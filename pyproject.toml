@@ -1,0 +1,31 @@
+[project]
+name = "agentmachinist"
+version = "0.1.0"
+description = "Local-first agentic build & CI/CD: bridge GitHub issues to local coding harnesses"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Vinny Carpenter", email = "vscarpenter@gmail.com" }]
+keywords = ["agents", "ci", "github", "claude-code", "developer-tools"]
+dependencies = [
+    "click>=8.1",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+machinist = "machinist.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/machinist"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
