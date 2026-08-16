@@ -1,31 +1,31 @@
-# AgentMachinist — M0 bootstrap
+# AgentMachinist — M1: spec phase end-to-end
 
-Design: docs/superpowers/specs/2026-08-16-agentmachinist-design.md (approved 2026-08-16)
+Design: docs/superpowers/specs/2026-08-16-agentmachinist-design.md
+Decisions confirmed 2026-08-16: approval stays label-based; GitHub layer
+stays on the gh wrapper (auth portability beats a PyGithub dependency).
 
-## Plan (M0) — COMPLETE
+## Plan (M1) — COMPLETE
 
-- [x] Commit design doc
-- [x] pyproject.toml + uv sync (click, pydantic, pyyaml; pytest dev)
-- [x] TDD config: tests/test_config.py red → src/machinist/config.py green
-- [x] TDD github: tests/test_github.py red → src/machinist/github.py green
-- [x] TDD harness: tests/test_harness.py red → harness/base.py + adapters + registry green
-- [x] TDD cli init: tests/test_cli.py red → cli.py + packaged templates green
-- [x] Templates: machinist.yaml, machinist-spec.yml, machinist-approve.yml
-- [x] README.md
-- [x] Full suite green (38 passed); live `machinist init` verified in scratch dir
+- [x] TDD github: default_branch() via gh repo view
+- [x] TDD workspace: provision (worktree + clone), commit_all, push,
+      cleanup policies — tested against real git repos in tmp_path
+- [x] TDD phases/spec: render_spec_prompt + run_spec_phase orchestration;
+      cleanup-on-failure; empty-spec guard
+- [x] TDD cli: `machinist spec <n>` wired; error types render as one-liners
+- [x] Spec prompt template (templates/spec-prompt.md, string.Template)
+- [x] Full suite green (59 passed); offline smoke of the real command verified
 
 ## Resuming From Here
 
-- Done: M0 complete. Config schema/loader, gh wrapper (draft PRs, labels,
-  issue reads), harness registry (4 adapters), working `machinist init`,
-  workflow + config templates, README. All committed on main (not pushed).
-- Next: M1 — `phases/spec.py` + real `machinist spec <n>`: get_issue →
-  harness.generate_spec → write .machinist/specs/issue-<n>-spec.md →
-  branch → commit → create_draft_pr. Needs workspace.py (branch handling)
-  and a spec-prompt template. Then M2 (execute) and M3 (watch), per the
-  design doc's milestones.
+- Done: M0 + M1. `machinist spec <n>` is fully wired: issue → harness spec
+  (read-only print mode, isolated worktree) → spec file → branch → push →
+  approval label ensured → draft PR with Closes #<n>. Not yet exercised
+  against a real GitHub issue (needs one to exist; creates a real PR).
+- Next: M2 — phases/execute.py + `machinist run <n>`: provision workspace on
+  the existing agent/issue-<n> branch, read the spec file, harness.implement
+  (acceptEdits), run tests.command gate, commit/push, mark PR ready
+  (gh pr ready). Then M3: watch daemon polling trigger label + approved PRs.
 - Blockers: none.
-- Assumptions: opencode/pi/codex headless flags are best-effort defaults
-  (overridable via harness.command); verify against real CLIs during M1.
-  Claude Code flags (-p, --output-format text, --permission-mode
-  acceptEdits) are current as of 2026-08.
+- Assumptions: spec-phase PR body uses 'Closes #<n>' so merging the
+  implementation closes the issue. opencode/pi/codex headless flags remain
+  best-effort defaults (harness.command overrides).
