@@ -1,0 +1,42 @@
+# AgentMachinist — Phase 1 in CI: generate a spec and open a draft PR
+# when an issue is labeled 'agent-task'.
+#
+# Requires an ANTHROPIC_API_KEY repository secret (Settings → Secrets).
+# Prefer running Phase 1 locally instead? Delete this file and let
+# `machinist watch` handle labeled issues on your machine.
+
+name: Machinist Spec Generation
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  generate-spec:
+    # Keep this label in sync with github.labels.trigger in machinist.yaml.
+    if: github.event.label.name == 'agent-task'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install AgentMachinist
+        run: uv tool install git+https://github.com/vscarpenter/AgentMachinist
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate spec and open draft PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: machinist spec ${{ github.event.issue.number }}
