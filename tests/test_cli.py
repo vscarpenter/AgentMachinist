@@ -67,7 +67,63 @@ def test_init_no_workflows_skips_github_dir():
 
 def test_phase_stubs_exit_nonzero_with_milestone_note():
     runner = CliRunner()
-    for argv in (["spec", "42"], ["watch"], ["run", "42"], ["status"]):
+    for argv in (["watch"], ["run", "42"], ["status"]):
         result = runner.invoke(main, argv)
         assert result.exit_code != 0
         assert "not implemented" in result.output.lower()
+
+
+def test_spec_without_config_points_at_init():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["spec", "42"])
+
+        assert result.exit_code != 0
+        assert "machinist init" in result.output
+
+
+def test_spec_wires_config_and_reports_pr_url(monkeypatch):
+    from machinist.github import DraftPR
+
+    seen = {}
+
+    def fake_run_spec_phase(issue_number, config, *, github, harness, workspace):
+        seen["issue"] = issue_number
+        seen["harness"] = harness.name
+        seen["repo"] = github.repo
+        seen["strategy"] = workspace.config.strategy.value
+        return DraftPR(number=57, url="https://github.com/vscarpenter/demo/pull/57")
+
+    monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["spec", "42"])
+
+        assert result.exit_code == 0, result.output
+        assert seen == {
+            "issue": 42,
+            "harness": "claude-code",
+            "repo": None,
+            "strategy": "worktree",
+        }
+        assert "pull/57" in result.output
+
+
+def test_spec_renders_machinist_errors_without_traceback(monkeypatch):
+    from machinist.harness.base import HarnessError
+
+    def failing_run_spec_phase(*args, **kwargs):
+        raise HarnessError("claude-code timed out after 10 minutes")
+
+    monkeypatch.setattr("machinist.cli.run_spec_phase", failing_run_spec_phase)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["spec", "42"])
+
+        assert result.exit_code != 0
+        assert "timed out" in result.output
+        assert "Traceback" not in result.output

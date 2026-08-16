@@ -7,7 +7,14 @@ from pathlib import Path
 
 import click
 
+from machinist.config import ConfigError, load_config
+from machinist.github import GitHubClient, GitHubError
+from machinist.harness import HarnessError, get_harness
+from machinist.phases.spec import SpecPhaseError, run_spec_phase
+from machinist.workspace import Workspace, WorkspaceError
+
 _TEMPLATES = files("machinist") / "templates"
+_MACHINIST_ERRORS = (ConfigError, GitHubError, HarnessError, SpecPhaseError, WorkspaceError)
 _WORKFLOW_NAMES = ("machinist-spec.yml", "machinist-approve.yml")
 
 
@@ -65,7 +72,20 @@ def _not_implemented(phase: str) -> None:
 @click.argument("issue_number", type=int)
 def spec(issue_number: int) -> None:
     """Generate a spec and open a draft PR for ISSUE_NUMBER (Phase 1)."""
-    _not_implemented("Phase 1 ('machinist spec')")
+    try:
+        config = load_config()
+        pr = run_spec_phase(
+            issue_number,
+            config,
+            github=GitHubClient(repo=config.github.repo),
+            harness=get_harness(config.harness),
+            workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Draft PR #{pr.number}: {pr.url}")
+    click.echo("Review the spec, then approve with the "
+               f"'{config.github.labels.approved}' label or a /machinist-execute comment.")
 
 
 @main.command()

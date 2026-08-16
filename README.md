@@ -88,9 +88,10 @@ Both paths run the same `machinist spec <n>` command:
 
 ## Status
 
-v0.1 (M0): config schema, GitHub wrapper, harness abstraction, `init`, and
-workflow templates. Phases 1–3 orchestration is landing next — see
-`docs/superpowers/specs/` for the design.
+v0.1 (M1): `machinist init` and `machinist spec <n>` work end-to-end —
+issue → harness-written spec → `agent/issue-<n>` branch → draft PR, in an
+isolated worktree that never touches your checkout. Phase 3 (`run`) and the
+`watch` daemon are landing next — see `docs/superpowers/specs/` for the design.
 
 ## License
 
