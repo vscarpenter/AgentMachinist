@@ -110,6 +110,20 @@ def test_ensure_label_is_idempotent_via_force():
     ]
 
 
+def test_default_branch_reads_repo_view():
+    runner = FakeRunner((json.dumps({"defaultBranchRef": {"name": "trunk"}}), 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    assert client.default_branch() == "trunk"
+    assert runner.calls == [
+        [
+            "gh", "repo", "view",
+            "--json", "defaultBranchRef",
+            "--repo", "vscarpenter/demo",
+        ]
+    ]
+
+
 def test_gh_failure_raises_github_error_with_stderr():
     runner = FakeRunner(("", 1, "gh: Not Found (HTTP 404)"))
     client = GitHubClient(repo="vscarpenter/demo", runner=runner)

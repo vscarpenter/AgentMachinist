@@ -52,6 +52,10 @@ class GitHubClient:
             labels=[label["name"] for label in data.get("labels", [])],
         )
 
+    def default_branch(self) -> str:
+        data = self._gh_json("repo", "view", "--json", "defaultBranchRef")
+        return data["defaultBranchRef"]["name"]
+
     def create_draft_pr(self, *, branch: str, base: str, title: str, body: str) -> DraftPR:
         url = self._gh(
             "pr", "create", "--draft",
