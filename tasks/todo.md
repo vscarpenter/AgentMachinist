@@ -1,4 +1,18 @@
-# AgentMachinist — M1: spec phase end-to-end
+# AgentMachinist — M2: execute phase
+
+## Plan (M2)
+
+- [ ] TDD github: mark_ready(number) via gh pr ready
+- [ ] TDD workspace: provision from remote-only branch; ff local branch to
+      origin when behind; has_changes(path)
+- [ ] TDD phases/execute: run_execute_phase — approval-label guard, spec file
+      read, harness.implement (acceptEdits), no-changes guard, tests.command
+      gate (fail = keep workspace, no push), commit/push, mark PR ready
+- [ ] implement-prompt.md template
+- [ ] TDD cli: wire `machinist run <n>`; stubs test shrinks to watch only
+- [ ] Suite green; push; live dogfood: machinist run 1 against approved PR #3
+
+# AgentMachinist — M1: spec phase end-to-end (complete)
 
 Design: docs/superpowers/specs/2026-08-16-agentmachinist-design.md
 Decisions confirmed 2026-08-16: approval stays label-based; GitHub layer
@@ -31,6 +45,13 @@ stays on the gh wrapper (auth portability beats a PyGithub dependency).
   machinist:approved — the draft→ready gesture is what users reach for.
   Consider (post-M2): treat ready-without-label as needing a nudge, or
   revisit approval signal UX with Vinny.
+- UX finding 2: "approve" wording collides with GitHub's PR-review Approve
+  button, which GitHub blocks on your own PRs ("Pull request authors can't
+  approve their own pull requests") — vindicates the label design (solo devs
+  are always the author) but the PR body / docs should say explicitly:
+  "GitHub's review Approve button is NOT the mechanism; add the label or
+  comment /machinist-execute." Phase 2 for issue #1 completed via label
+  2026-08-16; machinist status shows 'approved'.
 
 ## Resuming From Here
 
