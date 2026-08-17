@@ -1,0 +1,1325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A visual, action-first guide to installing AgentMachinist and moving a first GitHub issue through spec, approval, implementation, and review.">
+  <meta name="theme-color" content="#f3f1eb">
+  <title>Your first run with AgentMachinist</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --paper-0: #fbfaf6;
+      --paper-1: #f3f1eb;
+      --paper-2: #e8e5dc;
+      --ink-0: #17212a;
+      --ink-1: #34434f;
+      --ink-2: #65727c;
+      --line: #c8c7c1;
+      --line-strong: #90969a;
+      --blueprint: #285f78;
+      --blueprint-soft: #dce8ec;
+      --signal: #c84f24;
+      --signal-strong: #9f3716;
+      --signal-soft: #f4ded4;
+      --success: #287451;
+      --success-soft: #dbece2;
+      --warning: #8a5a13;
+      --warning-soft: #f2e7cf;
+      --danger: #a93d3d;
+      --danger-soft: #f3dddd;
+      --terminal: #17212a;
+      --terminal-ink: #e9eee9;
+      --terminal-muted: #a9b7ba;
+      --shadow-sm: 0 1px 2px rgb(23 33 42 / 0.06), 0 4px 10px rgb(23 33 42 / 0.04);
+      --shadow-lg: 0 18px 44px rgb(23 33 42 / 0.10), 0 4px 12px rgb(23 33 42 / 0.06);
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 14px;
+      --radius-xl: 22px;
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-5: 1.5rem;
+      --space-6: 2rem;
+      --space-7: 3rem;
+      --space-8: 4rem;
+      --space-9: 6rem;
+      --duration-fast: 140ms;
+      --duration-normal: 260ms;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --paper-0: #10171d;
+        --paper-1: #151f27;
+        --paper-2: #202d36;
+        --ink-0: #edf0ec;
+        --ink-1: #c6d0d2;
+        --ink-2: #91a0a6;
+        --line: #34434d;
+        --line-strong: #63727a;
+        --blueprint: #77b4c9;
+        --blueprint-soft: #183542;
+        --signal: #f08457;
+        --signal-strong: #ff9d76;
+        --signal-soft: #45281f;
+        --success: #72c79b;
+        --success-soft: #18382a;
+        --warning: #e1b86d;
+        --warning-soft: #3b301b;
+        --danger: #ed9292;
+        --danger-soft: #432424;
+        --terminal: #090e12;
+        --terminal-ink: #e5ebe8;
+        --terminal-muted: #8da0a4;
+        --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.06);
+        --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.09);
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --paper-0: #10171d;
+      --paper-1: #151f27;
+      --paper-2: #202d36;
+      --ink-0: #edf0ec;
+      --ink-1: #c6d0d2;
+      --ink-2: #91a0a6;
+      --line: #34434d;
+      --line-strong: #63727a;
+      --blueprint: #77b4c9;
+      --blueprint-soft: #183542;
+      --signal: #f08457;
+      --signal-strong: #ff9d76;
+      --signal-soft: #45281f;
+      --success: #72c79b;
+      --success-soft: #18382a;
+      --warning: #e1b86d;
+      --warning-soft: #3b301b;
+      --danger: #ed9292;
+      --danger-soft: #432424;
+      --terminal: #090e12;
+      --terminal-ink: #e5ebe8;
+      --terminal-muted: #8da0a4;
+      --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.06);
+      --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.09);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper-0);
+      color: var(--ink-0);
+      font-family: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+    button, input { font: inherit; }
+    a { color: var(--blueprint); text-underline-offset: 0.2em; }
+    a:hover { color: var(--signal-strong); }
+    svg { display: block; max-width: 100%; height: auto; }
+    code, pre, .mono {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    }
+    code { font-size: 0.9em; }
+    h1, h2, h3, p { margin-top: 0; }
+    figure { margin: 0; }
+    h1, h2, h3 { text-wrap: balance; }
+    .hero > *, .tool-bench > *, .install-grid > *, .mode-board > *, .config-layout > *,
+    .walk-step > *, .boundary > *, .launch-card > * { min-width: 0; }
+    h1 {
+      max-width: 13ch;
+      margin-bottom: var(--space-5);
+      font-size: clamp(2.8rem, 7vw, 5.8rem);
+      font-weight: 650;
+      letter-spacing: -0.055em;
+      line-height: 0.98;
+    }
+    h2 {
+      margin-bottom: var(--space-4);
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      font-weight: 620;
+      letter-spacing: -0.04em;
+      line-height: 1.04;
+    }
+    h3 {
+      margin-bottom: var(--space-2);
+      font-size: 1.22rem;
+      font-weight: 650;
+      letter-spacing: -0.018em;
+      line-height: 1.2;
+    }
+    p { color: var(--ink-1); }
+
+    .skip-link {
+      position: fixed;
+      top: var(--space-3);
+      left: var(--space-3);
+      z-index: 60;
+      transform: translateY(-180%);
+      padding: var(--space-3) var(--space-4);
+      border: 2px solid var(--signal);
+      border-radius: var(--radius-md);
+      background: var(--paper-0);
+      color: var(--ink-0);
+      font-weight: 700;
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .shell { width: min(100% - 2rem, 74rem); margin-inline: auto; }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--paper-0) 92%, transparent);
+      backdrop-filter: blur(14px);
+    }
+    .nav {
+      min-height: 4.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-3);
+      color: var(--ink-0);
+      text-decoration: none;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .brand-mark { width: 2rem; height: 2rem; color: var(--signal); }
+    .nav-links { display: flex; align-items: center; gap: var(--space-5); }
+    .nav-links a { color: var(--ink-1); font-size: 0.88rem; font-weight: 600; text-decoration: none; }
+    .theme-toggle, .copy-button, .mode-button, .reset-button {
+      min-height: 2.75rem;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      background: var(--paper-0);
+      color: var(--ink-0);
+      cursor: pointer;
+      font-weight: 650;
+      transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, transform var(--duration-fast) ease;
+    }
+    .theme-toggle { min-width: 2.75rem; padding: 0; }
+    .theme-toggle:hover, .copy-button:hover, .mode-button:hover, .reset-button:hover {
+      border-color: var(--signal);
+      color: var(--signal-strong);
+    }
+    .theme-toggle:active, .copy-button:active, .mode-button:active, .reset-button:active { transform: scale(0.98); }
+    :focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; }
+
+    .hero {
+      min-height: calc(100vh - 4.25rem);
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(28rem, 1.1fr);
+      align-items: center;
+      gap: clamp(var(--space-7), 7vw, var(--space-9));
+      padding-block: clamp(var(--space-8), 9vw, 7.5rem);
+    }
+    .hero-kicker, .section-kicker {
+      margin-bottom: var(--space-4);
+      color: var(--signal-strong);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.78rem;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .hero-lede {
+      max-width: 38rem;
+      margin-bottom: var(--space-6);
+      font-size: clamp(1.08rem, 2vw, 1.35rem);
+      color: var(--ink-1);
+    }
+    .version-note {
+      display: flex;
+      gap: var(--space-3);
+      align-items: flex-start;
+      max-width: 36rem;
+      padding: var(--space-4);
+      border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--line));
+      border-radius: var(--radius-lg);
+      background: var(--warning-soft);
+      color: var(--warning);
+      font-size: 0.9rem;
+    }
+    .version-note svg { flex: 0 0 auto; margin-top: 0.1rem; }
+    .version-note p { margin: 0; color: inherit; }
+
+    .hero-visual {
+      position: relative;
+      padding: clamp(var(--space-4), 3vw, var(--space-7));
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-xl);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .hero-visual::after {
+      content: "ISSUE → READY PR";
+      position: absolute;
+      right: -3.5rem;
+      bottom: 3.8rem;
+      transform: rotate(-90deg);
+      color: var(--line-strong);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.67rem;
+      letter-spacing: 0.16em;
+    }
+    .hero-caption {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-top: var(--space-4);
+      color: var(--ink-2);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.75rem;
+    }
+
+    .route-rail {
+      border-block: 1px solid var(--line);
+      background: var(--paper-1);
+    }
+    .route-list {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+    .route-list li {
+      position: relative;
+      min-height: 8rem;
+      padding: var(--space-5) var(--space-4);
+      border-right: 1px solid var(--line);
+    }
+    .route-list li:last-child { border-right: 0; }
+    .route-number { display: block; margin-bottom: var(--space-4); color: var(--signal); font: 700 0.74rem ui-monospace, monospace; }
+    .route-list strong { display: block; margin-bottom: var(--space-1); font-size: 0.95rem; }
+    .route-list small { display: block; color: var(--ink-2); line-height: 1.35; }
+
+    .section { padding-block: clamp(var(--space-8), 9vw, 7rem); }
+    .section-head { max-width: 46rem; margin-bottom: clamp(var(--space-7), 7vw, var(--space-9)); }
+    .section-head p { max-width: 42rem; font-size: 1.1rem; }
+
+    .tool-bench {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: var(--space-6);
+      align-items: start;
+    }
+    .tool-panel {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--paper-1);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .tool {
+      min-height: 14rem;
+      padding: var(--space-5);
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .tool:nth-child(2n) { border-right: 0; }
+    .tool:nth-child(n+3) { border-bottom: 0; }
+    .tool-icon { width: 3.2rem; height: 3.2rem; margin-bottom: var(--space-5); color: var(--blueprint); }
+    .tool code { display: inline-block; margin-top: var(--space-2); color: var(--signal-strong); }
+    .tool p { margin: 0; font-size: 0.9rem; }
+
+    .readiness-gauge {
+      position: sticky;
+      top: 6.5rem;
+      padding: var(--space-6);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-lg);
+      background: var(--paper-0);
+    }
+    .gauge-label { margin: var(--space-4) 0 0; color: var(--ink-2); font-size: 0.85rem; }
+    .gauge-value { margin: 0; color: var(--ink-0); font-size: 1.45rem; font-weight: 700; }
+
+    .terminal {
+      overflow: hidden;
+      border-radius: var(--radius-lg);
+      background: var(--terminal);
+      color: var(--terminal-ink);
+      box-shadow: var(--shadow-lg);
+    }
+    .terminal-bar {
+      min-height: 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+      border-bottom: 1px solid rgb(255 255 255 / 0.12);
+      color: var(--terminal-muted);
+      font: 0.74rem ui-monospace, monospace;
+    }
+    .terminal-dots { display: flex; gap: 0.4rem; }
+    .terminal-dots i { width: 0.58rem; height: 0.58rem; border: 1px solid currentColor; border-radius: 50%; }
+    .copy-button {
+      min-height: 2.25rem;
+      padding: 0 var(--space-3);
+      border-color: rgb(255 255 255 / 0.3);
+      background: transparent;
+      color: var(--terminal-ink);
+      font: 650 0.75rem ui-monospace, monospace;
+    }
+    .terminal pre {
+      min-height: 7.5rem;
+      margin: 0;
+      padding: var(--space-5);
+      overflow-x: auto;
+      color: var(--terminal-ink);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      white-space: pre;
+    }
+    .prompt { color: #f0a07e; }
+    .comment { color: var(--terminal-muted); }
+
+    .install-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.92fr) minmax(22rem, 1.08fr);
+      gap: var(--space-7);
+      align-items: center;
+    }
+    .install-copy ol { padding-left: 1.25rem; }
+    .install-copy li { margin-bottom: var(--space-3); color: var(--ink-1); }
+    .micro-note { color: var(--ink-2); font-size: 0.86rem; }
+
+    .mode-shell {
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+    }
+    .mode-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      border-bottom: 1px solid var(--line);
+      background: var(--paper-1);
+    }
+    .mode-toolbar p { margin: 0; color: var(--ink-2); font-size: 0.88rem; }
+    .mode-picker { display: flex; gap: var(--space-2); }
+    .mode-button { padding: 0 var(--space-4); }
+    .mode-button[aria-pressed="true"] {
+      border-color: var(--signal);
+      background: var(--signal);
+      color: #fff8f3;
+    }
+    .mode-board {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      min-height: 30rem;
+      background: var(--paper-0);
+    }
+    .mode-map { padding: clamp(var(--space-5), 4vw, var(--space-7)); border-right: 1px solid var(--line); }
+    .mode-steps { padding: clamp(var(--space-5), 4vw, var(--space-7)); background: var(--paper-1); }
+    .mode-panel[hidden] { display: none; }
+    .noscript-note {
+      margin: 0;
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--line);
+      background: var(--warning-soft);
+      color: var(--warning);
+      font-size: 0.88rem;
+    }
+    .mode-title { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); }
+    .mode-title span { color: var(--signal); font: 700 0.75rem ui-monospace, monospace; }
+    .mode-steps ol { margin: 0; padding: 0; list-style: none; counter-reset: mode-step; }
+    .mode-steps li {
+      position: relative;
+      padding: 0 0 var(--space-5) 2.7rem;
+      color: var(--ink-1);
+    }
+    .mode-steps li::before {
+      counter-increment: mode-step;
+      content: counter(mode-step);
+      position: absolute;
+      left: 0;
+      top: -0.15rem;
+      width: 1.75rem;
+      height: 1.75rem;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--signal);
+      border-radius: 50%;
+      color: var(--signal-strong);
+      font: 700 0.78rem ui-monospace, monospace;
+    }
+
+    .config-layout {
+      display: grid;
+      grid-template-columns: minmax(24rem, 1fr) minmax(18rem, 0.68fr);
+      gap: var(--space-6);
+      align-items: start;
+    }
+    .code-sheet {
+      padding: var(--space-6);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-sm);
+      overflow-x: auto;
+    }
+    .code-sheet pre { margin: 0; color: var(--ink-0); font-size: 0.9rem; line-height: 1.7; }
+    .code-hot { color: var(--signal-strong); font-weight: 750; }
+    .annotations { display: grid; gap: var(--space-4); }
+    .annotation {
+      padding: var(--space-5);
+      border-left: 3px solid var(--blueprint);
+      background: var(--blueprint-soft);
+    }
+    .annotation:nth-child(2) { border-left-color: var(--signal); background: var(--signal-soft); }
+    .annotation:nth-child(3) { border-left-color: var(--success); background: var(--success-soft); }
+    .annotation p { margin: 0; color: var(--ink-1); font-size: 0.9rem; }
+
+    .walkthrough { display: grid; gap: clamp(var(--space-8), 10vw, 8rem); }
+    .walk-step {
+      display: grid;
+      grid-template-columns: minmax(18rem, 0.72fr) minmax(28rem, 1.28fr);
+      gap: clamp(var(--space-6), 6vw, var(--space-9));
+      align-items: center;
+    }
+    .walk-step:nth-child(even) .walk-copy { order: 2; }
+    .walk-step:nth-child(even) .walk-visual { order: 1; }
+    .walk-index { display: inline-block; margin-bottom: var(--space-4); color: var(--signal); font: 750 0.8rem ui-monospace, monospace; }
+    .walk-copy p { font-size: 1.05rem; }
+    .walk-command {
+      display: inline-flex;
+      align-items: center;
+      min-height: 2.4rem;
+      margin-top: var(--space-2);
+      padding: 0 var(--space-3);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      background: var(--paper-1);
+      color: var(--ink-0);
+      font: 650 0.82rem ui-monospace, monospace;
+    }
+    .walk-visual {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .visual-label {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--line);
+      color: var(--ink-2);
+      font: 0.72rem ui-monospace, monospace;
+      letter-spacing: 0.06em;
+    }
+
+    .status-board {
+      overflow-x: auto;
+      border-block: 1px solid var(--line);
+    }
+    .status-track {
+      min-width: 68rem;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+    }
+    .status-item { min-height: 13rem; padding: var(--space-5); border-right: 1px solid var(--line); }
+    .status-item:last-child { border-right: 0; }
+    .status-dot { width: 0.8rem; height: 0.8rem; margin-bottom: var(--space-5); border: 2px solid currentColor; border-radius: 50%; }
+    .status-item code { display: block; margin-bottom: var(--space-3); color: var(--ink-0); font-weight: 700; }
+    .status-item p { margin: 0; font-size: 0.85rem; }
+    .status-item.user { color: var(--signal); }
+    .status-item.machine { color: var(--blueprint); }
+    .status-item.alert { color: var(--warning); }
+    .status-item.done { color: var(--success); }
+
+    .boundary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-7);
+      align-items: center;
+    }
+    .boundary-copy ul { padding-left: 1.2rem; color: var(--ink-1); }
+    .boundary-copy li { margin-bottom: var(--space-3); }
+    .boundary-visual {
+      padding: var(--space-5);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-xl);
+      background: var(--paper-1);
+    }
+
+    .trouble-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--space-4);
+    }
+    details {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-sm);
+    }
+    details[open] { border-color: var(--line-strong); }
+    summary {
+      min-height: 4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      cursor: pointer;
+      color: var(--ink-0);
+      font-weight: 680;
+    }
+    summary::marker { color: var(--signal); }
+    .detail-body { padding: 0 var(--space-5) var(--space-5); }
+    .detail-body p { margin-bottom: var(--space-3); }
+    .detail-body code { color: var(--signal-strong); }
+
+    .launch-card {
+      display: grid;
+      grid-template-columns: 1fr 0.8fr;
+      gap: var(--space-7);
+      padding: clamp(var(--space-6), 6vw, var(--space-9));
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-xl);
+      background: var(--ink-0);
+      color: var(--paper-0);
+      box-shadow: var(--shadow-lg);
+    }
+    .launch-card h2, .launch-card h3 { color: var(--paper-0); }
+    .launch-card p { color: color-mix(in srgb, var(--paper-0) 72%, transparent); }
+    .checklist { margin: 0; padding: 0; list-style: none; }
+    .checklist li { margin-bottom: var(--space-3); }
+    .checklist label { display: flex; gap: var(--space-3); align-items: flex-start; cursor: pointer; }
+    .checklist input { width: 1.25rem; height: 1.25rem; margin-top: 0.15rem; accent-color: var(--signal); }
+    .reset-button { margin-top: var(--space-4); padding: 0 var(--space-4); border-color: rgb(255 255 255 / 0.35); background: transparent; color: var(--paper-0); }
+    .launch-links { display: grid; align-content: start; gap: var(--space-3); }
+    .launch-links a {
+      min-height: 3.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: 0 var(--space-4);
+      border: 1px solid rgb(255 255 255 / 0.28);
+      border-radius: var(--radius-md);
+      color: var(--paper-0);
+      text-decoration: none;
+      font-weight: 650;
+    }
+    .launch-links a:hover { border-color: var(--signal); color: #ffb597; }
+
+    footer { padding-block: var(--space-7); color: var(--ink-2); font-size: 0.85rem; }
+    .footer-row { display: flex; justify-content: space-between; gap: var(--space-5); border-top: 1px solid var(--line); padding-top: var(--space-5); }
+
+    .reveal { animation: rise-in 560ms var(--ease-out) both; }
+    .reveal:nth-child(2) { animation-delay: 70ms; }
+    @keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (hover: hover) and (pointer: fine) {
+      .tool { transition: background-color var(--duration-normal) ease, transform var(--duration-normal) var(--ease-out); }
+      .tool:hover { background: var(--paper-0); transform: translateY(-2px); }
+    }
+
+    @media (max-width: 62rem) {
+      .nav-links a { display: none; }
+      .hero, .install-grid, .tool-bench, .mode-board, .config-layout, .walk-step, .boundary, .launch-card { grid-template-columns: minmax(0, 1fr); }
+      .hero { min-height: auto; }
+      .hero-visual { max-width: 42rem; }
+      .route-list { grid-template-columns: repeat(3, 1fr); }
+      .route-list li:nth-child(3) { border-right: 0; }
+      .route-list li:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+      .readiness-gauge { position: static; }
+      .mode-map { border-right: 0; border-bottom: 1px solid var(--line); }
+      .walk-step:nth-child(even) .walk-copy, .walk-step:nth-child(even) .walk-visual { order: initial; }
+      .launch-links { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 40rem) {
+      .shell { width: min(100% - 1.25rem, 74rem); }
+      .nav { min-height: 3.8rem; }
+      .brand span { display: none; }
+      .hero { padding-block: var(--space-7); gap: var(--space-7); }
+      h1 { font-size: clamp(2.7rem, 14vw, 4rem); }
+      .route-list, .tool-panel, .trouble-grid, .launch-links { grid-template-columns: 1fr; }
+      .route-list li { min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .route-list li:last-child { border-bottom: 0; }
+      .tool { min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .tool:nth-child(n+3) { border-bottom: 1px solid var(--line); }
+      .tool:last-child { border-bottom: 0; }
+      .mode-toolbar { align-items: flex-start; flex-direction: column; }
+      .mode-picker { width: 100%; }
+      .mode-button { flex: 1; padding-inline: var(--space-2); }
+      .terminal pre { font-size: 0.78rem; }
+      .config-layout { display: block; }
+      .code-sheet { margin-bottom: var(--space-5); padding: var(--space-4); }
+      .walk-step { gap: var(--space-5); }
+      .launch-card { padding: var(--space-6); }
+      .footer-row { flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the first-run guide</a>
+
+  <header class="site-header">
+    <nav class="nav shell" aria-label="First-run guide">
+      <a class="brand" href="#top">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M6 9h20v14H6z" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8" fill="none" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <span>AgentMachinist / first run</span>
+      </a>
+      <div class="nav-links">
+        <a href="#prepare">Prepare</a>
+        <a href="#choose-mode">Choose a mode</a>
+        <a href="#first-task">First task</a>
+        <a href="#troubleshoot">Get unstuck</a>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" id="top">
+      <div class="hero-copy reveal">
+        <p class="hero-kicker">A visual field guide for version 0.2</p>
+        <h1>Your first issue, machined into a PR.</h1>
+        <p class="hero-lede">Set up AgentMachinist, choose who writes the spec, approve the exact plan you read, and let your coding harness build behind a test gate.</p>
+        <div class="version-note" role="note">
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <p><strong>AgentMachinist 0.2.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints 0.1.0, run <code>uv tool upgrade agentmachinist</code>.</p>
+        </div>
+      </div>
+
+      <figure class="hero-visual reveal">
+        <svg viewBox="0 0 620 520" role="img" aria-label="An assembly line showing a GitHub issue becoming a spec, receiving human approval, being implemented and tested, and arriving as a ready pull request.">
+          <defs>
+            <marker id="hero-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker>
+          </defs>
+          <g fill="none" stroke="var(--line)" stroke-width="1">
+            <path d="M30 80H590M30 180H590M30 280H590M30 380H590M130 30V490M310 30V490M490 30V490"/>
+          </g>
+          <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#hero-arrow)">
+            <path d="M180 120H250"/><path d="M370 120H440"/><path d="M490 175V235"/><path d="M440 320H370"/><path d="M250 320H180"/>
+          </g>
+          <g font-family="Avenir Next, system-ui, sans-serif">
+            <g transform="translate(35 70)">
+              <path d="M0 0h145v100H0z" fill="var(--paper-0)" stroke="var(--line-strong)" stroke-width="2"/>
+              <circle cx="22" cy="23" r="8" fill="var(--signal)"/>
+              <text x="40" y="28" fill="var(--ink-0)" font-size="14" font-weight="700">Issue #42</text>
+              <path d="M18 48h108M18 62h90M18 76h70" stroke="var(--line-strong)" stroke-width="5"/>
+              <text x="18" y="93" fill="var(--signal)" font-size="10" font-family="ui-monospace, monospace">agent-task</text>
+            </g>
+            <g transform="translate(250 65)">
+              <path d="M0 0h120v110l-16 16H0z" fill="var(--blueprint-soft)" stroke="var(--blueprint)" stroke-width="2"/>
+              <path d="M104 110V92h16" fill="none" stroke="var(--blueprint)" stroke-width="2"/>
+              <text x="16" y="28" fill="var(--blueprint)" font-size="12" font-weight="700">SPEC</text>
+              <path d="M16 46h84M16 59h72M16 72h88M16 85h64" stroke="var(--blueprint)" stroke-opacity=".55" stroke-width="4"/>
+            </g>
+            <g transform="translate(440 70)">
+              <circle cx="50" cy="50" r="47" fill="var(--signal-soft)" stroke="var(--signal)" stroke-width="2"/>
+              <path d="m27 50 15 15 31-34" fill="none" stroke="var(--signal)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+              <text x="50" y="116" text-anchor="middle" fill="var(--signal-strong)" font-size="11" font-family="ui-monospace, monospace">SHA APPROVED</text>
+            </g>
+            <g transform="translate(410 245)">
+              <path d="M0 0h160v150H0z" fill="var(--terminal)" stroke="var(--line-strong)" stroke-width="2"/>
+              <circle cx="16" cy="16" r="4" fill="#f08457"/><circle cx="30" cy="16" r="4" fill="#e1b86d"/><circle cx="44" cy="16" r="4" fill="#72c79b"/>
+              <path d="M15 38h130" stroke="var(--terminal-muted)" stroke-width="1"/>
+              <text x="16" y="60" fill="var(--terminal-muted)" font-size="10" font-family="ui-monospace, monospace">$ harness implements</text>
+              <text x="16" y="80" fill="var(--terminal-ink)" font-size="10" font-family="ui-monospace, monospace">$ uv run pytest</text>
+              <text x="16" y="100" fill="#72c79b" font-size="10" font-family="ui-monospace, monospace">tests passed</text>
+              <path d="M16 119h96M16 132h72" stroke="var(--terminal-muted)" stroke-width="4"/>
+            </g>
+            <g transform="translate(220 255)">
+              <path d="M0 0h150v130H0z" fill="var(--paper-0)" stroke="var(--success)" stroke-width="2"/>
+              <rect x="16" y="16" width="65" height="18" rx="9" fill="var(--success-soft)"/>
+              <text x="48" y="29" text-anchor="middle" fill="var(--success)" font-size="9" font-weight="700">READY</text>
+              <text x="16" y="58" fill="var(--ink-0)" font-size="13" font-weight="700">Pull request #18</text>
+              <path d="M16 76h112M16 90h94M16 104h74" stroke="var(--line-strong)" stroke-width="4"/>
+              <circle cx="128" cy="115" r="7" fill="var(--signal)"/>
+            </g>
+            <g transform="translate(45 275)">
+              <path d="M18 0h76l18 20v88H0V20L18 0Z" fill="var(--signal-soft)" stroke="var(--signal)" stroke-width="2"/>
+              <text x="56" y="42" text-anchor="middle" fill="var(--signal-strong)" font-size="12" font-weight="700">YOU</text>
+              <text x="56" y="60" text-anchor="middle" fill="var(--ink-0)" font-size="11">review</text>
+              <text x="56" y="76" text-anchor="middle" fill="var(--ink-0)" font-size="11">and merge</text>
+            </g>
+          </g>
+          <g font-family="ui-monospace, monospace" font-size="10" fill="var(--ink-2)">
+            <text x="35" y="44">INPUT</text><text x="250" y="44">PLAN</text><text x="440" y="44">GATE 1</text>
+            <text x="410" y="425">MACHINE WORK</text><text x="220" y="425">GATE 2</text><text x="45" y="425">OUTPUT</text>
+          </g>
+        </svg>
+        <figcaption class="hero-caption"><span>Human actions use safety orange</span><span>Machine work uses blueprint blue</span></figcaption>
+      </figure>
+    </section>
+
+    <section class="route-rail" aria-label="The six stops in a first AgentMachinist run">
+      <ol class="route-list shell">
+        <li><span class="route-number">01</span><strong>Prepare</strong><small>Git, gh, uv, harness</small></li>
+        <li><span class="route-number">02</span><strong>Install</strong><small>CLI and project files</small></li>
+        <li><span class="route-number">03</span><strong>Configure</strong><small>Harness, tests, owner</small></li>
+        <li><span class="route-number">04</span><strong>Spec</strong><small>Issue becomes a draft PR</small></li>
+        <li><span class="route-number">05</span><strong>Approve</strong><small>Bind consent to one SHA</small></li>
+        <li><span class="route-number">06</span><strong>Review</strong><small>Tests pass; you merge</small></li>
+      </ol>
+    </section>
+
+    <section class="section shell" id="prepare">
+      <header class="section-head">
+        <p class="section-kicker">Station 01 / lay out the tools</p>
+        <h2>Four tools. One repository. About fifteen minutes.</h2>
+        <p>AgentMachinist coordinates software you already use. Get these four checks green before asking it to touch an issue.</p>
+      </header>
+
+      <div class="tool-bench">
+        <div class="tool-panel">
+          <article class="tool">
+            <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 16v17m0-12c6 0 14 2 14-5v17m-14-5c5 0 9 0 14 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="15" r="2.5" fill="currentColor"/><circle cx="17" cy="33" r="2.5" fill="currentColor"/><circle cx="31" cy="15" r="2.5" fill="currentColor"/><circle cx="31" cy="34" r="2.5" fill="currentColor"/></svg>
+            <h3>Git</h3><p>Creates isolated worktrees, commits controller-owned changes, and pushes with a lease.</p><code>git --version</code>
+          </article>
+          <article class="tool">
+            <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M11 37c-3-4-5-9-5-14C6 13 14 6 24 6s18 7 18 17c0 5-2 10-5 14" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 37v-5c-5 1-6-2-7-4m23 9v-5c5-2 7-5 7-10 0-3-1-5-3-7 1-2 1-5 0-7-3 0-5 1-7 2-3-1-7-1-10 0-2-1-4-2-7-2-1 2-1 5 0 7-2 2-3 4-3 7 0 5 2 8 7 10v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>GitHub CLI</h3><p>Reads issues, opens PRs, records approvals, and reuses your authenticated GitHub session.</p><code>gh auth status</code>
+          </article>
+          <article class="tool">
+            <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M9 13h30v22H9z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15 21 5 4-5 4m9 0h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <h3>uv</h3><p>Installs AgentMachinist and provides its locked Python environment.</p><code>uv --version</code>
+          </article>
+          <article class="tool">
+            <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M15 8h18l7 12-7 20H15L8 20 15 8Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="24" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 12v5m0 14v5M12 24h5m14 0h5" stroke="currentColor" stroke-width="2"/></svg>
+            <h3>A coding harness</h3><p>Choose Claude Code, OpenCode, Pi, or Codex. Log in before your first automated run.</p><code>claude --version</code>
+          </article>
+        </div>
+
+        <aside class="readiness-gauge" aria-label="Readiness check">
+          <svg viewBox="0 0 260 170" role="img" aria-label="A readiness gauge pointing to ready after four tool checks.">
+            <path d="M35 135a95 95 0 0 1 190 0" fill="none" stroke="var(--paper-2)" stroke-width="22" stroke-linecap="round"/>
+            <path d="M35 135a95 95 0 0 1 190 0" fill="none" stroke="var(--success)" stroke-width="22" stroke-linecap="round" stroke-dasharray="299" stroke-dashoffset="20"/>
+            <path d="m130 132 53-48" stroke="var(--signal)" stroke-width="5" stroke-linecap="round"/>
+            <circle cx="130" cy="132" r="10" fill="var(--signal)"/>
+            <text x="130" y="158" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">4 CHECKS</text>
+          </svg>
+          <p class="gauge-value">Ready means authenticated.</p>
+          <p class="gauge-label">A version command proves the executable exists. Run your harness once interactively too; AgentMachinist cannot prove provider access for you.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section shell" id="install">
+      <div class="install-grid">
+        <div class="install-copy">
+          <p class="section-kicker">Station 02 / install the controller</p>
+          <h2>Install, then check the number.</h2>
+          <ol>
+            <li>Install the current release directly from PyPI.</li>
+            <li>Confirm the CLI reports <strong>0.2.0</strong>.</li>
+            <li>Change into the repository you want agents to work on.</li>
+          </ol>
+          <p class="micro-note">Already installed an earlier version? Run <code>uv tool upgrade agentmachinist</code> instead.</p>
+        </div>
+        <div class="terminal" aria-label="Installation commands">
+          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / install</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist --version&#10;cd ~/code/your-project">Copy commands</button></div>
+          <pre><span class="prompt">$</span> uv tool install agentmachinist
+
+<span class="prompt">$</span> machinist --version
+machinist, version 0.2.0
+
+<span class="prompt">$</span> cd ~/code/your-project</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="choose-mode">
+      <header class="section-head">
+        <p class="section-kicker">Station 03 / choose the spec dispatcher</p>
+        <h2>Where should planning happen?</h2>
+        <p>For a first run, keep planning local. GitHub Actions is useful later, but it needs a provider secret and still hands implementation back to your local watcher.</p>
+      </header>
+
+      <div class="mode-shell">
+        <div class="mode-toolbar">
+          <p>Switch routes to see exactly what changes.</p>
+          <div class="mode-picker" role="group" aria-label="Choose spec generation mode">
+            <button class="mode-button" type="button" data-mode-button="local" aria-pressed="true" aria-controls="local-route local-steps">Local · recommended</button>
+            <button class="mode-button" type="button" data-mode-button="ci" aria-pressed="false" aria-controls="ci-route ci-steps">GitHub Actions</button>
+          </div>
+        </div>
+        <noscript><p class="noscript-note">Route switching needs JavaScript. The recommended local route is shown below; the complete CI route is also documented in <a href="getting-started.md">Getting Started</a>.</p></noscript>
+
+        <div class="mode-board">
+          <div class="mode-map">
+            <div class="mode-panel" id="local-route" data-mode-panel="local">
+              <div class="mode-title"><span>LOCAL ROUTE</span><h3>Your Mac owns both machine phases</h3></div>
+              <svg viewBox="0 0 560 330" role="img" aria-label="Local mode: GitHub sends a labeled issue to the local watcher, which runs the harness for spec and execute, then pushes the pull request back to GitHub.">
+                <defs><marker id="local-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
+                <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#local-arrow)"><path d="M140 75H240"/><path d="M320 120v65"/><path d="M240 230H140"/></g>
+                <g font-family="Avenir Next, system-ui, sans-serif">
+                  <rect x="25" y="35" width="115" height="80" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="82" y="68" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">GitHub</text><text x="82" y="89" text-anchor="middle" fill="var(--ink-2)" font-size="11">issue + PR</text>
+                  <rect x="240" y="35" width="160" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="320" y="69" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">machinist watch</text><text x="320" y="90" text-anchor="middle" fill="var(--ink-1)" font-size="11">your Mac</text>
+                  <rect x="240" y="185" width="160" height="90" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="320" y="220" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">coding harness</text><text x="320" y="242" text-anchor="middle" fill="var(--ink-1)" font-size="11">spec + implement</text>
+                  <rect x="25" y="190" width="115" height="80" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="82" y="223" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Ready PR</text><text x="82" y="244" text-anchor="middle" fill="var(--ink-1)" font-size="11">you review</text>
+                </g>
+                <text x="280" y="313" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">github.spec_source: local</text>
+              </svg>
+            </div>
+
+            <div class="mode-panel" id="ci-route" data-mode-panel="ci" hidden>
+              <div class="mode-title"><span>CI ROUTE</span><h3>Actions writes the spec; your Mac executes</h3></div>
+              <svg viewBox="0 0 560 330" role="img" aria-label="GitHub Actions mode: a labeled issue triggers the Actions spec workflow, then the local watcher runs implementation after approval.">
+                <defs><marker id="ci-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
+                <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#ci-arrow)"><path d="M140 70H215"/><path d="M345 70H420"/><path d="M480 115v70"/><path d="M420 230H345"/></g>
+                <g font-family="Avenir Next, system-ui, sans-serif">
+                  <rect x="20" y="35" width="120" height="75" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="80" y="67" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">Labeled issue</text><text x="80" y="87" text-anchor="middle" fill="var(--ink-2)" font-size="11">GitHub</text>
+                  <rect x="215" y="30" width="130" height="85" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="280" y="63" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">Actions</text><text x="280" y="84" text-anchor="middle" fill="var(--ink-1)" font-size="11">Claude writes spec</text>
+                  <rect x="420" y="35" width="120" height="80" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="67" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Approval</text><text x="480" y="88" text-anchor="middle" fill="var(--ink-1)" font-size="11">exact SHA</text>
+                  <rect x="420" y="185" width="120" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="218" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Local watch</text><text x="480" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">implements</text>
+                  <rect x="215" y="185" width="130" height="85" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="280" y="218" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Ready PR</text><text x="280" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">you review</text>
+                </g>
+                <text x="280" y="313" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">github.spec_source: github-actions</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="mode-steps">
+            <div class="mode-panel" id="local-steps" data-mode-panel="local">
+              <h3>Local setup</h3>
+              <ol>
+                <li>Run <code>machinist init</code>. The default config already selects <code>local</code>.</li>
+                <li>Set your harness and test command in <code>machinist.yaml</code>.</li>
+                <li>Run <code>machinist doctor</code>, then start <code>machinist watch</code>.</li>
+                <li>Keep one watcher per repository. Local claims are not distributed locks.</li>
+              </ol>
+            </div>
+            <div class="mode-panel" id="ci-steps" data-mode-panel="ci" hidden>
+              <h3>GitHub Actions setup</h3>
+              <ol>
+                <li>Set <code>github.spec_source: github-actions</code>.</li>
+                <li>Run <code>machinist sync-workflows</code> and commit the generated spec workflow.</li>
+                <li>Add <code>ANTHROPIC_API_KEY</code> as a repository secret. The bundled CI path is Claude-specific.</li>
+                <li>Keep a local watcher for approved execution; CI owns only the spec phase.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="configure">
+      <header class="section-head">
+        <p class="section-kicker">Station 04 / initialize the project</p>
+        <h2>Three lines deserve your attention.</h2>
+        <p><code>machinist init</code> creates the file. Your job is to choose a harness, leave spec ownership explicit, and give implementation a real test gate.</p>
+      </header>
+
+      <div class="config-layout">
+        <div class="code-sheet" aria-label="Annotated machinist configuration">
+          <pre><span class="comment"># machinist.yaml</span>
+version: 1
+
+harness:
+  name: <span class="code-hot">claude-code</span>
+  command: null
+  timeout_minutes: 30
+  spec_timeout_minutes: 10
+
+github:
+  repo: null
+  spec_source: <span class="code-hot">local</span>
+  labels:
+    trigger: agent-task
+    approved: "machinist:approved"
+  poll_interval_seconds: 60
+
+workspace:
+  root: ~/.machinist/workspaces
+  strategy: worktree
+  cleanup: on_success
+  branch_prefix: agent/
+
+tests:
+  command: <span class="code-hot">uv run pytest</span></pre>
+        </div>
+        <div class="annotations">
+          <article class="annotation"><h3>Pick the harness you use</h3><p><code>claude-code</code>, <code>opencode</code>, <code>pi</code>, or <code>codex</code>. Local runs reuse its provider authentication.</p></article>
+          <article class="annotation"><h3>Keep one spec owner</h3><p><code>local</code> is simplest for a first run. Changing ownership requires <code>machinist sync-workflows</code>.</p></article>
+          <article class="annotation"><h3>Make tests real</h3><p>A null command skips the gate. Use the same command you trust before merging a human PR.</p></article>
+        </div>
+      </div>
+
+      <div class="terminal" style="margin-top: var(--space-6)" aria-label="Initialization and diagnostic commands">
+        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist init&#10;# edit machinist.yaml, then:&#10;machinist doctor&#10;machinist sync-workflows --check">Copy commands</button></div>
+        <pre><span class="prompt">$</span> machinist init
+<span class="comment"># edit machinist.yaml, then:</span>
+<span class="prompt">$</span> machinist doctor
+PASS repository               /Users/you/code/your-project
+PASS GitHub authentication    gh auth is active
+PASS harness                  /path/to/claude
+PASS test gate                uv run pytest
+PASS workflows                managed workflows match config
+PASS Task Runs                no failed or abandoned runs
+
+<span class="prompt">$</span> machinist sync-workflows --check
+Managed workflows match machinist.yaml.</pre>
+      </div>
+    </section>
+
+    <section class="section shell" id="first-task">
+      <header class="section-head">
+        <p class="section-kicker">Stations 05–08 / run one real issue</p>
+        <h2>The first task, screen by screen.</h2>
+        <p>Use a small issue with a visible test. Your first run should teach the workflow, not test the outer limit of your model or repository.</p>
+      </header>
+
+      <div class="walkthrough">
+        <article class="walk-step">
+          <div class="walk-copy">
+            <span class="walk-index">05 / WRITE THE INPUT</span>
+            <h3>File one outcome, not a project.</h3>
+            <p>Give the issue a clear title, acceptance criteria, and the <code>agent-task</code> label. “Add CSV export for filtered rows” is a first run. “Improve reporting” is not.</p>
+            <span class="walk-command">GitHub · add label agent-task</span>
+          </div>
+          <figure class="walk-visual">
+            <figcaption class="visual-label"><span>GITHUB ISSUE</span><span>good first input</span></figcaption>
+            <svg viewBox="0 0 680 330" role="img" aria-label="A GitHub issue titled Add CSV export for filtered rows with three acceptance criteria and the agent-task label.">
+              <g font-family="Avenir Next, system-ui, sans-serif">
+                <rect x="38" y="35" width="604" height="260" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
+                <circle cx="76" cy="75" r="18" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="76" y="80" text-anchor="middle" fill="var(--signal)" font-weight="700">42</text>
+                <text x="112" y="70" fill="var(--ink-0)" font-size="20" font-weight="700">Add CSV export for filtered rows</text>
+                <text x="112" y="94" fill="var(--ink-2)" font-size="12">Open · filed by you</text>
+                <text x="74" y="138" fill="var(--ink-0)" font-size="13" font-weight="700">Acceptance criteria</text>
+                <g fill="none" stroke="var(--success)" stroke-width="2"><path d="m76 164 5 5 9-11M76 196l5 5 9-11M76 228l5 5 9-11"/></g>
+                <g fill="var(--ink-1)" font-size="13"><text x="103" y="169">Exports only the currently filtered rows</text><text x="103" y="201">Preserves visible column order</text><text x="103" y="233">Has a focused automated test</text></g>
+                <rect x="74" y="254" width="94" height="23" rx="11" fill="var(--signal-soft)"/><text x="121" y="270" text-anchor="middle" fill="var(--signal-strong)" font-size="11" font-weight="700">agent-task</text>
+              </g>
+            </svg>
+          </figure>
+        </article>
+
+        <article class="walk-step">
+          <div class="walk-copy">
+            <span class="walk-index">06 / MAKE THE PLAN</span>
+            <h3>Run one poll, or address the issue directly.</h3>
+            <p><code>watch --once</code> picks up eligible work and exits. <code>spec 42</code> is the direct route. Either way, the result is a draft PR containing only the plan.</p>
+            <span class="walk-command">machinist watch --once</span>
+          </div>
+          <figure class="walk-visual">
+            <figcaption class="visual-label"><span>DRAFT PULL REQUEST</span><span>machine wrote the plan</span></figcaption>
+            <svg viewBox="0 0 680 360" role="img" aria-label="A draft pull request showing an implementation specification with summary, requirements, approach, testing plan, and out-of-scope sections.">
+              <g font-family="Avenir Next, system-ui, sans-serif">
+                <rect x="30" y="28" width="620" height="304" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
+                <rect x="54" y="51" width="58" height="22" rx="11" fill="var(--warning-soft)"/><text x="83" y="66" text-anchor="middle" fill="var(--warning)" font-size="10" font-weight="700">DRAFT</text>
+                <text x="128" y="67" fill="var(--ink-0)" font-size="18" font-weight="700">Spec: Add CSV export (#42)</text>
+                <path d="M54 94h572" stroke="var(--line)"/>
+                <text x="64" y="124" fill="var(--ink-0)" font-size="14" font-weight="700">.machinist/specs/issue-42-spec.md</text>
+                <g transform="translate(64 148)">
+                  <rect width="150" height="142" rx="6" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/>
+                  <text x="16" y="27" fill="var(--blueprint)" font-size="11" font-weight="700">DOCUMENT MAP</text>
+                  <g fill="var(--ink-1)" font-size="11"><text x="16" y="52">Summary</text><text x="16" y="72">Requirements</text><text x="16" y="92">Approach</text><text x="16" y="112">Testing plan</text><text x="16" y="132">Out of scope</text></g>
+                </g>
+                <g transform="translate(240 150)" stroke="var(--line-strong)" stroke-width="5"><path d="M0 0h330M0 20h285M0 53h320M0 73h250M0 106h300M0 126h200"/></g>
+                <rect x="480" y="294" width="138" height="21" rx="10" fill="var(--paper-2)"/><text x="549" y="308" text-anchor="middle" fill="var(--ink-2)" font-size="9">agent/issue-42</text>
+              </g>
+            </svg>
+          </figure>
+        </article>
+
+        <article class="walk-step">
+          <div class="walk-copy">
+            <span class="walk-index">07 / STAMP THE BLUEPRINT</span>
+            <h3>Approve the PR number, not the issue number.</h3>
+            <p>Read the spec first. Then run <code>machinist approve 18</code> for PR #18, or comment exactly <code>/machinist-execute</code>. Approval is bound to the current commit; edits make it stale.</p>
+            <span class="walk-command">machinist approve 18</span>
+          </div>
+          <figure class="walk-visual">
+            <figcaption class="visual-label"><span>HUMAN GATE</span><span>approval names one commit</span></figcaption>
+            <svg viewBox="0 0 680 350" role="img" aria-label="A human approval stamp binds the machinist approved label to a specific commit SHA; a later changed SHA invalidates it.">
+              <g font-family="Avenir Next, system-ui, sans-serif">
+                <rect x="42" y="52" width="270" height="225" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
+                <text x="68" y="86" fill="var(--ink-2)" font-size="11" font-family="ui-monospace, monospace">CURRENT PR HEAD</text>
+                <text x="68" y="118" fill="var(--ink-0)" font-size="18" font-family="ui-monospace, monospace" font-weight="700">a17c98d42e6f</text>
+                <rect x="68" y="142" width="156" height="27" rx="13" fill="var(--success-soft)"/><text x="146" y="160" text-anchor="middle" fill="var(--success)" font-size="11" font-weight="700">machinist:approved</text>
+                <path d="M68 195h188M68 214h152M68 233h176" stroke="var(--line-strong)" stroke-width="5"/>
+                <g transform="translate(340 70) rotate(-8 130 100)">
+                  <circle cx="130" cy="100" r="87" fill="var(--signal-soft)" stroke="var(--signal)" stroke-width="7"/>
+                  <circle cx="130" cy="100" r="68" fill="none" stroke="var(--signal)" stroke-width="2" stroke-dasharray="5 5"/>
+                  <path d="m93 102 23 23 52-58" fill="none" stroke="var(--signal)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+                  <text x="130" y="151" text-anchor="middle" fill="var(--signal-strong)" font-size="12" font-weight="800">SHA BOUND</text>
+                </g>
+                <text x="470" y="299" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">branch changes → approval stale</text>
+              </g>
+            </svg>
+          </figure>
+        </article>
+
+        <article class="walk-step">
+          <div class="walk-copy">
+            <span class="walk-index">08 / BUILD, TEST, REVIEW</span>
+            <h3>Let the machine work. Keep the merge.</h3>
+            <p>The watcher or <code>machinist run 42</code> provisions the approved branch, asks the harness to implement, runs your test command, pushes with a lease, and marks the PR ready. You review and merge.</p>
+            <span class="walk-command">machinist run 42</span>
+          </div>
+          <figure class="walk-visual">
+            <figcaption class="visual-label"><span>READY FOR REVIEW</span><span>controller delivered; human decides</span></figcaption>
+            <svg viewBox="0 0 680 360" role="img" aria-label="A ready pull request with passing tests, changed files, and a final human review gate before merge.">
+              <g font-family="Avenir Next, system-ui, sans-serif">
+                <rect x="35" y="30" width="610" height="300" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
+                <rect x="58" y="54" width="120" height="24" rx="12" fill="var(--success-soft)"/><text x="118" y="70" text-anchor="middle" fill="var(--success)" font-size="10" font-weight="700">READY FOR REVIEW</text>
+                <text x="196" y="71" fill="var(--ink-0)" font-size="17" font-weight="700">Add CSV export (#42)</text>
+                <g transform="translate(58 104)">
+                  <rect width="255" height="164" rx="7" fill="var(--paper-1)" stroke="var(--line)"/>
+                  <text x="18" y="28" fill="var(--ink-2)" font-size="10" font-family="ui-monospace, monospace">QUALITY GATE</text>
+                  <circle cx="28" cy="58" r="8" fill="var(--success)"/><path d="m24 58 3 3 6-7" fill="none" stroke="var(--paper-0)" stroke-width="2"/>
+                  <text x="48" y="63" fill="var(--ink-0)" font-size="12" font-weight="700">uv run pytest</text>
+                  <text x="48" y="84" fill="var(--success)" font-size="11">tests passed</text>
+                  <path d="M18 108h218M18 126h184M18 144h203" stroke="var(--line-strong)" stroke-width="4"/>
+                </g>
+                <g transform="translate(340 104)">
+                  <rect width="272" height="164" rx="7" fill="var(--signal-soft)" stroke="var(--signal)"/>
+                  <text x="20" y="29" fill="var(--signal-strong)" font-size="10" font-family="ui-monospace, monospace">YOUR FINAL GATE</text>
+                  <text x="20" y="59" fill="var(--ink-0)" font-size="15" font-weight="700">Review the diff</text>
+                  <g fill="var(--ink-1)" font-size="11"><text x="20" y="84">• Does the code match the spec?</text><text x="20" y="106">• Do the tests prove the outcome?</text><text x="20" y="128">• Are deviations explained?</text></g>
+                  <rect x="174" y="136" width="78" height="20" rx="4" fill="var(--signal)"/><text x="213" y="150" text-anchor="middle" fill="#fff8f3" font-size="9" font-weight="700">MERGE</text>
+                </g>
+                <text x="58" y="301" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">AgentMachinist never clicks merge.</text>
+              </g>
+            </svg>
+          </figure>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="status">
+      <div class="shell section-head">
+        <p class="section-kicker">The shop-floor board</p>
+        <h2>Read status without guessing.</h2>
+        <p>Run <code>machinist status</code>. The wording tells you who moves next. Scroll the board horizontally on a small screen.</p>
+      </div>
+      <div class="status-board">
+        <div class="status-track shell">
+          <article class="status-item machine"><div class="status-dot"></div><code>awaiting spec</code><p>The trigger exists. Local watch or the configured CI owner must write the plan.</p></article>
+          <article class="status-item user"><div class="status-dot"></div><code>awaiting approval</code><p>A draft spec is ready. Read it before authorizing implementation.</p></article>
+          <article class="status-item alert"><div class="status-dot"></div><code>approval pending</code><p>The label exists without trusted SHA evidence. Approve again.</p></article>
+          <article class="status-item alert"><div class="status-dot"></div><code>approval stale</code><p>The branch changed after approval. Review and approve the new head.</p></article>
+          <article class="status-item machine"><div class="status-dot"></div><code>approved</code><p>The exact head can execute. Run the watcher or the issue directly.</p></article>
+          <article class="status-item done"><div class="status-dot"></div><code>in review</code><p>Implementation reached the ready PR. You own review and merge.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="trust">
+      <div class="boundary">
+        <div class="boundary-copy">
+          <p class="section-kicker">Know the safety boundary</p>
+          <h2>Guardrails, not a vault.</h2>
+          <p>AgentMachinist keeps Git custody and detects ordinary harness violations, but the harness still runs as your operating-system user.</p>
+          <ul>
+            <li>Spec runs request the strongest available read-only mode and reject file mutations.</li>
+            <li>Implementation checks for harness commits, remote pushes, and <code>.machinist/</code> edits.</li>
+            <li>Common GitHub and SSH-agent credentials are removed from the harness environment.</li>
+            <li>These controls are not a VM, container, or protection from a malicious local executable.</li>
+          </ul>
+          <p><a href="trust-model.md">Read the full trust model before unattended use.</a></p>
+        </div>
+        <figure class="boundary-visual">
+          <svg viewBox="0 0 560 500" role="img" aria-label="Trust boundary diagram: AgentMachinist controls Git and GitHub, the harness receives a workspace and provider credentials, and the human owns approval and merge.">
+            <defs><marker id="boundary-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
+            <rect x="60" y="50" width="440" height="390" rx="18" fill="none" stroke="var(--signal)" stroke-width="2" stroke-dasharray="8 8"/>
+            <text x="80" y="82" fill="var(--signal-strong)" font-family="ui-monospace, monospace" font-size="11">LOCAL USER BOUNDARY</text>
+            <rect x="115" y="110" width="330" height="105" rx="10" fill="var(--signal-soft)" stroke="var(--signal)"/>
+            <text x="280" y="150" text-anchor="middle" fill="var(--signal-strong)" font-family="Avenir Next, system-ui, sans-serif" font-size="17" font-weight="700">AgentMachinist controller</text>
+            <text x="280" y="178" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="12">Git · GitHub · approval · tests · Task Runs</text>
+            <rect x="105" y="290" width="150" height="95" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/>
+            <text x="180" y="328" text-anchor="middle" fill="var(--blueprint)" font-family="Avenir Next, system-ui, sans-serif" font-size="15" font-weight="700">Harness</text>
+            <text x="180" y="352" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="11">reads / edits workspace</text>
+            <rect x="305" y="290" width="150" height="95" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/>
+            <text x="380" y="328" text-anchor="middle" fill="var(--ink-0)" font-family="Avenir Next, system-ui, sans-serif" font-size="15" font-weight="700">GitHub</text>
+            <text x="380" y="352" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="11">issues / branches / PRs</text>
+            <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#boundary-arrow)"><path d="M230 215 190 290"/><path d="M330 215 370 290"/></g>
+            <circle cx="500" cy="50" r="38" fill="var(--success-soft)" stroke="var(--success)"/>
+            <text x="500" y="47" text-anchor="middle" fill="var(--success)" font-family="Avenir Next, system-ui, sans-serif" font-size="11" font-weight="700">YOU</text>
+            <text x="500" y="63" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="9">approve + merge</text>
+          </svg>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section shell" id="troubleshoot">
+      <header class="section-head">
+        <p class="section-kicker">When the machine stops</p>
+        <h2>Start with the sentence it gave you.</h2>
+        <p>Failures are parked instead of retried forever. Expand the symptom that matches what you see.</p>
+      </header>
+      <div class="trouble-grid">
+        <details>
+          <summary>Doctor reports a FAIL</summary>
+          <div class="detail-body"><p>Fix that prerequisite before running a task. Common causes are missing <code>gh</code> auth, a missing harness executable, or workflow drift.</p><code>machinist doctor</code></div>
+        </details>
+        <details>
+          <summary>Status says approval pending</summary>
+          <div class="detail-body"><p>The label exists, but no trusted marker names the current SHA. Approve the PR again with the CLI or exact comment.</p><code>machinist approve &lt;pr&gt;</code></div>
+        </details>
+        <details>
+          <summary>Status says approval stale</summary>
+          <div class="detail-body"><p>The spec branch changed after approval. Read the new diff, then approve the current head. This is a safety stop, not a synchronization bug.</p><code>machinist approve &lt;pr&gt;</code></div>
+        </details>
+        <details>
+          <summary>A Task Run failed</summary>
+          <div class="detail-body"><p>Inspect the retained workspace and error first. Fix the cause, mark the phase retryable, then restart a long-running watcher.</p><code>machinist retry &lt;issue&gt; --phase execute</code></div>
+        </details>
+        <details>
+          <summary>The workspace already exists</summary>
+          <div class="detail-body"><p>That is usually retained evidence from a failure. Inspect it before removal. Worktrees should be removed with Git, not by blindly deleting directories.</p><code>git worktree list</code></div>
+        </details>
+        <details>
+          <summary>Tests failed</summary>
+          <div class="detail-body"><p>Nothing new is pushed by the controller. Open the retained workspace, reproduce the test command, and decide whether the spec, implementation, or test needs correction.</p><code>machinist status</code></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="section shell" id="launch">
+      <div class="launch-card">
+        <div>
+          <p class="section-kicker" style="color:#ff9d76">Pocket checklist</p>
+          <h2>Ready to make the first cut?</h2>
+          <p>Check these off as you go. The guide remembers your checks in this browser.</p>
+          <ul class="checklist" id="checklist">
+            <li><label><input type="checkbox" value="tools"> <span>Git, gh, uv, and one harness respond</span></label></li>
+            <li><label><input type="checkbox" value="version"> <span><code>machinist --version</code> matches this guide</span></label></li>
+            <li><label><input type="checkbox" value="config"> <span>Harness, spec owner, and test command are set</span></label></li>
+            <li><label><input type="checkbox" value="doctor"> <span><code>machinist doctor</code> has no FAIL checks</span></label></li>
+            <li><label><input type="checkbox" value="issue"> <span>A small issue has acceptance criteria and <code>agent-task</code></span></label></li>
+            <li><label><input type="checkbox" value="merge"> <span>I know the machine never merges for me</span></label></li>
+          </ul>
+          <button class="reset-button" id="reset-checklist" type="button">Reset checklist</button>
+        </div>
+        <div class="launch-links">
+          <h3>Keep nearby</h3>
+          <a href="getting-started.md"><span>Full getting-started reference</span><span aria-hidden="true">→</span></a>
+          <a href="operator-runbook.md"><span>Operator runbook</span><span aria-hidden="true">→</span></a>
+          <a href="harnesses.md"><span>Harness support matrix</span><span aria-hidden="true">→</span></a>
+          <a href="trust-model.md"><span>Trust model</span><span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell">
+    <div class="footer-row"><span>AgentMachinist 0.2 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
+  </footer>
+
+  <div id="live-region" class="mono" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const themeButton = document.getElementById('theme-toggle');
+      const storage = {
+        get(key) {
+          try { return window.localStorage.getItem(key); } catch (error) { return null; }
+        },
+        set(key, value) {
+          try { window.localStorage.setItem(key, value); } catch (error) { /* Preferences remain session-only. */ }
+        },
+        remove(key) {
+          try { window.localStorage.removeItem(key); } catch (error) { /* Nothing to remove. */ }
+        },
+      };
+      const savedTheme = storage.get('agentmachinist-guide-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
+
+      themeButton.addEventListener('click', () => {
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const currentDark = root.dataset.theme ? root.dataset.theme === 'dark' : systemDark;
+        const next = currentDark ? 'light' : 'dark';
+        root.dataset.theme = next;
+        storage.set('agentmachinist-guide-theme', next);
+        themeButton.setAttribute('aria-label', `Use ${currentDark ? 'dark' : 'light'} theme`);
+      });
+
+      const liveRegion = document.getElementById('live-region');
+      const copyText = async (value) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(value);
+          return;
+        }
+        const field = document.createElement('textarea');
+        field.value = value;
+        field.setAttribute('readonly', '');
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        field.select();
+        const copied = document.execCommand('copy');
+        field.remove();
+        if (!copied) throw new Error('Copy command was rejected');
+      };
+      document.querySelectorAll('[data-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          try {
+            await copyText(button.dataset.copy);
+            const original = button.textContent;
+            button.textContent = 'Copied';
+            liveRegion.textContent = 'Commands copied to clipboard';
+            window.setTimeout(() => { button.textContent = original; }, 1400);
+          } catch (error) {
+            liveRegion.textContent = 'Clipboard access was unavailable. Select the commands manually.';
+          }
+        });
+      });
+
+      const modeButtons = document.querySelectorAll('[data-mode-button]');
+      const modePanels = document.querySelectorAll('[data-mode-panel]');
+      modeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const mode = button.dataset.modeButton;
+          modeButtons.forEach((candidate) => candidate.setAttribute('aria-pressed', String(candidate === button)));
+          modePanels.forEach((panel) => { panel.hidden = panel.dataset.modePanel !== mode; });
+          liveRegion.textContent = `${button.textContent.trim()} route selected`;
+        });
+      });
+
+      const checklist = document.getElementById('checklist');
+      const storageKey = 'agentmachinist-first-run-checklist';
+      let checked = [];
+      try { checked = JSON.parse(storage.get(storageKey) || '[]'); } catch (error) { checked = []; }
+      checklist.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.checked = checked.includes(input.value);
+        input.addEventListener('change', () => {
+          const values = [...checklist.querySelectorAll('input:checked')].map((item) => item.value);
+          storage.set(storageKey, JSON.stringify(values));
+        });
+      });
+      document.getElementById('reset-checklist').addEventListener('click', () => {
+        checklist.querySelectorAll('input').forEach((input) => { input.checked = false; });
+        storage.remove(storageKey);
+        liveRegion.textContent = 'First-run checklist reset';
+      });
+    })();
+  </script>
+</body>
+</html>
