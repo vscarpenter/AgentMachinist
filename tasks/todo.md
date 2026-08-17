@@ -1,17 +1,23 @@
-# AgentMachinist — M3: watch daemon
+# AgentMachinist — M3: watch daemon (COMPLETE)
 
 ## Plan (M3)
 
-- [ ] TDD status: labeled+non-draft PR classifies "in review" (dogfood nit);
+- [x] TDD status: labeled+non-draft PR classifies "in review" (dogfood nit);
       StatusRow gains issue_number (parsed from branch for PR rows)
-- [ ] TDD spec: PR body says explicitly GitHub's review-Approve button is
+- [x] TDD spec: PR body says explicitly GitHub's review-Approve button is
       not the approval mechanism (dogfood UX finding 2)
-- [ ] TDD phases/watch: WatchState + watch_once — dispatch awaiting-spec →
+- [x] TDD phases/watch: WatchState + watch_once — dispatch awaiting-spec →
       run_spec, approved(draft) → run_execute; record failures, never
       re-dispatch a failed issue; errors become events, daemon survives
-- [ ] TDD cli: watch with --once (single pass) and poll loop; stub test dies
-- [ ] Docs: README + getting-started "what's next" reflect all commands live
-- [ ] Suite green; live smoke: machinist watch --once on empty pipeline
+- [x] TDD cli: watch with --once (single pass) and poll loop; stub test dies
+- [x] Docs: README + getting-started "what's next" reflect all commands live
+- [x] Suite green (101); live smoke passed: machinist watch --once on empty pipeline
+
+M3 complete 2026-08-16. All designed commands ship. Local branch
+agent/issue-1 deleted post-merge. Remaining ideas (backlog, not
+milestones): exercise the clone strategy in anger; CI spec workflow
+needs ANTHROPIC_API_KEY to be tried; PyPI publish; failure-notification
+(watch currently just logs).
 
 # AgentMachinist — M2: execute phase (COMPLETE)
 
