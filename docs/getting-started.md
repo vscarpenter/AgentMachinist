@@ -23,7 +23,7 @@ AgentMachinist is a local-first pipeline for solo developers. It bridges GitHub 
 
 Two guarantees hold throughout. The agent never merges anything, and it never touches your working checkout. You approve the spec before the agent writes any code, and you review the PR before it lands.
 
-One honest note before you start: v0.1 ships Phases 1 and 2 end to end, and Phase 3 is next. The [What's next](#whats-next-v01-limits) section maps the exact edges.
+All three phases ship in v0.1 — this guide's own repository ran the full loop on itself as the pipeline's first task. The [What's next](#whats-next-v01-limits) section maps the remaining edges.
 
 ## Before you begin
 
@@ -241,17 +241,14 @@ Failed runs keep their workspace on purpose so you can inspect exactly what the 
 
 ## What's next (v0.1 limits)
 
-v0.1 covers milestones M0 and M1 of the [design doc](superpowers/specs/2026-08-16-agentmachinist-design.md). Working today, end to end:
+v0.1 covers milestones M0 through M3 of the [design doc](superpowers/specs/2026-08-16-agentmachinist-design.md). Working today, end to end:
 
 - `machinist init`: repository setup.
 - `machinist spec <n>`: issue to draft spec PR.
+- `machinist run <n>`: Phase 3 — implements an approved spec in an isolated workspace, runs your `tests.command` gate, pushes, and marks the PR ready for review. It refuses to start unless the PR carries the approval label.
+- `machinist watch`: the daemon that polls for `agent-task` issues and approved PRs and dispatches the phases automatically. Use `machinist watch --once` for a single pass (handy under cron). An issue that fails is not retried for the daemon's lifetime — fix it, restart, and it dispatches again.
+- `machinist status`: pipeline state at a glance — `awaiting spec`, `awaiting approval`, `approved`, or `in review`.
 
-Three more commands exist as deliberate stubs. Each exits with a "not implemented" message that points at the roadmap:
+Known edges rather than missing commands: spec quality depends on your harness and issue quality; the `clone` workspace strategy is less exercised than `worktree`; and the CI spec workflow needs an `ANTHROPIC_API_KEY` secret you may prefer not to create — the local daemon covers that path.
 
-- `machinist run <n>` (milestone M2): Phase 3. It will implement an approved spec in an isolated workspace, run your `tests.command` gate, push, and mark the PR ready for review.
-- `machinist watch` (milestone M3): the daemon that polls for `agent-task` issues and approved PRs, closing the loop.
-- `machinist status`: pipeline state at a glance.
-
-The practical consequence today: you run `machinist spec` by hand or through CI, and applying `machinist:approved` records your decision without triggering anything yet.
-
-That is the whole loop for now. Write a sharp issue, read the spec like you mean it, and keep your hand on the merge button.
+That is the whole loop. Write a sharp issue, read the spec like you mean it, and keep your hand on the merge button.

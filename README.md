@@ -90,10 +90,11 @@ Both paths run the same `machinist spec <n>` command:
 
 ## Status
 
-v0.1 (M1): `machinist init` and `machinist spec <n>` work end-to-end —
-issue → harness-written spec → `agent/issue-<n>` branch → draft PR, in an
-isolated worktree that never touches your checkout. Phase 3 (`run`) and the
-`watch` daemon are landing next — see `docs/superpowers/specs/` for the design.
+v0.1 (M3): all three phases work end-to-end — `init`, `spec`, `run`,
+`status`, and the `watch` daemon (`--once` for a single cron-friendly pass).
+The pipeline has dogfooded itself: its own getting-started guide was specced,
+approved, implemented, test-gated, and merged by the pipeline (issue #1 →
+PR #3). See `docs/superpowers/specs/` for the design.
 
 ## License
 
