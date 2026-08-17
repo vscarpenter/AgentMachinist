@@ -1,3 +1,17 @@
+# AgentMachinist — beta-readiness sweep
+
+## Plan
+
+- [ ] A: heartbeat — harness base emits on_progress during long runs;
+      CLI prints "still working (Xm elapsed)" every 30s
+- [ ] B: init ensures trigger + approved labels (warn-only on failure)
+- [ ] C: verify opencode/pi/codex headless flags against real docs; fix argv
+- [ ] D: run refuses a non-draft (already implemented) PR without --force
+- [ ] Push A-D, then dogfood E through the FULL watch loop: file issue
+      "watch: macOS notification on dispatch failure" with agent-task label,
+      run machinist watch (real daemon), Vinny approves via
+      /machinist-execute comment (also first live test of approve workflow)
+
 # AgentMachinist — M3: watch daemon (COMPLETE)
 
 ## Plan (M3)

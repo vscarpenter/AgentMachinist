@@ -6,7 +6,7 @@ class Codex(Harness):
     default_command = "codex"
 
     def spec_argv(self, prompt: str) -> list[str]:
-        return [self.command, "exec", prompt]
+        return [self.command, "exec", "--sandbox", "read-only", prompt]
 
     def implement_argv(self, prompt: str) -> list[str]:
         return [self.command, "exec", "--full-auto", prompt]

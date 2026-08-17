@@ -6,7 +6,8 @@ class Pi(Harness):
     default_command = "pi"
 
     def spec_argv(self, prompt: str) -> list[str]:
-        return [self.command, "-p", prompt]
+        # Exclude the edit/write tools so spec generation stays read-only.
+        return [self.command, "-p", "-xt", "edit,write", prompt]
 
     def implement_argv(self, prompt: str) -> list[str]:
         return [self.command, "-p", prompt]

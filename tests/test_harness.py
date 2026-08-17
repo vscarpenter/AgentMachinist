@@ -50,6 +50,21 @@ def test_claude_code_spec_argv_is_headless_print_mode():
     ]
 
 
+def test_spec_argv_is_read_only_for_every_harness():
+    # Phase 1 must not be able to edit files: stray edits would be swept
+    # into the spec commit. Flags verified against the real CLIs 2026-08-16.
+    expectations = {
+        HarnessName.CLAUDE_CODE: ["--output-format", "text"],   # print mode: no edit perms
+        HarnessName.OPENCODE: ["--agent", "plan"],              # plan agent is read-only
+        HarnessName.PI: ["-xt", "edit,write"],                  # exclude edit/write tools
+        HarnessName.CODEX: ["--sandbox", "read-only"],
+    }
+    for name, flags in expectations.items():
+        argv = get_harness(HarnessConfig(name=name)).spec_argv("p")
+        for flag in flags:
+            assert flag in argv, f"{name.value} spec argv missing {flag}: {argv}"
+
+
 def test_claude_code_implement_argv_can_edit_files():
     harness = get_harness(HarnessConfig(name=HarnessName.CLAUDE_CODE))
     argv = harness.implement_argv("build it")
