@@ -77,3 +77,11 @@ stays on the gh wrapper (auth portability beats a PyGithub dependency).
 - Assumptions: spec-phase PR body uses 'Closes #<n>' so merging the
   implementation closes the issue. opencode/pi/codex headless flags remain
   best-effort defaults (harness.command overrides).
+
+## Lifecycle #1 complete (2026-08-16)
+
+Issue #1 → spec (PR #3 draft) → approved via label → implemented by
+machinist run → pytest gate → ready-for-review → human merge (ff526e1)
+→ issue auto-closed, remote branch auto-deleted. Merged main: 92 tests
+green including the agent's 6 drift tests. The system built its own
+getting-started guide as its first shipped deliverable.
