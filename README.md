@@ -99,6 +99,16 @@ The pipeline has dogfooded itself: its own getting-started guide was specced,
 approved, implemented, test-gated, and merged by the pipeline (issue #1 →
 PR #3). See `docs/superpowers/specs/` for the design.
 
+## Releasing (maintainer notes)
+
+Publishing uses [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)
+— no tokens. One-time setup: on pypi.org under *Publishing*, add a pending
+publisher for project `agentmachinist` (owner `vscarpenter`, repo
+`AgentMachinist`, workflow `release.yml`, environment `pypi`). After that,
+each release is: bump `version` in `pyproject.toml`, commit, then create a
+GitHub Release for tag `v<version>` — the release workflow builds and
+publishes automatically.
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
