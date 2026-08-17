@@ -41,8 +41,15 @@ class Workspace:
             )
         self._git(self.repo_root, "fetch", "origin")
         if self.config.strategy is WorkspaceStrategy.WORKTREE:
+            remote_branch = f"refs/remotes/origin/{branch}"
             if self._branch_exists(self.repo_root, f"refs/heads/{branch}"):
                 self._git(self.repo_root, "worktree", "add", str(path), branch)
+                if self._branch_exists(self.repo_root, remote_branch):
+                    # Origin is the source of truth for machinist branches;
+                    # ff-only refuses (loudly) if the two have diverged.
+                    self._git(path, "merge", "--ff-only", f"origin/{branch}")
+            elif self._branch_exists(self.repo_root, remote_branch):
+                self._git(self.repo_root, "worktree", "add", str(path), "-b", branch, f"origin/{branch}")
             else:
                 self._git(self.repo_root, "worktree", "add", str(path), "-b", branch, base_ref)
         else:
@@ -61,6 +68,9 @@ class Workspace:
             # Bare CI runners have no git identity configured.
             args = ["-c", f"user.name={_BOT_NAME}", "-c", f"user.email={_BOT_EMAIL}", *args]
         self._git(path, *args)
+
+    def has_changes(self, path: Path) -> bool:
+        return bool(self._git(path, "status", "--porcelain").strip())
 
     def push(self, path: Path, branch: str) -> None:
         self._git(path, "push", "-u", "origin", branch)

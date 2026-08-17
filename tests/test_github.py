@@ -196,6 +196,17 @@ def test_default_branch_reads_repo_view():
     ]
 
 
+def test_mark_ready_builds_argv():
+    runner = FakeRunner(("", 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    client.mark_ready(57)
+
+    assert runner.calls == [
+        ["gh", "pr", "ready", "57", "--repo", "vscarpenter/demo"]
+    ]
+
+
 def test_gh_failure_raises_github_error_with_stderr():
     runner = FakeRunner(("", 1, "gh: Not Found (HTTP 404)"))
     client = GitHubClient(repo="vscarpenter/demo", runner=runner)

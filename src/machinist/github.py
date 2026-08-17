@@ -113,6 +113,9 @@ class GitHubClient:
         ).strip()
         return DraftPR(number=int(url.rstrip("/").rsplit("/", 1)[-1]), url=url)
 
+    def mark_ready(self, number: int) -> None:
+        self._gh("pr", "ready", str(number))
+
     def ensure_label(self, name: str, *, color: str, description: str) -> None:
         # --force updates an existing label instead of failing, making this idempotent.
         self._gh(

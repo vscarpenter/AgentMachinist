@@ -146,6 +146,52 @@ def test_cleanup_policy_always_removes_even_on_failure(repo, tmp_path):
     assert not path.exists()
 
 
+def test_provision_from_remote_only_branch(repo, tmp_path):
+    # Simulate another machine having pushed the spec branch: it exists on
+    # origin (one commit ahead of main) but not locally.
+    git(repo, "checkout", "-q", "-b", "agent/issue-7", "origin/main")
+    (repo / "extra.md").write_text("from spec phase\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "spec")
+    git(repo, "push", "origin", "agent/issue-7")
+    git(repo, "checkout", "-q", "main")
+    git(repo, "branch", "-D", "agent/issue-7")
+    workspace = make_workspace(repo, tmp_path)
+
+    path = workspace.provision("issue-7", "agent/issue-7", "origin/main")
+
+    assert git(path, "branch", "--show-current") == "agent/issue-7"
+    assert (path / "extra.md").exists()
+
+
+def test_provision_fast_forwards_stale_local_branch(repo, tmp_path):
+    # Local branch exists at origin/main, but origin's copy is one commit
+    # ahead (e.g. the spec was edited on GitHub). Provision must land on
+    # the origin tip, not the stale local one.
+    git(repo, "branch", "agent/issue-7", "origin/main")
+    git(repo, "checkout", "-q", "agent/issue-7")
+    (repo / "spec-edit.md").write_text("edited on GitHub\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "spec edit")
+    git(repo, "push", "origin", "agent/issue-7")
+    git(repo, "reset", "--hard", "-q", "origin/main")
+    git(repo, "checkout", "-q", "main")
+    workspace = make_workspace(repo, tmp_path)
+
+    path = workspace.provision("issue-7", "agent/issue-7", "origin/main")
+
+    assert (path / "spec-edit.md").exists()
+
+
+def test_has_changes_reflects_working_tree(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+    path = workspace.provision("issue-7", "agent/issue-7", "origin/main")
+
+    assert workspace.has_changes(path) is False
+    (path / "new.md").write_text("hi\n")
+    assert workspace.has_changes(path) is True
+
+
 def test_clone_strategy_provisions_independent_clone(repo, tmp_path):
     workspace = make_workspace(repo, tmp_path, strategy=WorkspaceStrategy.CLONE)
 
