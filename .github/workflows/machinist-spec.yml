@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   generate-spec:
-    if: github.event.label.name == '__TRIGGER_LABEL__'
+    if: github.event.label.name == 'agent-task'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install AgentMachinist
-        run: uv tool install agentmachinist==__VERSION__
+        run: uv tool install agentmachinist==0.2.0
 
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code

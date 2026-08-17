@@ -19,6 +19,7 @@ def make_pr(*, draft=True, labels=("machinist:approved",)):
         title="Spec: Add dark mode (#42)",
         url="https://github.com/x/y/pull/57",
         branch="agent/issue-42",
+        head_sha="a" * 40,
         is_draft=draft,
         labels=list(labels),
     )
@@ -35,6 +36,9 @@ class FakeGitHub:
 
     def default_branch(self):
         return "main"
+
+    def approval_sha(self, number):
+        return "a" * 40
 
     def mark_ready(self, number):
         self.calls.append(("mark_ready", number))
@@ -63,6 +67,10 @@ class FakeWorkspace:
         self.calls = []
         self._dirty = False
         self._spec_text = spec_text
+        self._committed = False
+        self._head_override = None
+        self._remote_sha = "a" * 40
+        self._machinist_changed = False
 
     def provision(self, task, branch, base_ref):
         self.calls.append(("provision", task, branch, base_ref))
@@ -77,9 +85,19 @@ class FakeWorkspace:
 
     def commit_all(self, path, message):
         self.calls.append(("commit_all", message))
+        self._committed = True
 
-    def push(self, path, branch):
-        self.calls.append(("push", branch))
+    def push(self, path, branch, expected_sha=None):
+        self.calls.append(("push", branch, expected_sha))
+
+    def head_sha(self, path):
+        return self._head_override or ("c" * 40 if self._committed else "a" * 40)
+
+    def remote_sha(self, path, branch):
+        return self._remote_sha
+
+    def path_changed(self, path, relative):
+        return self._machinist_changed
 
     def cleanup(self, path, *, success):
         self.calls.append(("cleanup", success))
@@ -133,7 +151,7 @@ def test_happy_path_implements_tests_pushes_and_marks_ready(tmp_path):
     assert ran == {"command": "pytest -q", "cwd": workspace.path}
     commit = next(c for c in workspace.calls if c[0] == "commit_all")
     assert "#42" in commit[1]
-    assert ("push", "agent/issue-42") in workspace.calls
+    assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
     assert ("mark_ready", 57) in github.calls
     assert ("cleanup", True) in workspace.calls
 
@@ -158,6 +176,28 @@ def test_unapproved_pr_refuses_and_names_the_label(tmp_path):
         )
 
     assert not any(c[0] == "mark_ready" for c in github.calls)
+
+
+def test_missing_approval_sha_refuses(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    github.approval_sha = lambda number: None
+
+    with pytest.raises(ExecutePhaseError, match="approval evidence"):
+        run_execute_phase(
+            42, MachinistConfig(), github=github, harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path), test_runner=passing_tests,
+        )
+
+
+def test_stale_approval_sha_refuses(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    github.approval_sha = lambda number: "b" * 40
+
+    with pytest.raises(ExecutePhaseError, match="changed after approval"):
+        run_execute_phase(
+            42, MachinistConfig(), github=github, harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path), test_runner=passing_tests,
+        )
 
 
 def test_already_implemented_pr_refuses_without_force(tmp_path):
@@ -186,7 +226,7 @@ def test_force_reimplements_a_ready_pr(tmp_path):
     )
 
     assert pr.number == 57
-    assert ("push", "agent/issue-42") in workspace.calls
+    assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
 
 
 def test_missing_spec_file_fails_before_harness_runs(tmp_path):
@@ -215,6 +255,32 @@ def test_no_changes_from_harness_fails(tmp_path):
         )
 
     assert not any(c[0] == "push" for c in workspace.calls)
+
+
+@pytest.mark.parametrize("violation", ["commit", "push", "machinist"])
+def test_harness_git_and_pipeline_violations_are_rejected(tmp_path, violation):
+    workspace = FakeWorkspace(tmp_path)
+
+    def violate(cwd):
+        workspace._dirty = True
+        if violation == "commit":
+            workspace._head_override = "d" * 40
+        elif violation == "push":
+            workspace._remote_sha = "e" * 40
+        else:
+            workspace._machinist_changed = True
+
+    with pytest.raises(ExecutePhaseError, match=r"custody|harness|machinist|\.machinist"):
+        run_execute_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=FakeHarness(on_implement=violate),
+            workspace=workspace,
+            test_runner=passing_tests,
+        )
+
+    assert not any(call[0] == "commit_all" for call in workspace.calls)
 
 
 def test_failing_test_gate_keeps_workspace_and_never_pushes(tmp_path):
@@ -248,4 +314,37 @@ def test_null_test_command_skips_the_gate(tmp_path):
     )
 
     assert pr.number == 57
-    assert ("push", "agent/issue-42") in workspace.calls
+    assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
+
+
+def test_partial_push_retry_marks_ready_without_rerunning_harness(tmp_path):
+    recovered = make_pr()
+    object.__setattr__(recovered, "head_sha", "c" * 40)
+    github = FakeGitHub(prs=[recovered])
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(error=AssertionError("harness must not rerun"))
+    claim = type(
+        "Claim",
+        (),
+        {
+            "previous_evidence": {
+                "approved_sha": "a" * 40,
+                "implementation_sha": "c" * 40,
+            },
+            "checkpoint": lambda self, **kwargs: None,
+        },
+    )()
+
+    pr = run_execute_phase(
+        42,
+        config_with_tests(),
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+        claim=claim,
+    )
+
+    assert pr.number == 57
+    assert harness.prompts == []
+    assert ("mark_ready", 57) in github.calls

@@ -8,6 +8,7 @@ out of this codebase entirely.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -41,6 +42,7 @@ class PullRequest:
     url: str
     branch: str
     is_draft: bool
+    head_sha: str = ""
     labels: list[str] = field(default_factory=list)
 
 
@@ -84,7 +86,7 @@ class GitHubClient:
         data = self._gh_json(
             "pr", "list",
             "--state", "open",
-            "--json", "number,title,url,headRefName,isDraft,labels",
+            "--json", "number,title,url,headRefName,headRefOid,isDraft,labels",
         )
         return [
             PullRequest(
@@ -92,6 +94,7 @@ class GitHubClient:
                 title=item["title"],
                 url=item["url"],
                 branch=item["headRefName"],
+                head_sha=item["headRefOid"],
                 is_draft=item["isDraft"],
                 labels=[l["name"] for l in item.get("labels", [])],
             )
@@ -115,6 +118,32 @@ class GitHubClient:
 
     def mark_ready(self, number: int) -> None:
         self._gh("pr", "ready", str(number))
+
+    def approval_sha(self, number: int) -> str | None:
+        """Return the newest SHA-bound approval recorded on a PR."""
+        data = self._gh_json("pr", "view", str(number), "--json", "comments")
+        marker = re.compile(
+            r"<!--\s*agentmachinist:approval\s+sha=([0-9a-fA-F]{40})\s*-->"
+        )
+        for comment in reversed(data.get("comments", [])):
+            association = comment.get("authorAssociation")
+            login = (comment.get("author") or {}).get("login")
+            trusted_author = association in {"OWNER", "MEMBER", "COLLABORATOR"}
+            trusted_workflow = login in {"github-actions", "github-actions[bot]"}
+            if not (trusted_author or trusted_workflow):
+                continue
+            match = marker.search(comment.get("body") or "")
+            if match:
+                return match.group(1).lower()
+        return None
+
+    def approve_pr(self, number: int, *, label: str, head_sha: str) -> None:
+        """Record immutable approval evidence before exposing the approval label."""
+        self._gh(
+            "pr", "comment", str(number),
+            "--body", f"<!-- agentmachinist:approval sha={head_sha.lower()} -->",
+        )
+        self._gh("pr", "edit", str(number), "--add-label", label)
 
     def ensure_label(self, name: str, *, color: str, description: str) -> None:
         # --force updates an existing label instead of failing, making this idempotent.
@@ -140,4 +169,9 @@ class GitHubClient:
         return result.stdout
 
     def _gh_json(self, *args: str) -> Any:
-        return json.loads(self._gh(*args))
+        try:
+            return json.loads(self._gh(*args))
+        except json.JSONDecodeError as exc:
+            raise GitHubError(
+                f"gh {' '.join(args[:2])} returned invalid JSON: {exc.msg}"
+            ) from exc

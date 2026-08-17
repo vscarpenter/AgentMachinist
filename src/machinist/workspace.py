@@ -72,8 +72,21 @@ class Workspace:
     def has_changes(self, path: Path) -> bool:
         return bool(self._git(path, "status", "--porcelain").strip())
 
-    def push(self, path: Path, branch: str) -> None:
-        self._git(path, "push", "-u", "origin", branch)
+    def push(self, path: Path, branch: str, *, expected_sha: str | None = None) -> None:
+        args = ["push", "-u"]
+        if expected_sha is not None:
+            args.append(f"--force-with-lease=refs/heads/{branch}:{expected_sha}")
+        self._git(path, *args, "origin", branch)
+
+    def head_sha(self, path: Path) -> str:
+        return self._git(path, "rev-parse", "HEAD").strip()
+
+    def remote_sha(self, path: Path, branch: str) -> str | None:
+        output = self._git(path, "ls-remote", "--heads", "origin", f"refs/heads/{branch}")
+        return output.split()[0] if output.strip() else None
+
+    def path_changed(self, path: Path, relative: str) -> bool:
+        return bool(self._git(path, "status", "--porcelain", "--", relative).strip())
 
     def cleanup(self, path: Path, *, success: bool) -> None:
         policy = self.config.cleanup

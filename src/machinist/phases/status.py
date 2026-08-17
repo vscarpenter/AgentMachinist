@@ -5,6 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from machinist.config import MachinistConfig
+from machinist.lifecycle import RunStatus
+
+PIPELINE_STATES = (
+    "awaiting spec",
+    "awaiting approval",
+    "approval pending",
+    "approval stale",
+    "approved",
+    "in review",
+)
 
 
 @dataclass(frozen=True)
@@ -17,7 +27,7 @@ class StatusRow:
     issue_number: int | None = None
 
 
-def pipeline_status(config: MachinistConfig, github) -> list[StatusRow]:
+def pipeline_status(config: MachinistConfig, github, *, lifecycle=None) -> list[StatusRow]:
     prefix = config.workspace.branch_prefix
     issues = github.issues_with_label(config.github.labels.trigger)
     prs = github.open_machinist_prs(prefix)
@@ -40,12 +50,27 @@ def pipeline_status(config: MachinistConfig, github) -> list[StatusRow]:
         if not pr.is_draft:
             state = "in review"
         elif approved_label in pr.labels:
-            state = "approved"
+            approval_sha = github.approval_sha(pr.number)
+            if approval_sha is None:
+                state = "approval pending"
+            elif approval_sha != pr.head_sha:
+                state = "approval stale"
+            else:
+                state = "approved"
         else:
             state = "awaiting approval"
+        issue_number = _issue_number_from_branch(pr.branch, prefix)
+        if lifecycle is not None and issue_number is not None:
+            record = lifecycle.latest(issue_number)
+            if record is not None and record.status in {
+                RunStatus.RUNNING,
+                RunStatus.FAILED,
+                RunStatus.RETRYABLE,
+            }:
+                state = f"{record.phase.value} {record.status.value}"
         rows.append(StatusRow(kind="pr", number=pr.number, title=pr.title,
                               state=state, url=pr.url,
-                              issue_number=_issue_number_from_branch(pr.branch, prefix)))
+                              issue_number=issue_number))
     return rows
 
 

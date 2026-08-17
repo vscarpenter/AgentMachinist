@@ -3,24 +3,26 @@
 from machinist.config import MachinistConfig
 from machinist.github import Issue, PullRequest
 from machinist.phases.status import StatusRow, pipeline_status
+from machinist.lifecycle import Phase, TaskLifecycle
 
 
 def issue(number, title="An issue"):
     return Issue(number=number, title=title, body="", url=f"https://github.com/x/y/issues/{number}")
 
 
-def pr(number, branch, *, draft=True, labels=(), title="Spec PR"):
+def pr(number, branch, *, draft=True, labels=(), title="Spec PR", head_sha=None):
     return PullRequest(
         number=number, title=title, url=f"https://github.com/x/y/pull/{number}",
-        branch=branch, is_draft=draft, labels=list(labels),
+        branch=branch, head_sha=head_sha or ("a" * 40), is_draft=draft, labels=list(labels),
     )
 
 
 class FakeGitHub:
-    def __init__(self, issues=(), prs=()):
+    def __init__(self, issues=(), prs=(), approvals=None):
         self._issues = list(issues)
         self._prs = list(prs)
         self.queries = []
+        self.approvals = approvals or {}
 
     def issues_with_label(self, label):
         self.queries.append(("issues", label))
@@ -29,6 +31,10 @@ class FakeGitHub:
     def open_machinist_prs(self, prefix):
         self.queries.append(("prs", prefix))
         return self._prs
+
+    def approval_sha(self, number):
+        self.queries.append(("approval", number))
+        return self.approvals.get(number)
 
 
 def test_labeled_issue_without_pr_is_awaiting_spec():
@@ -65,11 +71,29 @@ def test_draft_pr_without_label_awaits_approval():
 
 
 def test_draft_pr_with_approved_label_is_approved():
-    github = FakeGitHub(prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])])
+    github = FakeGitHub(
+        prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])],
+        approvals={57: "a" * 40},
+    )
 
     rows = pipeline_status(MachinistConfig(), github)
 
     assert rows[0].state == "approved"
+
+
+def test_labeled_pr_without_sha_evidence_is_approval_pending():
+    github = FakeGitHub(prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])])
+
+    assert pipeline_status(MachinistConfig(), github)[0].state == "approval pending"
+
+
+def test_branch_change_after_approval_is_stale():
+    github = FakeGitHub(
+        prs=[pr(57, "agent/issue-42", labels=["machinist:approved"], head_sha="b" * 40)],
+        approvals={57: "a" * 40},
+    )
+
+    assert pipeline_status(MachinistConfig(), github)[0].state == "approval stale"
 
 
 def test_non_draft_pr_is_in_review():
@@ -113,7 +137,7 @@ def test_custom_prefix_and_labels_come_from_config():
     )
     github = FakeGitHub(
         issues=[issue(42)],
-        prs=[pr(57, "bot/issue-42", labels=["go"])],
+        prs=[pr(57, "bot/issue-42", labels=["go"])], approvals={57: "a" * 40},
     )
 
     rows = pipeline_status(config, github)
@@ -126,3 +150,16 @@ def test_custom_prefix_and_labels_come_from_config():
 
 def test_no_activity_yields_empty_list():
     assert pipeline_status(MachinistConfig(), FakeGitHub()) == []
+
+
+def test_durable_failed_run_is_visible_in_status(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    try:
+        lifecycle.run(42, Phase.EXECUTE, lambda claim: (_ for _ in ()).throw(RuntimeError("boom")))
+    except RuntimeError:
+        pass
+    github = FakeGitHub(prs=[pr(57, "agent/issue-42")])
+
+    row = pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0]
+
+    assert row.state == "execute failed"

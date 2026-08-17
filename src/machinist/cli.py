@@ -4,20 +4,24 @@ from __future__ import annotations
 
 import subprocess
 import time
+from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
 from pathlib import Path
 
 import click
 
 from machinist.config import ConfigError, load_config
+from machinist.doctor import run_doctor
 from machinist.github import GitHubClient, GitHubError
 from machinist.harness import HarnessError, get_harness
+from machinist.lifecycle import LifecycleError, Phase, TaskLifecycle
 from machinist.notify import notify
 from machinist.phases.execute import ExecutePhaseError, run_execute_phase
 from machinist.phases.spec import SpecPhaseError, run_spec_phase
 from machinist.phases.status import pipeline_status
 from machinist.phases.watch import WatchState, watch_once
 from machinist.workspace import Workspace, WorkspaceError
+from machinist.workflows import WorkflowDriftError, sync_workflows as project_workflows
 
 _TEMPLATES = files("machinist") / "templates"
 _LABEL_COLORS = {"trigger": "1d76db", "approved": "0e8a16"}
@@ -27,10 +31,19 @@ def _make_harness(config):
     harness = get_harness(config.harness)
     harness.on_progress = lambda message: click.echo(f"  … {message}")
     return harness
+
+
+def _installed_version() -> str:
+    try:
+        return version("agentmachinist")
+    except PackageNotFoundError:
+        return "0.0.0+local"
+
+
 _MACHINIST_ERRORS = (
     ConfigError, GitHubError, HarnessError, SpecPhaseError, ExecutePhaseError, WorkspaceError,
+    LifecycleError, WorkflowDriftError,
 )
-_WORKFLOW_NAMES = ("machinist-spec.yml", "machinist-approve.yml")
 
 
 @click.group()
@@ -60,15 +73,14 @@ def init(force: bool, install_workflows: bool) -> None:
     (specs_dir / ".gitkeep").touch()
     click.echo(f"created {specs_dir}/")
 
-    if install_workflows:
-        workflows_dir = Path(".github/workflows")
-        workflows_dir.mkdir(parents=True, exist_ok=True)
-        for name in _WORKFLOW_NAMES:
-            (workflows_dir / name).write_text((_TEMPLATES / "github" / name).read_text())
-            click.echo(f"wrote {workflows_dir / name}")
-
     try:
         config = load_config()
+        if install_workflows:
+            report = project_workflows(
+                Path.cwd(), config, installed_version=_installed_version(), check=False
+            )
+            for name in report.written:
+                click.echo(f"wrote .github/workflows/{name}")
         github = GitHubClient(repo=config.github.repo)
         github.ensure_label(
             config.github.labels.trigger,
@@ -91,8 +103,88 @@ def init(force: bool, install_workflows: bool) -> None:
         "\nNext steps:\n"
         "  1. Review machinist.yaml (harness, labels, test command).\n"
         "  2. Commit the new files and push.\n"
-        "  3. For CI spec generation, add an ANTHROPIC_API_KEY repository secret.\n"
+        "  3. Run 'machinist doctor' and resolve any FAIL checks.\n"
         "  4. Label an issue 'agent-task' to start the pipeline."
+    )
+
+
+@main.command("sync-workflows")
+@click.option("--check", is_flag=True, help="Report drift without changing files.")
+def sync_workflows_command(check: bool) -> None:
+    """Project config into managed GitHub workflow files."""
+    try:
+        config = load_config()
+        report = project_workflows(
+            Path.cwd(), config, installed_version=_installed_version(), check=check
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    if check:
+        click.echo("Managed workflows match machinist.yaml.")
+        return
+    for name in report.written:
+        click.echo(f"wrote .github/workflows/{name}")
+    for name in report.removed:
+        click.echo(f"removed .github/workflows/{name}")
+    if not report.written and not report.removed:
+        click.echo("Managed workflows already match machinist.yaml.")
+
+
+@main.command()
+def doctor() -> None:
+    """Run read-only installation and repository diagnostics."""
+    try:
+        config = load_config()
+        report = run_doctor(Path.cwd(), config, installed_version=_installed_version())
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    for check in report.checks:
+        click.echo(f"{check.level.value:<4} {check.name:<24} {check.detail}")
+    if not report.ok:
+        raise click.ClickException("doctor found blocking problems")
+
+
+@main.command()
+@click.argument("pr_number", type=int)
+def approve(pr_number: int) -> None:
+    """Approve the current head commit of draft PR_NUMBER."""
+    try:
+        config = load_config()
+        github = GitHubClient(repo=config.github.repo)
+        pr = next(
+            (
+                candidate
+                for candidate in github.open_machinist_prs(config.workspace.branch_prefix)
+                if candidate.number == pr_number
+            ),
+            None,
+        )
+        if pr is None:
+            raise click.ClickException(f"open machinist draft PR #{pr_number} was not found")
+        github.approve_pr(
+            pr.number,
+            label=config.github.labels.approved,
+            head_sha=pr.head_sha,
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Approved PR #{pr_number} at {pr.head_sha[:12]}.")
+
+
+@main.command()
+@click.argument("issue_number", type=int)
+@click.option("--phase", type=click.Choice([phase.value for phase in Phase]))
+def retry(issue_number: int, phase: str | None) -> None:
+    """Make a failed Task Run eligible for one explicit retry."""
+    try:
+        record = TaskLifecycle(Path(".machinist/runs")).retry(
+            issue_number, Phase(phase) if phase else None
+        )
+    except LifecycleError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"Issue #{issue_number} {record.phase.value} is retryable "
+        f"(previous attempt {record.attempt})."
     )
 
 
@@ -102,12 +194,18 @@ def spec(issue_number: int) -> None:
     """Generate a spec and open a draft PR for ISSUE_NUMBER (Phase 1)."""
     try:
         config = load_config()
-        pr = run_spec_phase(
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        pr = lifecycle.run(
             issue_number,
-            config,
-            github=GitHubClient(repo=config.github.repo),
-            harness=_make_harness(config),
-            workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
+            Phase.SPEC,
+            lambda claim: run_spec_phase(
+                issue_number,
+                config,
+                github=GitHubClient(repo=config.github.repo),
+                harness=_make_harness(config),
+                workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
+                claim=claim,
+            ),
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -127,22 +225,33 @@ def watch(once: bool) -> None:
 
     github = GitHubClient(repo=config.github.repo)
     repo_root = Path.cwd()
+    lifecycle = TaskLifecycle(repo_root / ".machinist/runs")
 
     def dispatch_spec(issue_number: int):
-        return run_spec_phase(
-            issue_number, config,
-            github=github,
-            harness=_make_harness(config),
-            workspace=Workspace(repo_root=repo_root, config=config.workspace),
+        return lifecycle.run(
+            issue_number,
+            Phase.SPEC,
+            lambda claim: run_spec_phase(
+                issue_number, config,
+                github=github,
+                harness=_make_harness(config),
+                workspace=Workspace(repo_root=repo_root, config=config.workspace),
+                claim=claim,
+            ),
         )
 
     def dispatch_execute(issue_number: int):
-        return run_execute_phase(
-            issue_number, config,
-            github=github,
-            harness=_make_harness(config),
-            workspace=Workspace(repo_root=repo_root, config=config.workspace),
-            test_runner=subprocess.run,
+        return lifecycle.run(
+            issue_number,
+            Phase.EXECUTE,
+            lambda claim: run_execute_phase(
+                issue_number, config,
+                github=github,
+                harness=_make_harness(config),
+                workspace=Workspace(repo_root=repo_root, config=config.workspace),
+                test_runner=subprocess.run,
+                claim=claim,
+            ),
         )
 
     state = WatchState()
@@ -172,19 +281,30 @@ def watch(once: bool) -> None:
 
 @main.command()
 @click.argument("issue_number", type=int)
-@click.option("--force", is_flag=True, help="Re-implement even if the PR is already marked ready.")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Re-implement a ready PR; its current head must have fresh approval.",
+)
 def run(issue_number: int, force: bool) -> None:
     """Implement the approved spec for ISSUE_NUMBER (Phase 3)."""
     try:
         config = load_config()
-        pr = run_execute_phase(
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        pr = lifecycle.run(
             issue_number,
-            config,
-            github=GitHubClient(repo=config.github.repo),
-            harness=_make_harness(config),
-            workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
-            test_runner=subprocess.run,
-            force=force,
+            Phase.EXECUTE,
+            lambda claim: run_execute_phase(
+                issue_number,
+                config,
+                github=GitHubClient(repo=config.github.repo),
+                harness=_make_harness(config),
+                workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
+                test_runner=subprocess.run,
+                force=force,
+                claim=claim,
+            ),
+            repeat_succeeded=force,
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -196,7 +316,11 @@ def status() -> None:
     """Show the pipeline state of machinist-managed issues and PRs."""
     try:
         config = load_config()
-        rows = pipeline_status(config, GitHubClient(repo=config.github.repo))
+        rows = pipeline_status(
+            config,
+            GitHubClient(repo=config.github.repo),
+            lifecycle=TaskLifecycle(Path(".machinist/runs")),
+        )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     if not rows:

@@ -7,12 +7,14 @@ translation live here so adapters stay one screen long.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Callable, ClassVar
 
 from machinist.config import HarnessConfig
@@ -24,9 +26,29 @@ class HarnessError(Exception):
     """A harness invocation failed or timed out."""
 
 
+@dataclass(frozen=True)
+class HarnessCapabilities:
+    """Controls the adapter actually requests, not security guarantees."""
+
+    spec_repository_writes: str
+    implementation_git_control: str = "prompt-and-postcondition"
+
+
+_CONTROLLER_CREDENTIALS = {
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "GIT_ASKPASS",
+    "SSH_ASKPASS",
+    "SSH_AUTH_SOCK",
+    "GIT_SSH",
+    "GIT_SSH_COMMAND",
+}
+
+
 class Harness(ABC):
     name: ClassVar[str]
     default_command: ClassVar[str]
+    capabilities: ClassVar[HarnessCapabilities] = HarnessCapabilities("advisory")
 
     # Harness runs are silent and can last many minutes; a periodic progress
     # callback keeps callers (and humans) sure the process is alive.
@@ -71,7 +93,19 @@ class Harness(ABC):
         return result.stdout
 
     def _run_with_heartbeat(self, argv: list[str], cwd: Path, timeout_minutes: int) -> subprocess.CompletedProcess:
-        kwargs = dict(cwd=cwd, timeout=timeout_minutes * 60, capture_output=True, text=True)
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in _CONTROLLER_CREDENTIALS
+        }
+        environment["GIT_TERMINAL_PROMPT"] = "0"
+        kwargs = dict(
+            cwd=cwd,
+            timeout=timeout_minutes * 60,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
         if self.on_progress is None:
             return self._runner(argv, **kwargs)
         start = time.monotonic()

@@ -144,6 +144,7 @@ def test_open_machinist_prs_filters_by_branch_prefix():
                 "title": "Spec: Add dark mode (#42)",
                 "url": "https://github.com/vscarpenter/demo/pull/57",
                 "headRefName": "agent/issue-42",
+                "headRefOid": "a" * 40,
                 "isDraft": True,
                 "labels": [{"name": "machinist:approved"}],
             },
@@ -152,6 +153,7 @@ def test_open_machinist_prs_filters_by_branch_prefix():
                 "title": "Unrelated human PR",
                 "url": "https://github.com/vscarpenter/demo/pull/58",
                 "headRefName": "fix/typo",
+                "headRefOid": "b" * 40,
                 "isDraft": False,
                 "labels": [],
             },
@@ -166,7 +168,7 @@ def test_open_machinist_prs_filters_by_branch_prefix():
         [
             "gh", "pr", "list",
             "--state", "open",
-            "--json", "number,title,url,headRefName,isDraft,labels",
+            "--json", "number,title,url,headRefName,headRefOid,isDraft,labels",
             "--repo", "vscarpenter/demo",
         ]
     ]
@@ -176,10 +178,75 @@ def test_open_machinist_prs_filters_by_branch_prefix():
             title="Spec: Add dark mode (#42)",
             url="https://github.com/vscarpenter/demo/pull/57",
             branch="agent/issue-42",
+            head_sha="a" * 40,
             is_draft=True,
             labels=["machinist:approved"],
         )
     ]
+
+
+def test_approval_sha_returns_latest_valid_marker():
+    payload = json.dumps(
+        {
+            "comments": [
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "a" * 40 + " -->",
+                    "authorAssociation": "OWNER",
+                    "author": {"login": "owner"},
+                },
+                {"body": "ordinary discussion"},
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "b" * 40 + " -->",
+                    "authorAssociation": "NONE",
+                    "author": {"login": "github-actions"},
+                },
+            ]
+        }
+    )
+    runner = FakeRunner((payload, 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    assert client.approval_sha(57) == "b" * 40
+
+
+def test_approval_sha_ignores_markers_from_untrusted_commenters():
+    payload = json.dumps(
+        {
+            "comments": [
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "a" * 40 + " -->",
+                    "authorAssociation": "MEMBER",
+                    "author": {"login": "maintainer"},
+                },
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "b" * 40 + " -->",
+                    "authorAssociation": "NONE",
+                    "author": {"login": "drive-by-user"},
+                },
+            ]
+        }
+    )
+    client = GitHubClient(runner=FakeRunner((payload, 0, "")))
+
+    assert client.approval_sha(57) == "a" * 40
+
+
+def test_approve_pr_records_sha_before_applying_label():
+    runner = FakeRunner(("", 0, ""), ("", 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    client.approve_pr(57, label="machinist:approved", head_sha="a" * 40)
+
+    assert runner.calls[0][:5] == ["gh", "pr", "comment", "57", "--body"]
+    assert "a" * 40 in runner.calls[0][5]
+    assert runner.calls[1][:5] == ["gh", "pr", "edit", "57", "--add-label"]
+
+
+def test_invalid_gh_json_is_a_github_error():
+    client = GitHubClient(runner=FakeRunner(("not json", 0, "")))
+
+    with pytest.raises(GitHubError, match="invalid JSON"):
+        client.get_issue(42)
 
 
 def test_default_branch_reads_repo_view():

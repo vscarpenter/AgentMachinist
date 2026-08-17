@@ -109,6 +109,33 @@ def test_push_publishes_branch_to_origin(repo, tmp_path):
     assert "agent/issue-7" in heads.splitlines()
 
 
+def test_push_with_lease_refuses_when_remote_changed(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+    path = workspace.provision("issue-7", "agent/issue-7", "origin/main")
+    expected = git(path, "rev-parse", "HEAD")
+    (path / "impl.md").write_text("implementation\n")
+    workspace.commit_all(path, "implementation")
+
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", str(tmp_path / "origin.git"), str(other)], check=True)
+    git(other, "config", "user.email", "other@example.com")
+    git(other, "config", "user.name", "Other")
+    git(other, "checkout", "-b", "agent/issue-7", "origin/main")
+    (other / "spec.md").write_text("changed spec\n")
+    git(other, "add", "-A")
+    git(other, "commit", "-m", "change spec")
+    git(other, "push", "origin", "agent/issue-7")
+
+    with pytest.raises(WorkspaceError, match="push"):
+        workspace.push(path, "agent/issue-7", expected_sha=expected)
+
+
+def test_head_sha_returns_current_commit(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+    path = workspace.provision("issue-7", "agent/issue-7", "origin/main")
+    assert workspace.head_sha(path) == git(path, "rev-parse", "HEAD")
+
+
 def test_cleanup_on_success_removes_worktree(repo, tmp_path):
     workspace = make_workspace(repo, tmp_path, cleanup=CleanupPolicy.ON_SUCCESS)
     path = workspace.provision("issue-7", "agent/issue-7", "origin/main")

@@ -14,7 +14,11 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,3 +30,23 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Smoke-test installed wheel
+        run: |
+          WHEEL="$(find dist -name '*.whl' -print -quit)"
+          ENV_DIR="$(mktemp -d)/venv"
+          uv venv "$ENV_DIR"
+          uv pip install --python "$ENV_DIR/bin/python" "$WHEEL"
+          PATH="$ENV_DIR/bin:$PATH" machinist --version
+          "$ENV_DIR/bin/python" -c "from importlib.resources import files; assert (files('machinist') / 'templates' / 'github' / 'machinist-approve.yml').is_file()"

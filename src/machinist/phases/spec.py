@@ -30,7 +30,15 @@ def render_spec_prompt(issue: Issue) -> str:
     )
 
 
-def run_spec_phase(issue_number: int, config: MachinistConfig, *, github, harness, workspace) -> DraftPR:
+def run_spec_phase(
+    issue_number: int,
+    config: MachinistConfig,
+    *,
+    github,
+    harness,
+    workspace,
+    claim=None,
+) -> DraftPR:
     issue = github.get_issue(issue_number)
     base = github.default_branch()
     branch = f"{config.workspace.branch_prefix}issue-{issue.number}"
@@ -40,6 +48,10 @@ def run_spec_phase(issue_number: int, config: MachinistConfig, *, github, harnes
         spec_text = harness.generate_spec(render_spec_prompt(issue), cwd=path)
         if not spec_text.strip():
             raise SpecPhaseError(f"{harness.name} returned an empty spec for issue #{issue.number}")
+        if workspace.has_changes(path):
+            raise SpecPhaseError(
+                f"{harness.name} changed repository files during read-only spec generation"
+            )
 
         spec_file = path / ".machinist" / "specs" / f"issue-{issue.number}-spec.md"
         spec_file.parent.mkdir(parents=True, exist_ok=True)
@@ -47,6 +59,8 @@ def run_spec_phase(issue_number: int, config: MachinistConfig, *, github, harnes
 
         workspace.commit_all(path, f"docs(spec): add implementation spec for issue #{issue.number}")
         workspace.push(path, branch)
+        if claim is not None:
+            claim.checkpoint(spec_sha=workspace.head_sha(path))
 
         github.ensure_label(
             config.github.labels.approved,

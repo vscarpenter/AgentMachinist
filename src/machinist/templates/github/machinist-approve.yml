@@ -1,5 +1,4 @@
-# AgentMachinist — Phase 2 convenience: convert a '/machinist-execute'
-# comment on a machinist draft PR into the 'machinist:approved' label.
+# AgentMachinist — bind approval to the PR's exact head commit.
 #
 # Only comments from the repo owner, org members, or collaborators are
 # honored; anyone else commenting the command is ignored.
@@ -9,6 +8,8 @@ name: Machinist Approve
 on:
   issue_comment:
     types: [created]
+  pull_request_target:
+    types: [labeled]
 
 permissions:
   pull-requests: write
@@ -16,18 +17,34 @@ permissions:
 
 jobs:
   approve:
-    # contains() rather than startsWith(): real comments arrive with stray
-    # leading whitespace, and startsWith is character-exact.
     if: >-
-      github.event.issue.pull_request
-      && contains(github.event.comment.body, '/machinist-execute')
-      && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+      || (github.event_name == 'pull_request_target'
+        && github.event.label.name == '__APPROVED_LABEL__')
     runs-on: ubuntu-latest
     steps:
-      - name: Apply approval label
+      - name: Require the exact approval command
+        if: github.event_name == 'issue_comment'
+        env:
+          COMMAND: ${{ github.event.comment.body }}
+        run: |
+          NORMALIZED="$(printf '%s' "$COMMAND" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          [[ "$NORMALIZED" == "/machinist-execute" ]] || {
+            echo "Expected the exact command /machinist-execute" >&2
+            exit 1
+          }
+
+      - name: Bind approval to current PR head
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
         run: |
-          gh pr edit ${{ github.event.issue.number }} \
-            --repo ${{ github.repository }} \
-            --add-label "machinist:approved"
+          HEAD_SHA="$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)"
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" \
+            --body "<!-- agentmachinist:approval sha=$HEAD_SHA -->"
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            gh pr edit "$PR_NUMBER" --repo "${{ github.repository }}" \
+              --add-label "__APPROVED_LABEL__"
+          fi

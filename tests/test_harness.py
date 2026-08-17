@@ -45,18 +45,20 @@ def test_config_command_overrides_default_executable():
 
 def test_claude_code_spec_argv_is_headless_print_mode():
     harness = get_harness(HarnessConfig(name=HarnessName.CLAUDE_CODE))
-    assert harness.spec_argv("write a spec") == [
-        "claude", "-p", "write a spec", "--output-format", "text",
-    ]
+    argv = harness.spec_argv("write a spec")
+    assert argv[:3] == ["claude", "-p", "write a spec"]
+    assert ["--permission-mode", "plan"] == argv[argv.index("--permission-mode"):][:2]
+    assert ["--tools", "Read,Grep,Glob"] == argv[argv.index("--tools"):][:2]
+    assert "--no-session-persistence" in argv
 
 
 def test_spec_argv_is_read_only_for_every_harness():
     # Phase 1 must not be able to edit files: stray edits would be swept
     # into the spec commit. Flags verified against the real CLIs 2026-08-16.
     expectations = {
-        HarnessName.CLAUDE_CODE: ["--output-format", "text"],   # print mode: no edit perms
-        HarnessName.OPENCODE: ["--agent", "plan"],              # plan agent is read-only
-        HarnessName.PI: ["-xt", "edit,write"],                  # exclude edit/write tools
+        HarnessName.CLAUDE_CODE: ["--permission-mode", "plan", "--tools", "Read,Grep,Glob"],
+        HarnessName.OPENCODE: ["--agent", "plan", "--pure"],
+        HarnessName.PI: ["--tools", "read,grep,find,ls", "--no-extensions", "--no-session"],
         HarnessName.CODEX: ["--sandbox", "read-only"],
     }
     for name, flags in expectations.items():
@@ -142,3 +144,28 @@ def test_timeout_raises_harness_error(tmp_path):
 
     with pytest.raises(HarnessError, match="timed out"):
         harness.generate_spec("write a spec", cwd=tmp_path)
+
+
+def test_harness_subprocess_strips_controller_credentials_but_keeps_provider_key(tmp_path, monkeypatch):
+    runner = FakeRunner(("ok", 0, ""))
+    monkeypatch.setenv("GH_TOKEN", "github-secret")
+    monkeypatch.setenv("GITHUB_TOKEN", "actions-secret")
+    monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "provider-secret")
+    harness = get_harness(HarnessConfig(), runner=runner)
+
+    harness.generate_spec("p", cwd=tmp_path)
+
+    env = runner.calls[0][1]["env"]
+    assert "GH_TOKEN" not in env
+    assert "GITHUB_TOKEN" not in env
+    assert "SSH_AUTH_SOCK" not in env
+    assert env["ANTHROPIC_API_KEY"] == "provider-secret"
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_adapters_publish_honest_policy_capabilities():
+    for name in HarnessName:
+        capability = get_harness(HarnessConfig(name=name)).capabilities
+        assert capability.spec_repository_writes in {"cli-enforced", "advisory"}
+        assert capability.implementation_git_control == "prompt-and-postcondition"

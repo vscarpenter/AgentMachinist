@@ -1,3 +1,21 @@
+# AgentMachinist — reliability and usability hardening (COMPLETE)
+
+Spec: `docs/superpowers/specs/2026-08-17-reliability-and-usability-hardening.md`
+
+- [x] Bind Approval to the exact Spec commit and surface stale Approval.
+- [x] Persist exclusive local Task Runs with explicit retry/recovery.
+- [x] Make Spec dispatch ownership and generated workflows config-driven.
+- [x] Add `approve`, `doctor`, `sync-workflows`, and `retry` commands.
+- [x] Add Spec/Execute custody checks and typed quality-gate failures.
+- [x] Strengthen CI, release identity, wheel smoke, and versioning.
+- [x] Reconcile all onboarding, operations, trust, support, and maintainer docs.
+- [x] Run full tests, package verification, and handbook checks.
+
+Completed 2026-08-17 on `codex/reliability-and-docs-hardening`: 167 tests
+passed; `agentmachinist-0.2.0` sdist and wheel built; isolated wheel install,
+CLI version, packaged templates, doctor, and workflow drift check all passed.
+Publishing and pushing remain explicitly out of scope.
+
 # AgentMachinist — beta-readiness sweep (COMPLETE)
 
 ## Plan

@@ -24,8 +24,30 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
+      - name: Verify tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          PACKAGE_VERSION="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          test "${RELEASE_TAG#v}" = "$PACKAGE_VERSION" || {
+            echo "release tag $RELEASE_TAG does not match package version $PACKAGE_VERSION" >&2
+            exit 1
+          }
+
+      - name: Run tests
+        run: uv run pytest
+
       - name: Build sdist and wheel
         run: uv build
+
+      - name: Smoke-test installed wheel
+        run: |
+          WHEEL="$(find dist -name '*.whl' -print -quit)"
+          ENV_DIR="$(mktemp -d)/venv"
+          uv venv "$ENV_DIR"
+          uv pip install --python "$ENV_DIR/bin/python" "$WHEEL"
+          PATH="$ENV_DIR/bin:$PATH" machinist --version
+          "$ENV_DIR/bin/python" -c "from importlib.resources import files; assert (files('machinist') / 'templates' / 'github' / 'machinist-approve.yml').is_file(); assert (files('machinist') / 'templates' / 'spec-prompt.md').is_file()"
 
       - name: Publish to PyPI
         run: uv publish --trusted-publishing always
