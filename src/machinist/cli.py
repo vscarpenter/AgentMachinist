@@ -11,6 +11,7 @@ from machinist.config import ConfigError, load_config
 from machinist.github import GitHubClient, GitHubError
 from machinist.harness import HarnessError, get_harness
 from machinist.phases.spec import SpecPhaseError, run_spec_phase
+from machinist.phases.status import pipeline_status
 from machinist.workspace import Workspace, WorkspaceError
 
 _TEMPLATES = files("machinist") / "templates"
@@ -104,4 +105,18 @@ def run(issue_number: int) -> None:
 @main.command()
 def status() -> None:
     """Show the pipeline state of machinist-managed issues and PRs."""
-    _not_implemented("'machinist status'")
+    try:
+        config = load_config()
+        rows = pipeline_status(config, GitHubClient(repo=config.github.repo))
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    if not rows:
+        click.echo(
+            f"No machinist activity: no open '{config.github.labels.trigger}' issues "
+            f"and no open '{config.workspace.branch_prefix}*' PRs."
+        )
+        return
+    for row in rows:
+        kind = "issue" if row.kind == "issue" else "PR"
+        click.echo(f"{kind:<5} #{row.number:<4} {row.state:<18} {row.title}")
+        click.echo(f"      {row.url}")

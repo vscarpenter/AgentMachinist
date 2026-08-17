@@ -15,6 +15,23 @@ stays on the gh wrapper (auth portability beats a PyGithub dependency).
 - [x] Spec prompt template (templates/spec-prompt.md, string.Template)
 - [x] Full suite green (59 passed); offline smoke of the real command verified
 
+## Issue #2 — machinist status: COMPLETE
+
+- [x] TDD github: issues_with_label + open_machinist_prs (+ PullRequest type)
+- [x] TDD phases/status: pipeline_status classification (awaiting spec /
+      awaiting approval / approved / in review; no double-listing)
+- [x] TDD cli: render status; drop status from stub test
+- [x] Suite green (71); live-verified against real repo (shows PR #3)
+
+## Dogfood log (issue #1)
+
+- Phase 1 ran end-to-end 2026-08-16: draft PR #3, 62-line spec grounded in
+  real files/error strings; worktree auto-cleaned on success.
+- Observation: PR #3 was marked ready-for-review by hand instead of labeled
+  machinist:approved — the draft→ready gesture is what users reach for.
+  Consider (post-M2): treat ready-without-label as needing a nudge, or
+  revisit approval signal UX with Vinny.
+
 ## Resuming From Here
 
 - Done: M0 + M1. `machinist spec <n>` is fully wired: issue → harness spec

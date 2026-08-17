@@ -67,10 +67,53 @@ def test_init_no_workflows_skips_github_dir():
 
 def test_phase_stubs_exit_nonzero_with_milestone_note():
     runner = CliRunner()
-    for argv in (["watch"], ["run", "42"], ["status"]):
+    for argv in (["watch"], ["run", "42"]):
         result = runner.invoke(main, argv)
         assert result.exit_code != 0
         assert "not implemented" in result.output.lower()
+
+
+def test_status_without_config_points_at_init():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["status"])
+
+        assert result.exit_code != 0
+        assert "machinist init" in result.output
+
+
+def test_status_renders_rows(monkeypatch):
+    from machinist.phases.status import StatusRow
+
+    rows = [
+        StatusRow(kind="issue", number=3, title="Fix frobnicator",
+                  state="awaiting spec", url="https://github.com/x/y/issues/3"),
+        StatusRow(kind="pr", number=57, title="Spec: Add dark mode (#42)",
+                  state="awaiting approval", url="https://github.com/x/y/pull/57"),
+    ]
+    monkeypatch.setattr("machinist.cli.pipeline_status", lambda config, github: rows)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["status"])
+
+        assert result.exit_code == 0, result.output
+        assert "#3" in result.output and "awaiting spec" in result.output
+        assert "#57" in result.output and "awaiting approval" in result.output
+        assert "Spec: Add dark mode (#42)" in result.output
+
+
+def test_status_with_no_activity_says_so(monkeypatch):
+    monkeypatch.setattr("machinist.cli.pipeline_status", lambda config, github: [])
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["status"])
+
+        assert result.exit_code == 0
+        assert "no machinist activity" in result.output.lower()
 
 
 def test_spec_without_config_points_at_init():

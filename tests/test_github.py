@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from machinist.github import DraftPR, GitHubClient, GitHubError, Issue
+from machinist.github import DraftPR, GitHubClient, GitHubError, Issue, PullRequest
 
 
 class FakeRunner:
@@ -107,6 +107,78 @@ def test_ensure_label_is_idempotent_via_force():
             "--description", "Spec approved",
             "--repo", "vscarpenter/demo",
         ]
+    ]
+
+
+def test_issues_with_label_builds_argv_and_parses():
+    runner = FakeRunner((json.dumps([json.loads(ISSUE_JSON)]), 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    issues = client.issues_with_label("agent-task")
+
+    assert runner.calls == [
+        [
+            "gh", "issue", "list",
+            "--label", "agent-task",
+            "--state", "open",
+            "--json", "number,title,body,url,labels",
+            "--repo", "vscarpenter/demo",
+        ]
+    ]
+    assert issues == [
+        Issue(
+            number=42,
+            title="Add dark mode",
+            body="Users want dark mode.",
+            url="https://github.com/vscarpenter/demo/issues/42",
+            labels=["agent-task", "enhancement"],
+        )
+    ]
+
+
+def test_open_machinist_prs_filters_by_branch_prefix():
+    payload = json.dumps(
+        [
+            {
+                "number": 57,
+                "title": "Spec: Add dark mode (#42)",
+                "url": "https://github.com/vscarpenter/demo/pull/57",
+                "headRefName": "agent/issue-42",
+                "isDraft": True,
+                "labels": [{"name": "machinist:approved"}],
+            },
+            {
+                "number": 58,
+                "title": "Unrelated human PR",
+                "url": "https://github.com/vscarpenter/demo/pull/58",
+                "headRefName": "fix/typo",
+                "isDraft": False,
+                "labels": [],
+            },
+        ]
+    )
+    runner = FakeRunner((payload, 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    prs = client.open_machinist_prs("agent/")
+
+    assert runner.calls == [
+        [
+            "gh", "pr", "list",
+            "--state", "open",
+            "--json", "number,title,url,headRefName,isDraft,labels",
+            "--repo", "vscarpenter/demo",
+        ]
+    ]
+    assert prs == [
+        PullRequest(
+            number=57,
+            title="Spec: Add dark mode (#42)",
+            url="https://github.com/vscarpenter/demo/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            labels=["machinist:approved"],
+        )
     ]
 
 

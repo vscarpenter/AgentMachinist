@@ -34,6 +34,16 @@ class DraftPR:
     url: str
 
 
+@dataclass(frozen=True)
+class PullRequest:
+    number: int
+    title: str
+    url: str
+    branch: str
+    is_draft: bool
+    labels: list[str] = field(default_factory=list)
+
+
 class GitHubClient:
     def __init__(self, repo: str | None = None, runner: Runner = subprocess.run):
         self.repo = repo
@@ -51,6 +61,43 @@ class GitHubClient:
             url=data["url"],
             labels=[label["name"] for label in data.get("labels", [])],
         )
+
+    def issues_with_label(self, label: str) -> list[Issue]:
+        data = self._gh_json(
+            "issue", "list",
+            "--label", label,
+            "--state", "open",
+            "--json", "number,title,body,url,labels",
+        )
+        return [
+            Issue(
+                number=item["number"],
+                title=item["title"],
+                body=item.get("body") or "",
+                url=item["url"],
+                labels=[l["name"] for l in item.get("labels", [])],
+            )
+            for item in data
+        ]
+
+    def open_machinist_prs(self, branch_prefix: str) -> list[PullRequest]:
+        data = self._gh_json(
+            "pr", "list",
+            "--state", "open",
+            "--json", "number,title,url,headRefName,isDraft,labels",
+        )
+        return [
+            PullRequest(
+                number=item["number"],
+                title=item["title"],
+                url=item["url"],
+                branch=item["headRefName"],
+                is_draft=item["isDraft"],
+                labels=[l["name"] for l in item.get("labels", [])],
+            )
+            for item in data
+            if item["headRefName"].startswith(branch_prefix)
+        ]
 
     def default_branch(self) -> str:
         data = self._gh_json("repo", "view", "--json", "defaultBranchRef")
