@@ -55,6 +55,7 @@ class FakeWorkspace:
     def __init__(self, tmp_path):
         self.path = tmp_path / "ws"
         self.calls = []
+        self.dirty = False
 
     def provision(self, task, branch, base_ref):
         self.calls.append(("provision", task, branch, base_ref))
@@ -66,6 +67,12 @@ class FakeWorkspace:
 
     def push(self, path, branch):
         self.calls.append(("push", branch))
+
+    def has_changes(self, path):
+        return self.dirty
+
+    def head_sha(self, path):
+        return "b" * 40
 
     def cleanup(self, path, *, success):
         self.calls.append(("cleanup", success))
@@ -150,4 +157,26 @@ def test_harness_failure_cleans_up_and_propagates(tmp_path):
             github=FakeGitHub(), harness=FakeHarness(error=boom), workspace=workspace,
         )
 
+    assert ("cleanup", False) in workspace.calls
+
+
+def test_spec_harness_repository_mutation_is_rejected(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+
+    class MutatingHarness(FakeHarness):
+        def generate_spec(self, prompt, cwd):
+            (cwd / "oops.py").write_text("changed\n")
+            workspace.dirty = True
+            return super().generate_spec(prompt, cwd)
+
+    with pytest.raises(SpecPhaseError, match="read-only"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(),
+            harness=MutatingHarness(),
+            workspace=workspace,
+        )
+
+    assert not any(call[0] == "commit_all" for call in workspace.calls)
     assert ("cleanup", False) in workspace.calls

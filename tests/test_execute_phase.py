@@ -82,8 +82,11 @@ class FakeWorkspace:
     def commit_all(self, path, message):
         self.calls.append(("commit_all", message))
 
-    def push(self, path, branch):
-        self.calls.append(("push", branch))
+    def push(self, path, branch, expected_sha=None):
+        self.calls.append(("push", branch, expected_sha))
+
+    def head_sha(self, path):
+        return "c" * 40
 
     def cleanup(self, path, *, success):
         self.calls.append(("cleanup", success))
@@ -137,7 +140,7 @@ def test_happy_path_implements_tests_pushes_and_marks_ready(tmp_path):
     assert ran == {"command": "pytest -q", "cwd": workspace.path}
     commit = next(c for c in workspace.calls if c[0] == "commit_all")
     assert "#42" in commit[1]
-    assert ("push", "agent/issue-42") in workspace.calls
+    assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
     assert ("mark_ready", 57) in github.calls
     assert ("cleanup", True) in workspace.calls
 
@@ -212,7 +215,7 @@ def test_force_reimplements_a_ready_pr(tmp_path):
     )
 
     assert pr.number == 57
-    assert ("push", "agent/issue-42") in workspace.calls
+    assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
 
 
 def test_missing_spec_file_fails_before_harness_runs(tmp_path):
@@ -274,4 +277,37 @@ def test_null_test_command_skips_the_gate(tmp_path):
     )
 
     assert pr.number == 57
-    assert ("push", "agent/issue-42") in workspace.calls
+    assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
+
+
+def test_partial_push_retry_marks_ready_without_rerunning_harness(tmp_path):
+    recovered = make_pr()
+    object.__setattr__(recovered, "head_sha", "c" * 40)
+    github = FakeGitHub(prs=[recovered])
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(error=AssertionError("harness must not rerun"))
+    claim = type(
+        "Claim",
+        (),
+        {
+            "previous_evidence": {
+                "approved_sha": "a" * 40,
+                "implementation_sha": "c" * 40,
+            },
+            "checkpoint": lambda self, **kwargs: None,
+        },
+    )()
+
+    pr = run_execute_phase(
+        42,
+        config_with_tests(),
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+        claim=claim,
+    )
+
+    assert pr.number == 57
+    assert harness.prompts == []
+    assert ("mark_ready", 57) in github.calls

@@ -12,11 +12,10 @@ harness:
 
 github:
   repo: null                   # "owner/repo"; null = gh derives it from origin
+  spec_source: local           # local = watch owns Phase 1 | github-actions = CI owns it
   labels:
     trigger: agent-task        # issues with this label enter the pipeline
     approved: "machinist:approved"   # PRs with this label get implemented
-    # NOTE: if you rename 'trigger', update the matching label name in
-    # .github/workflows/machinist-spec.yml as well.
   poll_interval_seconds: 60    # how often `machinist watch` polls (min 10)
 
 workspace:

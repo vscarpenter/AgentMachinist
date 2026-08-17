@@ -21,6 +21,7 @@ harness:
   spec_timeout_minutes: 5
 github:
   repo: vscarpenter/demo
+  spec_source: github-actions
   labels:
     trigger: ai-task
     approved: "go:build"
@@ -57,6 +58,7 @@ def test_full_config_round_trips(tmp_path):
     assert config.harness.command == "/opt/bin/codex"
     assert config.harness.timeout_minutes == 45
     assert config.github.repo == "vscarpenter/demo"
+    assert config.github.spec_source.value == "github-actions"
     assert config.github.labels.trigger == "ai-task"
     assert config.github.poll_interval_seconds == 120
     assert config.workspace.cleanup.value == "never"

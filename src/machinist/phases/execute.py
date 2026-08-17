@@ -35,6 +35,7 @@ def run_execute_phase(
     workspace,
     test_runner=subprocess.run,
     force: bool = False,
+    claim=None,
 ) -> PullRequest:
     branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
     pr = next(
@@ -52,6 +53,22 @@ def run_execute_phase(
             "(or comment /machinist-execute on it) first"
         )
     approval_sha = github.approval_sha(pr.number)
+    previous = getattr(claim, "previous_evidence", {})
+    recovering_push = (
+        previous.get("approved_sha") == approval_sha
+        and previous.get("implementation_sha") == pr.head_sha
+    )
+    if recovering_push:
+        base = github.default_branch()
+        path = workspace.provision(f"issue-{issue_number}", branch, f"origin/{base}")
+        try:
+            _run_test_gate(path, config, test_runner)
+            github.mark_ready(pr.number)
+        except Exception:
+            workspace.cleanup(path, success=False)
+            raise
+        workspace.cleanup(path, success=True)
+        return pr
     if approval_sha is None:
         raise ExecutePhaseError(
             f"PR #{pr.number} has the approval label but no SHA-bound approval evidence; "
@@ -80,27 +97,44 @@ def run_execute_phase(
         if not workspace.has_changes(path):
             raise ExecutePhaseError(f"{harness.name} made no changes for issue #{issue_number}")
 
-        if config.tests.command:
-            result = test_runner(
-                config.tests.command,
-                shell=True,
-                cwd=path,
-                capture_output=True,
-                text=True,
-                timeout=config.harness.timeout_minutes * 60,
-            )
-            if result.returncode != 0:
-                output = (result.stdout + result.stderr).strip()
-                raise ExecutePhaseError(
-                    f"test gate '{config.tests.command}' failed (workspace kept at {path}):\n"
-                    f"{output[-2000:]}"
-                )
+        _run_test_gate(path, config, test_runner)
 
         workspace.commit_all(path, f"feat(agent): implement issue #{issue_number} per approved spec")
-        workspace.push(path, branch)
+        implementation_sha = workspace.head_sha(path)
+        workspace.push(path, branch, expected_sha=pr.head_sha)
+        if claim is not None:
+            claim.checkpoint(
+                approved_sha=approval_sha,
+                implementation_sha=implementation_sha,
+            )
         github.mark_ready(pr.number)
     except Exception:
         workspace.cleanup(path, success=False)
         raise
     workspace.cleanup(path, success=True)
     return pr
+
+
+def _run_test_gate(path, config: MachinistConfig, test_runner) -> None:
+    if not config.tests.command:
+        return
+    try:
+        result = test_runner(
+            config.tests.command,
+            shell=True,
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=config.harness.timeout_minutes * 60,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ExecutePhaseError(
+            f"test gate '{config.tests.command}' timed out after "
+            f"{config.harness.timeout_minutes} minutes (workspace kept at {path})"
+        ) from exc
+    if result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        raise ExecutePhaseError(
+            f"test gate '{config.tests.command}' failed (workspace kept at {path}):\n"
+            f"{output[-2000:]}"
+        )

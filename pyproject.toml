@@ -1,7 +1,7 @@
 [project]
 name = "agentmachinist"
-version = "0.1.0"
-description = "Local-first agentic build & CI/CD: bridge GitHub issues to local coding harnesses"
+version = "0.2.0"
+description = "Local-first issue-to-PR build pipeline for coding harnesses"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"

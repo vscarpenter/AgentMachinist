@@ -38,6 +38,11 @@ class CleanupPolicy(str, Enum):
     NEVER = "never"
 
 
+class SpecSource(str, Enum):
+    LOCAL = "local"
+    GITHUB_ACTIONS = "github-actions"
+
+
 class HarnessConfig(StrictModel):
     name: HarnessName = HarnessName.CLAUDE_CODE
     command: str | None = None
@@ -52,6 +57,7 @@ class LabelsConfig(StrictModel):
 
 class GitHubConfig(StrictModel):
     repo: str | None = None
+    spec_source: SpecSource = SpecSource.LOCAL
     labels: LabelsConfig = Field(default_factory=LabelsConfig)
     poll_interval_seconds: int = Field(default=60, ge=10)
 

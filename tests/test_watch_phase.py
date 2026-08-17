@@ -65,6 +65,22 @@ def test_awaiting_spec_issue_dispatches_spec_phase():
     assert any("issue #7" in e for e in events)
 
 
+def test_github_actions_spec_source_prevents_local_spec_dispatch():
+    config = MachinistConfig.model_validate({"github": {"spec_source": "github-actions"}})
+    run_spec = Dispatcher()
+
+    events = watch_once(
+        config,
+        FakeGitHub(issues=[issue(7)]),
+        run_spec=run_spec,
+        run_execute=Dispatcher(),
+        state=WatchState(),
+    )
+
+    assert run_spec.calls == []
+    assert events == []
+
+
 def test_approved_draft_pr_dispatches_execute_with_issue_number():
     run_execute = Dispatcher()
     github = FakeGitHub(

@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from machinist.config import MachinistConfig
+from machinist.config import MachinistConfig, SpecSource
 from machinist.phases.status import pipeline_status
 
 
@@ -30,7 +30,7 @@ def watch_once(
         issue_number = row.issue_number
         if issue_number is None or issue_number in state.failed_issues:
             continue
-        if row.state == "awaiting spec":
+        if row.state == "awaiting spec" and config.github.spec_source is SpecSource.LOCAL:
             _dispatch(
                 run_spec, issue_number, state, events,
                 phase="spec",

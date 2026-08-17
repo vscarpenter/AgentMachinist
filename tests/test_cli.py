@@ -11,7 +11,7 @@ from machinist.config import load_config
 def test_help_lists_all_commands():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    for command in ("init", "spec", "watch", "run", "status"):
+    for command in ("init", "spec", "approve", "watch", "run", "retry", "status", "doctor", "sync-workflows"):
         assert command in result.output
 
 
@@ -23,8 +23,33 @@ def test_init_creates_config_dirs_and_workflows():
         assert result.exit_code == 0, result.output
         assert Path("machinist.yaml").is_file()
         assert Path(".machinist/specs/.gitkeep").is_file()
-        assert Path(".github/workflows/machinist-spec.yml").is_file()
         assert Path(".github/workflows/machinist-approve.yml").is_file()
+
+
+def test_sync_workflows_projects_configured_ci_dispatcher():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        path = Path("machinist.yaml")
+        path.write_text(path.read_text().replace("spec_source: local", "spec_source: github-actions"))
+
+        result = runner.invoke(main, ["sync-workflows"])
+
+        assert result.exit_code == 0, result.output
+        assert Path(".github/workflows/machinist-spec.yml").is_file()
+
+
+def test_sync_workflows_check_fails_on_drift():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init"])
+        approval = Path(".github/workflows/machinist-approve.yml")
+        approval.write_text("drift\n")
+
+        result = runner.invoke(main, ["sync-workflows", "--check"])
+
+        assert result.exit_code != 0
+        assert "drift" in result.output.lower()
 
 
 def test_init_template_round_trips_through_schema():
@@ -179,7 +204,7 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
 
     seen = {}
 
-    def fake_run_execute_phase(issue_number, config, *, github, harness, workspace, test_runner, force):
+    def fake_run_execute_phase(issue_number, config, *, github, harness, workspace, test_runner, force, claim):
         seen["issue"] = issue_number
         seen["harness"] = harness.name
         seen["force"] = force
@@ -277,7 +302,7 @@ def test_spec_wires_config_and_reports_pr_url(monkeypatch):
 
     seen = {}
 
-    def fake_run_spec_phase(issue_number, config, *, github, harness, workspace):
+    def fake_run_spec_phase(issue_number, config, *, github, harness, workspace, claim):
         seen["issue"] = issue_number
         seen["harness"] = harness.name
         seen["repo"] = github.repo
