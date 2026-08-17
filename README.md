@@ -5,6 +5,9 @@ GitHub issues to local coding harnesses — Claude Code, OpenCode, PI, or
 Codex — through a three-phase, human-in-the-loop pipeline that runs on your Mac.
 
 New here? Start with the [Getting Started guide](docs/getting-started.md).
+Prefer a visual tour? Open [`docs/onboarding.html`](docs/onboarding.html) in a
+browser — a self-contained illustrated handbook of the pipeline and its
+principles.
 
 ```
  GitHub issue (label: agent-task)

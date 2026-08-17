@@ -1,0 +1,384 @@
+<title>AgentMachinist Handbook</title>
+<style>
+  :root {
+    --ground: #eef1f4;
+    --panel: #ffffff;
+    --ink: #1c2733;
+    --steel: #5a6b7c;
+    --line: #ccd4db;
+    --blueprint: #2563a8;
+    --blueprint-soft: #dce9f6;
+    --stamp: #a3660a;
+    --stamp-soft: #f3e7d3;
+    --good: #2e7d4f;
+    --code-bg: #1c2733;
+    --code-ink: #dce9f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #10161d;
+      --panel: #182028;
+      --ink: #e5ebf1;
+      --steel: #93a4b5;
+      --line: #2c3a47;
+      --blueprint: #6ea8e0;
+      --blueprint-soft: #1d3350;
+      --stamp: #d99a3d;
+      --stamp-soft: #3a2c14;
+      --good: #5cb884;
+      --code-bg: #0b1015;
+      --code-ink: #c8d6e4;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #10161d;
+    --panel: #182028;
+    --ink: #e5ebf1;
+    --steel: #93a4b5;
+    --line: #2c3a47;
+    --blueprint: #6ea8e0;
+    --blueprint-soft: #1d3350;
+    --stamp: #d99a3d;
+    --stamp-soft: #3a2c14;
+    --good: #5cb884;
+    --code-bg: #0b1015;
+    --code-ink: #c8d6e4;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
+    font-size: 1.06rem;
+    line-height: 1.65;
+    margin: 0;
+  }
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+  .display, h1, h2, h3, .eyebrow, .card h3, figcaption, .cmd-note {
+    font-family: "Avenir Next", Avenir, Futura, "Century Gothic", "Trebuchet MS", system-ui, sans-serif;
+  }
+  h1 { font-size: clamp(2rem, 6vw, 3rem); font-weight: 600; letter-spacing: -0.01em; line-height: 1.1; margin: 0.4rem 0 0.8rem; text-wrap: balance; }
+  h2 { font-size: 1.5rem; font-weight: 600; margin: 3.2rem 0 0.8rem; text-wrap: balance; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 1.6rem 0 0.4rem; }
+  p { margin: 0.8rem 0; }
+  a { color: var(--blueprint); }
+  .eyebrow {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--steel); margin: 0 0 0.2rem;
+  }
+  .lede { font-size: 1.2rem; color: var(--steel); margin-top: 0; }
+
+  .legend { display: flex; gap: 1.4rem; flex-wrap: wrap; margin: 1.4rem 0 0.4rem;
+    font-family: "Avenir Next", Avenir, Futura, system-ui, sans-serif; font-size: 0.85rem; }
+  .legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; display: inline-block; }
+  .dot.you { background: var(--stamp); }
+  .dot.machine { background: var(--blueprint); }
+
+  figure { margin: 1.8rem 0; }
+  figure svg { max-width: 100%; height: auto; display: block; }
+  figcaption { font-size: 0.85rem; color: var(--steel); margin-top: 0.6rem; }
+  .figpanel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1.2rem; overflow-x: auto; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.9rem; margin: 1.4rem 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.1rem; }
+  .card h3 { margin: 0 0 0.35rem; font-size: 0.98rem; }
+  .card p { margin: 0; font-size: 0.94rem; color: var(--steel); }
+
+  pre {
+    background: var(--code-bg); color: var(--code-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88rem; line-height: 1.55;
+    padding: 0.9rem 1.1rem; border-radius: 6px; overflow-x: auto; margin: 0.9rem 0;
+  }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; }
+  p code, li code, td code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0.05em 0.35em; }
+  pre code { background: none; border: none; padding: 0; }
+  .cmd-note { color: var(--steel); font-size: 0.82rem; margin: -0.4rem 0 1rem; }
+
+  .callout { border-left: 4px solid var(--stamp); background: var(--stamp-soft); border-radius: 0 6px 6px 0; padding: 0.9rem 1.1rem; margin: 1.4rem 0; }
+  .callout p { margin: 0.3rem 0; }
+  .callout .eyebrow { color: var(--stamp); }
+
+  ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 1.4rem 0; display: grid; gap: 0.9rem; }
+  ol.steps > li { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.1rem 1rem 3.4rem; position: relative; }
+  ol.steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 1rem; top: 1.05rem;
+    width: 1.6rem; height: 1.6rem; border-radius: 50%;
+    background: var(--blueprint); color: var(--panel);
+    font-family: "Avenir Next", Avenir, system-ui, sans-serif; font-weight: 600; font-size: 0.9rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps h3 { margin: 0 0 0.3rem; }
+  ol.steps p { margin: 0.3rem 0; font-size: 0.96rem; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  .tablewrap { overflow-x: auto; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--line); }
+  th { font-family: "Avenir Next", Avenir, system-ui, sans-serif; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--steel); }
+  td:first-child { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.85rem; white-space: nowrap; }
+
+  ul { padding-left: 1.2rem; }
+  li { margin: 0.35rem 0; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 3rem 0; }
+  .foot { color: var(--steel); font-size: 0.88rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: opacity 120ms ease; }
+    a:hover { opacity: 0.75; }
+  }
+  a:focus-visible, code:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">AgentMachinist · Onboarding</p>
+  <h1>Run a one-person machine shop for your code</h1>
+  <p class="lede">AgentMachinist turns your GitHub issues into reviewed, tested pull requests — built by the coding agent you already use, on your own Mac, with you signing off at every step that matters.</p>
+
+  <p class="legend">
+    <span><span class="dot you"></span> amber = you act</span>
+    <span><span class="dot machine"></span> blue = the machine acts</span>
+  </p>
+
+  <figure>
+    <div class="figpanel">
+    <svg viewBox="0 0 720 150" role="img" aria-label="The pipeline: you file an issue, the machine writes a spec, you approve it, the machine builds and tests, you review and merge.">
+      <defs>
+        <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L8 4 L0 8 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.4" color="var(--ink)">
+        <line x1="118" y1="62" x2="158" y2="62" marker-end="url(#arr)"/>
+        <line x1="266" y1="62" x2="306" y2="62" marker-end="url(#arr)"/>
+        <line x1="414" y1="62" x2="454" y2="62" marker-end="url(#arr)"/>
+        <line x1="562" y1="62" x2="602" y2="62" marker-end="url(#arr)"/>
+      </g>
+      <g font-family="Avenir Next, Avenir, system-ui, sans-serif" font-size="12.5" text-anchor="middle">
+        <rect x="10" y="38" width="108" height="48" rx="6" fill="var(--stamp-soft)" stroke="var(--stamp)" stroke-width="1.5"/>
+        <text x="64" y="58" fill="var(--stamp)" font-weight="600">You</text>
+        <text x="64" y="74" fill="currentColor">file an issue</text>
+
+        <rect x="158" y="38" width="108" height="48" rx="6" fill="var(--blueprint-soft)" stroke="var(--blueprint)" stroke-width="1.5"/>
+        <text x="212" y="58" fill="var(--blueprint)" font-weight="600">Machine</text>
+        <text x="212" y="74" fill="currentColor">writes a spec</text>
+
+        <rect x="306" y="38" width="108" height="48" rx="6" fill="var(--stamp-soft)" stroke="var(--stamp)" stroke-width="1.5"/>
+        <text x="360" y="58" fill="var(--stamp)" font-weight="600">You</text>
+        <text x="360" y="74" fill="currentColor">approve the plan</text>
+
+        <rect x="454" y="38" width="108" height="48" rx="6" fill="var(--blueprint-soft)" stroke="var(--blueprint)" stroke-width="1.5"/>
+        <text x="508" y="58" fill="var(--blueprint)" font-weight="600">Machine</text>
+        <text x="508" y="74" fill="currentColor">builds &amp; tests</text>
+
+        <rect x="602" y="38" width="108" height="48" rx="6" fill="var(--stamp-soft)" stroke="var(--stamp)" stroke-width="1.5"/>
+        <text x="656" y="58" fill="var(--stamp)" font-weight="600">You</text>
+        <text x="656" y="74" fill="currentColor">review &amp; merge</text>
+
+        <text x="212" y="110" fill="var(--steel)" font-size="11">draft PR with the plan</text>
+        <text x="508" y="110" fill="var(--steel)" font-size="11">code lands on the same PR</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>The whole system in one line: work alternates between you (amber) and the machine (blue), and it always ends with your merge.</figcaption>
+  </figure>
+
+  <h2>The one principle everything follows</h2>
+  <p>Coding agents are fast, but speed without checkpoints is how you end up with code you don't understand in a repo you no longer trust. AgentMachinist's answer is simple: <strong>the expensive machine work only ever happens between two cheap human decisions.</strong></p>
+
+  <figure>
+    <div class="figpanel">
+    <svg viewBox="0 0 720 190" role="img" aria-label="Two gates: gate one approves the plan before any code exists; gate two reviews the code before it merges. The machine works only between them.">
+      <defs>
+        <marker id="arr2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L8 4 L0 8 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.4" color="var(--ink)">
+        <line x1="30" y1="95" x2="205" y2="95" marker-end="url(#arr2)"/>
+        <line x1="285" y1="95" x2="460" y2="95" marker-end="url(#arr2)"/>
+        <line x1="540" y1="95" x2="690" y2="95" marker-end="url(#arr2)"/>
+      </g>
+      <g font-family="Avenir Next, Avenir, system-ui, sans-serif" text-anchor="middle">
+        <rect x="205" y="55" width="80" height="80" rx="6" fill="var(--stamp-soft)" stroke="var(--stamp)" stroke-width="2"/>
+        <text x="245" y="82" fill="var(--stamp)" font-weight="600" font-size="12">GATE 1</text>
+        <text x="245" y="100" fill="currentColor" font-size="11.5">approve</text>
+        <text x="245" y="115" fill="currentColor" font-size="11.5">the plan</text>
+
+        <rect x="460" y="55" width="80" height="80" rx="6" fill="var(--stamp-soft)" stroke="var(--stamp)" stroke-width="2"/>
+        <text x="500" y="82" fill="var(--stamp)" font-weight="600" font-size="12">GATE 2</text>
+        <text x="500" y="100" fill="currentColor" font-size="11.5">review</text>
+        <text x="500" y="115" fill="currentColor" font-size="11.5">the code</text>
+
+        <text x="112" y="78" fill="var(--steel)" font-size="11.5">a plan exists,</text>
+        <text x="112" y="93" fill="var(--steel)" font-size="11.5">no code yet</text>
+        <text x="372" y="70" fill="var(--blueprint)" font-size="11.5" font-weight="600">machine implements here</text>
+        <text x="372" y="120" fill="var(--steel)" font-size="11.5">tests must pass or nothing ships</text>
+        <text x="618" y="78" fill="var(--steel)" font-size="11.5">merge closes</text>
+        <text x="618" y="93" fill="var(--steel)" font-size="11.5">the issue</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Gate 1 is cheap — rejecting a plan costs a minute. Gate 2 is thorough — real code review. The machine never merges.</figcaption>
+  </figure>
+
+  <p>Gate 1 works because <strong>a plan is much easier to judge than code</strong>. The spec is a short Markdown document in a draft PR: what will be built, which files change, how it will be tested. If it's wrong, you close the PR and sharpen the issue — no code was written, nothing was wasted.</p>
+
+  <h2>How it's built, in plain terms</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Local-first</h3>
+      <p>Everything runs on your Mac using the logins you already have — your GitHub CLI session and your coding agent's own account. There are no API keys to create or store.</p>
+    </div>
+    <div class="card">
+      <h3>Your files are never touched</h3>
+      <p>Every task runs in its own disposable workshop (a git worktree), away from whatever you're editing. Your checkout, including uncommitted work, stays exactly as you left it.</p>
+    </div>
+    <div class="card">
+      <h3>Permissions match trust</h3>
+      <p>While writing the spec, the agent can read your code but can't change a file. Edit rights only switch on after you approve — the gates exist in the process itself, not just in policy.</p>
+    </div>
+    <div class="card">
+      <h3>Tests are the gatekeeper</h3>
+      <p>After implementing, your test command runs. If it fails, nothing is pushed and the PR stays draft — you get the failing workshop kept on disk to inspect.</p>
+    </div>
+    <div class="card">
+      <h3>Everything is visible on GitHub</h3>
+      <p>Specs are commits, approvals are labels, progress is PR state. There's no hidden database — you can audit every decision in your repo's history.</p>
+    </div>
+    <div class="card">
+      <h3>Bring your own agent</h3>
+      <p>Claude Code is the default, but OpenCode, PI, and Codex plug into the same pipeline through one config line.</p>
+    </div>
+  </div>
+
+  <figure>
+    <div class="figpanel">
+    <svg viewBox="0 0 720 210" role="img" aria-label="Isolation: the agent works in a separate workshop directory branched from GitHub, pushes back to GitHub, and your own checkout is never involved.">
+      <g font-family="Avenir Next, Avenir, system-ui, sans-serif" text-anchor="middle">
+        <rect x="270" y="16" width="180" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="360" y="38" fill="currentColor" font-weight="600" font-size="12.5">GitHub</text>
+        <text x="360" y="54" fill="var(--steel)" font-size="11">issues · PRs · labels</text>
+
+        <rect x="60" y="130" width="220" height="60" rx="6" fill="var(--stamp-soft)" stroke="var(--stamp)" stroke-width="1.5"/>
+        <text x="170" y="154" fill="var(--stamp)" font-weight="600" font-size="12.5">Your checkout</text>
+        <text x="170" y="171" fill="currentColor" font-size="11">your edits, your mess — untouched</text>
+
+        <rect x="440" y="130" width="220" height="60" rx="6" fill="var(--blueprint-soft)" stroke="var(--blueprint)" stroke-width="1.5"/>
+        <text x="550" y="154" fill="var(--blueprint)" font-weight="600" font-size="12.5">Task workshop</text>
+        <text x="550" y="171" fill="currentColor" font-size="11">~/.machinist/workspaces/…</text>
+      </g>
+      <defs>
+        <marker id="arr3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L8 4 L0 8 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.4" color="var(--ink)">
+        <line x1="480" y1="68" x2="520" y2="122" marker-end="url(#arr3)"/>
+        <line x1="580" y1="126" x2="620" y2="72" marker-end="url(#arr3)"/>
+      </g>
+      <g font-family="Avenir Next, Avenir, system-ui, sans-serif" font-size="11" fill="var(--steel)">
+        <text x="452" y="100" text-anchor="end">branch out</text>
+        <text x="648" y="100" text-anchor="start">push results</text>
+        <text x="170" y="118" text-anchor="middle">no arrows in or out</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Each task gets a fresh workshop branched from GitHub. It talks to GitHub — never to your working copy. Successful workshops are cleaned up automatically; failed ones are kept so you can look inside.</figcaption>
+  </figure>
+
+  <h2>Set up in three steps</h2>
+  <ol class="steps">
+    <li>
+      <h3>Check your tools</h3>
+      <p>You need <code>git</code>, the GitHub CLI signed in (<code>gh auth status</code>), <code>uv</code>, and at least one coding agent CLI such as <code>claude</code>.</p>
+    </li>
+    <li>
+      <h3>Install the machinist</h3>
+      <pre><code>uv tool install git+https://github.com/vscarpenter/AgentMachinist</code></pre>
+      <p>Then confirm with <code>machinist --version</code>.</p>
+    </li>
+    <li>
+      <h3>Initialize your project</h3>
+      <pre><code>cd ~/code/my-project
+machinist init</code></pre>
+      <p>This writes <code>machinist.yaml</code>, creates a spec folder, and installs two small GitHub workflows. Open <code>machinist.yaml</code> and set one thing before anything else: your test command.</p>
+      <pre><code>tests:
+  command: npm test   # or pytest, cargo test, go test ./...</code></pre>
+      <p>Commit the new files and push. You're operational.</p>
+    </li>
+  </ol>
+
+  <h2>A day with the machinist</h2>
+  <p>The system fits around your day instead of demanding it. Here's the rhythm it settles into:</p>
+
+  <figure>
+    <div class="figpanel">
+    <svg viewBox="0 0 720 278" role="img" aria-label="A day: morning, you file issues and start the watch daemon; midday, you approve specs over coffee; afternoon, the machine implements; evening, you review and merge.">
+      <line x1="60" y1="20" x2="60" y2="245" stroke="currentColor" stroke-width="1.4" color="var(--ink)"/>
+      <g font-family="Avenir Next, Avenir, system-ui, sans-serif">
+        <circle cx="60" cy="40" r="7" fill="var(--stamp)"/>
+        <text x="84" y="37" fill="currentColor" font-weight="600" font-size="12.5">Morning — think in issues</text>
+        <text x="84" y="54" fill="var(--steel)" font-size="11.5">Write down what you want built, label each one “agent-task”, run: machinist watch</text>
+
+        <circle cx="60" cy="95" r="7" fill="var(--blueprint)"/>
+        <text x="84" y="92" fill="currentColor" font-weight="600" font-size="12.5">While you do other things</text>
+        <text x="84" y="109" fill="var(--steel)" font-size="11.5">The daemon notices labeled issues and opens a draft PR with a plan for each</text>
+
+        <circle cx="60" cy="150" r="7" fill="var(--stamp)"/>
+        <text x="84" y="147" fill="currentColor" font-weight="600" font-size="12.5">Coffee break — stamp the blueprints</text>
+        <text x="84" y="164" fill="var(--steel)" font-size="11.5">Read each spec. Good plan? Comment /machinist-execute. Bad plan? Close it, sharpen the issue</text>
+
+        <circle cx="60" cy="205" r="7" fill="var(--blueprint)"/>
+        <text x="84" y="202" fill="currentColor" font-weight="600" font-size="12.5">Afternoon — the shop floor runs</text>
+        <text x="84" y="219" fill="var(--steel)" font-size="11.5">Approved specs get implemented and test-gated; finished PRs flip to “ready for review”</text>
+
+        <circle cx="60" cy="245" r="7" fill="var(--stamp)"/>
+        <text x="84" y="242" fill="currentColor" font-weight="600" font-size="12.5">Evening — inspect and ship</text>
+        <text x="84" y="259" fill="var(--steel)" font-size="11.5" >Review the diffs like any teammate's PR. Merge closes the issue automatically</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Amber moments are yours; blue stretches belong to the machine. None of the amber moments take long — that's the point.</figcaption>
+  </figure>
+
+  <p>Prefer to drive manually? Every stage is also a command: <code>machinist spec 12</code> plans one issue, <code>machinist run 12</code> implements an approved one, and <code>machinist watch --once</code> does a single sweep — handy under cron.</p>
+
+  <div class="callout">
+    <p class="eyebrow">The one thing everyone gets wrong once</p>
+    <p><strong>GitHub's green “Approve” review button is not the approval.</strong> GitHub actually blocks that button on your own PRs. To approve a spec, add the <code>machinist:approved</code> label — or simply comment <code>/machinist-execute</code> on the PR, which does it for you.</p>
+  </div>
+
+  <h2>Getting good specs out of it</h2>
+  <p>The machine plans from your issue the way a machinist works from a drawing: it can only be as precise as what you hand it. Three habits make the difference:</p>
+  <ul>
+    <li><strong>One outcome per issue.</strong> “Add CSV export to the reports page” specs beautifully. “Improve the app” doesn't. If a spec comes back sprawling, that's the signal to split the issue.</li>
+    <li><strong>Say how you'll know it's done.</strong> A sentence of acceptance criteria (“exports the filtered rows, not the whole table”) shows up almost verbatim in the spec's testing plan.</li>
+    <li><strong>Treat a bad spec as cheap feedback.</strong> Closing a spec PR costs nothing and teaches you what your issue left ambiguous. Reject freely at Gate 1 so you rarely have to at Gate 2.</li>
+  </ul>
+
+  <h2>When something goes wrong</h2>
+  <p><code>machinist status</code> is your shop-floor board — it shows every issue and PR in the pipeline and what each is waiting for. Beyond that, the failure behavior is designed to be boring:</p>
+  <ul>
+    <li><strong>Tests failed?</strong> Nothing was pushed. The workshop folder is kept on disk (the error tells you where) so you can open it and see exactly what the agent did.</li>
+    <li><strong>A task keeps failing?</strong> The daemon won't retry it in a loop and burn agent time — it parks the issue until you restart <code>watch</code> after fixing the cause.</li>
+    <li><strong>Bad code got through to the PR?</strong> That's what Gate 2 is for. Push your own fixup commits to the branch, or close the PR — the machine never merges, so nothing lands without you.</li>
+  </ul>
+
+  <hr>
+
+  <h2>Command reference</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td>machinist init</td><td>Sets a repository up: config file, spec folder, GitHub workflows.</td></tr>
+    <tr><td>machinist watch</td><td>Runs the daemon: plans labeled issues, implements approved specs. <code>--once</code> for a single pass.</td></tr>
+    <tr><td>machinist spec &lt;n&gt;</td><td>Plans one issue by hand — spec, branch, draft PR.</td></tr>
+    <tr><td>machinist run &lt;n&gt;</td><td>Implements one approved spec by hand.</td></tr>
+    <tr><td>machinist status</td><td>Shows where every issue and PR stands in the pipeline.</td></tr>
+  </table>
+  </div>
+
+  <p class="foot">AgentMachinist is open source and was, fittingly, partly built by itself: its getting-started guide was specced, implemented, test-gated, and shipped through this exact pipeline as the project's first task. Full details live in the repository's <code>docs/</code> folder.</p>
+</div>
