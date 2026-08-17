@@ -1,16 +1,27 @@
-# AgentMachinist — beta-readiness sweep
+# AgentMachinist — beta-readiness sweep (COMPLETE)
 
 ## Plan
 
-- [ ] A: heartbeat — harness base emits on_progress during long runs;
+- [x] A: heartbeat — harness base emits on_progress during long runs;
       CLI prints "still working (Xm elapsed)" every 30s
-- [ ] B: init ensures trigger + approved labels (warn-only on failure)
-- [ ] C: verify opencode/pi/codex headless flags against real docs; fix argv
-- [ ] D: run refuses a non-draft (already implemented) PR without --force
-- [ ] Push A-D, then dogfood E through the FULL watch loop: file issue
+- [x] B: init ensures trigger + approved labels (warn-only on failure)
+- [x] C: verify opencode/pi/codex headless flags against real docs; fix argv
+- [x] D: run refuses a non-draft (already implemented) PR without --force
+- [x] Push A-D, then dogfood E through the FULL watch loop: file issue
       "watch: macOS notification on dispatch failure" with agent-task label,
       run machinist watch (real daemon), Vinny approves via
       /machinist-execute comment (also first live test of approve workflow)
+
+Sweep complete 2026-08-16. Lifecycle #2 (issue #4 -> PR #5, merged ee97673)
+ran fully daemon-driven: watch specced, waited at the gate, implemented,
+test-gated, flipped ready; human only approved and merged. Live findings
+fixed same-day: comment trigger now whitespace-tolerant (contains, not
+startsWith); spec PR body asks to leave the PR as draft (instinct fired
+2-for-2). C note: spec phase is now provably read-only on all four
+harnesses (plan agent / -xt edit,write / --sandbox read-only). Merged
+main: 117 tests. Onboarding handbook updated for PyPI + new features.
+Beta-ready: hand testers the handbook; known limits are macOS-tested-only
+and claude-code as the proven harness.
 
 # AgentMachinist — M3: watch daemon (COMPLETE)
 
