@@ -65,11 +65,42 @@ def test_init_no_workflows_skips_github_dir():
         assert not Path(".github").exists()
 
 
-def test_phase_stubs_exit_nonzero_with_milestone_note():
+def test_watch_without_config_points_at_init():
     runner = CliRunner()
-    result = runner.invoke(main, ["watch"])
-    assert result.exit_code != 0
-    assert "not implemented" in result.output.lower()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["watch", "--once"])
+
+        assert result.exit_code != 0
+        assert "machinist init" in result.output
+
+
+def test_watch_once_prints_dispatch_events(monkeypatch):
+    events = [
+        "spec: issue #7 → draft PR #97 (https://github.com/x/y/pull/97)",
+        "error: execute for issue #8 failed: boom",
+    ]
+    monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: events)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["watch", "--once"])
+
+        assert result.exit_code == 0, result.output
+        assert "issue #7" in result.output
+        assert "failed: boom" in result.output
+
+
+def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
+    monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["watch", "--once"])
+
+        assert result.exit_code == 0
+        assert "nothing to do" in result.output.lower()
 
 
 def test_run_without_config_points_at_init():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from importlib.resources import files
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from machinist.harness import HarnessError, get_harness
 from machinist.phases.execute import ExecutePhaseError, run_execute_phase
 from machinist.phases.spec import SpecPhaseError, run_spec_phase
 from machinist.phases.status import pipeline_status
+from machinist.phases.watch import WatchState, watch_once
 from machinist.workspace import Workspace, WorkspaceError
 
 _TEMPLATES = files("machinist") / "templates"
@@ -66,13 +68,6 @@ def init(force: bool, install_workflows: bool) -> None:
     )
 
 
-def _not_implemented(phase: str) -> None:
-    raise click.ClickException(
-        f"{phase} is not implemented yet in this milestone; "
-        "see docs/superpowers/specs/ for the roadmap."
-    )
-
-
 @main.command()
 @click.argument("issue_number", type=int)
 def spec(issue_number: int) -> None:
@@ -94,9 +89,56 @@ def spec(issue_number: int) -> None:
 
 
 @main.command()
-def watch() -> None:
-    """Poll GitHub for labeled issues and approved PRs (daemon)."""
-    _not_implemented("The watch daemon")
+@click.option("--once", is_flag=True, help="Run a single poll pass and exit.")
+def watch(once: bool) -> None:
+    """Poll GitHub for labeled issues and approved PRs; dispatch the phases."""
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    github = GitHubClient(repo=config.github.repo)
+    repo_root = Path.cwd()
+
+    def dispatch_spec(issue_number: int):
+        return run_spec_phase(
+            issue_number, config,
+            github=github,
+            harness=get_harness(config.harness),
+            workspace=Workspace(repo_root=repo_root, config=config.workspace),
+        )
+
+    def dispatch_execute(issue_number: int):
+        return run_execute_phase(
+            issue_number, config,
+            github=github,
+            harness=get_harness(config.harness),
+            workspace=Workspace(repo_root=repo_root, config=config.workspace),
+            test_runner=subprocess.run,
+        )
+
+    state = WatchState()
+    try:
+        while True:
+            try:
+                events = watch_once(
+                    config, github,
+                    run_spec=dispatch_spec, run_execute=dispatch_execute, state=state,
+                )
+            except _MACHINIST_ERRORS as exc:
+                if once:
+                    raise click.ClickException(str(exc)) from exc
+                click.echo(f"poll error: {exc}", err=True)
+                events = []
+            for event in events:
+                click.echo(event)
+            if once:
+                if not events:
+                    click.echo("Nothing to do.")
+                return
+            time.sleep(config.github.poll_interval_seconds)
+    except KeyboardInterrupt:
+        click.echo("watch stopped.")
 
 
 @main.command()
