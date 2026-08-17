@@ -51,6 +51,16 @@ def run_execute_phase(
             f"PR #{pr.number} is not approved; apply the '{approved}' label "
             "(or comment /machinist-execute on it) first"
         )
+    approval_sha = github.approval_sha(pr.number)
+    if approval_sha is None:
+        raise ExecutePhaseError(
+            f"PR #{pr.number} has the approval label but no SHA-bound approval evidence; "
+            "approve the current spec again"
+        )
+    if approval_sha != pr.head_sha:
+        raise ExecutePhaseError(
+            f"PR #{pr.number} changed after approval; approve current head {pr.head_sha} again"
+        )
     if not pr.is_draft and not force:
         raise ExecutePhaseError(
             f"PR #{pr.number} is already marked ready for review (implemented). "

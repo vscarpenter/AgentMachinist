@@ -19,6 +19,7 @@ def make_pr(*, draft=True, labels=("machinist:approved",)):
         title="Spec: Add dark mode (#42)",
         url="https://github.com/x/y/pull/57",
         branch="agent/issue-42",
+        head_sha="a" * 40,
         is_draft=draft,
         labels=list(labels),
     )
@@ -35,6 +36,9 @@ class FakeGitHub:
 
     def default_branch(self):
         return "main"
+
+    def approval_sha(self, number):
+        return "a" * 40
 
     def mark_ready(self, number):
         self.calls.append(("mark_ready", number))
@@ -158,6 +162,28 @@ def test_unapproved_pr_refuses_and_names_the_label(tmp_path):
         )
 
     assert not any(c[0] == "mark_ready" for c in github.calls)
+
+
+def test_missing_approval_sha_refuses(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    github.approval_sha = lambda number: None
+
+    with pytest.raises(ExecutePhaseError, match="approval evidence"):
+        run_execute_phase(
+            42, MachinistConfig(), github=github, harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path), test_runner=passing_tests,
+        )
+
+
+def test_stale_approval_sha_refuses(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    github.approval_sha = lambda number: "b" * 40
+
+    with pytest.raises(ExecutePhaseError, match="changed after approval"):
+        run_execute_phase(
+            42, MachinistConfig(), github=github, harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path), test_runner=passing_tests,
+        )
 
 
 def test_already_implemented_pr_refuses_without_force(tmp_path):

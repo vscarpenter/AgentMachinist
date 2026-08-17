@@ -40,7 +40,13 @@ def pipeline_status(config: MachinistConfig, github) -> list[StatusRow]:
         if not pr.is_draft:
             state = "in review"
         elif approved_label in pr.labels:
-            state = "approved"
+            approval_sha = github.approval_sha(pr.number)
+            if approval_sha is None:
+                state = "approval pending"
+            elif approval_sha != pr.head_sha:
+                state = "approval stale"
+            else:
+                state = "approved"
         else:
             state = "awaiting approval"
         rows.append(StatusRow(kind="pr", number=pr.number, title=pr.title,

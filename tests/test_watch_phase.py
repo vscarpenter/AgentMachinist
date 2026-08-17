@@ -13,19 +13,24 @@ def issue(number):
 def pr(number, branch, *, draft=True, labels=()):
     return PullRequest(number=number, title=f"PR {number}",
                        url=f"https://github.com/x/y/pull/{number}",
-                       branch=branch, is_draft=draft, labels=list(labels))
+                       branch=branch, is_draft=draft, head_sha="a" * 40,
+                       labels=list(labels))
 
 
 class FakeGitHub:
-    def __init__(self, issues=(), prs=()):
+    def __init__(self, issues=(), prs=(), approvals=None):
         self._issues = list(issues)
         self._prs = list(prs)
+        self._approvals = approvals or {}
 
     def issues_with_label(self, label):
         return self._issues
 
     def open_machinist_prs(self, prefix):
         return self._prs
+
+    def approval_sha(self, number):
+        return self._approvals.get(number)
 
 
 class Dispatcher:
@@ -62,7 +67,10 @@ def test_awaiting_spec_issue_dispatches_spec_phase():
 
 def test_approved_draft_pr_dispatches_execute_with_issue_number():
     run_execute = Dispatcher()
-    github = FakeGitHub(prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])])
+    github = FakeGitHub(
+        prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])],
+        approvals={57: "a" * 40},
+    )
 
     events = run(github, run_execute=run_execute)
 
