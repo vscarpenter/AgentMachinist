@@ -4,6 +4,8 @@ Local-first agentic build & CI/CD for solo developers. AgentMachinist bridges
 GitHub issues to local coding harnesses — Claude Code, OpenCode, PI, or
 Codex — through a three-phase, human-in-the-loop pipeline that runs on your Mac.
 
+New here? Start with the [Getting Started guide](docs/getting-started.md).
+
 ```
  GitHub issue (label: agent-task)
         │
