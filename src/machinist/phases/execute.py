@@ -93,7 +93,21 @@ def run_execute_phase(
                 f"spec file .machinist/specs/{spec_file.name} not found on branch '{branch}'"
             )
 
+        harness_head = workspace.head_sha(path)
+        harness_remote = workspace.remote_sha(path, branch)
         harness.implement(render_implement_prompt(issue_number, spec_file.read_text()), cwd=path)
+        if workspace.head_sha(path) != harness_head:
+            raise ExecutePhaseError(
+                f"{harness.name} created or changed a git commit; the harness must leave git custody to AgentMachinist"
+            )
+        if workspace.remote_sha(path, branch) != harness_remote:
+            raise ExecutePhaseError(
+                f"{harness.name} changed the remote branch; refusing to continue after a harness push"
+            )
+        if workspace.path_changed(path, ".machinist"):
+            raise ExecutePhaseError(
+                f"{harness.name} changed .machinist/ pipeline files; those files are controller-owned"
+            )
         if not workspace.has_changes(path):
             raise ExecutePhaseError(f"{harness.name} made no changes for issue #{issue_number}")
 

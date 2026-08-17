@@ -67,6 +67,10 @@ class FakeWorkspace:
         self.calls = []
         self._dirty = False
         self._spec_text = spec_text
+        self._committed = False
+        self._head_override = None
+        self._remote_sha = "a" * 40
+        self._machinist_changed = False
 
     def provision(self, task, branch, base_ref):
         self.calls.append(("provision", task, branch, base_ref))
@@ -81,12 +85,19 @@ class FakeWorkspace:
 
     def commit_all(self, path, message):
         self.calls.append(("commit_all", message))
+        self._committed = True
 
     def push(self, path, branch, expected_sha=None):
         self.calls.append(("push", branch, expected_sha))
 
     def head_sha(self, path):
-        return "c" * 40
+        return self._head_override or ("c" * 40 if self._committed else "a" * 40)
+
+    def remote_sha(self, path, branch):
+        return self._remote_sha
+
+    def path_changed(self, path, relative):
+        return self._machinist_changed
 
     def cleanup(self, path, *, success):
         self.calls.append(("cleanup", success))
@@ -244,6 +255,32 @@ def test_no_changes_from_harness_fails(tmp_path):
         )
 
     assert not any(c[0] == "push" for c in workspace.calls)
+
+
+@pytest.mark.parametrize("violation", ["commit", "push", "machinist"])
+def test_harness_git_and_pipeline_violations_are_rejected(tmp_path, violation):
+    workspace = FakeWorkspace(tmp_path)
+
+    def violate(cwd):
+        workspace._dirty = True
+        if violation == "commit":
+            workspace._head_override = "d" * 40
+        elif violation == "push":
+            workspace._remote_sha = "e" * 40
+        else:
+            workspace._machinist_changed = True
+
+    with pytest.raises(ExecutePhaseError, match=r"custody|harness|machinist|\.machinist"):
+        run_execute_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=FakeHarness(on_implement=violate),
+            workspace=workspace,
+            test_runner=passing_tests,
+        )
+
+    assert not any(call[0] == "commit_all" for call in workspace.calls)
 
 
 def test_failing_test_gate_keeps_workspace_and_never_pushes(tmp_path):

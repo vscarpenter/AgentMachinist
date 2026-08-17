@@ -81,6 +81,13 @@ class Workspace:
     def head_sha(self, path: Path) -> str:
         return self._git(path, "rev-parse", "HEAD").strip()
 
+    def remote_sha(self, path: Path, branch: str) -> str | None:
+        output = self._git(path, "ls-remote", "--heads", "origin", f"refs/heads/{branch}")
+        return output.split()[0] if output.strip() else None
+
+    def path_changed(self, path: Path, relative: str) -> bool:
+        return bool(self._git(path, "status", "--porcelain", "--", relative).strip())
+
     def cleanup(self, path: Path, *, success: bool) -> None:
         policy = self.config.cleanup
         if policy is CleanupPolicy.NEVER:
