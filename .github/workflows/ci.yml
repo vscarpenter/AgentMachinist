@@ -1,0 +1,28 @@
+# Test suite for AgentMachinist itself. No secrets needed: the tests
+# never touch the network (gh and harness subprocesses are faked; git
+# tests run against local repos in tmp dirs).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest
