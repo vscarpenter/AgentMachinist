@@ -19,7 +19,9 @@ from machinist.phases.status import PIPELINE_STATES
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GUIDE_PATH = _REPO_ROOT / "docs" / "getting-started.md"
+_FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
 _README_PATH = _REPO_ROOT / "README.md"
+_CHANGELOG_PATH = _REPO_ROOT / "CHANGELOG.md"
 
 _REQUIRED_HEADINGS = (
     "# Getting Started with AgentMachinist",
@@ -141,3 +143,44 @@ def test_visual_handbook_has_document_semantics_and_navigation():
         "</html>",
     ):
         assert required in html
+
+
+def test_first_run_guide_is_visual_interactive_and_linked():
+    assert _FIRST_RUN_GUIDE_PATH.is_file(), "docs/first-run-guide.html is missing"
+    html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    for required in (
+        "<!doctype html>",
+        '<html lang="en">',
+        '<meta name="viewport"',
+        'href="#main"',
+        '<nav class="nav shell" aria-label=',
+        '<main id="main">',
+        'role="group" aria-label="choose spec generation mode"',
+        'data-mode-button="local" aria-pressed="true"',
+        'data-mode-button="ci" aria-pressed="false"',
+        'aria-live="polite"',
+        "</html>",
+    ):
+        assert required in html
+    assert html.count("<svg") >= 8, "first-run guide should remain visually led"
+    assert "machinist approve 18" in html
+    assert "machinist run 42" in html
+    assert "/machinist-execute" in html
+    assert "approval stale" in html
+    assert "agentmachinist never" in html and "merge" in html
+    assert (
+        "https://github.com/vscarpenter/AgentMachinist/blob/main/docs/first-run-guide.html"
+        in _README_PATH.read_text()
+    )
+
+
+def test_release_docs_describe_published_0_2():
+    html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    assert "agentmachinist 0.2.0 is available on pypi" in html
+    assert "uv tool install agentmachinist" in html
+    assert "unreleased" not in html
+    assert "## 0.2.0 — 2026-08-17" in _CHANGELOG_PATH.read_text()
+    assert (
+        "https://pypi.org/project/agentmachinist/0.2.0/"
+        in _README_PATH.read_text()
+    )

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — unreleased
+## 0.2.0 — 2026-08-17
 
 - Bind approvals to the exact draft-PR head SHA and surface pending/stale states.
 - Add atomic Task Run records, explicit retry, checkpoints, and partial-push recovery.
