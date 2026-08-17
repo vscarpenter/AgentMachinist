@@ -132,7 +132,7 @@
 </style>
 
 <div class="wrap">
-  <p class="eyebrow">AgentMachinist · Onboarding</p>
+  <p class="eyebrow">AgentMachinist - Onboarding</p>
   <h1>Run a one-person machine shop for your code</h1>
   <p class="lede">AgentMachinist turns your GitHub issues into reviewed, tested pull requests — built by the coding agent you already use, on your own Mac, with you signing off at every step that matters.</p>
 
@@ -237,7 +237,7 @@
     </div>
     <div class="card">
       <h3>Permissions match trust</h3>
-      <p>While writing the spec, the agent can read your code but can't change a file. Edit rights only switch on after you approve — the gates exist in the process itself, not just in policy.</p>
+      <p>While writing the spec, the agent can read your code but can't change a file — enforced through each agent's own read-only mode, on all four supported agents. Edit rights only switch on after you approve.</p>
     </div>
     <div class="card">
       <h3>Tests are the gatekeeper</h3>
@@ -259,7 +259,7 @@
       <g font-family="Avenir Next, Avenir, system-ui, sans-serif" text-anchor="middle">
         <rect x="270" y="16" width="180" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
         <text x="360" y="38" fill="currentColor" font-weight="600" font-size="12.5">GitHub</text>
-        <text x="360" y="54" fill="var(--steel)" font-size="11">issues · PRs · labels</text>
+        <text x="360" y="54" fill="var(--steel)" font-size="11">issues - PRs - labels</text>
 
         <rect x="60" y="130" width="220" height="60" rx="6" fill="var(--stamp-soft)" stroke="var(--stamp)" stroke-width="1.5"/>
         <text x="170" y="154" fill="var(--stamp)" font-weight="600" font-size="12.5">Your checkout</text>
@@ -296,14 +296,14 @@
     </li>
     <li>
       <h3>Install the machinist</h3>
-      <pre><code>uv tool install git+https://github.com/vscarpenter/AgentMachinist</code></pre>
-      <p>Then confirm with <code>machinist --version</code>.</p>
+      <pre><code>uv tool install agentmachinist</code></pre>
+      <p>Straight from PyPI. Then confirm with <code>machinist --version</code>.</p>
     </li>
     <li>
       <h3>Initialize your project</h3>
       <pre><code>cd ~/code/my-project
 machinist init</code></pre>
-      <p>This writes <code>machinist.yaml</code>, creates a spec folder, and installs two small GitHub workflows. Open <code>machinist.yaml</code> and set one thing before anything else: your test command.</p>
+      <p>This writes <code>machinist.yaml</code>, creates a spec folder, installs two small GitHub workflows, and creates the two pipeline labels in your repository for you. Open <code>machinist.yaml</code> and set one thing before anything else: your test command.</p>
       <pre><code>tests:
   command: npm test   # or pytest, cargo test, go test ./...</code></pre>
       <p>Commit the new files and push. You're operational.</p>
@@ -345,9 +345,31 @@ machinist init</code></pre>
 
   <p>Prefer to drive manually? Every stage is also a command: <code>machinist spec 12</code> plans one issue, <code>machinist run 12</code> implements an approved one, and <code>machinist watch --once</code> does a single sweep — handy under cron.</p>
 
+  <h2>Comforts of a well-run shop</h2>
+  <p>A few details exist purely so the system feels trustworthy while it works:</p>
+  <div class="cards">
+    <div class="card">
+      <h3>It never looks hung</h3>
+      <p>Agent runs can take many minutes. Every half minute machinist prints a pulse — <code>… claude-code still working (4m 30s elapsed)</code> — so silence never means mystery.</p>
+    </div>
+    <div class="card">
+      <h3>Failures find you</h3>
+      <p>If a daemon dispatch fails while you're away, machinist sends a macOS notification with the issue number and reason. Best-effort: on other systems it simply stays quiet and logs as usual.</p>
+    </div>
+    <div class="card">
+      <h3>Rework is deliberate</h3>
+      <p>Running an issue whose PR is already marked ready is refused unless you pass <code>--force</code> — so a finished implementation is never accidentally built over.</p>
+    </div>
+    <div class="card">
+      <h3>No label homework</h3>
+      <p><code>machinist init</code> creates both pipeline labels in your repository. If the repo has no remote yet, it just tells you and moves on.</p>
+    </div>
+  </div>
+
   <div class="callout">
-    <p class="eyebrow">The one thing everyone gets wrong once</p>
+    <p class="eyebrow">The two things everyone gets wrong once</p>
     <p><strong>GitHub's green “Approve” review button is not the approval.</strong> GitHub actually blocks that button on your own PRs. To approve a spec, add the <code>machinist:approved</code> label — or simply comment <code>/machinist-execute</code> on the PR, which does it for you.</p>
+    <p><strong>And leave the spec PR as a draft.</strong> Flipping it to “Ready for review” yourself pauses the daemon — draft means “not yet built”, and the machine flips it to ready itself when the implementation lands.</p>
   </div>
 
   <h2>Getting good specs out of it</h2>
@@ -375,10 +397,10 @@ machinist init</code></pre>
     <tr><td>machinist init</td><td>Sets a repository up: config file, spec folder, GitHub workflows.</td></tr>
     <tr><td>machinist watch</td><td>Runs the daemon: plans labeled issues, implements approved specs. <code>--once</code> for a single pass.</td></tr>
     <tr><td>machinist spec &lt;n&gt;</td><td>Plans one issue by hand — spec, branch, draft PR.</td></tr>
-    <tr><td>machinist run &lt;n&gt;</td><td>Implements one approved spec by hand.</td></tr>
+    <tr><td>machinist run &lt;n&gt;</td><td>Implements one approved spec by hand. <code>--force</code> re-implements a PR that's already marked ready.</td></tr>
     <tr><td>machinist status</td><td>Shows where every issue and PR stands in the pipeline.</td></tr>
   </table>
   </div>
 
-  <p class="foot">AgentMachinist is open source and was, fittingly, partly built by itself: its getting-started guide was specced, implemented, test-gated, and shipped through this exact pipeline as the project's first task. Full details live in the repository's <code>docs/</code> folder.</p>
+  <p class="foot">AgentMachinist is open source (<code>agentmachinist</code> on PyPI) and is, fittingly, partly built by itself: its getting-started guide — and even the watch daemon's own failure notifications — were specced, approved, implemented, test-gated, and shipped through this exact pipeline. Full details live in the repository's <code>docs/</code> folder.</p>
 </div>
