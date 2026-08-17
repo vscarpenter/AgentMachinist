@@ -67,10 +67,63 @@ def test_init_no_workflows_skips_github_dir():
 
 def test_phase_stubs_exit_nonzero_with_milestone_note():
     runner = CliRunner()
-    for argv in (["watch"], ["run", "42"]):
-        result = runner.invoke(main, argv)
+    result = runner.invoke(main, ["watch"])
+    assert result.exit_code != 0
+    assert "not implemented" in result.output.lower()
+
+
+def test_run_without_config_points_at_init():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["run", "42"])
+
         assert result.exit_code != 0
-        assert "not implemented" in result.output.lower()
+        assert "machinist init" in result.output
+
+
+def test_run_wires_config_and_reports_ready_pr(monkeypatch):
+    from machinist.github import PullRequest
+
+    seen = {}
+
+    def fake_run_execute_phase(issue_number, config, *, github, harness, workspace, test_runner):
+        seen["issue"] = issue_number
+        seen["harness"] = harness.name
+        return PullRequest(
+            number=57, title="Spec: Add dark mode (#42)",
+            url="https://github.com/x/y/pull/57",
+            branch="agent/issue-42", is_draft=False, labels=["machinist:approved"],
+        )
+
+    monkeypatch.setattr("machinist.cli.run_execute_phase", fake_run_execute_phase)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["run", "42"])
+
+        assert result.exit_code == 0, result.output
+        assert seen == {"issue": 42, "harness": "claude-code"}
+        assert "pull/57" in result.output
+        assert "ready for review" in result.output.lower()
+
+
+def test_run_renders_machinist_errors_without_traceback(monkeypatch):
+    from machinist.phases.execute import ExecutePhaseError
+
+    def failing(*args, **kwargs):
+        raise ExecutePhaseError("PR #57 is not approved")
+
+    monkeypatch.setattr("machinist.cli.run_execute_phase", failing)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["run", "42"])
+
+        assert result.exit_code != 0
+        assert "not approved" in result.output
+        assert "Traceback" not in result.output
 
 
 def test_status_without_config_points_at_init():

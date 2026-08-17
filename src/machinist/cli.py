@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from importlib.resources import files
 from pathlib import Path
 
@@ -10,12 +11,15 @@ import click
 from machinist.config import ConfigError, load_config
 from machinist.github import GitHubClient, GitHubError
 from machinist.harness import HarnessError, get_harness
+from machinist.phases.execute import ExecutePhaseError, run_execute_phase
 from machinist.phases.spec import SpecPhaseError, run_spec_phase
 from machinist.phases.status import pipeline_status
 from machinist.workspace import Workspace, WorkspaceError
 
 _TEMPLATES = files("machinist") / "templates"
-_MACHINIST_ERRORS = (ConfigError, GitHubError, HarnessError, SpecPhaseError, WorkspaceError)
+_MACHINIST_ERRORS = (
+    ConfigError, GitHubError, HarnessError, SpecPhaseError, ExecutePhaseError, WorkspaceError,
+)
 _WORKFLOW_NAMES = ("machinist-spec.yml", "machinist-approve.yml")
 
 
@@ -99,7 +103,19 @@ def watch() -> None:
 @click.argument("issue_number", type=int)
 def run(issue_number: int) -> None:
     """Implement the approved spec for ISSUE_NUMBER (Phase 3)."""
-    _not_implemented("Phase 3 ('machinist run')")
+    try:
+        config = load_config()
+        pr = run_execute_phase(
+            issue_number,
+            config,
+            github=GitHubClient(repo=config.github.repo),
+            harness=get_harness(config.harness),
+            workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
+            test_runner=subprocess.run,
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"PR #{pr.number} implemented and marked ready for review: {pr.url}")
 
 
 @main.command()
