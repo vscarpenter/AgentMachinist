@@ -263,7 +263,7 @@ def test_status_renders_rows(monkeypatch):
         StatusRow(kind="pr", number=57, title="Spec: Add dark mode (#42)",
                   state="awaiting approval", url="https://github.com/x/y/pull/57"),
     ]
-    monkeypatch.setattr("machinist.cli.pipeline_status", lambda config, github: rows)
+    monkeypatch.setattr("machinist.cli.pipeline_status", lambda config, github, **kwargs: rows)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -277,7 +277,7 @@ def test_status_renders_rows(monkeypatch):
 
 
 def test_status_with_no_activity_says_so(monkeypatch):
-    monkeypatch.setattr("machinist.cli.pipeline_status", lambda config, github: [])
+    monkeypatch.setattr("machinist.cli.pipeline_status", lambda config, github, **kwargs: [])
 
     runner = CliRunner()
     with runner.isolated_filesystem():

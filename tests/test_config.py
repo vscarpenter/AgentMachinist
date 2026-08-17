@@ -112,3 +112,17 @@ def test_defaults_construct_without_yaml():
     config = MachinistConfig()
     assert config.version == 1
     assert config.github.poll_interval_seconds == 60
+
+
+@pytest.mark.parametrize("label", ["bad\nlabel", "bad'label", "", "x" * 51])
+def test_workflow_labels_reject_unsafe_or_unusable_values(tmp_path, label):
+    path = write_config(tmp_path, f"github:\n  labels:\n    trigger: {label!r}\n")
+    with pytest.raises(ConfigError, match="label"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("prefix", ["../agent/", "agent branch/", "/agent/", "agent//"])
+def test_branch_prefix_rejects_unsafe_git_ref_shapes(tmp_path, prefix):
+    path = write_config(tmp_path, f"workspace:\n  branch_prefix: {prefix!r}\n")
+    with pytest.raises(ConfigError, match="branch_prefix"):
+        load_config(path)

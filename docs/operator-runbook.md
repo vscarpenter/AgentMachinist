@@ -11,7 +11,9 @@ machinist status
 ```
 
 Resolve `FAIL` checks before unattended work. Decide explicitly whether a
-`tests.command: null` warning is acceptable.
+`tests.command: null` warning is acceptable. A Task Runs warning points to a
+failed or process-abandoned record that should be inspected and explicitly
+retried.
 
 ## Run modes
 
@@ -31,7 +33,9 @@ a permanently attached process.
 ## Observe
 
 `machinist status` shows `awaiting spec`, `awaiting approval`,
-`approval pending`, `approval stale`, `approved`, and `in review`.
+`approval pending`, `approval stale`, `approved`, and `in review`. When a local
+Task Run is active or needs intervention, its `spec running`, `execute failed`,
+or `execute retryable` state overrides the GitHub eligibility state.
 
 Local Task Run records are under `.machinist/runs/`. They are runtime state and
 should remain ignored by Git. Failed workspaces are retained by the default

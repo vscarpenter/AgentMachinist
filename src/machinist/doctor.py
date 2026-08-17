@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -119,5 +120,35 @@ def run_doctor(
         checks.append(DoctorCheck(CheckLevel.FAIL, "workflows", str(exc)))
     else:
         checks.append(DoctorCheck(CheckLevel.PASS, "workflows", "managed workflows match config"))
+
+    run_files = sorted((root / ".machinist/runs").glob("issue-*-*.json"))
+    needs_attention: list[str] = []
+    malformed: list[str] = []
+    for path in run_files:
+        try:
+            status = json.loads(path.read_text()).get("status")
+        except (OSError, json.JSONDecodeError):
+            malformed.append(path.name)
+            continue
+        if status in {"running", "failed"}:
+            needs_attention.append(path.name)
+    if malformed:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "Task Runs",
+                "unreadable runtime state: " + ", ".join(malformed),
+            )
+        )
+    elif needs_attention:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.WARN,
+                "Task Runs",
+                f"{len(needs_attention)} failed or abandoned run(s); inspect, then use 'machinist retry'",
+            )
+        )
+    else:
+        checks.append(DoctorCheck(CheckLevel.PASS, "Task Runs", "no failed or abandoned runs"))
 
     return DoctorReport(tuple(checks))

@@ -1,6 +1,7 @@
 """Read-only installation diagnostics."""
 
 import subprocess
+import json
 
 from machinist.config import MachinistConfig
 from machinist.doctor import CheckLevel, run_doctor
@@ -48,3 +49,22 @@ def test_doctor_reports_workflow_drift(tmp_path):
     workflow = next(check for check in report.checks if check.name == "workflows")
     assert workflow.level is CheckLevel.FAIL
     assert "sync-workflows" in workflow.detail
+
+
+def test_doctor_warns_about_failed_or_abandoned_task_runs(tmp_path):
+    (tmp_path / ".git").mkdir()
+    runs = tmp_path / ".machinist/runs"
+    runs.mkdir(parents=True)
+    (runs / "issue-7-spec.json").write_text(json.dumps({"status": "running"}))
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=lambda args, **kwargs: subprocess.CompletedProcess(args, 0, "", ""),
+    )
+
+    task_runs = next(check for check in report.checks if check.name == "Task Runs")
+    assert task_runs.level is CheckLevel.WARN
+    assert "retry" in task_runs.detail

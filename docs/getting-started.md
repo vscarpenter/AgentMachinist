@@ -114,6 +114,10 @@ If anyone changes the spec branch afterward, `machinist status` reports
 Do not mark the draft ready yourself. AgentMachinist uses that transition to
 signal that implementation and the configured test gate completed.
 
+`machinist run <issue> --force` is an intentional rework path for a ready PR.
+It does not bypass immutable approval: approve that PR's current head again
+before forcing a second implementation attempt.
+
 ## Spec generation: local or CI
 
 `github.spec_source` assigns Phase 1 to exactly one dispatcher:

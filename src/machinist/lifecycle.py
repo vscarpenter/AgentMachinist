@@ -78,6 +78,8 @@ class TaskLifecycle:
         issue: int,
         phase: Phase,
         action: Callable[[TaskClaim], _T],
+        *,
+        repeat_succeeded: bool = False,
     ) -> _T:
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         with _HELD_LOCK:
@@ -94,7 +96,12 @@ class TaskLifecycle:
                 raise LifecycleError(f"issue #{issue} is already claimed by another worker") from exc
 
             prior = self.record(issue, phase)
-            if prior is not None and prior.status is not RunStatus.RETRYABLE:
+            repeat = (
+                prior is not None
+                and prior.status is RunStatus.SUCCEEDED
+                and repeat_succeeded
+            )
+            if prior is not None and prior.status is not RunStatus.RETRYABLE and not repeat:
                 if prior.status is RunStatus.FAILED:
                     raise LifecycleError(
                         f"issue #{issue} {phase.value} previously failed; run 'machinist retry {issue}'"
@@ -148,16 +155,31 @@ class TaskLifecycle:
                     _HELD_ISSUES.discard(issue)
 
     def retry(self, issue: int, phase: Phase | None = None) -> RunRecord:
-        record = self.record(issue, phase) if phase is not None else self.latest(issue)
-        if record is None:
-            raise LifecycleError(f"no Task Run exists for issue #{issue}")
-        if record.status is not RunStatus.FAILED:
-            raise LifecycleError(
-                f"issue #{issue} {record.phase.value} is {record.status.value}, not failed"
-            )
-        retryable = self._replace(record, status=RunStatus.RETRYABLE, error=None)
-        self._write(retryable)
-        return retryable
+        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        with _HELD_LOCK:
+            if issue in _HELD_ISSUES:
+                raise LifecycleError(f"issue #{issue} is still claimed by this process")
+        lock_file = (self.runs_dir / f"issue-{issue}.lock").open("a+")
+        try:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise LifecycleError(
+                    f"issue #{issue} is still claimed by another worker; stop it before retrying"
+                ) from exc
+            record = self.record(issue, phase) if phase is not None else self.latest(issue)
+            if record is None:
+                raise LifecycleError(f"no Task Run exists for issue #{issue}")
+            if record.status not in {RunStatus.FAILED, RunStatus.RUNNING}:
+                raise LifecycleError(
+                    f"issue #{issue} {record.phase.value} is {record.status.value}, not failed or abandoned"
+                )
+            retryable = self._replace(record, status=RunStatus.RETRYABLE, error=None)
+            self._write(retryable)
+            return retryable
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
 
     def record(self, issue: int, phase: Phase | None = None) -> RunRecord | None:
         if phase is None:

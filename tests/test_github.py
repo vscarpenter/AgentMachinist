@@ -189,9 +189,17 @@ def test_approval_sha_returns_latest_valid_marker():
     payload = json.dumps(
         {
             "comments": [
-                {"body": "<!-- agentmachinist:approval sha=" + "a" * 40 + " -->"},
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "a" * 40 + " -->",
+                    "authorAssociation": "OWNER",
+                    "author": {"login": "owner"},
+                },
                 {"body": "ordinary discussion"},
-                {"body": "<!-- agentmachinist:approval sha=" + "b" * 40 + " -->"},
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "b" * 40 + " -->",
+                    "authorAssociation": "NONE",
+                    "author": {"login": "github-actions"},
+                },
             ]
         }
     )
@@ -199,6 +207,28 @@ def test_approval_sha_returns_latest_valid_marker():
     client = GitHubClient(repo="vscarpenter/demo", runner=runner)
 
     assert client.approval_sha(57) == "b" * 40
+
+
+def test_approval_sha_ignores_markers_from_untrusted_commenters():
+    payload = json.dumps(
+        {
+            "comments": [
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "a" * 40 + " -->",
+                    "authorAssociation": "MEMBER",
+                    "author": {"login": "maintainer"},
+                },
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "b" * 40 + " -->",
+                    "authorAssociation": "NONE",
+                    "author": {"login": "drive-by-user"},
+                },
+            ]
+        }
+    )
+    client = GitHubClient(runner=FakeRunner((payload, 0, "")))
+
+    assert client.approval_sha(57) == "a" * 40
 
 
 def test_approve_pr_records_sha_before_applying_label():

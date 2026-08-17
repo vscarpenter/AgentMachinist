@@ -126,6 +126,12 @@ class GitHubClient:
             r"<!--\s*agentmachinist:approval\s+sha=([0-9a-fA-F]{40})\s*-->"
         )
         for comment in reversed(data.get("comments", [])):
+            association = comment.get("authorAssociation")
+            login = (comment.get("author") or {}).get("login")
+            trusted_author = association in {"OWNER", "MEMBER", "COLLABORATOR"}
+            trusted_workflow = login in {"github-actions", "github-actions[bot]"}
+            if not (trusted_author or trusted_workflow):
+                continue
             match = marker.search(comment.get("body") or "")
             if match:
                 return match.group(1).lower()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from pathlib import Path
 
@@ -54,6 +55,15 @@ class LabelsConfig(StrictModel):
     trigger: str = "agent-task"
     approved: str = "machinist:approved"
 
+    @field_validator("trigger", "approved")
+    @classmethod
+    def _workflow_safe_label(cls, value: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 .:_/-]{0,49}", value):
+            raise ValueError(
+                "label must be 1-50 characters using letters, digits, spaces, '.', ':', '_', '/', or '-'"
+            )
+        return value
+
 
 class GitHubConfig(StrictModel):
     repo: str | None = None
@@ -74,6 +84,17 @@ class WorkspaceConfig(StrictModel):
     strategy: WorkspaceStrategy = WorkspaceStrategy.WORKTREE
     cleanup: CleanupPolicy = CleanupPolicy.ON_SUCCESS
     branch_prefix: str = "agent/"
+
+    @field_validator("branch_prefix")
+    @classmethod
+    def _safe_branch_prefix(cls, value: str) -> str:
+        if (
+            not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*/", value)
+            or ".." in value
+            or "//" in value
+        ):
+            raise ValueError("branch_prefix must be a safe Git ref prefix ending in '/'")
+        return value
 
     def resolved_root(self) -> Path:
         return self.root.expanduser().resolve()

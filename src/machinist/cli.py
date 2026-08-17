@@ -161,8 +161,6 @@ def approve(pr_number: int) -> None:
         )
         if pr is None:
             raise click.ClickException(f"open machinist draft PR #{pr_number} was not found")
-        if not pr.is_draft:
-            raise click.ClickException(f"PR #{pr_number} is already ready for review")
         github.approve_pr(
             pr.number,
             label=config.github.labels.approved,
@@ -283,7 +281,11 @@ def watch(once: bool) -> None:
 
 @main.command()
 @click.argument("issue_number", type=int)
-@click.option("--force", is_flag=True, help="Re-implement even if the PR is already marked ready.")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Re-implement a ready PR; its current head must have fresh approval.",
+)
 def run(issue_number: int, force: bool) -> None:
     """Implement the approved spec for ISSUE_NUMBER (Phase 3)."""
     try:
@@ -302,6 +304,7 @@ def run(issue_number: int, force: bool) -> None:
                 force=force,
                 claim=claim,
             ),
+            repeat_succeeded=force,
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -313,7 +316,11 @@ def status() -> None:
     """Show the pipeline state of machinist-managed issues and PRs."""
     try:
         config = load_config()
-        rows = pipeline_status(config, GitHubClient(repo=config.github.repo))
+        rows = pipeline_status(
+            config,
+            GitHubClient(repo=config.github.repo),
+            lifecycle=TaskLifecycle(Path(".machinist/runs")),
+        )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     if not rows:

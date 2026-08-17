@@ -3,6 +3,7 @@
 from machinist.config import MachinistConfig
 from machinist.github import Issue, PullRequest
 from machinist.phases.status import StatusRow, pipeline_status
+from machinist.lifecycle import Phase, TaskLifecycle
 
 
 def issue(number, title="An issue"):
@@ -149,3 +150,16 @@ def test_custom_prefix_and_labels_come_from_config():
 
 def test_no_activity_yields_empty_list():
     assert pipeline_status(MachinistConfig(), FakeGitHub()) == []
+
+
+def test_durable_failed_run_is_visible_in_status(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    try:
+        lifecycle.run(42, Phase.EXECUTE, lambda claim: (_ for _ in ()).throw(RuntimeError("boom")))
+    except RuntimeError:
+        pass
+    github = FakeGitHub(prs=[pr(57, "agent/issue-42")])
+
+    row = pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0]
+
+    assert row.state == "execute failed"

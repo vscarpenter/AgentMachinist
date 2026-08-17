@@ -80,3 +80,28 @@ def test_latest_failed_phase_can_be_queried(tmp_path):
     assert record.phase is Phase.SPEC
     assert record.status is RunStatus.FAILED
 
+
+def test_explicit_retry_can_recover_an_abandoned_running_record(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    now = "2026-08-17T00:00:00+00:00"
+    path = tmp_path / "runs" / "issue-9-execute.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        '{"attempt":1,"error":null,"evidence":{"approved_sha":"abc"},'
+        f'"issue":9,"phase":"execute","started_at":"{now}",'
+        f'"status":"running","updated_at":"{now}"}}\n'
+    )
+
+    record = lifecycle.retry(9, Phase.EXECUTE)
+
+    assert record.status is RunStatus.RETRYABLE
+    assert record.evidence["approved_sha"] == "abc"
+
+
+def test_explicit_repeat_can_start_a_second_attempt_after_success(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(4, Phase.EXECUTE, lambda claim: None)
+
+    lifecycle.run(4, Phase.EXECUTE, lambda claim: None, repeat_succeeded=True)
+
+    assert lifecycle.record(4, Phase.EXECUTE).attempt == 2
