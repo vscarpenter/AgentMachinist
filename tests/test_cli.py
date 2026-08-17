@@ -131,6 +131,28 @@ def test_watch_once_prints_dispatch_events(monkeypatch):
         assert "failed: boom" in result.output
 
 
+def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
+    notified = []
+    monkeypatch.setattr(
+        "machinist.cli.notify",
+        lambda title, message: notified.append((title, message)),
+    )
+
+    def fake_watch_once(config, github, *, run_spec, run_execute, state, notify):
+        notify("spec for issue #7 failed: boom")
+        return []
+
+    monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["watch", "--once"])
+
+        assert result.exit_code == 0, result.output
+        assert notified == [("machinist watch", "spec for issue #7 failed: boom")]
+
+
 def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
     monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
 

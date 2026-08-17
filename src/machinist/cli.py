@@ -12,6 +12,7 @@ import click
 from machinist.config import ConfigError, load_config
 from machinist.github import GitHubClient, GitHubError
 from machinist.harness import HarnessError, get_harness
+from machinist.notify import notify
 from machinist.phases.execute import ExecutePhaseError, run_execute_phase
 from machinist.phases.spec import SpecPhaseError, run_spec_phase
 from machinist.phases.status import pipeline_status
@@ -151,6 +152,7 @@ def watch(once: bool) -> None:
                 events = watch_once(
                     config, github,
                     run_spec=dispatch_spec, run_execute=dispatch_execute, state=state,
+                    notify=lambda message: notify("machinist watch", message),
                 )
             except _MACHINIST_ERRORS as exc:
                 if once:

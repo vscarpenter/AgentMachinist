@@ -40,13 +40,14 @@ class Dispatcher:
         return DraftPR(number=90 + issue_number, url=f"https://github.com/x/y/pull/{90 + issue_number}")
 
 
-def run(github, *, state=None, run_spec=None, run_execute=None):
+def run(github, *, state=None, run_spec=None, run_execute=None, notify=None):
     return watch_once(
         MachinistConfig(),
         github,
         run_spec=run_spec or Dispatcher(),
         run_execute=run_execute or Dispatcher(),
         state=state or WatchState(),
+        notify=notify,
     )
 
 
@@ -95,6 +96,26 @@ def test_dispatch_failure_becomes_event_and_daemon_survives():
     assert run_spec.calls == [7, 8]
     assert sum("failed" in e for e in events) == 2
     assert state.failed_issues == {7, 8}
+
+
+def test_dispatch_failure_notifies_with_issue_and_reason():
+    notifications = []
+    run_spec = Dispatcher(error=RuntimeError("boom"))
+
+    events = run(FakeGitHub(issues=[issue(7)]), run_spec=run_spec,
+                 notify=notifications.append)
+
+    assert notifications == ["spec for issue #7 failed: boom"]
+    assert events == ["error: spec for issue #7 failed: boom"]
+
+
+def test_successful_dispatch_does_not_notify():
+    notifications = []
+
+    events = run(FakeGitHub(issues=[issue(7)]), notify=notifications.append)
+
+    assert notifications == []
+    assert any("draft PR" in e for e in events)
 
 
 def test_failed_issue_is_never_redispatched():
