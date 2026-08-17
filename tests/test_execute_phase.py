@@ -160,6 +160,35 @@ def test_unapproved_pr_refuses_and_names_the_label(tmp_path):
     assert not any(c[0] == "mark_ready" for c in github.calls)
 
 
+def test_already_implemented_pr_refuses_without_force(tmp_path):
+    github = FakeGitHub(prs=[make_pr(draft=False)])
+    harness = FakeHarness()
+
+    with pytest.raises(ExecutePhaseError, match="--force"):
+        run_execute_phase(
+            42, MachinistConfig(),
+            github=github, harness=harness,
+            workspace=FakeWorkspace(tmp_path), test_runner=passing_tests,
+        )
+
+    assert harness.prompts == []
+
+
+def test_force_reimplements_a_ready_pr(tmp_path):
+    github = FakeGitHub(prs=[make_pr(draft=False)])
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+
+    pr = run_execute_phase(
+        42, MachinistConfig(),
+        github=github, harness=harness,
+        workspace=workspace, test_runner=passing_tests, force=True,
+    )
+
+    assert pr.number == 57
+    assert ("push", "agent/issue-42") in workspace.calls
+
+
 def test_missing_spec_file_fails_before_harness_runs(tmp_path):
     harness = FakeHarness()
     workspace = FakeWorkspace(tmp_path, spec_text=None)

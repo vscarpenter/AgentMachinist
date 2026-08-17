@@ -34,6 +34,7 @@ def run_execute_phase(
     harness,
     workspace,
     test_runner=subprocess.run,
+    force: bool = False,
 ) -> PullRequest:
     branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
     pr = next(
@@ -49,6 +50,11 @@ def run_execute_phase(
         raise ExecutePhaseError(
             f"PR #{pr.number} is not approved; apply the '{approved}' label "
             "(or comment /machinist-execute on it) first"
+        )
+    if not pr.is_draft and not force:
+        raise ExecutePhaseError(
+            f"PR #{pr.number} is already marked ready for review (implemented). "
+            "Re-run with --force to implement again on top of this branch."
         )
 
     base = github.default_branch()

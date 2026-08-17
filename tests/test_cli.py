@@ -56,6 +56,46 @@ def test_init_force_overwrites():
         assert "harness" in Path("machinist.yaml").read_text()
 
 
+def test_init_ensures_pipeline_labels(monkeypatch):
+    ensured = []
+
+    class FakeGitHub:
+        def __init__(self, repo=None):
+            pass
+
+        def ensure_label(self, name, *, color, description):
+            ensured.append(name)
+
+    monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["init", "--no-workflows"])
+
+        assert result.exit_code == 0, result.output
+        assert ensured == ["agent-task", "machinist:approved"]
+
+
+def test_init_survives_label_creation_failure(monkeypatch):
+    from machinist.github import GitHubError
+
+    class FailingGitHub:
+        def __init__(self, repo=None):
+            pass
+
+        def ensure_label(self, name, *, color, description):
+            raise GitHubError("no git remotes found")
+
+    monkeypatch.setattr("machinist.cli.GitHubClient", FailingGitHub)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["init", "--no-workflows"])
+
+        assert result.exit_code == 0, result.output
+        assert "could not create" in result.output
+
+
 def test_init_no_workflows_skips_github_dir():
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -117,9 +157,10 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
 
     seen = {}
 
-    def fake_run_execute_phase(issue_number, config, *, github, harness, workspace, test_runner):
+    def fake_run_execute_phase(issue_number, config, *, github, harness, workspace, test_runner, force):
         seen["issue"] = issue_number
         seen["harness"] = harness.name
+        seen["force"] = force
         return PullRequest(
             number=57, title="Spec: Add dark mode (#42)",
             url="https://github.com/x/y/pull/57",
@@ -134,7 +175,7 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
         result = runner.invoke(main, ["run", "42"])
 
         assert result.exit_code == 0, result.output
-        assert seen == {"issue": 42, "harness": "claude-code"}
+        assert seen == {"issue": 42, "harness": "claude-code", "force": False}
         assert "pull/57" in result.output
         assert "ready for review" in result.output.lower()
 

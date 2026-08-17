@@ -8,7 +8,10 @@ translation live here so adapters stay one screen long.
 from __future__ import annotations
 
 import subprocess
+import time
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
 from typing import Callable, ClassVar
 
@@ -24,6 +27,11 @@ class HarnessError(Exception):
 class Harness(ABC):
     name: ClassVar[str]
     default_command: ClassVar[str]
+
+    # Harness runs are silent and can last many minutes; a periodic progress
+    # callback keeps callers (and humans) sure the process is alive.
+    heartbeat_seconds: float = 30.0
+    on_progress: Callable[[str], None] | None = None
 
     def __init__(self, config: HarnessConfig, runner: Runner = subprocess.run):
         self.config = config
@@ -49,10 +57,7 @@ class Harness(ABC):
 
     def _run(self, argv: list[str], cwd: Path, timeout_minutes: int) -> str:
         try:
-            result = self._runner(
-                argv, cwd=cwd, timeout=timeout_minutes * 60,
-                capture_output=True, text=True,
-            )
+            result = self._run_with_heartbeat(argv, cwd, timeout_minutes)
         except FileNotFoundError as exc:
             raise HarnessError(
                 f"harness executable '{argv[0]}' not found; install it or set harness.command"
@@ -64,3 +69,19 @@ class Harness(ABC):
                 f"{self.name} exited with {result.returncode}: {result.stderr.strip()}"
             )
         return result.stdout
+
+    def _run_with_heartbeat(self, argv: list[str], cwd: Path, timeout_minutes: int) -> subprocess.CompletedProcess:
+        kwargs = dict(cwd=cwd, timeout=timeout_minutes * 60, capture_output=True, text=True)
+        if self.on_progress is None:
+            return self._runner(argv, **kwargs)
+        start = time.monotonic()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(self._runner, argv, **kwargs)
+            while True:
+                try:
+                    return future.result(timeout=self.heartbeat_seconds)
+                except FutureTimeout:
+                    elapsed = int(time.monotonic() - start)
+                    self.on_progress(
+                        f"{self.name} still working ({elapsed // 60}m {elapsed % 60:02d}s elapsed)"
+                    )

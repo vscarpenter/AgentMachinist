@@ -19,6 +19,13 @@ from machinist.phases.watch import WatchState, watch_once
 from machinist.workspace import Workspace, WorkspaceError
 
 _TEMPLATES = files("machinist") / "templates"
+_LABEL_COLORS = {"trigger": "1d76db", "approved": "0e8a16"}
+
+
+def _make_harness(config):
+    harness = get_harness(config.harness)
+    harness.on_progress = lambda message: click.echo(f"  … {message}")
+    return harness
 _MACHINIST_ERRORS = (
     ConfigError, GitHubError, HarnessError, SpecPhaseError, ExecutePhaseError, WorkspaceError,
 )
@@ -59,6 +66,26 @@ def init(force: bool, install_workflows: bool) -> None:
             (workflows_dir / name).write_text((_TEMPLATES / "github" / name).read_text())
             click.echo(f"wrote {workflows_dir / name}")
 
+    try:
+        config = load_config()
+        github = GitHubClient(repo=config.github.repo)
+        github.ensure_label(
+            config.github.labels.trigger,
+            color=_LABEL_COLORS["trigger"],
+            description="Machinist: run the pipeline on this issue",
+        )
+        github.ensure_label(
+            config.github.labels.approved,
+            color=_LABEL_COLORS["approved"],
+            description="Machinist: spec approved for implementation",
+        )
+        click.echo(
+            f"ensured GitHub labels '{config.github.labels.trigger}' "
+            f"and '{config.github.labels.approved}'"
+        )
+    except (GitHubError, ConfigError) as exc:
+        click.echo(f"note: could not create GitHub labels yet ({exc})")
+
     click.echo(
         "\nNext steps:\n"
         "  1. Review machinist.yaml (harness, labels, test command).\n"
@@ -78,7 +105,7 @@ def spec(issue_number: int) -> None:
             issue_number,
             config,
             github=GitHubClient(repo=config.github.repo),
-            harness=get_harness(config.harness),
+            harness=_make_harness(config),
             workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
         )
     except _MACHINIST_ERRORS as exc:
@@ -104,7 +131,7 @@ def watch(once: bool) -> None:
         return run_spec_phase(
             issue_number, config,
             github=github,
-            harness=get_harness(config.harness),
+            harness=_make_harness(config),
             workspace=Workspace(repo_root=repo_root, config=config.workspace),
         )
 
@@ -112,7 +139,7 @@ def watch(once: bool) -> None:
         return run_execute_phase(
             issue_number, config,
             github=github,
-            harness=get_harness(config.harness),
+            harness=_make_harness(config),
             workspace=Workspace(repo_root=repo_root, config=config.workspace),
             test_runner=subprocess.run,
         )
@@ -143,7 +170,8 @@ def watch(once: bool) -> None:
 
 @main.command()
 @click.argument("issue_number", type=int)
-def run(issue_number: int) -> None:
+@click.option("--force", is_flag=True, help="Re-implement even if the PR is already marked ready.")
+def run(issue_number: int, force: bool) -> None:
     """Implement the approved spec for ISSUE_NUMBER (Phase 3)."""
     try:
         config = load_config()
@@ -151,9 +179,10 @@ def run(issue_number: int) -> None:
             issue_number,
             config,
             github=GitHubClient(repo=config.github.repo),
-            harness=get_harness(config.harness),
+            harness=_make_harness(config),
             workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
             test_runner=subprocess.run,
+            force=force,
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc

@@ -1,6 +1,7 @@
 """Tests for the harness abstraction layer."""
 
 import subprocess
+import time
 
 import pytest
 
@@ -86,6 +87,38 @@ def test_nonzero_exit_raises_harness_error_with_stderr(tmp_path):
 
     with pytest.raises(HarnessError, match="rate limited"):
         harness.generate_spec("write a spec", cwd=tmp_path)
+
+
+def test_progress_callback_fires_during_long_runs(tmp_path):
+    def slow_runner(args, **kwargs):
+        time.sleep(0.3)
+        return subprocess.CompletedProcess(args, 0, "done", "")
+
+    harness = get_harness(HarnessConfig(), runner=slow_runner)
+    harness.heartbeat_seconds = 0.05
+    beats = []
+    harness.on_progress = beats.append
+
+    assert harness.generate_spec("p", cwd=tmp_path) == "done"
+    assert beats
+    assert "claude-code" in beats[0]
+    assert "elapsed" in beats[0]
+
+
+def test_no_progress_callback_is_fine(tmp_path):
+    runner = FakeRunner(("ok", 0, ""))
+    harness = get_harness(HarnessConfig(), runner=runner)
+
+    assert harness.generate_spec("p", cwd=tmp_path) == "ok"
+
+
+def test_errors_still_surface_with_progress_enabled(tmp_path):
+    runner = FakeRunner(("", 3, "kaboom"))
+    harness = get_harness(HarnessConfig(), runner=runner)
+    harness.on_progress = lambda msg: None
+
+    with pytest.raises(HarnessError, match="kaboom"):
+        harness.generate_spec("p", cwd=tmp_path)
 
 
 def test_timeout_raises_harness_error(tmp_path):
