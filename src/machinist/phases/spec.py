@@ -73,6 +73,8 @@ def _pr_body(issue: Issue, config: MachinistConfig) -> str:
         f"`.machinist/specs/issue-{issue.number}-spec.md` (see Files changed).\n"
         "\n"
         f"**To approve:** apply the `{approved}` label, or comment `/machinist-execute`.\n"
+        "(GitHub's review **Approve button** is *not* the mechanism — GitHub blocks it\n"
+        "on your own PRs, and machinist only watches the label.)\n"
         "Once approved, the machinist daemon implements the spec on this branch,\n"
         "runs the test gate, and marks this PR ready for review.\n"
         "\n"

@@ -109,6 +109,9 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     assert "Closes #42" in body
     assert "machinist:approved" in body
     assert "/machinist-execute" in body
+    # Dogfood UX finding: solo devs reach for GitHub's review Approve button,
+    # which GitHub blocks on their own PRs. The body must head that off.
+    assert "Approve button" in body
 
 
 def test_branch_prefix_comes_from_config(tmp_path):

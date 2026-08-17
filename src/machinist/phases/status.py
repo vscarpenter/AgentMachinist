@@ -14,6 +14,7 @@ class StatusRow:
     title: str
     state: str   # "awaiting spec" | "awaiting approval" | "approved" | "in review"
     url: str
+    issue_number: int | None = None
 
 
 def pipeline_status(config: MachinistConfig, github) -> list[StatusRow]:
@@ -28,20 +29,23 @@ def pipeline_status(config: MachinistConfig, github) -> list[StatusRow]:
 
     rows = [
         StatusRow(kind="issue", number=i.number, title=i.title,
-                  state="awaiting spec", url=i.url)
+                  state="awaiting spec", url=i.url, issue_number=i.number)
         for i in issues
         if i.number not in covered
     ]
     approved_label = config.github.labels.approved
     for pr in prs:
-        if approved_label in pr.labels:
-            state = "approved"
-        elif pr.is_draft:
-            state = "awaiting approval"
-        else:
+        # Draft-ness outranks the label: once the agent marks a PR ready,
+        # a leftover approval label must not make it look runnable again.
+        if not pr.is_draft:
             state = "in review"
+        elif approved_label in pr.labels:
+            state = "approved"
+        else:
+            state = "awaiting approval"
         rows.append(StatusRow(kind="pr", number=pr.number, title=pr.title,
-                              state=state, url=pr.url))
+                              state=state, url=pr.url,
+                              issue_number=_issue_number_from_branch(pr.branch, prefix)))
     return rows
 
 

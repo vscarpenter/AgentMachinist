@@ -1,3 +1,18 @@
+# AgentMachinist — M3: watch daemon
+
+## Plan (M3)
+
+- [ ] TDD status: labeled+non-draft PR classifies "in review" (dogfood nit);
+      StatusRow gains issue_number (parsed from branch for PR rows)
+- [ ] TDD spec: PR body says explicitly GitHub's review-Approve button is
+      not the approval mechanism (dogfood UX finding 2)
+- [ ] TDD phases/watch: WatchState + watch_once — dispatch awaiting-spec →
+      run_spec, approved(draft) → run_execute; record failures, never
+      re-dispatch a failed issue; errors become events, daemon survives
+- [ ] TDD cli: watch with --once (single pass) and poll loop; stub test dies
+- [ ] Docs: README + getting-started "what's next" reflect all commands live
+- [ ] Suite green; live smoke: machinist watch --once on empty pipeline
+
 # AgentMachinist — M2: execute phase (COMPLETE)
 
 ## Plan (M2)
