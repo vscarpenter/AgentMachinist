@@ -16,9 +16,11 @@ permissions:
 
 jobs:
   approve:
+    # contains() rather than startsWith(): real comments arrive with stray
+    # leading whitespace, and startsWith is character-exact.
     if: >-
       github.event.issue.pull_request
-      && startsWith(github.event.comment.body, '/machinist-execute')
+      && contains(github.event.comment.body, '/machinist-execute')
       && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     steps:

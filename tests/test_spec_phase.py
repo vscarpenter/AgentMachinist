@@ -112,6 +112,9 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     # Dogfood UX finding: solo devs reach for GitHub's review Approve button,
     # which GitHub blocks on their own PRs. The body must head that off.
     assert "Approve button" in body
+    # Dogfood UX finding 2 (both live lifecycles): users instinctively click
+    # "Ready for review", which blocks the daemon (it implements drafts only).
+    assert "leave this PR as a draft" in body
 
 
 def test_branch_prefix_comes_from_config(tmp_path):

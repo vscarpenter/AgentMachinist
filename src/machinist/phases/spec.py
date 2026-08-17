@@ -77,6 +77,8 @@ def _pr_body(issue: Issue, config: MachinistConfig) -> str:
         "on your own PRs, and machinist only watches the label.)\n"
         "Once approved, the machinist daemon implements the spec on this branch,\n"
         "runs the test gate, and marks this PR ready for review.\n"
+        "Please leave this PR as a draft — machinist flips it to ready itself\n"
+        "when the implementation lands; marking it ready early pauses the daemon.\n"
         "\n"
         f"Closes #{issue.number}"
     )
