@@ -1,16 +1,26 @@
-# AgentMachinist — M2: execute phase
+# AgentMachinist — M2: execute phase (COMPLETE)
 
 ## Plan (M2)
 
-- [ ] TDD github: mark_ready(number) via gh pr ready
-- [ ] TDD workspace: provision from remote-only branch; ff local branch to
+- [x] TDD github: mark_ready(number) via gh pr ready
+- [x] TDD workspace: provision from remote-only branch; ff local branch to
       origin when behind; has_changes(path)
-- [ ] TDD phases/execute: run_execute_phase — approval-label guard, spec file
+- [x] TDD phases/execute: run_execute_phase — approval-label guard, spec file
       read, harness.implement (acceptEdits), no-changes guard, tests.command
       gate (fail = keep workspace, no push), commit/push, mark PR ready
-- [ ] implement-prompt.md template
-- [ ] TDD cli: wire `machinist run <n>`; stubs test shrinks to watch only
-- [ ] Suite green; push; live dogfood: machinist run 1 against approved PR #3
+- [x] implement-prompt.md template
+- [x] TDD cli: wire `machinist run <n>`; stubs test shrinks to watch only
+- [x] Suite green (86); pushed; live dogfood SUCCEEDED 2026-08-16:
+      machinist run 1 implemented the guide per spec (257-line
+      docs/getting-started.md + 91-line drift tests + README link),
+      passed the pytest gate, pushed ba0b3cd, marked PR #3 ready.
+      Branch suite independently verified (65 passed on fresh checkout).
+      Full issue→spec→approve→execute loop has now run end-to-end.
+      Remaining human step: review + merge PR #3 (closes #1).
+
+Next milestone: M3 — `machinist watch` polling daemon (pipeline_status
+reads already provide the polling backbone; add dispatch + de-dup so an
+in-flight issue isn't re-run each poll).
 
 # AgentMachinist — M1: spec phase end-to-end (complete)
 
