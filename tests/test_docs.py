@@ -15,6 +15,7 @@ import yaml
 
 from machinist.cli import main
 from machinist.config import LabelsConfig, MachinistConfig
+from machinist.phases.status import PIPELINE_STATES
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GUIDE_PATH = _REPO_ROOT / "docs" / "getting-started.md"
@@ -32,7 +33,14 @@ _REQUIRED_HEADINGS = (
     "## Configuration reference",
     "## Choosing a harness",
     "## Troubleshooting",
-    "## What's next (v0.1 limits)",
+    "## Operational limits",
+)
+
+_REQUIRED_DOCS = (
+    "architecture.md",
+    "operator-runbook.md",
+    "trust-model.md",
+    "harnesses.md",
 )
 
 
@@ -51,7 +59,10 @@ def test_guide_exists_with_required_sections():
 
 
 def test_readme_links_to_guide():
-    assert "docs/getting-started.md" in _README_PATH.read_text()
+    assert (
+        "https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md"
+        in _README_PATH.read_text()
+    )
 
 
 def test_guide_subcommands_are_real():
@@ -89,3 +100,44 @@ def test_guide_uses_real_label_names():
     labels = LabelsConfig()
     assert labels.trigger in text, f"guide never mentions the '{labels.trigger}' label"
     assert labels.approved in text, f"guide never mentions the '{labels.approved}' label"
+
+
+def test_operator_trust_architecture_and_harness_docs_exist():
+    for name in _REQUIRED_DOCS:
+        assert (_REPO_ROOT / "docs" / name).is_file(), f"docs/{name} is missing"
+
+
+def test_documented_pipeline_states_match_implementation_constants():
+    combined = _guide_text() + (_REPO_ROOT / "docs/operator-runbook.md").read_text()
+    for state in PIPELINE_STATES:
+        assert f"`{state}`" in combined, f"state '{state}' is undocumented"
+
+
+def test_stale_milestone_and_approval_claims_cannot_return():
+    current_docs = "\n".join(
+        path.read_text()
+        for path in (_README_PATH, _GUIDE_PATH, *(_REPO_ROOT / "docs" / name for name in _REQUIRED_DOCS))
+    ).lower()
+    forbidden = (
+        "nothing consumes it yet",
+        "coming watch daemon",
+        "package is not on pypi",
+        "label is the durable approval record",
+        "agent has no git access",
+    )
+    for phrase in forbidden:
+        assert phrase not in current_docs
+
+
+def test_visual_handbook_has_document_semantics_and_navigation():
+    html = (_REPO_ROOT / "docs/onboarding.html").read_text().lower()
+    for required in (
+        "<!doctype html>",
+        '<html lang="en">',
+        '<meta name="viewport"',
+        'href="#main"',
+        '<nav aria-label=',
+        '<main id="main"',
+        "</html>",
+    ):
+        assert required in html

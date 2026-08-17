@@ -1,114 +1,87 @@
 # AgentMachinist
 
-Local-first agentic build & CI/CD for solo developers. AgentMachinist bridges
-GitHub issues to local coding harnesses — Claude Code, OpenCode, PI, or
-Codex — through a three-phase, human-in-the-loop pipeline that runs on your Mac.
+AgentMachinist is a local-first, issue-to-reviewed-PR build pipeline for solo
+developers. It connects GitHub issues to Claude Code, OpenCode, Pi, or Codex,
+with a human-approved specification between planning and implementation.
 
-New here? Start with the [Getting Started guide](docs/getting-started.md).
-Prefer a visual tour? Open [`docs/onboarding.html`](docs/onboarding.html) in a
-browser — a self-contained illustrated handbook of the pipeline and its
-principles.
-
-```
- GitHub issue (label: agent-task)
-        │
-        ▼
- Phase 1 · SPEC        harness writes .machinist/specs/issue-<n>-spec.md
-        │              → branch agent/issue-<n> → draft PR (Closes #<n>)
-        ▼
- Phase 2 · APPROVE     you review the spec; apply label machinist:approved
-        │              (or comment /machinist-execute on the PR)
-        ▼
- Phase 3 · EXECUTE     local daemon implements the spec in an isolated
-                       worktree, runs your tests, pushes to the PR branch,
-                       and marks it ready for review
+```text
+issue + trigger label → spec commit → draft PR → SHA-bound approval
+                    → implementation → test gate → ready PR → human merge
 ```
 
-The agent never merges anything. You approve the spec before code is written,
-and you review the PR before it lands.
+The controller—not the harness—owns commits, pushes, PR transitions, and task
+records. AgentMachinist never merges.
 
 ## Install
 
 ```sh
-uv tool install agentmachinist        # or: uv tool install git+https://github.com/vscarpenter/AgentMachinist
+uv tool install agentmachinist
 ```
 
-Prerequisites: [`gh`](https://cli.github.com) (authenticated), `git`, and at
-least one coding harness CLI (`claude`, `opencode`, `pi`, or `codex`).
+You also need `git`, an authenticated [`gh`](https://cli.github.com), and one
+supported harness executable (`claude`, `opencode`, `pi`, or `codex`).
 
-## Quickstart
-
-In the repository you want agents to work on:
+## Start
 
 ```sh
-machinist init          # writes machinist.yaml, .machinist/, and GitHub workflows
-machinist spec 42       # Phase 1 for issue #42 (or let `watch` pick it up)
-machinist watch         # daemon: polls for labeled issues and approved PRs
-machinist run 42        # Phase 3 for an approved spec
+cd your-repository
+machinist init
+# Set tests.command in machinist.yaml, then:
+machinist doctor
+machinist watch
 ```
 
-## Configuration (`machinist.yaml`)
+The default `github.spec_source: local` makes `watch` own spec generation.
+Choose `github-actions` and run `machinist sync-workflows` if CI should own that
+phase instead. Exactly one source is active, preventing duplicate spec runs.
 
-```yaml
-version: 1
-harness:
-  name: claude-code            # claude-code | opencode | pi | codex
-  command: null                # optional executable override
-  timeout_minutes: 30          # Phase 3 implementation budget
-  spec_timeout_minutes: 10     # Phase 1 spec budget
-github:
-  repo: null                   # "owner/repo"; null = derived from origin
-  labels:
-    trigger: agent-task
-    approved: "machinist:approved"
-  poll_interval_seconds: 60
-workspace:
-  root: ~/.machinist/workspaces
-  strategy: worktree           # worktree | clone
-  cleanup: on_success          # always | on_success | never
-  branch_prefix: agent/
-tests:
-  command: null                # e.g. "pytest -q"; null skips the test gate
+Approval is bound to the exact PR head commit. Use either:
+
+```sh
+machinist approve 57
+# or post the exact PR comment: /machinist-execute
 ```
 
-Unknown keys are rejected — typos fail loudly instead of being ignored.
+Editing the spec after approval makes that approval stale and blocks execution
+until the new head is approved.
 
-## How approval works
+## Commands
 
-The single source of truth is the `machinist:approved` label on the draft PR.
-Apply it by hand, or comment `/machinist-execute` on the PR — the bundled
-`machinist-approve.yml` workflow converts that comment into the label (only
-for repo owners, members, and collaborators). Draft → Ready for Review is
-reserved as the *agent's* signal that implementation is complete.
+| Command | Purpose |
+| --- | --- |
+| `machinist init` | Create config, spec storage, labels, and managed workflows. |
+| `machinist doctor` | Run read-only setup and workflow-drift diagnostics. |
+| `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
+| `machinist spec <issue>` | Generate a spec and open its draft PR. |
+| `machinist approve <pr>` | Bind approval to the current PR head. |
+| `machinist run <issue>` | Implement an approved spec and run the test gate. |
+| `machinist watch [--once]` | Dispatch eligible tasks continuously or once. |
+| `machinist status` | Show issue/PR lifecycle states. |
+| `machinist retry <issue> [--phase spec\|execute]` | Re-enable one failed Task Run. |
 
-## Spec generation: local or CI
+## Documentation
 
-Both paths run the same `machinist spec <n>` command:
+- [Getting started](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md)
+- [Architecture and lifecycle](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md)
+- [Operator runbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md)
+- [Trust model](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md)
+- [Harness support](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/harnesses.md)
+- [Visual handbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/onboarding.html)
+- [Contributing](https://github.com/vscarpenter/AgentMachinist/blob/main/CONTRIBUTING.md)
+- [Changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md)
 
-- **Local (default):** `machinist watch` sees the `agent-task` label and
-  generates the spec on your machine using your existing harness login.
-- **CI:** the bundled `machinist-spec.yml` workflow runs it in GitHub Actions
-  when an issue is labeled — works while your Mac sleeps, but requires an
-  `ANTHROPIC_API_KEY` repository secret.
+The trust model is deliberately narrower than “the agent cannot use git.”
+Harness flags, credential reduction, repository postconditions, and push leases
+reduce risk, but local harnesses still execute with the operating-system access
+of the user who launched them. Read the trust model before unattended use.
 
-## Status
+## Releasing
 
-v0.1 (M3): all three phases work end-to-end — `init`, `spec`, `run`,
-`status`, and the `watch` daemon (`--once` for a single cron-friendly pass).
-The pipeline has dogfooded itself: its own getting-started guide was specced,
-approved, implemented, test-gated, and merged by the pipeline (issue #1 →
-PR #3). See `docs/superpowers/specs/` for the design.
-
-## Releasing (maintainer notes)
-
-Publishing uses [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)
-— no tokens. One-time setup: on pypi.org under *Publishing*, add a pending
-publisher for project `agentmachinist` (owner `vscarpenter`, repo
-`AgentMachinist`, workflow `release.yml`, environment `pypi`). After that,
-each release is: bump `version` in `pyproject.toml`, commit, then create a
-GitHub Release for tag `v<version>` — the release workflow builds and
-publishes automatically.
+Releases use PyPI Trusted Publishing. Bump `pyproject.toml`, update the
+changelog, and publish a GitHub Release tagged `v<version>`. The release job
+requires tag/version equality, runs the suite, builds both distributions,
+installs and smoke-tests the wheel, and publishes last.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/vscarpenter/AgentMachinist/blob/main/LICENSE).

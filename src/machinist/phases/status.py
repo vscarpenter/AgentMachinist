@@ -6,6 +6,15 @@ from dataclasses import dataclass
 
 from machinist.config import MachinistConfig
 
+PIPELINE_STATES = (
+    "awaiting spec",
+    "awaiting approval",
+    "approval pending",
+    "approval stale",
+    "approved",
+    "in review",
+)
+
 
 @dataclass(frozen=True)
 class StatusRow:
