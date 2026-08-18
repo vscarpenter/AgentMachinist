@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Serve the first-run guide rendered via GitHub Pages and link it from the README; refresh the guide's content, navigation, and dark-mode contrast.
+
 ## 0.3.0 — 2026-08-18
 
 - Add `github.spec_install` (`pypi` or `checkout`) so Spec CI can run the controller from the checkout.

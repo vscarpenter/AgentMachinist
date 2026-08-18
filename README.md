@@ -64,7 +64,7 @@ until the new head is approved.
 ## Documentation
 
 - [Getting started](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md)
-- [Visual first-run field guide](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/first-run-guide.html)
+- [Visual first-run field guide](https://vscarpenter.github.io/AgentMachinist/first-run-guide.html)
 - [Architecture and lifecycle](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md)
 - [Operator runbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md)
 - [Trust model](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md)
