@@ -174,9 +174,9 @@ def test_first_run_guide_is_visual_interactive_and_linked():
     assert "approval stale" in html
     assert "agentmachinist never" in html and "merge" in html
     assert (
-        "https://github.com/vscarpenter/AgentMachinist/blob/main/docs/first-run-guide.html"
+        "https://vscarpenter.github.io/AgentMachinist/first-run-guide.html"
         in _README_PATH.read_text()
-    )
+    ), "README must link the rendered guide, not the raw blob"
 
 
 def test_release_docs_describe_current_package_version():
@@ -185,6 +185,9 @@ def test_release_docs_describe_current_package_version():
     assert f"agentmachinist {version} is available on pypi" in html
     assert "uv tool install agentmachinist" in html
     assert "unreleased" not in html
+    major_minor = ".".join(version.split(".")[:2])
+    assert f"a visual field guide for the {major_minor} release" in html
+    assert f"agentmachinist {major_minor} first-run field guide" in html
     changelog = _CHANGELOG_PATH.read_text()
     assert f"## {version} —" in changelog
     assert (

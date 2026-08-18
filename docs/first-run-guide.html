@@ -289,9 +289,9 @@
     }
     .route-list {
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(8, 1fr);
       padding: 0;
-      margin: 0;
+      margin: 0 auto; /* the bare `margin: 0` list reset was overriding .shell's centering */
       list-style: none;
     }
     .route-list li {
@@ -489,12 +489,21 @@
     .annotation p { margin: 0; color: var(--ink-1); font-size: 0.9rem; }
 
     .walkthrough { display: grid; gap: clamp(var(--space-8), 10vw, 8rem); }
+    .walk-coda {
+      max-width: 46rem;
+      margin-top: clamp(var(--space-7), 7vw, var(--space-9));
+      padding: var(--space-5);
+      border-left: 3px solid var(--success);
+      background: var(--success-soft);
+    }
+    .walk-coda p { margin: 0; color: var(--ink-1); font-size: 0.95rem; }
     .walk-step {
       display: grid;
       grid-template-columns: minmax(18rem, 0.72fr) minmax(28rem, 1.28fr);
       gap: clamp(var(--space-6), 6vw, var(--space-9));
       align-items: center;
     }
+    .walk-step:nth-child(even) { grid-template-columns: minmax(28rem, 1.28fr) minmax(18rem, 0.72fr); }
     .walk-step:nth-child(even) .walk-copy { order: 2; }
     .walk-step:nth-child(even) .walk-visual { order: 1; }
     .walk-index { display: inline-block; margin-bottom: var(--space-4); color: var(--signal); font: 750 0.8rem ui-monospace, monospace; }
@@ -598,17 +607,19 @@
       padding: clamp(var(--space-6), 6vw, var(--space-9));
       border: 1px solid var(--line-strong);
       border-radius: var(--radius-xl);
-      background: var(--ink-0);
-      color: var(--paper-0);
+      /* Deliberately theme-independent: this card is always dark, so its
+         hardcoded orange kicker and white-alpha borders keep their contrast. */
+      background: #17212a;
+      color: #fbfaf6;
       box-shadow: var(--shadow-lg);
     }
-    .launch-card h2, .launch-card h3 { color: var(--paper-0); }
-    .launch-card p { color: color-mix(in srgb, var(--paper-0) 72%, transparent); }
+    .launch-card h2, .launch-card h3 { color: #fbfaf6; }
+    .launch-card p { color: rgb(251 250 246 / 0.72); }
     .checklist { margin: 0; padding: 0; list-style: none; }
     .checklist li { margin-bottom: var(--space-3); }
     .checklist label { display: flex; gap: var(--space-3); align-items: flex-start; cursor: pointer; }
     .checklist input { width: 1.25rem; height: 1.25rem; margin-top: 0.15rem; accent-color: var(--signal); }
-    .reset-button { margin-top: var(--space-4); padding: 0 var(--space-4); border-color: rgb(255 255 255 / 0.35); background: transparent; color: var(--paper-0); }
+    .reset-button { margin-top: var(--space-4); padding: 0 var(--space-4); border-color: rgb(255 255 255 / 0.35); background: transparent; color: #fbfaf6; }
     .launch-links { display: grid; align-content: start; gap: var(--space-3); }
     .launch-links a {
       min-height: 3.4rem;
@@ -619,7 +630,7 @@
       padding: 0 var(--space-4);
       border: 1px solid rgb(255 255 255 / 0.28);
       border-radius: var(--radius-md);
-      color: var(--paper-0);
+      color: #fbfaf6;
       text-decoration: none;
       font-weight: 650;
     }
@@ -639,14 +650,16 @@
 
     @media (max-width: 62rem) {
       .nav-links a { display: none; }
+      .nav-links .nav-keep { display: inline-block; }
       .hero, .install-grid, .tool-bench, .mode-board, .config-layout, .walk-step, .boundary, .launch-card { grid-template-columns: minmax(0, 1fr); }
       .hero { min-height: auto; }
       .hero-visual { max-width: 42rem; }
-      .route-list { grid-template-columns: repeat(3, 1fr); }
-      .route-list li:nth-child(3) { border-right: 0; }
-      .route-list li:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+      .route-list { grid-template-columns: repeat(4, 1fr); }
+      .route-list li:nth-child(4n) { border-right: 0; }
+      .route-list li:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
       .readiness-gauge { position: static; }
       .mode-map { border-right: 0; border-bottom: 1px solid var(--line); }
+      .walk-step:nth-child(even) { grid-template-columns: minmax(0, 1fr); }
       .walk-step:nth-child(even) .walk-copy, .walk-step:nth-child(even) .walk-visual { order: initial; }
       .launch-links { grid-template-columns: repeat(2, 1fr); }
     }
@@ -696,7 +709,7 @@
         <a href="#prepare">Prepare</a>
         <a href="#choose-mode">Choose a mode</a>
         <a href="#first-task">First task</a>
-        <a href="#troubleshoot">Get unstuck</a>
+        <a class="nav-keep" href="#troubleshoot">Get unstuck</a>
         <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
       </div>
     </nav>
@@ -705,7 +718,7 @@
   <main id="main">
     <section class="hero shell" id="top">
       <div class="hero-copy reveal">
-        <p class="hero-kicker">A visual field guide for version 0.2</p>
+        <p class="hero-kicker">A visual field guide for the 0.3 release</p>
         <h1>Your first issue, machined into a PR.</h1>
         <p class="hero-lede">Set up AgentMachinist, choose who writes the spec, approve the exact plan you read, and let your coding harness build behind a test gate.</p>
         <div class="version-note" role="note">
@@ -777,14 +790,16 @@
       </figure>
     </section>
 
-    <section class="route-rail" aria-label="The six stops in a first AgentMachinist run">
+    <section class="route-rail" aria-label="The eight stations in a first AgentMachinist run">
       <ol class="route-list shell">
         <li><span class="route-number">01</span><strong>Prepare</strong><small>Git, gh, uv, harness</small></li>
         <li><span class="route-number">02</span><strong>Install</strong><small>CLI and project files</small></li>
-        <li><span class="route-number">03</span><strong>Configure</strong><small>Harness, tests, owner</small></li>
-        <li><span class="route-number">04</span><strong>Spec</strong><small>Issue becomes a draft PR</small></li>
-        <li><span class="route-number">05</span><strong>Approve</strong><small>Bind consent to one SHA</small></li>
-        <li><span class="route-number">06</span><strong>Review</strong><small>Tests pass; you merge</small></li>
+        <li><span class="route-number">03</span><strong>Choose a mode</strong><small>Who writes the spec</small></li>
+        <li><span class="route-number">04</span><strong>Configure</strong><small>Harness, tests, labels</small></li>
+        <li><span class="route-number">05</span><strong>File the issue</strong><small>One outcome, labeled</small></li>
+        <li><span class="route-number">06</span><strong>Spec</strong><small>Issue becomes a draft PR</small></li>
+        <li><span class="route-number">07</span><strong>Approve</strong><small>Bind consent to one SHA</small></li>
+        <li><span class="route-number">08</span><strong>Review</strong><small>Tests pass; you merge</small></li>
       </ol>
     </section>
 
@@ -868,7 +883,7 @@ machinist, version 0.3.0
             <button class="mode-button" type="button" data-mode-button="ci" aria-pressed="false" aria-controls="ci-route ci-steps">GitHub Actions</button>
           </div>
         </div>
-        <noscript><p class="noscript-note">Route switching needs JavaScript. The recommended local route is shown below; the complete CI route is also documented in <a href="getting-started.md">Getting Started</a>.</p></noscript>
+        <noscript><p class="noscript-note">Route switching needs JavaScript. The recommended local route is shown below; the complete CI route is also documented in <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md">Getting Started</a>.</p></noscript>
 
         <div class="mode-board">
           <div class="mode-map">
@@ -1026,6 +1041,7 @@ Managed workflows match machinist.yaml.</pre>
             <span class="walk-index">06 / MAKE THE PLAN</span>
             <h3>Run one poll, or address the issue directly.</h3>
             <p><code>watch --once</code> picks up eligible work and exits. <code>spec 42</code> is the direct route. Either way, the result is a draft PR containing only the plan.</p>
+            <p class="micro-note">Silence is normal while the harness thinks: the CLI prints <code>still working (2m 30s elapsed)</code> every 30 seconds, and spec runs stop at ten minutes by default.</p>
             <span class="walk-command">machinist watch --once</span>
           </div>
           <figure class="walk-visual">
@@ -1112,6 +1128,11 @@ Managed workflows match machinist.yaml.</pre>
           </figure>
         </article>
       </div>
+
+      <aside class="walk-coda">
+        <h3>After the merge, the loop closes itself.</h3>
+        <p>Merging closes the issue automatically — the spec PR carries <code>Closes #42</code>. The isolated workspace was already removed when the tests passed (<code>cleanup: on_success</code>), and GitHub deletes the branch if your repository auto-deletes merged heads. Run <code>machinist status</code>: an empty board means the shop is ready for the next labeled issue.</p>
+      </aside>
     </section>
 
     <section class="section" id="status">
@@ -1144,7 +1165,7 @@ Managed workflows match machinist.yaml.</pre>
             <li>Common GitHub and SSH-agent credentials are removed from the harness environment.</li>
             <li>These controls are not a VM, container, or protection from a malicious local executable.</li>
           </ul>
-          <p><a href="trust-model.md">Read the full trust model before unattended use.</a></p>
+          <p><a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md">Read the full trust model before unattended use.</a></p>
         </div>
         <figure class="boundary-visual">
           <svg viewBox="0 0 560 500" role="img" aria-label="Trust boundary diagram: AgentMachinist controls Git and GitHub, the harness receives a workspace and provider credentials, and the human owns approval and merge.">
@@ -1221,17 +1242,17 @@ Managed workflows match machinist.yaml.</pre>
         </div>
         <div class="launch-links">
           <h3>Keep nearby</h3>
-          <a href="getting-started.md"><span>Full getting-started reference</span><span aria-hidden="true">→</span></a>
-          <a href="operator-runbook.md"><span>Operator runbook</span><span aria-hidden="true">→</span></a>
-          <a href="harnesses.md"><span>Harness support matrix</span><span aria-hidden="true">→</span></a>
-          <a href="trust-model.md"><span>Trust model</span><span aria-hidden="true">→</span></a>
+          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md"><span>Full getting-started reference</span><span aria-hidden="true">→</span></a>
+          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md"><span>Operator runbook</span><span aria-hidden="true">→</span></a>
+          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/harnesses.md"><span>Harness support matrix</span><span aria-hidden="true">→</span></a>
+          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md"><span>Trust model</span><span aria-hidden="true">→</span></a>
         </div>
       </div>
     </section>
   </main>
 
   <footer class="shell">
-    <div class="footer-row"><span>AgentMachinist 0.2 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
+    <div class="footer-row"><span>AgentMachinist 0.3 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
   </footer>
 
   <div id="live-region" class="mono" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>
