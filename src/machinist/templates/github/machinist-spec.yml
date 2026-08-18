@@ -29,7 +29,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install AgentMachinist
-        run: uv tool install agentmachinist==__VERSION__
+        run: __INSTALL_AGENTMACHINIST__
 
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
@@ -38,4 +38,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: machinist spec ${{ github.event.issue.number }}
+        run: __SPEC_INVOKE__ ${{ github.event.issue.number }}

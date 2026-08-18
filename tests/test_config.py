@@ -8,6 +8,7 @@ from machinist.config import (
     ConfigError,
     HarnessName,
     MachinistConfig,
+    SpecInstall,
     load_config,
 )
 
@@ -22,6 +23,7 @@ harness:
 github:
   repo: vscarpenter/demo
   spec_source: github-actions
+  spec_install: pypi
   labels:
     trigger: ai-task
     approved: "go:build"
@@ -112,6 +114,17 @@ def test_defaults_construct_without_yaml():
     config = MachinistConfig()
     assert config.version == 1
     assert config.github.poll_interval_seconds == 60
+
+
+def test_spec_install_defaults_to_pypi():
+    config = MachinistConfig()
+    assert config.github.spec_install is SpecInstall.PYPI
+
+
+def test_unknown_spec_install_is_rejected(tmp_path):
+    path = write_config(tmp_path, "github:\n  spec_install: docker\n")
+    with pytest.raises(ConfigError, match="spec_install"):
+        load_config(path)
 
 
 @pytest.mark.parametrize("label", ["bad\nlabel", "bad'label", "", "x" * 51])

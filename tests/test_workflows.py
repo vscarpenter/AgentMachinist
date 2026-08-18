@@ -41,6 +41,23 @@ def test_render_uses_configured_labels_exact_command_and_pinned_version():
     assert "pull_request_target:" in approval
 
 
+def test_checkout_spec_install_uses_uv_run_from_the_repository():
+    cfg = MachinistConfig.model_validate(
+        {
+            "github": {
+                "spec_source": "github-actions",
+                "spec_install": "checkout",
+                "labels": {"trigger": "ai:task", "approved": "ship:it"},
+            }
+        }
+    )
+    spec = expected_workflows(cfg, installed_version="0.2.0")["machinist-spec.yml"]
+    assert "uv sync --frozen" in spec
+    assert "uv run machinist spec" in spec
+    assert "uv tool install agentmachinist==" not in spec
+    assert "git+https://" not in spec
+
+
 def test_local_spec_source_omits_ci_dispatcher():
     assert set(expected_workflows(config("local"), installed_version="0.2.0")) == {
         "machinist-approve.yml"
