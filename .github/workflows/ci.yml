@@ -40,13 +40,9 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Build sdist and wheel
-        run: uv build
+        run: |
+          rm -rf dist
+          uv build
 
       - name: Smoke-test installed wheel
-        run: |
-          WHEEL="$(find dist -name '*.whl' -print -quit)"
-          ENV_DIR="$(mktemp -d)/venv"
-          uv venv "$ENV_DIR"
-          uv pip install --python "$ENV_DIR/bin/python" "$WHEEL"
-          PATH="$ENV_DIR/bin:$PATH" machinist --version
-          "$ENV_DIR/bin/python" -c "from importlib.resources import files; assert (files('machinist') / 'templates' / 'github' / 'machinist-approve.yml').is_file()"
+        run: bash scripts/smoke-wheel.sh

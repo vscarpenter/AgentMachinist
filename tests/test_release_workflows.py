@@ -26,8 +26,9 @@ def test_release_verifies_identity_tests_and_wheel_before_publish():
     positions = [text.index(item) for item in required_order]
     assert positions == sorted(positions)
     assert "github.event.release.tag_name" in text
-    assert "importlib.resources" in text
-    assert "machinist --version" in text
+    assert "scripts/smoke-wheel.sh" in text
+    assert "rm -rf dist" in text
+    assert "find dist -name '*.whl'" not in text
 
 
 def test_ci_covers_linux_macos_and_package_build():
@@ -36,3 +37,6 @@ def test_ci_covers_linux_macos_and_package_build():
     assert "macos-latest" in text
     assert "uv build" in text
     assert "Smoke-test installed wheel" in text
+    assert "rm -rf dist" in text
+    assert "scripts/smoke-wheel.sh" in text
+    assert "find dist -name '*.whl'" not in text
