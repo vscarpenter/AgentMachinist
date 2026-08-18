@@ -2,9 +2,13 @@
 
 from pathlib import Path
 
+import pytest
 import tomllib
 
 _ROOT = Path(__file__).resolve().parent.parent
+
+if not (_ROOT / ".github" / "workflows").exists():
+    pytest.skip("repository-only test (paths absent from sdist)", allow_module_level=True)
 
 
 def test_package_version_is_pep440_and_not_the_initial_release():

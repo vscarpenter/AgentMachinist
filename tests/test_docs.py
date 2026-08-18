@@ -12,6 +12,7 @@ import re
 import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 from machinist.cli import main
@@ -23,6 +24,9 @@ _GUIDE_PATH = _REPO_ROOT / "docs" / "getting-started.md"
 _FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
 _README_PATH = _REPO_ROOT / "README.md"
 _CHANGELOG_PATH = _REPO_ROOT / "CHANGELOG.md"
+
+if not (_REPO_ROOT / "docs").exists():
+    pytest.skip("repository-only test (paths absent from sdist)", allow_module_level=True)
 
 _REQUIRED_HEADINGS = (
     "# Getting Started with AgentMachinist",

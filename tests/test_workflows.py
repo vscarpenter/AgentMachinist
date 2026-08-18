@@ -69,6 +69,10 @@ def test_switching_to_local_prunes_managed_spec_workflow(tmp_path):
     assert not (tmp_path / ".github/workflows/machinist-spec.yml").exists()
 
 
+@pytest.mark.skipif(
+    not (_ROOT / ".github" / "workflows").exists(),
+    reason="repository-only test (paths absent from sdist)",
+)
 def test_checked_in_workflows_match_config_and_package_version():
     config_obj = load_config(_ROOT / "machinist.yaml")
     expected = expected_workflows(config_obj, installed_version=_package_version())
