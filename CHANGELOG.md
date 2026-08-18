@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-08-18
 
 - Add `github.spec_install` (`pypi` or `checkout`) so Spec CI can run the controller from the checkout.
 - Require checked-in managed workflows to match config plus package version.
