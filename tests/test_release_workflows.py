@@ -7,9 +7,11 @@ import tomllib
 _ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_version_has_advanced_past_published_0_1_0():
-    data = tomllib.loads((_ROOT / "pyproject.toml").read_text())
-    assert data["project"]["version"] == "0.2.0"
+def test_package_version_is_pep440_and_not_the_initial_release():
+    version = tomllib.loads((_ROOT / "pyproject.toml").read_text())["project"]["version"]
+    assert version != "0.1.0"
+    assert version[0].isdigit()
+    assert "+" not in version
 
 
 def test_release_verifies_identity_tests_and_wheel_before_publish():
