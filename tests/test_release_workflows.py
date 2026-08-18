@@ -50,4 +50,4 @@ def test_ci_covers_linux_macos_and_package_build():
     assert "3.13" in text
     assert "python-version:" in text
     assert "uv run pytest -o addopts=" in text
-    assert 'version: "0.' in text or "version: '0." in text
+    assert 'version: "0.12.5"' in text

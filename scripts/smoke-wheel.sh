@@ -9,7 +9,9 @@ if [[ ! -f "$WHEEL" ]]; then
   echo "expected $WHEEL after uv build" >&2
   exit 1
 fi
-ENV_DIR="$(mktemp -d)/venv"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+ENV_DIR="$TMP_DIR/venv"
 uv venv "$ENV_DIR"
 uv pip install --python "$ENV_DIR/bin/python" "$WHEEL"
 PATH="$ENV_DIR/bin:$PATH" machinist --version

@@ -1,5 +1,4 @@
 import subprocess
-import sys
 import tarfile
 import tomllib
 from pathlib import Path
@@ -14,7 +13,7 @@ def test_smoke_wheel_script_selects_versioned_wheel_and_templates():
     text = _SCRIPT.read_text()
     assert "set -euo pipefail" in text
     assert "tomllib" in text
-    assert "agentmachinist-${VERSION}-py3-none-any.whl" in text or 'agentmachinist-${VERSION}-py3-none-any.whl' in text
+    assert "agentmachinist-${VERSION}-py3-none-any.whl" in text
     assert "machinist --version" in text
     assert "spec-prompt.md" in text
     assert "machinist-approve.yml" in text
@@ -30,7 +29,8 @@ def test_sdist_omits_dogfood_and_design_tree(tmp_path):
     version = tomllib.loads((_ROOT / "pyproject.toml").read_text())["project"]["version"]
     sdist = _ROOT / "dist" / f"agentmachinist-{version}.tar.gz"
     assert sdist.is_file()
-    names = tarfile.open(sdist).getnames()
+    with tarfile.open(sdist) as tf:
+        names = tf.getnames()
     joined = "\n".join(names)
     assert f"agentmachinist-{version}/src/machinist/workflows.py" in names
     assert f"agentmachinist-{version}/tests/test_lifecycle.py" in names
