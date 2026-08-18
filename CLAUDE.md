@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.2.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.3.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -166,9 +166,10 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-08-17)
+## Current state (2026-08-18)
 
-- v0.2.0 released on PyPI; 169 tests green; CI runs on ubuntu + macos.
+- v0.3.0 released on PyPI; 175 tests green; CI runs on ubuntu + macos
+  across Python 3.12 and 3.13.
 - All designed commands ship; two full issue→merge lifecycles have run
   end-to-end (issue #1 and issue #4), the second fully daemon-driven.
 - Known limits: macOS is the only tested OS for the daemon/notifications;
