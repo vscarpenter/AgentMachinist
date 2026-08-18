@@ -44,3 +44,8 @@ def test_ci_covers_linux_macos_and_package_build():
     assert "rm -rf dist" in text
     assert "scripts/smoke-wheel.sh" in text
     assert "find dist -name '*.whl'" not in text
+    assert "3.12" in text
+    assert "3.13" in text
+    assert "python-version:" in text
+    assert "uv run pytest -o addopts=" in text
+    assert 'version: "0.' in text or "version: '0." in text

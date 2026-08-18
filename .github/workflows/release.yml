@@ -23,6 +23,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.5"
 
       - name: Verify tag matches package version
         env:
@@ -35,7 +37,7 @@ jobs:
           }
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest -o addopts= --tb=short
 
       - name: Build sdist and wheel
         run: |
