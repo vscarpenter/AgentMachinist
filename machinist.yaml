@@ -13,6 +13,7 @@ harness:
 github:
   repo: null                   # "owner/repo"; null = gh derives it from origin
   spec_source: github-actions  # this repository uses CI for Phase 1
+  spec_install: checkout       # Phase 1 uses this checkout, not the last PyPI pin
   labels:
     trigger: agent-task        # issues with this label enter the pipeline
     approved: "machinist:approved"   # PRs with this label get implemented
