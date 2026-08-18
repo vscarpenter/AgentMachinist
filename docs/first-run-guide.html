@@ -918,6 +918,7 @@ machinist, version 0.2.0
               <h3>GitHub Actions setup</h3>
               <ol>
                 <li>Set <code>github.spec_source: github-actions</code>.</li>
+                <li>Leave <code>github.spec_install: pypi</code> so the workflow pins the released controller. Set <code>checkout</code> to run it from your repository with uv — how AgentMachinist dogfoods itself.</li>
                 <li>Run <code>machinist sync-workflows</code> and commit the generated spec workflow.</li>
                 <li>Add <code>ANTHROPIC_API_KEY</code> as a repository secret. The bundled CI path is Claude-specific.</li>
                 <li>Keep a local watcher for approved execution; CI owns only the spec phase.</li>
@@ -949,6 +950,7 @@ harness:
 github:
   repo: null
   spec_source: <span class="code-hot">local</span>
+  spec_install: pypi
   labels:
     trigger: agent-task
     approved: "machinist:approved"
@@ -965,7 +967,7 @@ tests:
         </div>
         <div class="annotations">
           <article class="annotation"><h3>Pick the harness you use</h3><p><code>claude-code</code>, <code>opencode</code>, <code>pi</code>, or <code>codex</code>. Local runs reuse its provider authentication.</p></article>
-          <article class="annotation"><h3>Keep one spec owner</h3><p><code>local</code> is simplest for a first run. Changing ownership requires <code>machinist sync-workflows</code>.</p></article>
+          <article class="annotation"><h3>Keep one spec owner</h3><p><code>local</code> is simplest for a first run. Changing ownership requires <code>machinist sync-workflows</code>. In CI mode, <code>spec_install</code> chooses between the pinned PyPI release and your checkout.</p></article>
           <article class="annotation"><h3>Make tests real</h3><p>A null command skips the gate. Use the same command you trust before merging a human PR.</p></article>
         </div>
       </div>
