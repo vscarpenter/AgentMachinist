@@ -35,6 +35,7 @@ packages = ["src/machinist"]
 exclude = [
   "/.github",
   "/.machinist",
+  "/.superpowers",
   "/docs",
   "/tasks",
   "/AgentMachinist-Prompt.md",

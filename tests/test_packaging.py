@@ -41,3 +41,4 @@ def test_sdist_omits_dogfood_and_design_tree(tmp_path):
     assert "tasks/todo.md" not in joined
     assert ".github/workflows/" not in joined
     assert "AgentMachinist-Prompt.md" not in joined
+    assert ".superpowers/" not in joined
