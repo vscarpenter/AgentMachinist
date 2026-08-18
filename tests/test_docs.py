@@ -9,8 +9,10 @@ Guide conventions these tests rely on:
 """
 
 import re
+import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 from machinist.cli import main
@@ -22,6 +24,9 @@ _GUIDE_PATH = _REPO_ROOT / "docs" / "getting-started.md"
 _FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
 _README_PATH = _REPO_ROOT / "README.md"
 _CHANGELOG_PATH = _REPO_ROOT / "CHANGELOG.md"
+
+if not (_REPO_ROOT / "docs").exists():
+    pytest.skip("repository-only test (paths absent from sdist)", allow_module_level=True)
 
 _REQUIRED_HEADINGS = (
     "# Getting Started with AgentMachinist",
@@ -174,13 +179,15 @@ def test_first_run_guide_is_visual_interactive_and_linked():
     )
 
 
-def test_release_docs_describe_published_0_2():
+def test_release_docs_describe_current_package_version():
+    version = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"]["version"]
     html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
-    assert "agentmachinist 0.2.0 is available on pypi" in html
+    assert f"agentmachinist {version} is available on pypi" in html
     assert "uv tool install agentmachinist" in html
     assert "unreleased" not in html
-    assert "## 0.2.0 — 2026-08-17" in _CHANGELOG_PATH.read_text()
+    changelog = _CHANGELOG_PATH.read_text()
+    assert f"## {version} —" in changelog
     assert (
-        "https://pypi.org/project/agentmachinist/0.2.0/"
+        f"https://pypi.org/project/agentmachinist/{version}/"
         in _README_PATH.read_text()
     )

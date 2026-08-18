@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
-from machinist.config import MachinistConfig, SpecSource
+from machinist.config import MachinistConfig, SpecInstall, SpecSource
 
 _TEMPLATES = files("machinist") / "templates" / "github"
 _MANAGED = ("machinist-spec.yml", "machinist-approve.yml")
@@ -33,7 +33,15 @@ def expected_workflows(
     if config.github.spec_source is SpecSource.GITHUB_ACTIONS:
         spec = (_TEMPLATES / "machinist-spec.yml").read_text()
         spec = spec.replace("__TRIGGER_LABEL__", config.github.labels.trigger)
-        spec = spec.replace("__VERSION__", installed_version)
+        if config.github.spec_install is SpecInstall.CHECKOUT:
+            spec = spec.replace("__INSTALL_AGENTMACHINIST__", "uv sync --frozen")
+            spec = spec.replace("__SPEC_INVOKE__", "uv run machinist spec")
+        else:
+            spec = spec.replace(
+                "__INSTALL_AGENTMACHINIST__",
+                f"uv tool install agentmachinist=={installed_version}",
+            )
+            spec = spec.replace("__SPEC_INVOKE__", "machinist spec")
         rendered["machinist-spec.yml"] = spec
     return rendered
 

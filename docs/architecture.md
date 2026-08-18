@@ -72,6 +72,11 @@ claiming Phase 1. `sync-workflows` deterministically projects config and the
 installed package version into managed workflow files; `--check` and `doctor`
 report drift without writing.
 
+When `github.spec_source` is `github-actions`, `github.spec_install` is `pypi`
+or `checkout`. Consumer repositories should keep `pypi`. This project's
+dogfood config uses `checkout` so Spec Task Runs exercise the commit under
+test.
+
 ## Push safety
 
 Implementation pushes use `--force-with-lease` against the approved SHA. If the

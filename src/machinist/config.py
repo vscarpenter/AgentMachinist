@@ -44,6 +44,11 @@ class SpecSource(str, Enum):
     GITHUB_ACTIONS = "github-actions"
 
 
+class SpecInstall(str, Enum):
+    PYPI = "pypi"
+    CHECKOUT = "checkout"
+
+
 class HarnessConfig(StrictModel):
     name: HarnessName = HarnessName.CLAUDE_CODE
     command: str | None = None
@@ -68,6 +73,7 @@ class LabelsConfig(StrictModel):
 class GitHubConfig(StrictModel):
     repo: str | None = None
     spec_source: SpecSource = SpecSource.LOCAL
+    spec_install: SpecInstall = SpecInstall.PYPI
     labels: LabelsConfig = Field(default_factory=LabelsConfig)
     poll_interval_seconds: int = Field(default=60, ge=10)
 

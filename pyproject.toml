@@ -31,6 +31,18 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/machinist"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.github",
+  "/.machinist",
+  "/.superpowers",
+  "/docs",
+  "/tasks",
+  "/AgentMachinist-Prompt.md",
+  "/CLAUDE.md",
+  "/CONTEXT.md",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

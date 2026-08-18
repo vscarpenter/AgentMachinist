@@ -1,11 +1,19 @@
 """Config-derived GitHub workflow projection and drift checks."""
 
+import tomllib
 from pathlib import Path
 
 import pytest
 
-from machinist.config import MachinistConfig
+from machinist.config import MachinistConfig, load_config
 from machinist.workflows import WorkflowDriftError, expected_workflows, sync_workflows
+
+_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _package_version() -> str:
+    data = tomllib.loads((_ROOT / "pyproject.toml").read_text())
+    return data["project"]["version"]
 
 
 def config(spec_source="github-actions"):
@@ -31,6 +39,23 @@ def test_render_uses_configured_labels_exact_command_and_pinned_version():
     assert "ship:it" in approval
     assert "agentmachinist:approval sha=" in approval
     assert "pull_request_target:" in approval
+
+
+def test_checkout_spec_install_uses_uv_run_from_the_repository():
+    cfg = MachinistConfig.model_validate(
+        {
+            "github": {
+                "spec_source": "github-actions",
+                "spec_install": "checkout",
+                "labels": {"trigger": "ai:task", "approved": "ship:it"},
+            }
+        }
+    )
+    spec = expected_workflows(cfg, installed_version="0.2.0")["machinist-spec.yml"]
+    assert "uv sync --frozen" in spec
+    assert "uv run machinist spec" in spec
+    assert "uv tool install agentmachinist==" not in spec
+    assert "git+https://" not in spec
 
 
 def test_local_spec_source_omits_ci_dispatcher():
@@ -59,3 +84,20 @@ def test_switching_to_local_prunes_managed_spec_workflow(tmp_path):
 
     assert report.removed == ("machinist-spec.yml",)
     assert not (tmp_path / ".github/workflows/machinist-spec.yml").exists()
+
+
+@pytest.mark.skipif(
+    not (_ROOT / ".github" / "workflows").exists(),
+    reason="repository-only test (paths absent from sdist)",
+)
+def test_checked_in_workflows_match_config_and_package_version():
+    config_obj = load_config(_ROOT / "machinist.yaml")
+    expected = expected_workflows(config_obj, installed_version=_package_version())
+    directory = _ROOT / ".github" / "workflows"
+    for name, wanted in expected.items():
+        path = directory / name
+        assert path.is_file(), f"missing managed workflow {name}"
+        assert path.read_text() == wanted
+    for name in ("machinist-spec.yml", "machinist-approve.yml"):
+        if name not in expected:
+            assert not (directory / name).exists()

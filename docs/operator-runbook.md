@@ -93,9 +93,9 @@ labels; the next sync intentionally replaces drift.
 
 ## Release checklist
 
-1. Update `CHANGELOG.md` and `pyproject.toml`.
-2. Run `uv lock`, `uv run pytest`, and `uv build`.
-3. Install the wheel in an isolated environment and run `machinist --version`.
+1. Update `CHANGELOG.md` and `pyproject.toml` to the same version.
+2. Run `uv lock`, `uv run pytest -o addopts=`, `rm -rf dist`, `uv build`, and `bash scripts/smoke-wheel.sh`.
+3. Run `machinist sync-workflows --check` (after a version bump, run `machinist sync-workflows`, review, and commit the projection).
 4. Commit and push.
 5. Create GitHub Release `v<version>`.
 6. Separately verify the Actions job and the published PyPI artifact.

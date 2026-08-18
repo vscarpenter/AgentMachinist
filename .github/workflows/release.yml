@@ -23,6 +23,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.5"
 
       - name: Verify tag matches package version
         env:
@@ -35,19 +37,15 @@ jobs:
           }
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest -o addopts= --tb=short
 
       - name: Build sdist and wheel
-        run: uv build
+        run: |
+          rm -rf dist
+          uv build
 
       - name: Smoke-test installed wheel
-        run: |
-          WHEEL="$(find dist -name '*.whl' -print -quit)"
-          ENV_DIR="$(mktemp -d)/venv"
-          uv venv "$ENV_DIR"
-          uv pip install --python "$ENV_DIR/bin/python" "$WHEEL"
-          PATH="$ENV_DIR/bin:$PATH" machinist --version
-          "$ENV_DIR/bin/python" -c "from importlib.resources import files; assert (files('machinist') / 'templates' / 'github' / 'machinist-approve.yml').is_file(); assert (files('machinist') / 'templates' / 'spec-prompt.md').is_file()"
+        run: bash scripts/smoke-wheel.sh
 
       - name: Publish to PyPI
         run: uv publish --trusted-publishing always
