@@ -133,10 +133,12 @@ github:
   `machinist-spec.yml` owns spec generation. Run `machinist sync-workflows`
   after changing the value.
 
-The generated CI path is currently Claude-Code-specific and requires an
-`ANTHROPIC_API_KEY` repository secret. It installs the pinned AgentMachinist
-release instead of repository HEAD. For other harnesses, use local mode unless
-you maintain an appropriate installation step.
+`github.spec_install` chooses how CI obtains the controller: `pypi` (default)
+pins `agentmachinist==<installed version>`; `checkout` runs `uv sync --frozen`
+and `uv run machinist spec` from the repository (for dogfooding AgentMachinist
+itself). The generated workflow is still Claude-Code-specific and requires
+`ANTHROPIC_API_KEY`. For other harnesses, use local mode unless you maintain
+an appropriate installation step.
 
 ## Configuration reference
 
@@ -152,6 +154,7 @@ harness:
 github:
   repo: null
   spec_source: local
+  spec_install: pypi
   labels:
     trigger: agent-task
     approved: "machinist:approved"

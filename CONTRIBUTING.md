@@ -6,7 +6,10 @@ Use Python 3.12 or newer and `uv`:
 uv sync
 uv run pytest
 uv build
+bash scripts/smoke-wheel.sh
 ```
+
+`uv run pytest -o addopts=` is the verbose local equivalent of CI.
 
 Changes to lifecycle behavior should start with a failing contract test. Keep
 GitHub CLI construction behind `GitHubClient`, Git behavior behind `Workspace`,
