@@ -20,7 +20,7 @@ Completed 2026-08-18 on `worktree-build-system-hardening` (Tasks 1–8+11
 landed in a prior session; this session verified the gate and updated
 the guide). Task 10 (TestPyPI rehearsal) intentionally skipped. Version
 stays 0.2.0; changes ride the changelog's pending section until the
-next release. Branch not yet pushed/merged.
+next release. Pushed as PR #9; human review + merge remain.
 
 # AgentMachinist — reliability and usability hardening (COMPLETE)
 
