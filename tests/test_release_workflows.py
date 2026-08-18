@@ -33,6 +33,8 @@ def test_release_verifies_identity_tests_and_wheel_before_publish():
     assert "scripts/smoke-wheel.sh" in text
     assert "rm -rf dist" in text
     assert "find dist -name '*.whl'" not in text
+    assert 'version: "0.12.5"' in text
+    assert "uv run pytest -o addopts=" in text
 
 
 def test_ci_covers_linux_macos_and_package_build():
