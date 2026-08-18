@@ -1,3 +1,27 @@
+# AgentMachinist — build system hardening (COMPLETE)
+
+Plan: `docs/superpowers/plans/2026-08-17-build-system-hardening.md`
+
+- [x] Task 1: contract test — checked-in workflows match config projection
+- [x] Task 2: release/docs tests follow pyproject version (no frozen 0.2.0)
+- [x] Task 3: shared `scripts/smoke-wheel.sh` used by CI and release
+- [x] Task 4: sdist excludes dogfood and design trees
+- [x] Task 5: `github.spec_install` (`pypi` | `checkout`) projection
+- [x] Task 6: this repo's Spec workflow runs from the checkout
+- [x] Task 7: CI matrix 3.12/3.13, uv pinned 0.12.5, unmuted pytest
+- [x] Task 8: getting-started/architecture/runbook/CONTRIBUTING/changelog
+- [x] Task 9: full gate — 175 tests, drift check clean, build + wheel
+      smoke exit 0, sdist spot check shows only the package template
+- [x] Task 11 (optional): monthly Dependabot for Actions and uv.lock
+- [x] First-run guide surfaces `spec_install` (CI steps, config sheet,
+      spec-owner annotation); doc tests green
+
+Completed 2026-08-18 on `worktree-build-system-hardening` (Tasks 1–8+11
+landed in a prior session; this session verified the gate and updated
+the guide). Task 10 (TestPyPI rehearsal) intentionally skipped. Version
+stays 0.2.0; changes ride the changelog's pending section until the
+next release. Branch not yet pushed/merged.
+
 # AgentMachinist — reliability and usability hardening (COMPLETE)
 
 Spec: `docs/superpowers/specs/2026-08-17-reliability-and-usability-hardening.md`
