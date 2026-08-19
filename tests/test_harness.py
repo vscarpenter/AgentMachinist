@@ -1,13 +1,14 @@
 """Tests for the harness abstraction layer."""
 
 import subprocess
+import sys
 import time
 
 import pytest
 
 from machinist.config import HarnessConfig, HarnessName
 from machinist.harness import get_harness
-from machinist.harness.base import HarnessError
+from machinist.harness.base import Harness, HarnessError
 
 
 class FakeRunner:
@@ -22,6 +23,21 @@ class FakeRunner:
             raise result
         stdout, returncode, stderr = result
         return subprocess.CompletedProcess(args, returncode, stdout, stderr)
+
+
+class PythonProbeHarness(Harness):
+    name = "python-probe"
+    default_command = sys.executable
+
+    def spec_argv(self, prompt):
+        return [
+            self.command,
+            "-c",
+            f"import time; time.sleep(0.2); print({prompt!r})",
+        ]
+
+    def implement_argv(self, prompt):
+        return self.spec_argv(prompt)
 
 
 @pytest.mark.parametrize("name", list(HarnessName))
@@ -47,8 +63,8 @@ def test_claude_code_spec_argv_is_headless_print_mode():
     harness = get_harness(HarnessConfig(name=HarnessName.CLAUDE_CODE))
     argv = harness.spec_argv("write a spec")
     assert argv[:3] == ["claude", "-p", "write a spec"]
-    assert ["--permission-mode", "plan"] == argv[argv.index("--permission-mode"):][:2]
-    assert ["--tools", "Read,Grep,Glob"] == argv[argv.index("--tools"):][:2]
+    assert ["--permission-mode", "plan"] == argv[argv.index("--permission-mode") :][:2]
+    assert ["--tools", "Read,Grep,Glob"] == argv[argv.index("--tools") :][:2]
     assert "--no-session-persistence" in argv
 
 
@@ -56,9 +72,19 @@ def test_spec_argv_is_read_only_for_every_harness():
     # Phase 1 must not be able to edit files: stray edits would be swept
     # into the spec commit. Flags verified against the real CLIs 2026-08-16.
     expectations = {
-        HarnessName.CLAUDE_CODE: ["--permission-mode", "plan", "--tools", "Read,Grep,Glob"],
+        HarnessName.CLAUDE_CODE: [
+            "--permission-mode",
+            "plan",
+            "--tools",
+            "Read,Grep,Glob",
+        ],
         HarnessName.OPENCODE: ["--agent", "plan", "--pure"],
-        HarnessName.PI: ["--tools", "read,grep,find,ls", "--no-extensions", "--no-session"],
+        HarnessName.PI: [
+            "--tools",
+            "read,grep,find,ls",
+            "--no-extensions",
+            "--no-session",
+        ],
         HarnessName.CODEX: ["--sandbox", "read-only"],
     }
     for name, flags in expectations.items():
@@ -82,7 +108,7 @@ def test_generate_spec_runs_in_cwd_with_spec_timeout(tmp_path):
     output = harness.generate_spec("write a spec", cwd=tmp_path)
 
     assert output == "the spec text"
-    args, kwargs = runner.calls[0]
+    _args, kwargs = runner.calls[0]
     assert kwargs["cwd"] == tmp_path
     assert kwargs["timeout"] == 5 * 60
 
@@ -122,6 +148,28 @@ def test_progress_callback_fires_during_long_runs(tmp_path):
     assert "elapsed" in beats[0]
 
 
+def test_default_supervisor_preserves_output_and_heartbeat_contract(tmp_path):
+    harness = PythonProbeHarness(HarnessConfig())
+    harness.heartbeat_seconds = 0.05
+    beats = []
+    harness.on_progress = beats.append
+
+    assert (
+        harness.generate_spec("the generated spec", cwd=tmp_path)
+        == "the generated spec\n"
+    )
+    assert beats
+    assert all("python-probe still working" in beat for beat in beats)
+
+
+def test_default_supervisor_preserves_missing_executable_error_contract(tmp_path):
+    missing = tmp_path / "missing-harness"
+    harness = PythonProbeHarness(HarnessConfig(command=str(missing)))
+
+    with pytest.raises(HarnessError, match="harness executable.*not found"):
+        harness.generate_spec("p", cwd=tmp_path)
+
+
 def test_no_progress_callback_is_fine(tmp_path):
     runner = FakeRunner(("ok", 0, ""))
     harness = get_harness(HarnessConfig(), runner=runner)
@@ -146,11 +194,18 @@ def test_timeout_raises_harness_error(tmp_path):
         harness.generate_spec("write a spec", cwd=tmp_path)
 
 
-def test_harness_subprocess_strips_controller_credentials_but_keeps_provider_key(tmp_path, monkeypatch):
+def test_harness_subprocess_strips_controller_credentials_but_keeps_provider_key(
+    tmp_path, monkeypatch
+):
     runner = FakeRunner(("ok", 0, ""))
     monkeypatch.setenv("GH_TOKEN", "github-secret")
     monkeypatch.setenv("GITHUB_TOKEN", "actions-secret")
     monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "aws-key")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "azure-secret")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/google.json")
+    monkeypatch.setenv("SOME_CLOUD_TOKEN", "cloud-secret")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "provider-secret")
     harness = get_harness(HarnessConfig(), runner=runner)
 
@@ -160,7 +215,14 @@ def test_harness_subprocess_strips_controller_credentials_but_keeps_provider_key
     assert "GH_TOKEN" not in env
     assert "GITHUB_TOKEN" not in env
     assert "SSH_AUTH_SOCK" not in env
+    assert "AWS_ACCESS_KEY_ID" not in env
+    assert "AWS_SECRET_ACCESS_KEY" not in env
+    assert "AZURE_CLIENT_SECRET" not in env
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in env
+    assert "SOME_CLOUD_TOKEN" not in env
     assert env["ANTHROPIC_API_KEY"] == "provider-secret"
+    assert env["PATH"]
+    assert env["HOME"]
     assert env["GIT_TERMINAL_PROMPT"] == "0"
 
 
@@ -173,7 +235,9 @@ def test_adapters_publish_honest_policy_capabilities():
 
 def test_harness_model_and_extra_args_in_argv():
     for name in HarnessName:
-        config = HarnessConfig(name=name, model="custom-model", extra_args=["--verbose", "--flag"])
+        config = HarnessConfig(
+            name=name, model="custom-model", extra_args=["--verbose", "--flag"]
+        )
         harness = get_harness(config)
         spec_argv = harness.spec_argv("prompt")
         impl_argv = harness.implement_argv("prompt")
