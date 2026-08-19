@@ -163,6 +163,37 @@ def test_queue_admission_fails_closed_when_corruption_hides_budget_evidence(
     assert "history is corrupt" in decision.reason
 
 
+def test_queue_admission_fails_closed_when_journal_name_hides_budget_evidence(
+    tmp_path: Path,
+):
+    config = MachinistConfig.model_validate(
+        {
+            "queue": {
+                "task_budget": {
+                    "max_tasks_per_day": 1,
+                    "timezone": "UTC",
+                }
+            }
+        }
+    )
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(42, Phase.SPEC, lambda claim: None)
+    record = lifecycle.record(42, Phase.SPEC)
+    assert record is not None
+    journal = lifecycle.runs_dir / "history" / "issue-42-spec" / "attempt-000001.jsonl"
+    journal.rename(journal.with_name("attempt-invalid.jsonl"))
+    (lifecycle.runs_dir / "issue-42-spec.json").unlink()
+
+    decision = queue_admission(
+        config,
+        lifecycle,
+        now=datetime.fromisoformat(record.started_at).astimezone(UTC),
+    )
+
+    assert not decision.allowed
+    assert "history is corrupt" in decision.reason
+
+
 def test_queue_admission_does_not_double_count_projection_and_history(
     tmp_path: Path,
 ):

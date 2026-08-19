@@ -445,3 +445,25 @@ def test_oversized_journal_is_reported_corrupt_without_payload_read(tmp_path):
 
     assert lifecycle.history(42, Phase.EXECUTE) == []
     assert lifecycle.inventory().corrupt == (journal,)
+
+
+@pytest.mark.parametrize(
+    ("relative", "reported"),
+    [
+        (
+            "issue-42-execute/attempt-invalid.jsonl",
+            "issue-42-execute/attempt-invalid.jsonl",
+        ),
+        (
+            "issue-invalid-execute/attempt-000001.jsonl",
+            "issue-invalid-execute",
+        ),
+    ],
+)
+def test_inventory_reports_noncanonical_history_artifacts(tmp_path, relative, reported):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    artifact = lifecycle.runs_dir / "history" / relative
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("{}\n")
+
+    assert lifecycle.inventory().corrupt == (lifecycle.runs_dir / "history" / reported,)

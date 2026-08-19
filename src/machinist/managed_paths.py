@@ -223,7 +223,10 @@ def write_managed_text(repo_root: Path, relative: str | Path, content: str) -> N
                 os.fchmod(descriptor, stat.S_IMODE(existing.st_mode))
             offset = 0
             while offset < len(encoded):
-                offset += os.write(descriptor, encoded[offset:])
+                written = os.write(descriptor, encoded[offset:])
+                if written <= 0:
+                    raise _path_error(display, "managed file write made no progress")
+                offset += written
             os.fsync(descriptor)
             os.close(descriptor)
             descriptor = -1

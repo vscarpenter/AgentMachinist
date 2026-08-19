@@ -481,13 +481,15 @@ class TaskLifecycle:
         try:
             history_names = list_directory_names(history_root)
             for directory_name in history_names:
-                if not _history_directory_name(directory_name):
-                    continue
                 directory = history_root / directory_name
+                if not _history_directory_name(directory_name):
+                    corrupt.append(directory)
+                    continue
                 for filename in list_directory_names(directory):
-                    if not _journal_filename(filename):
-                        continue
                     path = directory / filename
+                    if not _journal_filename(filename):
+                        corrupt.append(path)
+                        continue
                     _, malformed = self._read_journal(path)
                     if malformed:
                         corrupt.append(path)
@@ -833,15 +835,22 @@ def _projection_filename(name: str) -> bool:
 
 
 def _history_directory_name(name: str) -> bool:
-    return name.startswith("issue-") and any(
-        name.endswith(f"-{phase.value}") for phase in Phase
-    )
+    if not name.startswith("issue-"):
+        return False
+    for phase in Phase:
+        suffix = f"-{phase.value}"
+        if not name.endswith(suffix):
+            continue
+        issue = name[len("issue-") : -len(suffix)]
+        return issue.isdigit() and int(issue) > 0
+    return False
 
 
 def _journal_filename(name: str) -> bool:
-    return (
-        name.startswith("attempt-") and name.endswith(".jsonl") and name[8:-6].isdigit()
-    )
+    if not name.startswith("attempt-") or not name.endswith(".jsonl"):
+        return False
+    attempt = name[8:-6]
+    return attempt.isdigit() and int(attempt) > 0
 
 
 def _record_payload(record: RunRecord) -> dict[str, Any]:

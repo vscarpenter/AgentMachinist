@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from machinist.config import MachinistConfig, load_config
-from machinist.managed_paths import ManagedPathError
+from machinist.managed_paths import ManagedPathError, write_managed_text
 from machinist.workflows import WorkflowDriftError, expected_workflows, sync_workflows
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -201,6 +201,29 @@ def test_sync_rejects_oversized_workflow_before_reading_payload(tmp_path):
 
     with pytest.raises(ManagedPathError, match="exceeds"):
         sync_workflows(tmp_path, config(), installed_version="0.2.0", check=False)
+
+
+def test_managed_write_rejects_zero_progress_without_clobbering_target(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "managed.txt"
+    target.write_text("original\n")
+    calls = 0
+
+    def no_progress(_descriptor, _payload):
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            pytest.fail("managed write retried after making no progress")
+        return 0
+
+    monkeypatch.setattr("machinist.managed_paths.os.write", no_progress)
+
+    with pytest.raises(ManagedPathError, match="made no progress"):
+        write_managed_text(tmp_path, target.name, "replacement\n")
+
+    assert target.read_text() == "original\n"
+    assert list(tmp_path.glob(".managed.txt.machinist-*.tmp")) == []
 
 
 @pytest.mark.skipif(
