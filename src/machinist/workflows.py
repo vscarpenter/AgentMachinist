@@ -26,8 +26,12 @@ def expected_workflows(
     config: MachinistConfig, *, installed_version: str
 ) -> dict[str, str]:
     """Render the exact managed files for a configuration."""
-    approval = (_TEMPLATES / "machinist-approve.yml").read_text().replace(
-        "__APPROVED_LABEL__", config.github.labels.approved
+    if not config.github.manage_workflows:
+        return {}
+    approval = (
+        (_TEMPLATES / "machinist-approve.yml")
+        .read_text()
+        .replace("__APPROVED_LABEL__", config.github.labels.approved)
     )
     rendered = {"machinist-approve.yml": approval}
     if config.github.spec_source is SpecSource.GITHUB_ACTIONS:
@@ -70,7 +74,8 @@ def sync_workflows(
     if check:
         if drift:
             raise WorkflowDriftError(
-                "managed workflow drift: " + ", ".join(sorted(drift))
+                "managed workflow drift: "
+                + ", ".join(sorted(drift))
                 + "; run 'machinist sync-workflows'"
             )
         return WorkflowSyncReport()

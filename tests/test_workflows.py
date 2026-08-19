@@ -16,11 +16,12 @@ def _package_version() -> str:
     return data["project"]["version"]
 
 
-def config(spec_source="github-actions"):
+def config(spec_source="github-actions", *, manage_workflows=True):
     return MachinistConfig.model_validate(
         {
             "github": {
                 "spec_source": spec_source,
+                "manage_workflows": manage_workflows,
                 "labels": {"trigger": "ai:task", "approved": "ship:it"},
             }
         }
@@ -34,6 +35,7 @@ def test_render_uses_configured_labels_exact_command_and_pinned_version():
     approval = rendered["machinist-approve.yml"]
     assert "github.event.label.name == 'ai:task'" in spec
     assert "agentmachinist==0.2.0" in spec
+    assert "persist-credentials: false" in spec
     assert "git+https://" not in spec
     assert '[[ "$NORMALIZED" == "/machinist-execute" ]]' in approval
     assert "ship:it" in approval
@@ -64,6 +66,13 @@ def test_local_spec_source_omits_ci_dispatcher():
     }
 
 
+def test_unmanaged_mode_omits_all_managed_workflows():
+    assert (
+        expected_workflows(config(manage_workflows=False), installed_version="0.2.0")
+        == {}
+    )
+
+
 def test_write_is_deterministic_and_check_detects_drift(tmp_path):
     first = sync_workflows(tmp_path, config(), installed_version="0.2.0", check=False)
     second = sync_workflows(tmp_path, config(), installed_version="0.2.0", check=False)
@@ -84,6 +93,21 @@ def test_switching_to_local_prunes_managed_spec_workflow(tmp_path):
 
     assert report.removed == ("machinist-spec.yml",)
     assert not (tmp_path / ".github/workflows/machinist-spec.yml").exists()
+
+
+def test_switching_to_unmanaged_prunes_every_managed_workflow(tmp_path):
+    sync_workflows(tmp_path, config(), installed_version="0.2.0", check=False)
+
+    report = sync_workflows(
+        tmp_path,
+        config(manage_workflows=False),
+        installed_version="0.2.0",
+        check=False,
+    )
+
+    assert set(report.removed) == {"machinist-spec.yml", "machinist-approve.yml"}
+    assert not (tmp_path / ".github/workflows/machinist-spec.yml").exists()
+    assert not (tmp_path / ".github/workflows/machinist-approve.yml").exists()
 
 
 @pytest.mark.skipif(
