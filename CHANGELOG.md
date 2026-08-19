@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix `machinist init` leaving a truncated template comment on the generated `tests.command` line.
 - Serve the first-run guide rendered via GitHub Pages and link it from the README; refresh the guide's content, navigation, and dark-mode contrast.
 
 ## 0.3.0 — 2026-08-18

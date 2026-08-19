@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import time
 from importlib.metadata import PackageNotFoundError, version
@@ -50,6 +51,19 @@ def _detect_test_command(root: Path) -> str | None:
     return None
 
 
+# The `command:` line inside the tests block. Anchored to the section header so
+# the identically named (and indented) harness.command key is left alone.
+_TESTS_COMMAND_LINE = re.compile(r"^(tests:\n(?:[ \t]+.*\n)*?[ \t]*)command:.*$", re.MULTILINE)
+
+
+def _set_test_command(template_text: str, command: str) -> str:
+    return _TESTS_COMMAND_LINE.sub(
+        lambda match: f"{match.group(1)}command: {command}        # auto-detected test command",
+        template_text,
+        count=1,
+    )
+
+
 _MACHINIST_ERRORS = (
     ConfigError, GitHubError, HarnessError, SpecPhaseError, ExecutePhaseError, WorkspaceError,
     LifecycleError, WorkflowDriftError,
@@ -97,7 +111,7 @@ def init(
 
     resolved_test_cmd = test_cmd or _detect_test_command(Path.cwd())
     if resolved_test_cmd:
-        template_text = template_text.replace("command: null                # e.g. \"pytest -q\"", f"command: {resolved_test_cmd}        # auto-detected test command")
+        template_text = _set_test_command(template_text, resolved_test_cmd)
         if not test_cmd:
             click.echo(f"auto-detected test runner: '{resolved_test_cmd}'")
 

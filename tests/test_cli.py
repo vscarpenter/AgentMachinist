@@ -365,6 +365,19 @@ def test_init_auto_detects_test_runner():
         assert config.tests.command == "uv run pytest"
 
 
+def test_init_rewrites_the_whole_test_command_line():
+    """The auto-detected command replaces the entire template line, comment and all."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        result = runner.invoke(main, ["init", "--no-workflows"])
+        assert result.exit_code == 0, result.output
+
+        tests_block = Path("machinist.yaml").read_text().split("\ntests:\n", 1)[1]
+        command_line = tests_block.splitlines()[0]
+        assert command_line == "  command: uv run pytest        # auto-detected test command"
+
+
 def test_approve_resolves_issue_number(monkeypatch):
     from machinist.github import PullRequest
 
