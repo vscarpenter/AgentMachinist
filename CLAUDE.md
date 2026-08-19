@@ -43,17 +43,32 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
 
 ### Module map (`src/machinist/`)
 
-- `cli.py` — Click entrypoints: `init`, `doctor`, `sync-workflows`, `spec`,
-  `approve`, `run`, `watch [--once]`, `retry`, `status`.
+- `cli.py` — Click entrypoints: `init [--harness --test-cmd]`, `doctor`,
+  `sync-workflows [--check]`, `spec`, `approve`, `run [--force --retry]`,
+  `watch [--once -v --interval]`, `retry [--phase --run]`, `status [-v]`,
+  `clean [--issue --all --force]`, `inspect`. Ergonomics worth knowing:
+  `init` auto-detects the test gate from the project manifest
+  (`_detect_test_command`: pyproject/uv.lock → `uv run pytest`, package.json
+  → `npm test`, Cargo.toml → `cargo test`, go.mod → `go test ./...`);
+  `approve <n>` accepts a PR number *or* an issue number (falling back to the
+  `<branch_prefix>issue-<n>` branch); `retry --run` and `run --retry` are the
+  same recovery in either direction; `inspect <issue>` prints issue, PR,
+  approval SHA, workspace path, and both Task Run records in one pass.
 - `config.py` — strict pydantic schema for `machinist.yaml`
   (`extra="forbid"`: unknown keys fail loudly). Validates label shapes,
-  branch prefix safety, timeout bounds.
+  branch prefix safety, timeout bounds. `harness.model` (str | None) and
+  `harness.extra_args` (list[str]) are optional pass-throughs into adapter
+  argv — the controller never interprets them.
 - `github.py` — `GitHubClient`, a thin wrapper over the `gh` CLI (auth stays
   in `gh`; no tokens in this codebase). Also parses/writes the approval
   marker comment.
 - `workspace.py` — isolated per-task checkouts (git worktree by default, or
   clone) under `workspace.root` (`~/.machinist/workspaces`); commit, leased
-  push (`--force-with-lease`), cleanup policies.
+  push (`--force-with-lease`), cleanup policies. Directories are named
+  `<repo-root-name>-issue-<n>`; `workspace_for_task`, `list_workspaces`, and
+  `remove_workspace` encode that convention and back `machinist clean`.
+  `remove_workspace` prefers `git worktree remove [--force]` + `prune` and
+  only falls back to `rmtree` when that fails or the strategy is `clone`.
 - `lifecycle.py` — durable Task Run records at
   `.machinist/runs/issue-<n>-<phase>.json` (atomic tmp+fsync+rename writes),
   `flock`-based local claims, explicit retry, checkpoints for crash recovery.
@@ -61,7 +76,12 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   callbacks, and credential scrubbing (removes `GH_TOKEN`, `GITHUB_TOKEN`,
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
   (`claude_code`, `codex`, `pi`, `opencode`) only build argv for the two
-  phases and stay one screen long. Registry in `__init__.py`.
+  phases and stay one screen long. Registry in `__init__.py`. Every adapter
+  threads `harness.model` (as `--model <value>`) and `harness.extra_args`
+  into both `spec_argv` and `implement_argv`. **Order matters**: `claude-code`
+  passes the prompt via `-p <prompt>`, so the new args append at the end;
+  `codex`, `opencode`, and `pi` take the prompt as the final positional, so
+  model/extra_args are inserted *before* the prompt is appended.
 - `phases/spec.py` — Phase 1: issue → harness in read-only mode → spec file →
   branch → push → draft PR ("Closes #n"). Rejects empty specs and any
   working-tree change made by the harness.
@@ -78,8 +98,9 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `machinist-approve.yml`); drift detection for `--check`/doctor.
 - `doctor.py` — read-only diagnostics (git/gh/harness on PATH, gh auth, test
   gate configured, workflow drift, failed/abandoned Task Runs).
-- `notify.py` — best-effort macOS notifications via osascript; all failures
-  deliberately swallowed.
+- `notify.py` — best-effort desktop notifications: macOS `osascript` first,
+  then Linux `notify-send`, each gated on `shutil.which`. All failures
+  deliberately swallowed; stdout remains the record of what happened.
 - `templates/` — `spec-prompt.md` and `implement-prompt.md`
   (`string.Template`), the `machinist.yaml` starter, and the GitHub workflow
   templates. Packaged into the wheel; release workflows smoke-test their
@@ -135,7 +156,9 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   states, update README/docs in the same change or the suite fails.
 - Harness adapters have exact-argv tests (`tests/test_harness.py`). Changing
   an adapter means updating its argv test, `docs/harnesses.md`, and the
-  changelog together.
+  changelog together. New pass-through options must be added to both
+  `spec_argv` and `implement_argv` on all four adapters, respecting each
+  one's prompt position.
 - When config affects GitHub Actions: edit the template under
   `src/machinist/templates/github/`, update projection tests, then run
   `uv run machinist sync-workflows` and commit the reviewed projection.
@@ -154,8 +177,10 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 - `docs/superpowers/specs/` — the two design documents (initial design,
   reliability/usability hardening) that drove the current architecture.
 - `docs/` — getting-started, architecture, operator-runbook, trust-model,
-  harnesses matrix, plus two HTML visual guides (onboarding.html,
-  first-run-guide.html) that tests check for structure and links.
+  harnesses matrix, plus three HTML visual assets: onboarding.html and
+  first-run-guide.html (both structure- and link-checked by
+  `tests/test_docs.py`) and explainer.html, an animated system walkthrough
+  that no test or doc currently references.
 - `AgentMachinist-Prompt.md` — the original kickoff prompt, historical.
 
 ## Releasing
@@ -168,12 +193,22 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-08-18)
 
-- v0.3.0 released on PyPI; 175 tests green; CI runs on ubuntu + macos
-  across Python 3.12 and 3.13.
+- v0.3.0 is the latest PyPI release; 185 tests green; CI runs on ubuntu +
+  macos across Python 3.12 and 3.13.
+- `main` is ahead of 0.3.0 by one unreleased feature commit (`b01512a`): the
+  ergonomics/model-selection/workspace-hygiene work described above.
 - All designed commands ship; two full issue→merge lifecycles have run
   end-to-end (issue #1 and issue #4), the second fully daemon-driven.
-- Known limits: macOS is the only tested OS for the daemon/notifications;
-  claude-code is the proven harness (other adapters' flags verified against
-  docs, less exercised); the CI spec workflow requires an
-  `ANTHROPIC_API_KEY` repository secret and installs Claude Code regardless
-  of the configured local harness.
+- Known documentation debt from `b01512a` — fix before the next release:
+  the README command table and `CHANGELOG.md` "Unreleased" still omit
+  `clean`, `inspect`, the new flags, and `harness.model`/`extra_args`.
+  `tests/test_docs.py` does not catch this (it asserts documented ⊆ actual,
+  never the reverse).
+- Known limits: macOS is the proven OS for the daemon; Linux notifications
+  exist via `notify-send` but are unexercised in practice. claude-code is the
+  proven harness (other adapters' flags verified against docs, less
+  exercised). The CI spec workflow requires an `ANTHROPIC_API_KEY` repository
+  secret and installs Claude Code regardless of the configured local harness.
+  `machinist init --test-cmd`/auto-detect rewrites the template comment by
+  substring replace, leaving a stale comment tail in the generated
+  `machinist.yaml` (cosmetic; the YAML is valid).
