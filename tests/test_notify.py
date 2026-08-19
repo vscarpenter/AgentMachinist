@@ -1,7 +1,9 @@
 """Tests for best-effort desktop and configured notification delivery."""
 
 import json
+import os
 import subprocess
+import sys
 from urllib.error import HTTPError
 
 from machinist.config import (
@@ -11,7 +13,13 @@ from machinist.config import (
     NotificationEvent,
     WebhookNotificationConfig,
 )
-from machinist.notify import NotificationStatus, notify, notify_event
+from machinist.notify import (
+    NotificationStatus,
+    _RejectWebhookRedirects,
+    notification_dedupe_key,
+    notify,
+    notify_event,
+)
 
 
 class FakeRunner:
@@ -182,7 +190,10 @@ def test_notify_event_command_sends_stable_json_on_stdin_without_a_shell():
         "text": True,
         "timeout": 7,
         "shell": False,
+        "env": kwargs["env"],
     }
+    assert "PATH" in kwargs["env"]
+    assert "GH_TOKEN" not in kwargs["env"]
     assert json.loads(kwargs["input"]) == {
         "context": {"issue_number": 7, "pull_request": 42},
         "dedupe_key": "issue-7:pr-ready:42",
@@ -192,6 +203,43 @@ def test_notify_event_command_sends_stable_json_on_stdin_without_a_shell():
     }
     assert result.status is NotificationStatus.DELIVERED
     assert result.dedupe_key == "issue-7:pr-ready:42"
+
+
+def test_notify_event_command_does_not_inherit_controller_credentials(
+    tmp_path, monkeypatch
+):
+    observed = tmp_path / "notification-environment.txt"
+    monkeypatch.setenv("GH_TOKEN", "controller-secret")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "cloud-secret")
+    config = NotificationConfig(
+        backend=NotificationBackend.COMMAND,
+        events=[NotificationEvent.FAILURE],
+        command=CommandNotificationConfig(
+            argv=[
+                sys.executable,
+                "-c",
+                (
+                    "import os, pathlib; "
+                    f"pathlib.Path({str(observed)!r}).write_text("
+                    "repr((os.environ.get('GH_TOKEN'), "
+                    "os.environ.get('AWS_SECRET_ACCESS_KEY'), "
+                    "bool(os.environ.get('PATH')), "
+                    "bool(os.environ.get('HOME')))))"
+                ),
+            ],
+        ),
+    )
+
+    result = notify_event(
+        config,
+        NotificationEvent.FAILURE,
+        "Machinist",
+        "Task failed",
+    )
+
+    assert result.status is NotificationStatus.DELIVERED
+    assert observed.read_text() == "(None, None, True, True)"
+    assert os.environ["GH_TOKEN"] == "controller-secret"
 
 
 def test_notify_event_command_failure_is_returned_and_dedupe_stable():
@@ -222,6 +270,24 @@ def test_notify_event_command_failure_is_returned_and_dedupe_stable():
     assert second.status is NotificationStatus.FAILED
     assert second.error == "command failed: FileNotFoundError: notifier"
     assert first.dedupe_key == second.dedupe_key
+
+
+def test_notification_dedupe_key_is_deterministic_across_context_order():
+    first = notification_dedupe_key(
+        NotificationEvent.FAILURE,
+        "Machinist",
+        "boom",
+        context={"phase": "spec", "issue": 7},
+    )
+    second = notification_dedupe_key(
+        "failure",
+        "Machinist",
+        "boom",
+        context={"issue": 7, "phase": "spec"},
+    )
+
+    assert first == second
+    assert first.startswith("machinist:failure:")
 
 
 class FakeResponse:
@@ -315,3 +381,121 @@ def test_notify_event_webhook_missing_url_and_http_error_do_not_raise():
     assert rejected_result.error == "webhook returned HTTP 503"
     assert "token" not in rejected_result.error
     assert missing.dedupe_key == rejected_result.dedupe_key
+
+
+def test_notify_event_refuses_authorization_over_plaintext_http():
+    calls = []
+    config = NotificationConfig(
+        backend=NotificationBackend.WEBHOOK,
+        webhook=WebhookNotificationConfig(
+            url_env="TEST_WEBHOOK_URL",
+            authorization_env="TEST_WEBHOOK_AUTH",
+        ),
+    )
+
+    result = notify_event(
+        config,
+        NotificationEvent.FAILURE,
+        "Machinist",
+        "boom",
+        opener=lambda *args, **kwargs: calls.append((args, kwargs)),
+        environ={
+            "TEST_WEBHOOK_URL": "http://hooks.example.test/machinist",
+            "TEST_WEBHOOK_AUTH": "Bearer secret-token",
+        },
+    )
+
+    assert result.status is NotificationStatus.FAILED
+    assert result.error == "webhook authorization requires an HTTPS URL"
+    assert "secret-token" not in result.error
+    assert calls == []
+
+
+def test_authenticated_webhook_redirect_is_rejected_before_secret_forwarding(
+    monkeypatch,
+):
+    initial_requests = []
+    redirected_requests = []
+    redirect_response = FakeResponse(status=302)
+
+    class RedirectingOpener:
+        def __init__(self, redirect_handler):
+            self.redirect_handler = redirect_handler
+
+        def open(self, request, *, timeout):
+            initial_requests.append((request, timeout))
+            redirected = self.redirect_handler.redirect_request(
+                request,
+                redirect_response,
+                302,
+                "Found",
+                {"Location": "http://attacker.example.test/capture"},
+                "http://attacker.example.test/capture",
+            )
+            redirected_requests.append(redirected)
+            raise AssertionError("redirect denial should raise")
+
+    def fake_build_opener(redirect_handler):
+        assert isinstance(redirect_handler, _RejectWebhookRedirects)
+        return RedirectingOpener(redirect_handler)
+
+    monkeypatch.setattr(
+        "machinist.notify.urllib_request.build_opener", fake_build_opener
+    )
+    config = NotificationConfig(
+        backend=NotificationBackend.WEBHOOK,
+        webhook=WebhookNotificationConfig(
+            url_env="TEST_WEBHOOK_URL",
+            authorization_env="TEST_WEBHOOK_AUTH",
+        ),
+    )
+
+    result = notify_event(
+        config,
+        NotificationEvent.FAILURE,
+        "Machinist",
+        "boom",
+        environ={
+            "TEST_WEBHOOK_URL": "https://hooks.example.test/machinist",
+            "TEST_WEBHOOK_AUTH": "Bearer secret-token",
+        },
+    )
+
+    assert result.status is NotificationStatus.FAILED
+    assert result.error == "webhook redirects are not allowed"
+    assert "secret-token" not in result.error
+    assert initial_requests[0][0].get_header("Authorization") == ("Bearer secret-token")
+    assert "Authorization" not in initial_requests[0][0].headers
+    assert initial_requests[0][0].unredirected_hdrs["Authorization"] == (
+        "Bearer secret-token"
+    )
+    assert initial_requests[0][1] == 5
+    assert redirected_requests == []
+    assert redirect_response.closed is True
+
+
+def test_notify_event_keeps_unauthenticated_http_webhooks_supported():
+    calls = []
+    response = FakeResponse()
+    config = NotificationConfig(
+        backend=NotificationBackend.WEBHOOK,
+        webhook=WebhookNotificationConfig(url_env="TEST_WEBHOOK_URL"),
+    )
+
+    def opener(request, **kwargs):
+        calls.append((request, kwargs))
+        return response
+
+    result = notify_event(
+        config,
+        NotificationEvent.FAILURE,
+        "Machinist",
+        "boom",
+        opener=opener,
+        environ={"TEST_WEBHOOK_URL": "http://localhost.test/machinist"},
+    )
+
+    assert result.status is NotificationStatus.DELIVERED
+    assert calls[0][0].full_url == "http://localhost.test/machinist"
+    assert calls[0][0].get_header("Authorization") is None
+    assert response.closed is True

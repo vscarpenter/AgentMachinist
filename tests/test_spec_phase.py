@@ -1,10 +1,15 @@
 """Tests for Phase 1 orchestration: issue → spec → branch → draft PR."""
 
+import hashlib
+import shutil
+from dataclasses import replace
+
 import pytest
 
 from machinist.config import MachinistConfig
 from machinist.github import DraftPR, Issue, PullRequest
 from machinist.phases.spec import (
+    SpecPhaseCancelled,
     SpecPhaseError,
     preview_spec_phase,
     render_spec_prompt,
@@ -39,7 +44,17 @@ class FakeGitHub:
 
     def create_draft_pr(self, *, branch, base, title, body):
         self.calls.append(("create_draft_pr", branch, base, title, body))
-        return DraftPR(number=57, url="https://github.com/vscarpenter/demo/pull/57")
+        result = DraftPR(number=57, url="https://github.com/vscarpenter/demo/pull/57")
+        self.existing_pr = PullRequest(
+            number=result.number,
+            title=title,
+            url=result.url,
+            branch=branch,
+            is_draft=True,
+            head_sha="b" * 40,
+            base=base,
+        )
+        return result
 
     def pr_for_branch(self, branch):
         self.calls.append(("pr_for_branch", branch))
@@ -47,9 +62,15 @@ class FakeGitHub:
 
     def reopen_pr(self, number):
         self.calls.append(("reopen_pr", number))
+        self.existing_pr = replace(self.existing_pr, state="OPEN")
 
     def update_pr(self, number, *, title=None, body=None):
         self.calls.append(("update_pr", number, title, body))
+        self.existing_pr = replace(
+            self.existing_pr,
+            title=title or self.existing_pr.title,
+            head_sha="b" * 40,
+        )
 
     def remove_pr_label(self, number, label):
         self.calls.append(("remove_pr_label", number, label))
@@ -75,11 +96,31 @@ class FakeWorkspace:
         self.path = tmp_path / "ws"
         self.calls = []
         self.dirty = False
+        self._remote_sha = None
 
-    def provision(self, task, branch, base_ref):
+    def repository_identity(self):
+        return "vscarpenter/demo"
+
+    def repository_target(self):
+        return "github.com", "vscarpenter/demo"
+
+    def provision(self, task, branch, base_ref, *, attempt=None):
         self.calls.append(("provision", task, branch, base_ref))
-        self.path.mkdir()
+        if attempt is not None:
+            self.path = self.path.parent / f"ws-attempt-{attempt}"
+        self.path.mkdir(parents=True)
         return self.path
+
+    def provision_preview(self, task, branch, base_ref):
+        self.calls.append(("provision_preview", task, branch, base_ref))
+        self.path = self.path.parent / task
+        self.path.mkdir(parents=True)
+        return self.path
+
+    def cleanup_preview(self, path):
+        self.calls.append(("cleanup_preview", path))
+        if path.exists():
+            shutil.rmtree(path)
 
     def commit_all(self, path, message):
         self.calls.append(("commit_all", message))
@@ -89,6 +130,10 @@ class FakeWorkspace:
             ("push", branch) if expected_sha is None else ("push", branch, expected_sha)
         )
         self.calls.append(call)
+        self._remote_sha = self.head_sha(path)
+
+    def remote_sha(self, path, branch):
+        return self._remote_sha
 
     def has_changes(self, path):
         return self.dirty
@@ -98,6 +143,15 @@ class FakeWorkspace:
 
     def cleanup(self, path, *, success):
         self.calls.append(("cleanup", success))
+
+
+class FakeClaim:
+    def __init__(self, previous=None):
+        self.previous_evidence = dict(previous or {})
+        self.evidence = dict(self.previous_evidence)
+
+    def checkpoint(self, **evidence):
+        self.evidence.update(evidence)
 
 
 def test_render_spec_prompt_includes_issue_and_survives_special_chars():
@@ -136,6 +190,8 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     assert "#42" in commit[1]
     assert ("push", "agent/issue-42") in workspace.calls
     assert ("ensure_label", "machinist:approved") in github.calls
+    assert github.repo == "vscarpenter/demo"
+    assert github.repo_host == "github.com"
     assert ("cleanup", True) in workspace.calls
 
     _, branch, base, title, body = next(
@@ -147,12 +203,118 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     assert "Closes #42" in body
     assert "machinist:approved" in body
     assert "/machinist-execute" in body
+    assert f"/machinist-execute {'b' * 40}" in body
     # Dogfood UX finding: solo devs reach for GitHub's review Approve button,
     # which GitHub blocks on their own PRs. The body must head that off.
     assert "Approve button" in body
     # Dogfood UX finding 2 (both live lifecycles): users instinctively click
     # "Ready for review", which blocks the daemon (it implements drafts only).
     assert "leave this PR as a draft" in body
+
+
+@pytest.mark.parametrize("trap", ["leaf", "parent"])
+def test_spec_rejects_symlink_trap_without_clobbering_external_file(tmp_path, trap):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    external_spec = outside / "issue-42-spec.md"
+    external_spec.write_text("KEEP\n")
+
+    class TrappedWorkspace(FakeWorkspace):
+        def provision(self, task, branch, base_ref, *, attempt=None):
+            path = super().provision(task, branch, base_ref, attempt=attempt)
+            if trap == "leaf":
+                spec_dir = path / ".machinist/specs"
+                spec_dir.mkdir(parents=True)
+                (spec_dir / "issue-42-spec.md").symlink_to(external_spec)
+            else:
+                external_specs = outside / "specs"
+                external_specs.mkdir()
+                external_spec.rename(external_specs / external_spec.name)
+                (path / ".machinist").symlink_to(outside, target_is_directory=True)
+            return path
+
+    workspace = TrappedWorkspace(tmp_path)
+    harness = FakeHarness(spec_text="CLOBBER\n")
+
+    with pytest.raises(SpecPhaseError, match="cannot safely write Spec"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(),
+            harness=harness,
+            workspace=workspace,
+        )
+
+    protected = (
+        external_spec if trap == "leaf" else outside / "specs" / "issue-42-spec.md"
+    )
+    assert protected.read_text() == "KEEP\n"
+    assert ("cleanup", False) in workspace.calls
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+
+
+def test_spec_rejects_configured_repo_mismatch_before_github_read(tmp_path):
+    github = FakeGitHub()
+    workspace = FakeWorkspace(tmp_path)
+    workspace.repository_target = lambda: ("github.com", "attacker/other")
+    config = MachinistConfig.model_validate({"github": {"repo": "vscarpenter/demo"}})
+
+    with pytest.raises(SpecPhaseError, match="origin does not match configured"):
+        run_spec_phase(
+            42,
+            config,
+            github=github,
+            harness=FakeHarness(),
+            workspace=workspace,
+        )
+
+    assert github.calls == []
+    assert workspace.calls == []
+
+
+@pytest.mark.parametrize(
+    "unsafe_pr",
+    [
+        PullRequest(
+            number=57,
+            title="Fork collision",
+            url="https://github.com/vscarpenter/demo/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            head_sha="a" * 40,
+            is_cross_repository=True,
+            head_repository="attacker/demo",
+        ),
+        PullRequest(
+            number=57,
+            title="Mismatched head",
+            url="https://github.com/vscarpenter/demo/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            head_sha="a" * 40,
+            head_repository="attacker/demo",
+        ),
+    ],
+)
+def test_spec_refuses_fork_or_mismatched_existing_pr_custody(tmp_path, unsafe_pr):
+    github = FakeGitHub(existing_pr=unsafe_pr)
+    workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = unsafe_pr.head_sha
+
+    with pytest.raises(SpecPhaseError, match="cross-repository|head repository"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=FakeHarness(),
+            workspace=workspace,
+            revise=True,
+        )
+
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+    assert not any(
+        call[0] in {"ensure_label", "update_pr", "reopen_pr"} for call in github.calls
+    )
 
 
 def test_branch_prefix_comes_from_config(tmp_path):
@@ -179,14 +341,15 @@ def test_preview_generates_read_only_spec_without_git_or_github_delivery(tmp_pat
     )
 
     assert preview == harness.spec_text
-    provision = next(call for call in workspace.calls if call[0] == "provision")
+    provision = next(call for call in workspace.calls if call[0] == "provision_preview")
     assert provision[1].startswith("preview-issue-42-")
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
     assert not any(
         call[0] in {"ensure_label", "create_draft_pr", "update_pr"}
         for call in github.calls
     )
-    assert ("cleanup", True) in workspace.calls
+    assert any(call[0] == "cleanup_preview" for call in workspace.calls)
+    assert not workspace.path.exists()
 
 
 def test_revise_updates_existing_draft_pr_and_invalidates_approval(tmp_path):
@@ -201,6 +364,7 @@ def test_revise_updates_existing_draft_pr_and_invalidates_approval(tmp_path):
     )
     github = FakeGitHub(existing_pr=existing)
     workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = existing.head_sha
 
     result = run_spec_phase(
         42,
@@ -229,17 +393,50 @@ def test_revise_reopens_a_closed_spec_pr_after_successful_push(tmp_path):
         state="CLOSED",
     )
     github = FakeGitHub(existing_pr=existing)
+    workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = existing.head_sha
 
     run_spec_phase(
         42,
         MachinistConfig(),
         github=github,
         harness=FakeHarness(),
-        workspace=FakeWorkspace(tmp_path),
+        workspace=workspace,
         revise=True,
     )
 
     assert ("reopen_pr", 57) in github.calls
+
+
+def test_revise_fails_if_mark_draft_does_not_take_effect(tmp_path):
+    class NoopMarkDraftGitHub(FakeGitHub):
+        def mark_draft(self, number):
+            self.calls.append(("mark_draft", number))
+
+    existing = PullRequest(
+        number=57,
+        title="Spec: old",
+        url="https://github.com/x/y/pull/57",
+        branch="agent/issue-42",
+        is_draft=False,
+        head_sha="a" * 40,
+    )
+    github = NoopMarkDraftGitHub(existing_pr=existing)
+    workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = existing.head_sha
+
+    with pytest.raises(SpecPhaseError, match="not a draft"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=FakeHarness(),
+            workspace=workspace,
+            revise=True,
+        )
+
+    assert ("mark_draft", 57) in github.calls
+    assert ("cleanup", False) in workspace.calls
 
 
 def test_revise_refuses_a_merged_spec_pr(tmp_path):
@@ -356,3 +553,301 @@ def test_spec_harness_repository_mutation_is_rejected(tmp_path):
 
     assert not any(call[0] == "commit_all" for call in workspace.calls)
     assert ("cleanup", False) in workspace.calls
+
+
+def test_cancellation_racing_after_harness_never_commits_or_publishes(tmp_path):
+    github = FakeGitHub()
+    workspace = FakeWorkspace(tmp_path)
+    checks = iter((False, False, True))
+
+    with pytest.raises(SpecPhaseCancelled, match="cancelled by operator") as caught:
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=FakeHarness(),
+            workspace=workspace,
+            cancel_check=lambda: next(checks),
+        )
+
+    assert caught.value.cancelled is True
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+    assert not any(
+        call[0] in {"ensure_label", "create_draft_pr", "update_pr"}
+        for call in github.calls
+    )
+    assert ("cleanup", False) in workspace.calls
+
+
+def test_preview_checks_cancellation_after_harness(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    checks = iter((False, False, True))
+
+    with pytest.raises(SpecPhaseCancelled):
+        preview_spec_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(),
+            harness=FakeHarness(),
+            workspace=workspace,
+            cancel_check=lambda: next(checks),
+        )
+
+    assert any(call[0] == "cleanup_preview" for call in workspace.calls)
+    assert not workspace.path.exists()
+
+
+def test_normal_run_refuses_to_hijack_existing_branch_pr(tmp_path):
+    existing = PullRequest(
+        number=99,
+        title="Unrelated work",
+        url="https://github.com/x/y/pull/99",
+        branch="agent/issue-42",
+        is_draft=True,
+        head_sha="a" * 40,
+    )
+    workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = existing.head_sha
+    github = FakeGitHub(existing_pr=existing)
+    harness = FakeHarness()
+
+    with pytest.raises(SpecPhaseError, match="refusing to mutate"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=harness,
+            workspace=workspace,
+        )
+
+    assert harness.prompts == []
+    assert not any(call[0] == "update_pr" for call in github.calls)
+
+
+def test_pr_created_crash_is_reconciled_by_checkpointed_retry(tmp_path):
+    class CrashOnceAfterCreateGitHub(FakeGitHub):
+        def __init__(self):
+            super().__init__()
+            self.crashed = False
+
+        def pr_for_branch(self, branch):
+            self.calls.append(("pr_for_branch", branch))
+            if self.existing_pr is not None and not self.crashed:
+                self.crashed = True
+                raise RuntimeError("controller crashed after PR creation")
+            return self.existing_pr
+
+    github = CrashOnceAfterCreateGitHub()
+    first_workspace = FakeWorkspace(tmp_path / "first")
+    first_claim = FakeClaim()
+
+    with pytest.raises(RuntimeError, match="after PR creation"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=FakeHarness(),
+            workspace=first_workspace,
+            claim=first_claim,
+        )
+
+    assert first_claim.evidence["pr_number"] == 57
+    assert first_claim.evidence["push_observed_sha"] == "b" * 40
+
+    retry_workspace = FakeWorkspace(tmp_path / "retry")
+    retry_workspace._remote_sha = first_workspace._remote_sha
+    retry_claim = FakeClaim(first_claim.evidence)
+    result = run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=FakeHarness(
+            error=AssertionError("delivery-only retry must not regenerate")
+        ),
+        workspace=retry_workspace,
+        claim=retry_claim,
+    )
+
+    assert result.number == 57
+    assert len([call for call in github.calls if call[0] == "create_draft_pr"]) == 1
+    assert any(call[0] == "update_pr" for call in github.calls)
+    assert not any(call[0] in {"commit_all", "push"} for call in retry_workspace.calls)
+    assert retry_claim.evidence["spec_recovery"] == "delivery-only"
+
+
+def test_label_failure_after_push_retries_as_delivery_only_and_creates_pr(tmp_path):
+    class FailLabelOnceGitHub(FakeGitHub):
+        def __init__(self):
+            super().__init__()
+            self.failed = False
+
+        def ensure_label(self, name, *, color, description):
+            self.calls.append(("ensure_label", name))
+            if not self.failed:
+                self.failed = True
+                raise RuntimeError("label API unavailable after push")
+
+    github = FailLabelOnceGitHub()
+    first_workspace = FakeWorkspace(tmp_path / "first")
+    first_claim = FakeClaim()
+
+    with pytest.raises(RuntimeError, match="label API unavailable"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=FakeHarness(),
+            workspace=first_workspace,
+            claim=first_claim,
+        )
+
+    assert first_claim.evidence["push_observed_sha"] == "b" * 40
+    assert github.existing_pr is None
+
+    retry_workspace = FakeWorkspace(tmp_path / "retry")
+    retry_workspace._remote_sha = first_workspace._remote_sha
+    retry_claim = FakeClaim(first_claim.evidence)
+    result = run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=FakeHarness(
+            error=AssertionError("delivery-only retry must not regenerate")
+        ),
+        workspace=retry_workspace,
+        claim=retry_claim,
+    )
+
+    assert result.number == 57
+    assert len([call for call in github.calls if call[0] == "create_draft_pr"]) == 1
+    assert not any(call[0] in {"commit_all", "push"} for call in retry_workspace.calls)
+    assert retry_claim.evidence["spec_recovery"] == "delivery-only"
+
+
+def test_remote_push_is_observed_before_checkpoint(tmp_path):
+    class StaleRemoteWorkspace(FakeWorkspace):
+        def push(self, path, branch, expected_sha=None):
+            self.calls.append(("push", branch))
+
+    claim = FakeClaim()
+
+    with pytest.raises(SpecPhaseError, match="remote branch"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(),
+            harness=FakeHarness(),
+            workspace=StaleRemoteWorkspace(tmp_path),
+            claim=claim,
+        )
+
+    assert claim.evidence["push_intended_sha"] == "b" * 40
+    assert "push_observed_sha" not in claim.evidence
+
+
+def test_post_delivery_rejects_pr_from_wrong_head(tmp_path):
+    class StaleGitHub(FakeGitHub):
+        def create_draft_pr(self, **kwargs):
+            result = super().create_draft_pr(**kwargs)
+            self.existing_pr = replace(self.existing_pr, head_sha="c" * 40)
+            return result
+
+    workspace = FakeWorkspace(tmp_path)
+
+    with pytest.raises(SpecPhaseError, match="delivery verification failed"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=StaleGitHub(),
+            harness=FakeHarness(),
+            workspace=workspace,
+        )
+
+    assert ("cleanup", False) in workspace.calls
+
+
+def test_post_delivery_rejects_cross_repository_pr_collision(tmp_path):
+    class ForkGitHub(FakeGitHub):
+        def create_draft_pr(self, **kwargs):
+            result = super().create_draft_pr(**kwargs)
+            self.existing_pr = replace(
+                self.existing_pr,
+                is_cross_repository=True,
+                head_repository="attacker/demo",
+            )
+            return result
+
+    workspace = FakeWorkspace(tmp_path)
+
+    with pytest.raises(SpecPhaseError, match="cross-repository"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=ForkGitHub(),
+            harness=FakeHarness(),
+            workspace=workspace,
+        )
+
+    assert ("cleanup", False) in workspace.calls
+
+
+def test_post_delivery_rejects_pr_retargeted_to_another_base(tmp_path):
+    class RetargetedGitHub(FakeGitHub):
+        def create_draft_pr(self, **kwargs):
+            result = super().create_draft_pr(**kwargs)
+            self.existing_pr = replace(self.existing_pr, base="release")
+            return result
+
+    workspace = FakeWorkspace(tmp_path)
+
+    with pytest.raises(SpecPhaseError, match="base 'release' != 'main'"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=RetargetedGitHub(),
+            harness=FakeHarness(),
+            workspace=workspace,
+        )
+
+    assert ("cleanup", False) in workspace.calls
+
+
+def test_spec_instructions_come_from_provisioned_task_head_and_are_checkpointed(
+    tmp_path,
+):
+    controller = tmp_path / "controller"
+    controller.mkdir()
+    (controller / "AGENTS.md").write_text("controller-only uncommitted rules")
+
+    class InstructionWorkspace(FakeWorkspace):
+        repo_root = controller
+
+        def provision(self, *args, **kwargs):
+            path = super().provision(*args, **kwargs)
+            (path / "AGENTS.md").write_text("rules from the provisioned task head")
+            return path
+
+    config = MachinistConfig.model_validate(
+        {"instructions": {"spec": {"paths": ["AGENTS.md"]}}}
+    )
+    harness = FakeHarness()
+    claim = FakeClaim()
+
+    run_spec_phase(
+        42,
+        config,
+        github=FakeGitHub(),
+        harness=harness,
+        workspace=InstructionWorkspace(tmp_path),
+        claim=claim,
+    )
+
+    prompt = harness.prompts[0][0]
+    assert "rules from the provisioned task head" in prompt
+    assert "controller-only uncommitted rules" not in prompt
+    assert (
+        claim.evidence["instructions_sha256"]
+        == hashlib.sha256(b"rules from the provisioned task head").hexdigest()
+    )
+    assert claim.evidence["instruction_paths"] == ["AGENTS.md"]
+    assert claim.evidence["instruction_source"] == "task-workspace"

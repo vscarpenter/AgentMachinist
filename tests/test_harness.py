@@ -1,5 +1,6 @@
 """Tests for the harness abstraction layer."""
 
+import signal
 import subprocess
 import sys
 import time
@@ -9,6 +10,7 @@ import pytest
 from machinist.config import HarnessConfig, HarnessName
 from machinist.harness import get_harness
 from machinist.harness.base import Harness, HarnessError
+from machinist.process import ProcessSignalInterruption, ProcessStragglerError
 
 
 class FakeRunner:
@@ -192,6 +194,37 @@ def test_timeout_raises_harness_error(tmp_path):
 
     with pytest.raises(HarnessError, match="timed out"):
         harness.generate_spec("write a spec", cwd=tmp_path)
+
+
+def test_background_process_straggler_raises_stable_harness_error(tmp_path):
+    runner = FakeRunner(
+        ProcessStragglerError(
+            ["claude"],
+            0,
+            stdout="generated output",
+            stderr="background helper remained",
+        )
+    )
+    harness = get_harness(HarnessConfig(), runner=runner)
+
+    with pytest.raises(
+        HarnessError,
+        match="left background processes running after exit; they were terminated",
+    ):
+        harness.generate_spec("write a spec", cwd=tmp_path)
+
+
+def test_service_signal_interruption_is_not_downgraded_to_task_failure(tmp_path):
+    def interrupted_runner(command, **_kwargs):
+        raise ProcessSignalInterruption(command, signal.SIGTERM)
+
+    harness = get_harness(HarnessConfig(), runner=interrupted_runner)
+
+    with pytest.raises(ProcessSignalInterruption) as caught:
+        harness.generate_spec("write a spec", cwd=tmp_path)
+
+    assert caught.value.code == 128 + signal.SIGTERM
+    assert caught.value.cancelled is True
 
 
 def test_harness_subprocess_strips_controller_credentials_but_keeps_provider_key(

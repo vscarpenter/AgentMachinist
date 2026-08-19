@@ -11,7 +11,9 @@ import fcntl
 import json
 import math
 import os
-import tempfile
+import signal
+import stat
+import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -19,10 +21,25 @@ from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from threading import Lock
+from types import FrameType
 from typing import Any, TypeVar, cast
+
+from machinist.runtime_paths import (
+    RuntimeDirectory,
+    RuntimePathError,
+    append_text_file,
+    atomic_write_text_file,
+    list_directory_names,
+    open_regular_file,
+    read_text_file,
+    regular_file_exists,
+    reserve_regular_file,
+)
 
 _SCHEMA_VERSION = 1
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled", "abandoned"})
+_MAX_PROJECTION_BYTES = 8 * 1024 * 1024
+_MAX_JOURNAL_BYTES = 32 * 1024 * 1024
 
 type EvidenceValue = (
     str | int | float | bool | None | list[EvidenceValue] | dict[str, EvidenceValue]
@@ -32,6 +49,74 @@ type Evidence = dict[str, EvidenceValue]
 
 class LifecycleError(Exception):
     """A Task cannot enter the requested lifecycle transition."""
+
+
+class LifecycleSignalInterruption(SystemExit):
+    """A service termination signal received while a Task Claim was active."""
+
+    cancelled = True
+
+    def __init__(self, signal_number: int):
+        self.signal_number = signal_number
+        self.signal_name = signal.Signals(signal_number).name
+        super().__init__(128 + signal_number)
+
+    def __str__(self) -> str:
+        return f"Task Run interrupted by {self.signal_name}"
+
+
+class _ScopedLifecycleSignals:
+    """Make TERM/HUP durable for a claimed Task without making them catchable."""
+
+    def __init__(self) -> None:
+        self._received: int | None = None
+        self._active = False
+        self._persisting_terminal = False
+        self._prior_handlers: dict[signal.Signals, Any] = {}
+
+    def __enter__(self) -> _ScopedLifecycleSignals:
+        if (
+            os.name != "posix"
+            or threading.current_thread() is not threading.main_thread()
+        ):
+            return self
+        for current_signal in (signal.SIGTERM, signal.SIGHUP):
+            self._prior_handlers[current_signal] = signal.getsignal(current_signal)
+            signal.signal(current_signal, self._handle)
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        for current_signal, prior_handler in self._prior_handlers.items():
+            signal.signal(current_signal, prior_handler)
+
+    def activate(self) -> None:
+        self._active = True
+        self.raise_if_received()
+
+    def begin_terminal_persistence(self) -> None:
+        # Repeated service signals remain pending but cannot interrupt the
+        # fsync/replace operations that make the terminal projection durable.
+        self._persisting_terminal = True
+
+    def pending(self) -> LifecycleSignalInterruption | None:
+        if self._received is None:
+            return None
+        return LifecycleSignalInterruption(self._received)
+
+    def resume_after_terminal_persistence(self) -> None:
+        self._persisting_terminal = False
+        self.raise_if_received()
+
+    def raise_if_received(self) -> None:
+        pending = self.pending()
+        if pending is not None and not self._persisting_terminal:
+            raise pending
+
+    def _handle(self, signal_number: int, _frame: FrameType | None) -> None:
+        if self._received is None:
+            self._received = signal_number
+        if self._active and not self._persisting_terminal:
+            raise LifecycleSignalInterruption(self._received)
 
 
 class Phase(str, Enum):
@@ -105,6 +190,10 @@ class TaskClaim:
         """Return a contained per-attempt path for controller-owned logs."""
         return self._lifecycle.log_path(self.issue, self.phase, self.attempt, name)
 
+    def log_directory(self, name: str) -> Path:
+        """Return a contained per-attempt directory for a related log set."""
+        return self._lifecycle.log_directory(self.issue, self.phase, self.attempt, name)
+
     def checkpoint(self, **evidence: EvidenceValue) -> None:
         """Atomically project and append Evidence needed for reconciliation."""
         merged = _validate_evidence({**self._record.evidence, **evidence})
@@ -116,8 +205,17 @@ class TaskClaim:
 class TaskLifecycle:
     """Own Task Run persistence, attempt history, transitions, and local Claims."""
 
-    def __init__(self, runs_dir: Path):
-        self.runs_dir = Path(runs_dir)
+    def __init__(
+        self,
+        runs_dir: Path,
+        *,
+        repo_root: str | Path | None = None,
+    ):
+        try:
+            self._runtime = RuntimeDirectory.bind(runs_dir, repo_root=repo_root)
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run path: {exc}") from exc
+        self.runs_dir = self._runtime.path
 
     def run(
         self,
@@ -174,60 +272,64 @@ class TaskLifecycle:
                 updated_at=now,
                 evidence=previous,
             )
-            self._persist(running, event="started")
-            claim = TaskClaim(self, running, previous)
+            with _ScopedLifecycleSignals() as signal_scope:
+                # Before activation, TERM/HUP is recorded but not raised.  This
+                # lets the initial RUNNING event become durable before the same
+                # signal is converted into a terminal cancellation.
+                self._persist(running, event="started")
+                claim = TaskClaim(self, running, previous)
 
-            try:
-                result = action(claim)
-                evidence = dict(claim._record.evidence)
-                for attr, key in (("number", "pr_number"), ("url", "pr_url")):
-                    value = getattr(result, attr, None)
-                    if value is not None:
-                        evidence[key] = value
-                evidence = _validate_evidence(evidence)
-            except Exception as exc:
-                status = (
-                    RunStatus.CANCELLED
-                    if getattr(exc, "cancelled", False)
-                    else RunStatus.FAILED
-                )
-                failed = self._finish(
-                    claim._record,
-                    status=status,
-                    error=_exception_text(exc),
-                )
-                self._persist_without_masking(
-                    failed,
-                    event=status.value,
-                    original=exc,
-                )
-                raise
-            except BaseException as exc:
-                status = (
-                    RunStatus.CANCELLED
-                    if isinstance(exc, KeyboardInterrupt)
-                    else RunStatus.ABANDONED
-                )
-                interrupted = self._finish(
-                    claim._record,
-                    status=status,
-                    error=_exception_text(exc),
-                )
-                self._persist_without_masking(
-                    interrupted,
-                    event=status.value,
-                    original=exc,
-                )
-                raise
+                try:
+                    signal_scope.activate()
+                    result = action(claim)
+                    evidence = dict(claim._record.evidence)
+                    for attr, key in (("number", "pr_number"), ("url", "pr_url")):
+                        value = getattr(result, attr, None)
+                        if value is not None:
+                            evidence[key] = value
+                    evidence = _validate_evidence(evidence)
 
-            succeeded = self._finish(
-                claim._record,
-                status=RunStatus.SUCCEEDED,
-                error=None,
-                evidence=evidence,
-            )
-            self._persist(succeeded, event="succeeded")
-            return result
+                    succeeded = self._finish(
+                        claim._record,
+                        status=RunStatus.SUCCEEDED,
+                        error=None,
+                        evidence=evidence,
+                    )
+                    self._persist(succeeded, event="succeeded")
+                    return result
+                except BaseException as exc:
+                    signal_scope.begin_terminal_persistence()
+                    status = _interrupted_status(exc)
+                    interrupted = self._finish(
+                        claim._record,
+                        status=status,
+                        error=_exception_text(exc),
+                    )
+                    self._persist_without_masking(
+                        interrupted,
+                        event=status.value,
+                        original=exc,
+                    )
+
+                    # If TERM/HUP raced persistence of an unrelated failure,
+                    # make cancellation the final projection and preserve the
+                    # service-level exit rather than letting a watcher continue.
+                    pending = signal_scope.pending()
+                    if pending is not None:
+                        if not getattr(exc, "signal_number", None):
+                            cancelled = self._finish(
+                                claim._record,
+                                status=RunStatus.CANCELLED,
+                                error=_exception_text(pending),
+                            )
+                            self._persist_without_masking(
+                                cancelled,
+                                event=RunStatus.CANCELLED.value,
+                                original=pending,
+                            )
+                        raise pending from exc
+                    signal_scope.resume_after_terminal_persistence()
+                    raise
 
     def retry(self, issue: int, phase: Phase | None = None) -> RunRecord:
         with self._hold_claim(issue, retrying=True):
@@ -299,11 +401,17 @@ class TaskLifecycle:
 
     def record(self, issue: int, phase: Phase | None = None) -> RunRecord | None:
         """Return the compatible current projection for a Task Phase."""
+        self._ensure_runs(create=False)
         if phase is None:
             return self.latest(issue)
         path = self._path(issue, phase)
-        if not path.exists():
-            return None
+        try:
+            if not regular_file_exists(path):
+                return None
+        except (OSError, RuntimePathError) as exc:
+            raise LifecycleError(
+                f"cannot inspect Task Run record {path}: {exc}"
+            ) from exc
         return self._read_projection(path)
 
     def latest(self, issue: int) -> RunRecord | None:
@@ -322,6 +430,7 @@ class TaskLifecycle:
         Malformed journal lines are ignored here so earlier valid append-only
         events remain useful; :meth:`inventory` reports the artifact as corrupt.
         """
+        self._ensure_runs(create=False)
         attempts: dict[tuple[Phase, int], RunRecord] = {}
         phases = (phase,) if phase is not None else tuple(Phase)
 
@@ -352,43 +461,69 @@ class TaskLifecycle:
 
     def inventory(self) -> RunInventory:
         """Enumerate valid current projections and report corrupt artifacts."""
+        self._ensure_runs(create=False)
         records: list[RunRecord] = []
         corrupt: list[Path] = []
-        if not self.runs_dir.exists():
-            return RunInventory()
-
-        for path in sorted(self.runs_dir.glob("issue-*-*.json")):
-            if not path.is_file():
+        try:
+            run_names = list_directory_names(self.runs_dir)
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run inventory path: {exc}") from exc
+        for name in run_names:
+            if not _projection_filename(name):
                 continue
+            path = self.runs_dir / name
             try:
                 records.append(self._read_projection(path))
             except LifecycleError:
                 corrupt.append(path)
 
-        history_root = self.runs_dir / "history"
-        if history_root.exists():
-            for path in sorted(history_root.glob("issue-*-*/attempt-*.jsonl")):
-                _, malformed = self._read_journal(path)
-                if malformed:
-                    corrupt.append(path)
+        history_root = self.history_root()
+        try:
+            history_names = list_directory_names(history_root)
+            for directory_name in history_names:
+                if not _history_directory_name(directory_name):
+                    continue
+                directory = history_root / directory_name
+                for filename in list_directory_names(directory):
+                    if not _journal_filename(filename):
+                        continue
+                    path = directory / filename
+                    _, malformed = self._read_journal(path)
+                    if malformed:
+                        corrupt.append(path)
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run history inventory: {exc}") from exc
 
         records.sort(key=lambda item: (item.issue, item.phase.value, item.attempt))
         return RunInventory(tuple(records), tuple(sorted(set(corrupt))))
 
+    def history_root(self) -> Path:
+        """Return the validated, non-creating append-only history directory."""
+        try:
+            return self._runtime.subdirectory("history", create=False)
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run history path: {exc}") from exc
+
     def claim_held(self, issue: int) -> bool:
         """Check a local Claim without waiting or creating a lock artifact."""
+        self._ensure_runs(create=False)
         with _HELD_LOCK:
             if issue in _HELD_ISSUES:
                 return True
 
         lock_path = self.runs_dir / f"issue-{issue}.lock"
-        if not lock_path.exists():
-            return False
         try:
-            lock_file = lock_path.open("a+")
-        except FileNotFoundError:
-            return False
-        except OSError:
+            if not regular_file_exists(lock_path):
+                return False
+        except (OSError, RuntimePathError):
+            return True
+        try:
+            descriptor = open_regular_file(lock_path, truncate=False)
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                os.close(descriptor)
+                return True
+            lock_file = os.fdopen(descriptor, "a+")
+        except (OSError, RuntimePathError):
             return True
 
         with lock_file:
@@ -406,36 +541,44 @@ class TaskLifecycle:
         """Create and return a contained per-attempt log path."""
         if issue < 1 or attempt < 1:
             raise LifecycleError("log paths require positive issue and attempt numbers")
-        if (
-            not name
-            or len(name) > 128
-            or name in {".", ".."}
-            or "/" in name
-            or "\\" in name
-            or "\x00" in name
-            or any(
-                not (character.isalnum() or character in "._-") for character in name
-            )
-        ):
-            raise LifecycleError(
-                "log name must be a safe filename using letters, digits, '.', '_', or '-'"
-            )
+        _validate_log_name(name)
 
-        logs_root = (self.runs_dir / "logs").resolve()
-        parent = (
-            logs_root / f"issue-{issue}" / phase.value / f"attempt-{attempt}"
-        ).resolve()
-        if logs_root != parent and logs_root not in parent.parents:
-            raise LifecycleError("resolved log path escapes the Task Run log root")
-        parent.mkdir(parents=True, exist_ok=True)
-        path = (parent / name).resolve()
-        if path.parent != parent:
-            raise LifecycleError("resolved log path escapes its Task Run attempt")
-        return path
+        try:
+            parent = self._runtime.subdirectory(
+                "logs",
+                f"issue-{issue}",
+                phase.value,
+                f"attempt-{attempt}",
+                create=True,
+            )
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run log path: {exc}") from exc
+        path = parent / name
+        try:
+            return reserve_regular_file(path)
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run log file: {exc}") from exc
+
+    def log_directory(self, issue: int, phase: Phase, attempt: int, name: str) -> Path:
+        """Create and return a contained per-attempt log directory."""
+        if issue < 1 or attempt < 1:
+            raise LifecycleError("log paths require positive issue and attempt numbers")
+        _validate_log_name(name)
+        try:
+            return self._runtime.subdirectory(
+                "logs",
+                f"issue-{issue}",
+                phase.value,
+                f"attempt-{attempt}",
+                name,
+                create=True,
+            )
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run log directory: {exc}") from exc
 
     @contextmanager
     def _hold_claim(self, issue: int, *, retrying: bool = False) -> Iterator[None]:
-        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_runs(create=True)
         with _HELD_LOCK:
             if issue in _HELD_ISSUES:
                 state = "still claimed" if retrying else "already claimed"
@@ -445,7 +588,19 @@ class TaskLifecycle:
         lock_file = None
         locked = False
         try:
-            lock_file = (self.runs_dir / f"issue-{issue}.lock").open("a+")
+            lock_path = self.runs_dir / f"issue-{issue}.lock"
+            try:
+                descriptor = open_regular_file(
+                    lock_path,
+                    truncate=False,
+                    mode=0o600,
+                )
+            except (OSError, RuntimePathError) as exc:
+                raise LifecycleError(f"could not open Task Run claim: {exc}") from exc
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                os.close(descriptor)
+                raise LifecycleError("Task Run claim lock is not a regular file")
+            lock_file = os.fdopen(descriptor, "a+")
             try:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 locked = True
@@ -511,9 +666,21 @@ class TaskLifecycle:
 
     def _journal_paths(self, issue: int, phase: Phase) -> list[Path]:
         directory = self._journal_directory(issue, phase)
-        if not directory.exists():
-            return []
-        return sorted(directory.glob("attempt-*.jsonl"))
+        try:
+            self.history_root()
+            self._runtime.subdirectory(
+                "history", f"issue-{issue}-{phase.value}", create=False
+            )
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run history path: {exc}") from exc
+        try:
+            return [
+                directory / name
+                for name in list_directory_names(directory)
+                if _journal_filename(name)
+            ]
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run history path: {exc}") from exc
 
     def _max_journal_attempt(self, issue: int, phase: Phase) -> int:
         attempts: list[int] = []
@@ -524,7 +691,11 @@ class TaskLifecycle:
         return max(attempts, default=0)
 
     def _ensure_journal(self, record: RunRecord) -> None:
-        if not self._journal_path(record).exists():
+        try:
+            exists = regular_file_exists(self._journal_path(record))
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run journal path: {exc}") from exc
+        if not exists:
             self._append_event(record, event="legacy_snapshot")
 
     def _persist(self, record: RunRecord, *, event: str) -> None:
@@ -548,60 +719,71 @@ class TaskLifecycle:
 
     def _append_event(self, record: RunRecord, *, event: str) -> None:
         path = self._journal_path(record)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._runtime.subdirectory(
+                "history",
+                f"issue-{record.issue}-{record.phase.value}",
+                create=True,
+            )
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run history path: {exc}") from exc
         payload = {
             "schema_version": _SCHEMA_VERSION,
             "event": event,
             "timestamp": record.updated_at,
             "record": _record_payload(record),
         }
-        encoded = (
+        serialized = (
             json.dumps(payload, allow_nan=False, separators=(",", ":"), sort_keys=True)
             + "\n"
-        ).encode()
-        descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-        try:
-            written = os.write(descriptor, encoded)
-            if written != len(encoded):
-                raise LifecycleError(
-                    f"could not append complete Task Run event to {path}"
-                )
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-
-    def _write_projection(self, record: RunRecord) -> None:
-        self.runs_dir.mkdir(parents=True, exist_ok=True)
-        payload = _record_payload(record)
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=".run-", dir=self.runs_dir, text=True
         )
         try:
-            with os.fdopen(descriptor, "w") as stream:
-                json.dump(payload, stream, allow_nan=False, indent=2, sort_keys=True)
-                stream.write("\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, self._path(record.issue, record.phase))
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+            append_text_file(path, serialized)
+        except (OSError, RuntimePathError) as exc:
+            raise LifecycleError(
+                f"could not append Task Run journal {path}: {exc}"
+            ) from exc
+
+    def _write_projection(self, record: RunRecord) -> None:
+        self._ensure_runs(create=True)
+        payload = _record_payload(record)
+        try:
+            serialized = json.dumps(
+                payload,
+                allow_nan=False,
+                indent=2,
+                sort_keys=True,
+            )
+            atomic_write_text_file(
+                self._path(record.issue, record.phase),
+                serialized + "\n",
+            )
+        except (OSError, RuntimePathError, TypeError, ValueError) as exc:
+            raise LifecycleError(f"could not write Task Run projection: {exc}") from exc
 
     def _read_projection(self, path: Path) -> RunRecord:
         try:
-            payload = json.loads(path.read_text())
+            payload = json.loads(read_text_file(path, max_bytes=_MAX_PROJECTION_BYTES))
             return _record_from_payload(payload, source=path)
         except LifecycleError:
             raise
-        except (OSError, json.JSONDecodeError, TypeError, ValueError, KeyError) as exc:
+        except (
+            OSError,
+            RuntimePathError,
+            UnicodeError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+            KeyError,
+        ) as exc:
             raise LifecycleError(f"Task Run record {path} is corrupt: {exc}") from exc
 
     def _read_journal(self, path: Path) -> tuple[list[_JournalEvent], bool]:
         events: list[_JournalEvent] = []
         malformed = False
         try:
-            lines = path.read_text().splitlines()
-        except OSError:
+            lines = read_text_file(path, max_bytes=_MAX_JOURNAL_BYTES).splitlines()
+        except (OSError, RuntimePathError, UnicodeError):
             return events, True
 
         for line_number, line in enumerate(lines, start=1):
@@ -621,6 +803,45 @@ class TaskLifecycle:
             except (LifecycleError, json.JSONDecodeError, TypeError, KeyError):
                 malformed = True
         return events, malformed
+
+    def _ensure_runs(self, *, create: bool) -> Path:
+        try:
+            return self._runtime.ensure(create=create)
+        except RuntimePathError as exc:
+            raise LifecycleError(f"unsafe Task Run path: {exc}") from exc
+
+
+def _validate_log_name(name: str) -> None:
+    if (
+        not name
+        or len(name) > 128
+        or name in {".", ".."}
+        or "/" in name
+        or "\\" in name
+        or "\x00" in name
+        or any(not (character.isalnum() or character in "._-") for character in name)
+    ):
+        raise LifecycleError(
+            "log name must be a safe filename using letters, digits, '.', '_', or '-'"
+        )
+
+
+def _projection_filename(name: str) -> bool:
+    return name.startswith("issue-") and any(
+        name.endswith(f"-{phase.value}.json") for phase in Phase
+    )
+
+
+def _history_directory_name(name: str) -> bool:
+    return name.startswith("issue-") and any(
+        name.endswith(f"-{phase.value}") for phase in Phase
+    )
+
+
+def _journal_filename(name: str) -> bool:
+    return (
+        name.startswith("attempt-") and name.endswith(".jsonl") and name[8:-6].isdigit()
+    )
 
 
 def _record_payload(record: RunRecord) -> dict[str, Any]:
@@ -745,6 +966,14 @@ def _exception_text(exc: BaseException) -> str:
     if isinstance(exc, KeyboardInterrupt):
         return "interrupted by user"
     return str(exc).strip() or type(exc).__name__
+
+
+def _interrupted_status(exc: BaseException) -> RunStatus:
+    if isinstance(exc, KeyboardInterrupt) or getattr(exc, "cancelled", False):
+        return RunStatus.CANCELLED
+    if isinstance(exc, Exception):
+        return RunStatus.FAILED
+    return RunStatus.ABANDONED
 
 
 def _now() -> str:

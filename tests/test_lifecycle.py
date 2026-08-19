@@ -2,6 +2,12 @@
 
 import fcntl
 import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -224,6 +230,84 @@ def test_non_exception_base_exception_is_abandoned_and_re_raised(tmp_path):
     assert record.error == "shutdown"
 
 
+def test_cancelled_system_exit_is_durable_cancelled_and_re_raised(tmp_path):
+    class ServiceTermination(SystemExit):
+        cancelled = True
+
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+
+    with pytest.raises(ServiceTermination):
+        lifecycle.run(
+            16,
+            Phase.EXECUTE,
+            lambda claim: (_ for _ in ()).throw(ServiceTermination(143)),
+        )
+
+    record = lifecycle.record(16, Phase.EXECUTE)
+    assert record.status is RunStatus.CANCELLED
+    assert record.ended_at is not None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="signal assertions require POSIX")
+def test_sigterm_during_nonprocess_action_is_durable_and_exits_without_traceback(
+    tmp_path,
+):
+    runs_dir = tmp_path / "runs"
+    action_started = tmp_path / "action-started"
+    worker_code = (
+        "import time; from pathlib import Path; "
+        "from machinist.lifecycle import Phase, TaskLifecycle; "
+        f"runs = Path({str(runs_dir)!r}); "
+        f"started = Path({str(action_started)!r}); "
+        "lifecycle = TaskLifecycle(runs); "
+        "lifecycle.run(42, Phase.EXECUTE, "
+        "lambda _claim: (started.write_text('started'), time.sleep(60)))"
+    )
+    worker = subprocess.Popen(
+        [sys.executable, "-c", worker_code],
+        cwd=Path(__file__).parents[1],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        projection = runs_dir / "issue-42-execute.json"
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not (
+            projection.exists() and action_started.exists()
+        ):
+            if worker.poll() is not None:
+                break
+            time.sleep(0.02)
+        assert projection.exists() and action_started.exists()
+        assert json.loads(projection.read_text())["status"] == "running"
+
+        worker.send_signal(signal.SIGTERM)
+        stdout, stderr = worker.communicate(timeout=5)
+
+        assert worker.returncode == 128 + signal.SIGTERM
+        assert stdout == ""
+        assert "Traceback" not in stderr
+        payload = json.loads(projection.read_text())
+        assert payload["status"] == "cancelled"
+        assert payload["ended_at"] is not None
+        assert payload["error"] == "Task Run interrupted by SIGTERM"
+        events = [
+            json.loads(line)
+            for line in (
+                runs_dir / "history" / "issue-42-execute" / "attempt-000001.jsonl"
+            )
+            .read_text()
+            .splitlines()
+        ]
+        assert events[-1]["event"] == "cancelled"
+    finally:
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait(timeout=3)
+
+
 def test_completed_spec_can_be_explicitly_abandoned_then_revised(tmp_path):
     lifecycle = TaskLifecycle(tmp_path / "runs")
 
@@ -286,7 +370,8 @@ def test_claim_exposes_identity_and_contained_log_paths(tmp_path):
         "log_path": expected,
     }
     assert expected.parent.is_dir()
-    assert not expected.exists()
+    assert expected.is_file()
+    assert not expected.is_symlink()
 
 
 def test_claim_held_is_nonblocking_for_local_and_external_claims(tmp_path):
@@ -332,3 +417,31 @@ def test_older_and_corrupt_projection_records_are_handled_safely(tmp_path):
     inventory = lifecycle.inventory()
     assert inventory.records == (record,)
     assert inventory.corrupt == (corrupt,)
+
+
+def test_oversized_projection_is_rejected_before_payload_read(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.runs_dir.mkdir()
+    projection = lifecycle.runs_dir / "issue-42-spec.json"
+    projection.touch()
+    with projection.open("r+b") as stream:
+        stream.truncate(8 * 1024 * 1024 + 1)
+
+    with pytest.raises(LifecycleError, match="too large"):
+        lifecycle.record(42, Phase.SPEC)
+
+    assert lifecycle.inventory().corrupt == (projection,)
+
+
+def test_oversized_journal_is_reported_corrupt_without_payload_read(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    journal = (
+        lifecycle.runs_dir / "history" / "issue-42-execute" / "attempt-000001.jsonl"
+    )
+    journal.parent.mkdir(parents=True)
+    journal.touch()
+    with journal.open("r+b") as stream:
+        stream.truncate(32 * 1024 * 1024 + 1)
+
+    assert lifecycle.history(42, Phase.EXECUTE) == []
+    assert lifecycle.inventory().corrupt == (journal,)

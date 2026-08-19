@@ -168,7 +168,7 @@ def build_run_report(
         )
     )
     current_keys = {_run_key(record) for record in current}
-    journal_keys = _journal_attempt_keys(lifecycle.runs_dir, issue=issue)
+    journal_keys = _journal_attempt_keys(lifecycle, issue=issue)
 
     candidate_issues = {record.issue for record in current}
     candidate_issues.update(key[0] for key in journal_keys)
@@ -260,9 +260,11 @@ def _run_record_dict(record: RunRecord) -> dict[str, JsonValue]:
     }
 
 
-def _journal_attempt_keys(runs_dir: Path, *, issue: int | None) -> set[_RunKey]:
+def _journal_attempt_keys(
+    lifecycle: TaskLifecycle, *, issue: int | None
+) -> set[_RunKey]:
     keys: set[_RunKey] = set()
-    history_root = runs_dir / "history"
+    history_root = lifecycle.history_root()
     if not history_root.exists():
         return keys
 

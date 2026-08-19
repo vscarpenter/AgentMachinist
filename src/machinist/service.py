@@ -11,6 +11,7 @@ import hashlib
 import os
 import plistlib
 import re
+import stat
 import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
@@ -18,12 +19,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from machinist.runtime_paths import (
+    RuntimeDirectory,
+    RuntimePathError,
+    reserve_regular_file,
+    validate_regular_file,
+)
+
 Runner = Callable[..., subprocess.CompletedProcess]
 
 _LABEL_PREFIX = "io.github.vscarpenter.agentmachinist.watch"
 _LABEL_SAFE = re.compile(r"[^a-z0-9]+")
 _COMMAND_TIMEOUT_SECONDS = 15
 _MAX_DIAGNOSTIC_CHARS = 2_000
+LOG_TAIL_READ_LIMIT_BYTES = 64 * 1024
+LOG_TAIL_OUTPUT_LIMIT_BYTES = 64 * 1024
+LOG_TAIL_TRUNCATION_MARKER = "[log truncated; showing bounded tail]"
 _MISSING_SERVICE_MESSAGES = (
     "could not find service",
     "no such process",
@@ -77,6 +88,15 @@ class ServiceStatus:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class LogTail:
+    """A bounded, decoded suffix of one service log."""
+
+    text: str
+    truncated: bool
+    bytes_read: int
+
+
 def service_identifier(repo_root: str | Path) -> str:
     """Return a bounded launchd label unique to a canonical repository path."""
     repository = _repository_root(repo_root)
@@ -85,6 +105,72 @@ def service_identifier(repo_root: str | Path) -> str:
     max_slug_length = 127 - len(_LABEL_PREFIX) - len(digest) - 2
     slug = slug[:max_slug_length].rstrip("-") or "repo"
     return f"{_LABEL_PREFIX}.{slug}-{digest}"
+
+
+def read_log_tail(
+    path: str | Path,
+    *,
+    lines: int,
+    read_limit_bytes: int = LOG_TAIL_READ_LIMIT_BYTES,
+    output_limit_bytes: int = LOG_TAIL_OUTPUT_LIMIT_BYTES,
+) -> LogTail:
+    """Read only a bounded file suffix and return at most ``lines`` data lines.
+
+    The truncation marker is included in the output byte budget. Invalid UTF-8
+    is replaced so a partially read multibyte character or a damaged log never
+    makes the recovery command fail.
+    """
+    if isinstance(lines, bool) or not isinstance(lines, int) or lines < 1:
+        raise ServiceError("log tail line count must be a positive integer")
+    if (
+        isinstance(read_limit_bytes, bool)
+        or not isinstance(read_limit_bytes, int)
+        or read_limit_bytes < 1
+    ):
+        raise ServiceError("log tail read limit must be a positive integer")
+    marker_bytes = LOG_TAIL_TRUNCATION_MARKER.encode("utf-8")
+    if (
+        isinstance(output_limit_bytes, bool)
+        or not isinstance(output_limit_bytes, int)
+        or output_limit_bytes < len(marker_bytes)
+    ):
+        raise ServiceError("log tail output limit must fit the truncation marker")
+
+    log_path = Path(path)
+    flags = os.O_RDONLY
+    for optional_flag in ("O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK"):
+        flags |= getattr(os, optional_flag, 0)
+    descriptor = os.open(log_path, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ServiceError(f"service log is not a regular file: {log_path}")
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = -1
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            offset = max(0, size - read_limit_bytes)
+            stream.seek(offset)
+            raw = stream.read(read_limit_bytes)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+    decoded = raw.decode("utf-8", errors="replace")
+    candidates = decoded.splitlines()
+    line_truncated = len(candidates) > lines
+    content = "\n".join(candidates[-lines:])
+    content_bytes = content.encode("utf-8")
+    truncated = offset > 0 or line_truncated or len(content_bytes) > output_limit_bytes
+    if not truncated:
+        return LogTail(text=content, truncated=False, bytes_read=len(raw))
+
+    remaining = output_limit_bytes - len(marker_bytes)
+    if not content or remaining < 2:
+        text = LOG_TAIL_TRUNCATION_MARKER
+    else:
+        bounded = _utf8_suffix(content, remaining - 1)
+        text = f"{LOG_TAIL_TRUNCATION_MARKER}\n{bounded}"
+    return LogTail(text=text, truncated=True, bytes_read=len(raw))
 
 
 class LaunchdService:
@@ -105,8 +191,72 @@ class LaunchdService:
         launchctl_path: str | Path = "/bin/launchctl",
         runner: Runner = subprocess.run,
     ):
+        self._configure(
+            repo_root,
+            executable=_executable_path(executable),
+            launch_agents_dir=launch_agents_dir,
+            logs_dir=logs_dir,
+            arguments=arguments,
+            start_interval=start_interval,
+            exit_timeout=exit_timeout,
+            path_environment=path_environment,
+            uid=uid,
+            launchctl_path=launchctl_path,
+            runner=runner,
+        )
+
+    @classmethod
+    def for_management(
+        cls,
+        repo_root: str | Path,
+        *,
+        launch_agents_dir: str | Path | None = None,
+        logs_dir: str | Path | None = None,
+        uid: int | None = None,
+        launchctl_path: str | Path = "/bin/launchctl",
+        runner: Runner = subprocess.run,
+    ) -> LaunchdService:
+        """Open an installed service without needing its executable or config.
+
+        launchd lifecycle operations address a service by its repository-derived
+        label and installed plist.  Keeping that management path independent of
+        the current controller installation makes recovery commands usable when
+        the repository config is broken or ``machinist`` has left ``PATH``.
+        This object intentionally cannot render or install a replacement plist.
+        """
+        service = cls.__new__(cls)
+        service._configure(
+            repo_root,
+            executable=None,
+            launch_agents_dir=launch_agents_dir,
+            logs_dir=logs_dir,
+            arguments=("watch", "--once"),
+            start_interval=60,
+            exit_timeout=30,
+            path_environment=None,
+            uid=uid,
+            launchctl_path=launchctl_path,
+            runner=runner,
+        )
+        return service
+
+    def _configure(
+        self,
+        repo_root: str | Path,
+        *,
+        executable: Path | None,
+        launch_agents_dir: str | Path | None,
+        logs_dir: str | Path | None,
+        arguments: Sequence[str],
+        start_interval: int,
+        exit_timeout: int,
+        path_environment: str | None,
+        uid: int | None,
+        launchctl_path: str | Path,
+        runner: Runner,
+    ) -> None:
         self.repo_root = _repository_root(repo_root)
-        self.executable = _executable_path(executable)
+        self.executable = executable
         self.arguments = _arguments(arguments)
         self.start_interval = _seconds(
             start_interval,
@@ -154,14 +304,32 @@ class LaunchdService:
         )
         if not raw_logs.is_absolute():
             raw_logs = self.repo_root / raw_logs
-        self.logs_dir = raw_logs.resolve(strict=False)
-        _require_descendant(
-            self.logs_dir,
-            self.repo_root,
-            description="logs directory",
-        )
+        self._logs_parts: tuple[str, ...]
+        try:
+            if logs_dir is None:
+                self._logs_runtime = RuntimeDirectory.bind(
+                    self.repo_root / ".machinist" / "runs",
+                    repo_root=self.repo_root,
+                )
+                self._logs_parts = ("service",)
+                self.logs_dir = self._logs_runtime.subdirectory(
+                    *self._logs_parts, create=False
+                )
+            else:
+                self._logs_runtime = RuntimeDirectory.bind(
+                    raw_logs,
+                    repo_root=self.repo_root,
+                )
+                self._logs_parts = ()
+                self.logs_dir = self._logs_runtime.path
+        except RuntimePathError as exc:
+            raise ServiceError(
+                "logs directory must be contained by repository and contain no "
+                f"symlinks: {exc}"
+            ) from exc
         self.stdout_log_path = self.logs_dir / "watch.stdout.log"
         self.stderr_log_path = self.logs_dir / "watch.stderr.log"
+        self._validate_log_files()
 
         launchctl = Path(launchctl_path).expanduser()
         if not launchctl.is_absolute():
@@ -187,6 +355,12 @@ class LaunchdService:
 
     def plist_payload(self) -> dict[str, Any]:
         """Return the structured launchd definition without touching disk."""
+        if self.executable is None:
+            raise ServiceError(
+                "a management-only service cannot render or install a plist; "
+                "provide the current controller executable"
+            )
+        self._validate_managed_paths()
         environment = {
             "GH_PROMPT_DISABLED": "1",
             "GIT_TERMINAL_PROMPT": "0",
@@ -219,10 +393,19 @@ class LaunchdService:
 
     def install(self) -> Path:
         """Atomically install or replace the per-repository LaunchAgent plist."""
+        if self.executable is None:
+            raise ServiceError(
+                "a management-only service cannot install a plist; "
+                "provide the current controller executable"
+            )
         self._validate_managed_paths()
         try:
             self.launch_agents_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-            self.logs_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            self._ensure_logs(create=True)
+            reserve_regular_file(self.stdout_log_path)
+            reserve_regular_file(self.stderr_log_path)
+        except RuntimePathError as exc:
+            raise ServiceError(f"service log file is unsafe: {exc}") from exc
         except OSError as exc:
             raise ServiceError(f"could not create service directories: {exc}") from exc
         self._validate_managed_paths()
@@ -316,14 +499,23 @@ class LaunchdService:
             self.launch_agents_dir,
             description="service plist",
         )
-        resolved_logs = self.logs_dir.resolve(strict=False)
-        _require_descendant(
-            resolved_logs,
-            self.repo_root,
-            description="logs directory",
-        )
-        if resolved_logs != self.logs_dir:
-            raise ServiceError("logs directory changed through a symlink")
+        self._ensure_logs(create=False)
+        self._validate_log_files()
+
+    def _validate_log_files(self) -> None:
+        try:
+            validate_regular_file(self.stdout_log_path)
+            validate_regular_file(self.stderr_log_path)
+        except RuntimePathError as exc:
+            raise ServiceError(f"service log file is unsafe: {exc}") from exc
+
+    def _ensure_logs(self, *, create: bool) -> Path:
+        try:
+            if self._logs_parts:
+                return self._logs_runtime.subdirectory(*self._logs_parts, create=create)
+            return self._logs_runtime.ensure(create=create)
+        except RuntimePathError as exc:
+            raise ServiceError(f"logs directory is unsafe: {exc}") from exc
 
     def _launchctl(self, *arguments: str, check: bool) -> ServiceCommand:
         argv = (str(self.launchctl_path), *arguments)
@@ -437,6 +629,19 @@ def _diagnostic(command: ServiceCommand) -> str:
     if len(value) > _MAX_DIAGNOSTIC_CHARS:
         return value[:_MAX_DIAGNOSTIC_CHARS] + "…"
     return value
+
+
+def _utf8_suffix(value: str, limit: int) -> str:
+    """Return a valid UTF-8 suffix whose encoded size is at most ``limit``."""
+    if limit <= 0:
+        return ""
+    encoded = value.encode("utf-8")
+    if len(encoded) <= limit:
+        return value
+    suffix = encoded[-limit:]
+    while suffix and suffix[0] & 0xC0 == 0x80:
+        suffix = suffix[1:]
+    return suffix.decode("utf-8")
 
 
 def _text(value: object) -> str:

@@ -5,6 +5,7 @@ import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from machinist.cli import main
@@ -19,6 +20,18 @@ class _GitCliRunner(CliRunner):
         with super().isolated_filesystem(*args, **kwargs) as directory:
             subprocess.run(
                 ["git", "init", "-q", "-b", "main"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://github.com/x/y.git",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -76,6 +89,29 @@ def test_config_commands_validate_show_schema_and_set():
         assert load_config().github.poll_interval_seconds == 120
 
 
+def test_config_set_renders_atomic_write_failure_without_traceback(monkeypatch):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        original = Path("machinist.yaml").read_text()
+
+        def deny_replace(*args, **kwargs):
+            raise PermissionError("injected replace denial")
+
+        monkeypatch.setattr("machinist.config_cli.os.replace", deny_replace)
+        result = runner.invoke(
+            main,
+            ["config", "set", "github.poll_interval_seconds", "120"],
+        )
+
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "injected replace denial" in result.output
+        assert "Traceback" not in result.output
+        assert Path("machinist.yaml").read_text() == original
+
+
 def test_config_validate_reports_machine_readable_failure():
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -89,6 +125,56 @@ def test_config_validate_reports_machine_readable_failure():
         assert payload["error"]["kind"] == "validation"
 
 
+def test_config_validate_invalid_utf8_is_machine_readable():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("machinist.yaml").write_bytes(b"version: 1\n# \xff\n")
+
+        result = runner.invoke(main, ["config", "validate", "--json"])
+
+        assert result.exit_code == 1
+        payload = json.loads(result.output)
+        assert payload["ok"] is False
+        assert payload["error"]["kind"] == "validation"
+        assert "not valid UTF-8" in payload["error"]["message"]
+
+
+def test_config_validate_duplicate_keys_is_machine_readable():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("machinist.yaml").write_text(
+            "github:\n  manage_workflows: true\n  manage_workflows: false\n"
+        )
+
+        result = runner.invoke(main, ["config", "validate", "--json"])
+
+        assert result.exit_code == 1
+        payload = json.loads(result.output)
+        assert payload["error"]["kind"] == "yaml"
+        assert "duplicate key" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize(
+    "repository",
+    ["/repo", "owner/", "../repo", "owner/..", "owner /repo", "owner/repo.git"],
+)
+def test_config_validate_rejects_repository_identity_runtime_would_refuse(
+    repository,
+):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("machinist.yaml").write_text(
+            f"github:\n  repo: {json.dumps(repository)}\n"
+        )
+
+        result = runner.invoke(main, ["config", "validate", "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert "owner/repo" in payload["error"]["message"]
+
+
 def test_init_creates_config_dirs_and_workflows():
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -98,6 +184,54 @@ def test_init_creates_config_dirs_and_workflows():
         assert Path("machinist.yaml").is_file()
         assert Path(".machinist/specs/.gitkeep").is_file()
         assert Path(".github/workflows/machinist-approve.yml").is_file()
+
+
+def test_init_no_workflows_prunes_prior_managed_workflows():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        first = runner.invoke(main, ["init"])
+        assert first.exit_code == 0, first.output
+        config_path = Path("machinist.yaml")
+        config_path.write_text(
+            config_path.read_text().replace(
+                "spec_source: local", "spec_source: github-actions"
+            )
+        )
+        projected = runner.invoke(main, ["sync-workflows"])
+        assert projected.exit_code == 0, projected.output
+        managed = [
+            Path(".github/workflows/machinist-spec.yml"),
+            Path(".github/workflows/machinist-approve.yml"),
+        ]
+        assert all(path.is_file() for path in managed)
+
+        disabled = runner.invoke(main, ["init", "--force", "--no-workflows"])
+
+        assert disabled.exit_code == 0, disabled.output
+        assert load_config().github.manage_workflows is False
+        assert all(not path.exists() for path in managed)
+        assert "removed .github/workflows/machinist-approve.yml" in disabled.output
+
+
+@pytest.mark.parametrize("no_workflows", [False, True])
+def test_init_refuses_custom_workflow_collision_before_any_mutation(no_workflows):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        custom = Path(".github/workflows/machinist-approve.yml")
+        custom.parent.mkdir(parents=True)
+        custom.write_text("name: Custom owner workflow\n")
+        args = ["init"]
+        if no_workflows:
+            args.append("--no-workflows")
+
+        result = runner.invoke(main, args)
+
+        assert result.exit_code != 0
+        assert "refusing to replace or remove" in result.output
+        assert custom.read_text() == "name: Custom owner workflow\n"
+        assert not Path("machinist.yaml").exists()
+        assert not Path(".machinist").exists()
+        assert not Path(".gitignore").exists()
 
 
 def test_init_refuses_non_git_directory_before_writing_anything():
@@ -196,6 +330,99 @@ def test_init_force_overwrites():
 
         assert result.exit_code == 0
         assert "harness" in Path("machinist.yaml").read_text()
+
+
+def test_init_force_rejects_config_symlink_without_clobbering_target(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        outside = tmp_path / "outside-machinist.yaml"
+        outside.write_text("external: keep\n")
+        Path("machinist.yaml").symlink_to(outside)
+
+        result = runner.invoke(main, ["init", "--force", "--no-workflows"])
+
+        assert result.exit_code != 0
+        assert "symbolic link" in result.output
+        assert outside.read_text() == "external: keep\n"
+        assert not Path(".machinist").exists()
+
+
+def test_init_rejects_gitignore_symlink_before_any_setup_write(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        outside = tmp_path / "outside-gitignore"
+        outside.write_text("keep-me\n")
+        Path(".gitignore").symlink_to(outside)
+
+        result = runner.invoke(main, ["init", "--no-workflows"])
+
+        assert result.exit_code != 0
+        assert "symbolic link" in result.output
+        assert outside.read_text() == "keep-me\n"
+        assert not Path("machinist.yaml").exists()
+
+
+def test_init_rejects_oversized_gitignore_before_any_setup_write():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with Path(".gitignore").open("wb") as stream:
+            stream.truncate(1024 * 1024 + 1)
+
+        result = runner.invoke(main, ["init", "--no-workflows"])
+
+        assert result.exit_code != 0
+        assert "exceeds" in result.output
+        assert not Path("machinist.yaml").exists()
+        assert not Path(".machinist").exists()
+
+
+@pytest.mark.parametrize("symlink_parent", [True, False])
+def test_init_rejects_symlinked_spec_parent_or_gitkeep(tmp_path, symlink_parent):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        outside = tmp_path / "outside-specs"
+        outside.mkdir()
+        if symlink_parent:
+            Path(".machinist").symlink_to(outside, target_is_directory=True)
+        else:
+            Path(".machinist/specs").mkdir(parents=True)
+            external_file = outside / "gitkeep"
+            external_file.write_text("keep\n")
+            Path(".machinist/specs/.gitkeep").symlink_to(external_file)
+
+        result = runner.invoke(main, ["init", "--no-workflows"])
+
+        assert result.exit_code != 0
+        assert "link" in result.output.lower()
+        assert not Path("machinist.yaml").exists()
+        if not symlink_parent:
+            assert (outside / "gitkeep").read_text() == "keep\n"
+
+
+def test_init_rejects_symlinked_workflow_parent_before_any_setup_write(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        outside = tmp_path / "outside-github"
+        outside.mkdir()
+        Path(".github").symlink_to(outside, target_is_directory=True)
+
+        result = runner.invoke(main, ["init"])
+
+        assert result.exit_code != 0
+        assert "symlink" in result.output.lower()
+        assert list(outside.iterdir()) == []
+        assert not Path("machinist.yaml").exists()
+
+
+def test_init_rejects_non_regular_config_target():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("machinist.yaml").mkdir()
+
+        result = runner.invoke(main, ["init", "--force", "--no-workflows"])
+
+        assert result.exit_code != 0
+        assert "not a regular file" in result.output
 
 
 def test_init_ensures_pipeline_labels(monkeypatch):
@@ -301,7 +528,9 @@ def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
         notify_stale,
         max_tasks,
         admit,
+        lifecycle,
     ):
+        assert lifecycle.runs_dir == Path.cwd() / ".machinist/runs"
         notify("spec for issue #7 failed: boom")
         return []
 
@@ -322,6 +551,55 @@ def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
         ]
 
 
+def test_two_fresh_watch_invocations_dedupe_the_same_stale_approval(monkeypatch):
+    from machinist.notify import NotificationResult, NotificationStatus
+
+    notified = []
+
+    def fake_notify(config, event, title, message, **kwargs):
+        notified.append((event.value, title, message, kwargs["dedupe_key"]))
+        return NotificationResult(
+            NotificationStatus.DELIVERED,
+            "desktop",
+            event.value,
+            kwargs["dedupe_key"],
+        )
+
+    def fake_watch_once(
+        config,
+        github,
+        *,
+        run_spec,
+        run_execute,
+        state,
+        notify,
+        notify_stale,
+        max_tasks,
+        admit,
+        lifecycle,
+    ):
+        notify_stale(42, "PR #57 approval is stale")
+        return []
+
+    monkeypatch.setattr("machinist.cli.notify_event", fake_notify)
+    monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        first = runner.invoke(main, ["watch", "--once"])
+        second = runner.invoke(main, ["watch", "--once"])
+
+        assert first.exit_code == 0, first.output
+        assert second.exit_code == 0, second.output
+        assert len(notified) == 1
+        assert notified[0][:3] == (
+            "approval_stale",
+            "Machinist approval stale",
+            "PR #57 approval is stale",
+        )
+
+
 def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
     monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
 
@@ -332,6 +610,31 @@ def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
 
         assert result.exit_code == 0
         assert "nothing to do" in result.output.lower()
+
+
+def test_watch_spec_dispatch_wires_durable_cancellation_check(monkeypatch):
+    from machinist.github import DraftPR
+
+    seen = []
+
+    def fake_run_spec_phase(*args, cancel_check, **kwargs):
+        seen.append(callable(cancel_check))
+        return DraftPR(number=57, url="https://github.com/x/y/pull/57")
+
+    def fake_watch_once(*args, run_spec, **kwargs):
+        run_spec(42)
+        return ["spec dispatched"]
+
+    monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
+    monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["watch", "--once"])
+
+    assert result.exit_code == 0, result.output
+    assert seen == [True]
 
 
 def test_watch_rejects_interval_below_rate_safe_minimum():
@@ -345,9 +648,11 @@ def test_watch_dry_run_lists_tasks_without_dispatching(monkeypatch):
     from machinist.phases.status import StatusRow
     from machinist.phases.watch import WatchTask
 
-    monkeypatch.setattr(
-        "machinist.cli.plan_watch_tasks",
-        lambda config, github: (
+    seen = {}
+
+    def fake_plan_watch_tasks(config, github, *, lifecycle):
+        seen["runs_dir"] = lifecycle.runs_dir
+        return (
             WatchTask(
                 "execute",
                 42,
@@ -360,8 +665,9 @@ def test_watch_dry_run_lists_tasks_without_dispatching(monkeypatch):
                     issue_number=42,
                 ),
             ),
-        ),
-    )
+        )
+
+    monkeypatch.setattr("machinist.cli.plan_watch_tasks", fake_plan_watch_tasks)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -370,6 +676,46 @@ def test_watch_dry_run_lists_tasks_without_dispatching(monkeypatch):
 
         assert result.exit_code == 0, result.output
         assert "eligible: execute issue #42" in result.output
+        assert seen["runs_dir"] == Path.cwd() / ".machinist/runs"
+        assert not Path(".machinist/runs").exists()
+
+
+def test_watch_dry_run_renders_corrupt_cancellation_without_traceback(monkeypatch):
+    from machinist.phases.status import StatusRow
+    from machinist.phases.watch import WatchTask
+
+    task = WatchTask(
+        "spec",
+        42,
+        StatusRow(
+            kind="issue",
+            number=42,
+            title="Unsafe cancellation marker",
+            state="awaiting spec",
+            url="https://github.com/x/y/issues/42",
+            issue_number=42,
+        ),
+    )
+    monkeypatch.setattr(
+        "machinist.cli.plan_watch_tasks",
+        lambda config, github, *, lifecycle: (task,),
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        marker = Path(".machinist/runs/cancellations/issue-42.json")
+        marker.parent.mkdir(parents=True)
+        marker.write_text("{not valid json")
+
+        result = runner.invoke(main, ["watch", "--dry-run"])
+
+        assert result.exit_code != 0
+        assert "Error:" in result.output
+        assert "cancellation marker" in result.output
+        assert "corrupt" in result.output
+        assert "Traceback" not in result.output
 
 
 def test_queue_commands_pause_defer_show_resume_and_allow():
@@ -396,6 +742,109 @@ def test_queue_commands_pause_defer_show_resume_and_allow():
         assert allowed.exit_code == 0
         assert final["paused"] is False
         assert final["deferred"] == {}
+
+
+def test_queue_write_error_is_rendered_without_traceback(monkeypatch):
+    def deny_replace(*args, **kwargs):
+        raise PermissionError("injected replace denial")
+
+    monkeypatch.setattr("machinist.queue_control.os.replace", deny_replace)
+
+    result = CliRunner().invoke(main, ["queue", "pause"])
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "injected replace denial" in result.output
+    assert "Traceback" not in result.output
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["queue", "pause", "--reason", "safety check"],
+        ["queue", "show"],
+        ["cancel", "42"],
+        ["runs"],
+        ["watch", "--dry-run"],
+    ],
+)
+def test_runtime_commands_render_symlink_rejections_without_tracebacks(
+    tmp_path, monkeypatch, arguments
+):
+    repo = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    repo.mkdir()
+    outside.mkdir()
+    monkeypatch.chdir(repo)
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/x/y.git"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    runner = CliRunner()
+    initialized = runner.invoke(main, ["init", "--no-workflows"])
+    assert initialized.exit_code == 0, initialized.output
+    runs = repo / ".machinist" / "runs"
+    runs.parent.mkdir(parents=True, exist_ok=True)
+    runs.symlink_to(outside, target_is_directory=True)
+
+    result = runner.invoke(main, arguments)
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "symlink component" in result.output
+    assert "Traceback" not in result.output
+    assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["status", "--local"],
+        ["inspect", "42", "--offline"],
+    ],
+)
+def test_runtime_reports_render_nested_history_symlink_rejections(
+    tmp_path, monkeypatch, arguments
+):
+    repo = tmp_path / "repo"
+    outside = tmp_path / "outside-history"
+    repo.mkdir()
+    outside.mkdir()
+    monkeypatch.chdir(repo)
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://github.com/x/y.git"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    runner = CliRunner()
+    initialized = runner.invoke(main, ["init", "--no-workflows"])
+    assert initialized.exit_code == 0, initialized.output
+    runs = repo / ".machinist" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "history").symlink_to(outside, target_is_directory=True)
+
+    result = runner.invoke(main, arguments)
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "symlink component" in result.output
+    assert "Traceback" not in result.output
+    assert list(outside.iterdir()) == []
 
 
 def test_run_without_config_points_at_init():
@@ -528,6 +977,58 @@ def test_amend_repeats_successful_execute_with_explicit_feedback(monkeypatch):
         }
 
 
+@pytest.mark.parametrize("from_file", [False, True])
+def test_amend_rejects_whitespace_feedback_before_claim(from_file):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        arguments = ["amend", "42"]
+        if from_file:
+            path = Path("feedback.txt")
+            path.write_text("  \n\t  ")
+            arguments += ["--feedback-file", str(path)]
+        else:
+            arguments += ["--feedback", "   "]
+
+        result = runner.invoke(main, arguments)
+
+        assert result.exit_code == 2
+        assert "non-whitespace" in result.output
+        assert not Path(".machinist/runs").exists()
+
+
+def test_amend_rejects_oversized_feedback_file_before_reading_or_claim():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        path = Path("feedback.txt")
+        with path.open("wb") as stream:
+            stream.truncate(200_001)
+
+        result = runner.invoke(main, ["amend", "42", "--feedback-file", str(path)])
+
+        assert result.exit_code == 2
+        assert "feedback file is too large" in result.output
+        assert not Path(".machinist/runs").exists()
+
+
+def test_amend_rejects_feedback_file_symlink_without_disclosure(tmp_path):
+    outside = tmp_path / "outside-feedback.txt"
+    outside.write_text("secret review context")
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        path = Path("feedback.txt")
+        path.symlink_to(outside)
+
+        result = runner.invoke(main, ["amend", "42", "--feedback-file", str(path)])
+
+        assert result.exit_code != 0
+        assert "could not safely read" in result.output
+        assert "secret review context" not in result.output
+        assert not Path(".machinist/runs").exists()
+
+
 def test_status_without_config_points_at_init():
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -612,6 +1113,23 @@ def test_portfolio_repo_commands_and_status_all_json():
         assert payload["repositories"][0]["report"]["current"][0]["issue"] == 7
 
 
+@pytest.mark.parametrize("invalid_utf8", [False, True])
+def test_service_install_renders_config_errors_without_traceback(
+    monkeypatch, invalid_utf8
+):
+    monkeypatch.setattr("machinist.cli.sys.platform", "darwin")
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        if invalid_utf8:
+            Path("machinist.yaml").write_bytes(b"version: 1\n# \xff\n")
+
+        result = runner.invoke(main, ["service", "install"])
+
+        assert result.exit_code != 0
+        assert "machinist.yaml" in result.output
+        assert "Traceback" not in result.output
+
+
 def test_service_commands_manage_launchd_and_show_bounded_logs(monkeypatch):
     from machinist.service import ServiceStatus
 
@@ -651,7 +1169,7 @@ def test_service_commands_manage_launchd_and_show_bounded_logs(monkeypatch):
             return True
 
     service = FakeService()
-    monkeypatch.setattr("machinist.cli._launchd_service", lambda: service)
+    monkeypatch.setattr("machinist.cli._launchd_service", lambda **_: service)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -679,12 +1197,148 @@ def test_service_commands_manage_launchd_and_show_bounded_logs(monkeypatch):
             "install",
             "bootstrap",
             "start",
+            "status",
             "start",
+            "status",
             "restart",
             "stop",
             "status",
             "uninstall",
         ]
+
+
+def test_service_logs_bounds_a_large_single_line(monkeypatch):
+    from machinist.service import (
+        LOG_TAIL_OUTPUT_LIMIT_BYTES,
+        LOG_TAIL_TRUNCATION_MARKER,
+    )
+
+    class FakeService:
+        logs_dir = Path(".machinist/runs/service")
+        log_paths = (
+            logs_dir / "watch.stdout.log",
+            logs_dir / "watch.stderr.log",
+        )
+
+    monkeypatch.setattr(
+        "machinist.cli._launchd_service",
+        lambda: FakeService(),
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        FakeService.logs_dir.mkdir(parents=True)
+        FakeService.log_paths[0].write_bytes(b"x" * (1024 * 1024) + b"tail")
+
+        result = runner.invoke(main, ["service", "logs", "--lines", "1"])
+
+        assert result.exit_code == 0, result.output
+        assert LOG_TAIL_TRUNCATION_MARKER in result.output
+        assert result.output.rstrip().endswith("(no log yet)")
+        assert "tail" in result.output
+        assert len(result.output.encode("utf-8")) < LOG_TAIL_OUTPUT_LIMIT_BYTES + 512
+
+
+def test_service_start_reloads_an_installed_but_stopped_agent(monkeypatch):
+    from machinist.service import ServiceStatus
+
+    calls = []
+
+    class StoppedService:
+        label = "io.github.test.machinist"
+        plist_path = Path("service.plist")
+
+        def status(self):
+            calls.append("status")
+            return ServiceStatus(self.label, True, False, 113, error="not loaded")
+
+        def bootstrap(self):
+            calls.append("bootstrap")
+
+        def start(self):
+            calls.append("start")
+
+    monkeypatch.setattr(
+        "machinist.cli._launchd_service",
+        lambda: StoppedService(),
+    )
+
+    result = CliRunner().invoke(main, ["service", "start"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["status", "bootstrap", "start"]
+
+
+def test_service_recovery_commands_need_neither_config_nor_current_path(monkeypatch):
+    from machinist.service import ServiceStatus
+
+    managed = []
+
+    class RecoveryService:
+        def __init__(self, root):
+            self.root = root
+            self.label = "io.github.test.recovery"
+            self.plist_path = root / "service.plist"
+            self.logs_dir = root / ".machinist" / "runs" / "service"
+            self.log_paths = (
+                self.logs_dir / "watch.stdout.log",
+                self.logs_dir / "watch.stderr.log",
+            )
+            self.calls = []
+
+        @classmethod
+        def for_management(cls, root):
+            service = cls(root)
+            managed.append(service)
+            return service
+
+        def status(self):
+            self.calls.append("status")
+            return ServiceStatus(self.label, True, True, 0, "loaded")
+
+        def start(self):
+            self.calls.append("start")
+
+        def restart(self):
+            self.calls.append("restart")
+
+        def stop(self):
+            self.calls.append("stop")
+
+        def uninstall(self):
+            self.calls.append("uninstall")
+            return True
+
+    def config_must_not_be_loaded(*args, **kwargs):
+        raise AssertionError("management commands must not load machinist.yaml")
+
+    monkeypatch.setattr("machinist.cli.sys.platform", "darwin")
+    monkeypatch.setattr("machinist.cli._repository_root", lambda cwd: cwd.resolve())
+    monkeypatch.setattr("machinist.cli.LaunchdService", RecoveryService)
+    monkeypatch.setattr("machinist.cli.load_config", config_must_not_be_loaded)
+    monkeypatch.setenv("PATH", "")
+
+    runner = _BaseCliRunner()
+    for config_text in (None, "github: [\n"):
+        with runner.isolated_filesystem():
+            if config_text is not None:
+                Path("machinist.yaml").write_text(config_text)
+
+            status = runner.invoke(main, ["service", "status"])
+            started = runner.invoke(main, ["service", "start"])
+            restarted = runner.invoke(main, ["service", "restart"])
+            stopped = runner.invoke(main, ["service", "stop"])
+            logs = runner.invoke(main, ["service", "logs"])
+            uninstalled = runner.invoke(main, ["service", "uninstall"])
+
+            for result in (status, started, restarted, stopped, logs, uninstalled):
+                assert result.exit_code == 0, result.output
+            assert "loaded/scheduled" in status.output
+            assert "running" not in status.output
+            assert "(no log yet)" in logs.output
+            assert "Uninstalled" in uninstalled.output
+
+    assert len(managed) == 12
 
 
 def test_spec_without_config_points_at_init():
@@ -702,17 +1356,31 @@ def test_spec_wires_config_and_reports_pr_url(monkeypatch):
     seen = {}
 
     def fake_run_spec_phase(
-        issue_number, config, *, github, harness, workspace, claim, revise, attempt
+        issue_number,
+        config,
+        *,
+        github,
+        harness,
+        workspace,
+        claim,
+        revise,
+        attempt,
+        cancel_check,
     ):
         seen["issue"] = issue_number
         seen["harness"] = harness.name
         seen["repo"] = github.repo
+        seen["repo_host"] = github.repo_host
         seen["strategy"] = workspace.config.strategy.value
         seen["revise"] = revise
         seen["attempt"] = attempt
+        seen["cancel_check"] = callable(cancel_check)
+        claim.checkpoint(spec_sha="a" * 40)
         return DraftPR(number=57, url="https://github.com/vscarpenter/demo/pull/57")
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
+    monkeypatch.setenv("GH_REPO", "attacker/other")
+    monkeypatch.setenv("GH_HOST", "ghe.attacker.test")
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -723,12 +1391,40 @@ def test_spec_wires_config_and_reports_pr_url(monkeypatch):
         assert seen == {
             "issue": 42,
             "harness": "claude-code",
-            "repo": None,
+            "repo": "x/y",
+            "repo_host": "github.com",
             "strategy": "worktree",
             "revise": False,
             "attempt": None,
+            "cancel_check": True,
         }
         assert "pull/57" in result.output
+        assert f"/machinist-execute {'a' * 40}" in result.output
+
+
+def test_spec_refuses_configured_repo_that_mismatches_controller_origin(monkeypatch):
+    invoked = False
+
+    def fake_run_spec_phase(*args, **kwargs):
+        nonlocal invoked
+        invoked = True
+        raise AssertionError("phase must not run for mismatched repository custody")
+
+    monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        config_path = Path("machinist.yaml")
+        config_path.write_text(
+            config_path.read_text().replace("repo: null", "repo: attacker/other", 1)
+        )
+
+        result = runner.invoke(main, ["spec", "42"])
+
+    assert result.exit_code != 0
+    assert "origin does not match configured GitHub repository" in result.output
+    assert invoked is False
 
 
 def test_spec_revise_repeats_successful_attempt_on_existing_pr(monkeypatch):
@@ -738,9 +1434,20 @@ def test_spec_revise_repeats_successful_attempt_on_existing_pr(monkeypatch):
     seen = []
 
     def fake_run_spec_phase(
-        issue_number, config, *, github, harness, workspace, claim, revise, attempt
+        issue_number,
+        config,
+        *,
+        github,
+        harness,
+        workspace,
+        claim,
+        revise,
+        attempt,
+        cancel_check,
     ):
-        seen.append((issue_number, revise, claim.attempt, attempt))
+        seen.append(
+            (issue_number, revise, claim.attempt, attempt, callable(cancel_check))
+        )
         return DraftPR(number=57, url="https://github.com/x/y/pull/57")
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
@@ -757,7 +1464,7 @@ def test_spec_revise_repeats_successful_attempt_on_existing_pr(monkeypatch):
         result = runner.invoke(main, ["spec", "42", "--revise"])
 
         assert result.exit_code == 0, result.output
-        assert seen == [(42, True, 2, 2)]
+        assert seen == [(42, True, 2, 2, True)]
         assert "Revised draft PR #57" in result.output
 
 
@@ -847,10 +1554,13 @@ def test_spec_renders_machinist_errors_without_traceback(monkeypatch):
 def test_spec_dry_run_prints_preview_without_lifecycle_record(monkeypatch):
     from machinist.lifecycle import Phase, TaskLifecycle
 
-    monkeypatch.setattr(
-        "machinist.cli.preview_spec_phase",
-        lambda *args, **kwargs: "## Preview\n\nNo delivery.\n",
-    )
+    seen = []
+
+    def fake_preview(*args, cancel_check, **kwargs):
+        seen.append(callable(cancel_check))
+        return "## Preview\n\nNo delivery.\n"
+
+    monkeypatch.setattr("machinist.cli.preview_spec_phase", fake_preview)
     runner = CliRunner()
     with runner.isolated_filesystem():
         runner.invoke(main, ["init", "--no-workflows"])
@@ -859,6 +1569,7 @@ def test_spec_dry_run_prints_preview_without_lifecycle_record(monkeypatch):
 
         assert result.exit_code == 0, result.output
         assert "## Preview" in result.output
+        assert seen == [True]
         assert TaskLifecycle(Path(".machinist/runs")).record(42, Phase.SPEC) is None
 
 
@@ -1031,9 +1742,75 @@ def test_retry_with_run_flag(monkeypatch):
 
         result = runner.invoke(main, ["retry", "42", "--phase", "execute", "--run"])
         assert result.exit_code == 0, result.output
-        assert "Issue #42 execute is retryable" in result.output
+        assert "Retrying issue #42 execute after attempt 1" in result.output
+        assert "is retryable" not in result.output
         assert "PR #18 implemented" in result.output
         assert executed == [(42, "fresh")]
+
+
+def test_retry_run_does_not_claim_retryable_after_dispatch_failure(monkeypatch):
+    from machinist.lifecycle import Phase, RunStatus, TaskLifecycle
+    from machinist.phases.execute import ExecutePhaseError
+
+    def fail_execute(*args, **kwargs):
+        raise ExecutePhaseError("dispatch failed")
+
+    monkeypatch.setattr("machinist.cli.run_execute_phase", fail_execute)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        with pytest.raises(RuntimeError):
+            lifecycle.run(
+                42,
+                Phase.EXECUTE,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("first failure")),
+            )
+
+        result = runner.invoke(main, ["retry", "42", "--phase", "execute", "--run"])
+
+        assert result.exit_code != 0
+        assert "Retrying issue #42 execute after attempt 1" in result.output
+        assert "is retryable" not in result.output
+        assert lifecycle.record(42, Phase.EXECUTE).status is RunStatus.FAILED
+
+
+def test_retry_spec_run_wires_cancellation_and_prior_delivery_evidence(monkeypatch):
+    from machinist.github import DraftPR
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    seen = []
+
+    def fake_run_spec_phase(*args, claim, cancel_check, **kwargs):
+        seen.append((callable(cancel_check), dict(claim.previous_evidence)))
+        return DraftPR(number=57, url="https://github.com/x/y/pull/57")
+
+    monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+
+        def fail_after_delivery(claim):
+            claim.checkpoint(
+                spec_sha="a" * 40,
+                push_intended_sha="a" * 40,
+                push_observed_sha="a" * 40,
+                pr_number=57,
+            )
+            raise RuntimeError("crashed after PR create")
+
+        with pytest.raises(RuntimeError):
+            lifecycle.run(42, Phase.SPEC, fail_after_delivery)
+
+        result = runner.invoke(main, ["retry", "42", "--phase", "spec", "--run"])
+
+    assert result.exit_code == 0, result.output
+    assert seen[0][0] is True
+    assert seen[0][1]["pr_number"] == 57
+    assert "Draft PR #57" in result.output
 
 
 def test_retry_expected_lifecycle_error_is_rendered_without_traceback():
@@ -1172,6 +1949,8 @@ def test_cancel_request_and_clear_are_durable():
 
 
 def test_clean_command():
+    from machinist.workspace import Workspace
+
     runner = CliRunner()
     with runner.isolated_filesystem():
         runner.invoke(main, ["init", "--no-workflows"])
@@ -1182,13 +1961,26 @@ def test_clean_command():
                 "root: .test-workspaces",
             )
         )
-        ws_root = Path(".test-workspaces").resolve()
-        ws_root.mkdir(parents=True, exist_ok=True)
-        # Create mock task workspace directories
-        ws1 = ws_root / f"{Path.cwd().name}-issue-42"
-        ws2 = ws_root / f"{Path.cwd().name}-issue-43"
-        ws1.mkdir(parents=True, exist_ok=True)
-        ws2.mkdir(parents=True, exist_ok=True)
+        origin = Path(".test-origin.git").resolve()
+        subprocess.run(
+            ["git", "init", "--bare", "-b", "main", str(origin)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "config", "user.email", "test@example.com"], check=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], check=True)
+        Path("README.md").write_text("test repository\n")
+        subprocess.run(["git", "add", "README.md"], check=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True)
+        subprocess.run(["git", "remote", "set-url", "origin", str(origin)], check=True)
+        subprocess.run(["git", "push", "-u", "origin", "main"], check=True)
+        config = load_config()
+        workspace = Workspace(Path.cwd(), config.workspace)
+        ws1 = workspace.provision("issue-42", "agent/issue-42", "origin/main")
+        ws2 = workspace.provision("issue-43", "agent/issue-43", "origin/main")
+        victim = config.workspace.resolved_root() / f"{Path.cwd().name}-personal"
+        victim.mkdir()
+        (victim / "keep.txt").write_text("unrelated\n")
 
         result_list = runner.invoke(main, ["clean"])
         assert result_list.exit_code == 0
@@ -1202,6 +1994,7 @@ def test_clean_command():
         result_all = runner.invoke(main, ["clean", "--all", "--force"])
         assert result_all.exit_code == 0
         assert not ws2.exists()
+        assert (victim / "keep.txt").read_text() == "unrelated\n"
 
 
 def test_clean_refuses_active_task_even_with_force(monkeypatch):
@@ -1342,6 +2135,14 @@ def test_runs_json_lists_orphan_safe_local_inventory():
 
         assert result.exit_code == 0, result.output
         assert json.loads(result.output)["current"][0]["issue"] == 7
+
+
+def test_runs_rejects_non_positive_issue_without_traceback():
+    result = CliRunner().invoke(main, ["runs", "--issue", "0"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--issue'" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_status_verbose(monkeypatch):

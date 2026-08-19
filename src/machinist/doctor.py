@@ -10,11 +10,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlsplit, urlunsplit
 
 from machinist.config import MachinistConfig
+from machinist.github import github_command_environment
 from machinist.harness import get_harness
+from machinist.lifecycle import RunStatus, TaskLifecycle
+from machinist.observability import build_run_report
 from machinist.workflows import WorkflowDriftError, sync_workflows
+from machinist.workspace import github_repository_target
 
 _COMMAND_TIMEOUT_SECONDS = 10
 
@@ -41,19 +45,24 @@ class DoctorReport:
         return all(check.level is not CheckLevel.FAIL for check in self.checks)
 
 
-def _run_read_only(runner, args: list[str], *, cwd: Path):
+def _run_read_only(
+    runner,
+    args: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+):
     """Run one bounded, read-only probe and turn runner failures into data."""
     try:
-        return (
-            runner(
-                args,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=_COMMAND_TIMEOUT_SECONDS,
-            ),
-            None,
-        )
+        kwargs = {
+            "cwd": cwd,
+            "capture_output": True,
+            "text": True,
+            "timeout": _COMMAND_TIMEOUT_SECONDS,
+        }
+        if env is not None:
+            kwargs["env"] = env
+        return runner(args, **kwargs), None
     except subprocess.TimeoutExpired:
         return None, f"timed out after {_COMMAND_TIMEOUT_SECONDS} seconds"
     except OSError as exc:
@@ -77,19 +86,21 @@ def _harness_for(config, phase: str):
     return resolver(phase) if callable(resolver) else config.harness
 
 
-def _repo_from_origin(origin: str) -> str | None:
-    """Derive owner/repo from common GitHub HTTPS and SSH remote forms."""
-    value = origin.strip().rstrip("/")
-    if value.startswith("git@github.com:"):
-        path = value.removeprefix("git@github.com:")
-    else:
-        parsed = urlparse(value)
-        if parsed.hostname != "github.com":
-            return None
-        path = parsed.path.lstrip("/")
-    path = path.removesuffix(".git")
-    parts = path.split("/")
-    return "/".join(parts) if len(parts) == 2 and all(parts) else None
+def _redact_origin(origin: str) -> str:
+    """Preserve transport/host/path while removing URL credentials and query data."""
+    try:
+        parsed = urlsplit(origin)
+        if parsed.scheme and parsed.hostname:
+            host = parsed.hostname
+            if parsed.port is not None:
+                host += f":{parsed.port}"
+            return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+    except ValueError:
+        return "<redacted origin>"
+    if ":" in origin and "@" in origin.split(":", 1)[0]:
+        authority, path = origin.split(":", 1)
+        return f"{authority.rsplit('@', 1)[-1]}:{path}"
+    return origin
 
 
 def _workspace_check(root: Path, repo_root: Path) -> DoctorCheck:
@@ -141,6 +152,72 @@ def _workspace_check(root: Path, repo_root: Path) -> DoctorCheck:
     )
 
 
+def _task_runs_check(root: Path) -> DoctorCheck:
+    """Summarize lifecycle evidence without changing or hiding damaged state."""
+    try:
+        report = build_run_report(TaskLifecycle(root / ".machinist" / "runs"))
+    except Exception as exc:  # noqa: BLE001 - diagnostics must isolate corrupt state
+        message = str(exc).strip() or type(exc).__name__
+        return DoctorCheck(
+            CheckLevel.FAIL,
+            "Task Runs",
+            f"cannot read lifecycle evidence: {type(exc).__name__}: {message}",
+        )
+
+    if report.corrupt:
+        paths = ", ".join(artifact.path for artifact in report.corrupt)
+        return DoctorCheck(
+            CheckLevel.FAIL,
+            "Task Runs",
+            f"{len(report.corrupt)} corrupt projection or journal artifact(s): {paths}",
+        )
+
+    recovery = tuple(
+        record for record in report.current if record.status is not RunStatus.SUCCEEDED
+    )
+    current_phases = {(record.issue, record.phase) for record in report.current}
+    journal_only = tuple(
+        record
+        for record in report.orphans
+        if (record.issue, record.phase) not in current_phases
+    )
+    evidence = (
+        f"{len(report.history)} recorded attempt(s), "
+        f"{len(report.orphans)} non-current history attempt(s)"
+    )
+
+    if recovery or journal_only:
+        details: list[str] = []
+        if recovery:
+            details.append(
+                "recovery needed: "
+                + ", ".join(
+                    f"#{record.issue} {record.phase.value} {record.status.value}"
+                    for record in recovery
+                )
+            )
+        if journal_only:
+            details.append(
+                "journal-only evidence without a current projection: "
+                + ", ".join(
+                    f"#{record.issue} {record.phase.value} attempt {record.attempt}"
+                    for record in journal_only
+                )
+            )
+        details.extend(
+            (evidence, "inspect Task Runs, then retry or abandon recovery-needed work")
+        )
+        return DoctorCheck(CheckLevel.WARN, "Task Runs", "; ".join(details))
+
+    if report.current:
+        return DoctorCheck(
+            CheckLevel.PASS,
+            "Task Runs",
+            f"all {len(report.current)} current run(s) succeeded; {evidence}",
+        )
+    return DoctorCheck(CheckLevel.PASS, "Task Runs", "no Task Run evidence")
+
+
 def _add_repository_checks(checks, root, config, locations, runner):
     repository_ok = False
     if locations["git"]:
@@ -177,7 +254,7 @@ def _add_repository_checks(checks, root, config, locations, runner):
             DoctorCheck(CheckLevel.FAIL, "repository", "cannot check without git")
         )
 
-    derived_repo = None
+    derived_target = None
     if locations["git"] and repository_ok:
         result, error = _run_read_only(
             runner, ["git", "remote", "get-url", "origin"], cwd=root
@@ -190,8 +267,10 @@ def _add_repository_checks(checks, root, config, locations, runner):
             )
         else:
             origin_url = (result.stdout or "").strip()
-            derived_repo = _repo_from_origin(origin_url)
-            checks.append(DoctorCheck(CheckLevel.PASS, "origin", origin_url))
+            derived_target = github_repository_target(origin_url)
+            checks.append(
+                DoctorCheck(CheckLevel.PASS, "origin", _redact_origin(origin_url))
+            )
     else:
         checks.append(
             DoctorCheck(
@@ -199,6 +278,7 @@ def _add_repository_checks(checks, root, config, locations, runner):
             )
         )
 
+    derived_repo = derived_target[1] if derived_target is not None else None
     configured_repo = getattr(config.github, "repo", None)
     if configured_repo and derived_repo:
         if configured_repo.casefold() == derived_repo.casefold():
@@ -237,135 +317,171 @@ def _add_repository_checks(checks, root, config, locations, runner):
                 "set github.repo when origin is not a GitHub URL",
             )
         )
-    return repository_ok, derived_repo
+    return repository_ok, derived_target
 
 
-def _add_github_checks(checks, root, config, locations, runner, derived_repo):
-    configured_repo = getattr(config.github, "repo", None)
-    if locations["gh"]:
-        result, error = _run_read_only(runner, ["gh", "auth", "status"], cwd=root)
-        if error:
-            checks.append(DoctorCheck(CheckLevel.FAIL, "GitHub authentication", error))
-        elif result.returncode == 0:
-            checks.append(
-                DoctorCheck(
-                    CheckLevel.PASS, "GitHub authentication", "gh auth is active"
-                )
-            )
-        else:
-            checks.append(
+def _add_github_checks(checks, root, config, locations, runner, derived_target):
+    if not locations["gh"]:
+        checks.extend(
+            (
                 DoctorCheck(
                     CheckLevel.FAIL,
                     "GitHub authentication",
-                    "gh is not authenticated; run 'gh auth login'",
-                )
+                    "cannot check without gh",
+                ),
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "GitHub repository",
+                    "cannot check without gh",
+                ),
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "default branch",
+                    "cannot check without gh",
+                ),
+                DoctorCheck(CheckLevel.FAIL, "labels", "cannot check without gh"),
             )
+        )
+        return
+    if derived_target is None:
+        detail = "cannot bind GitHub probes to a recognized controller origin"
+        checks.extend(
+            (
+                DoctorCheck(CheckLevel.FAIL, "GitHub authentication", detail),
+                DoctorCheck(CheckLevel.FAIL, "GitHub repository", detail),
+                DoctorCheck(CheckLevel.FAIL, "default branch", detail),
+                DoctorCheck(CheckLevel.FAIL, "labels", detail),
+            )
+        )
+        return
+
+    host, expected_repo = derived_target
+    repo_target = expected_repo if host == "github.com" else f"{host}/{expected_repo}"
+    environment = github_command_environment(host)
+    auth_args = ["gh", "auth", "status", "--hostname", host]
+    result, error = _run_read_only(
+        runner,
+        auth_args,
+        cwd=root,
+        env=environment,
+    )
+    if error:
+        checks.append(DoctorCheck(CheckLevel.FAIL, "GitHub authentication", error))
+    elif result.returncode == 0:
+        checks.append(
+            DoctorCheck(CheckLevel.PASS, "GitHub authentication", "gh auth is active")
+        )
     else:
         checks.append(
             DoctorCheck(
-                CheckLevel.FAIL, "GitHub authentication", "cannot check without gh"
+                CheckLevel.FAIL,
+                "GitHub authentication",
+                "gh is not authenticated; run 'gh auth login'",
             )
         )
 
-    repo_args = ["gh", "repo", "view"]
-    if configured_repo:
-        repo_args += ["--repo", configured_repo]
-    repo_args += ["--json", "nameWithOwner,defaultBranchRef"]
-    if locations["gh"]:
-        result, error = _run_read_only(runner, repo_args, cwd=root)
-        if error or result.returncode != 0:
-            detail = error or _command_failure(result)
-            checks.append(DoctorCheck(CheckLevel.FAIL, "GitHub repository", detail))
+    repo_args = [
+        "gh",
+        "repo",
+        "view",
+        repo_target,
+        "--json",
+        "nameWithOwner,defaultBranchRef",
+    ]
+    result, error = _run_read_only(
+        runner,
+        repo_args,
+        cwd=root,
+        env=environment,
+    )
+    if error or result.returncode != 0:
+        detail = error or _command_failure(result)
+        checks.append(DoctorCheck(CheckLevel.FAIL, "GitHub repository", detail))
+        checks.append(
+            DoctorCheck(CheckLevel.FAIL, "default branch", "repository lookup failed")
+        )
+    else:
+        try:
+            data = json.loads(result.stdout or "")
+            github_repo = data["nameWithOwner"]
+            default_branch = data["defaultBranchRef"]["name"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            checks.append(
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "GitHub repository",
+                    f"invalid gh response: {exc}",
+                )
+            )
             checks.append(
                 DoctorCheck(
                     CheckLevel.FAIL, "default branch", "repository lookup failed"
                 )
             )
         else:
-            try:
-                data = json.loads(result.stdout or "")
-                github_repo = data["nameWithOwner"]
-                default_branch = data["defaultBranchRef"]["name"]
-            except (json.JSONDecodeError, KeyError, TypeError) as exc:
-                checks.append(
-                    DoctorCheck(
-                        CheckLevel.FAIL,
-                        "GitHub repository",
-                        f"invalid gh response: {exc}",
-                    )
-                )
-                checks.append(
-                    DoctorCheck(
-                        CheckLevel.FAIL, "default branch", "repository lookup failed"
-                    )
-                )
-            else:
-                expected_repo = configured_repo or derived_repo
-                level = (
-                    CheckLevel.FAIL
-                    if expected_repo
-                    and github_repo.casefold() != expected_repo.casefold()
-                    else CheckLevel.PASS
-                )
-                detail = (
-                    f"gh resolved {github_repo}, expected {expected_repo}"
-                    if level is CheckLevel.FAIL
-                    else github_repo
-                )
-                checks.append(DoctorCheck(level, "GitHub repository", detail))
-                checks.append(
-                    DoctorCheck(CheckLevel.PASS, "default branch", default_branch)
-                )
-    else:
-        checks.append(
-            DoctorCheck(CheckLevel.FAIL, "GitHub repository", "cannot check without gh")
-        )
-        checks.append(
-            DoctorCheck(CheckLevel.FAIL, "default branch", "cannot check without gh")
-        )
-
-    if locations["gh"]:
-        label_args = ["gh", "label", "list", "--limit", "1000", "--json", "name"]
-        if configured_repo:
-            label_args += ["--repo", configured_repo]
-        result, error = _run_read_only(runner, label_args, cwd=root)
-        if error or result.returncode != 0:
-            checks.append(
-                DoctorCheck(
-                    CheckLevel.FAIL, "labels", error or _command_failure(result)
-                )
+            level = (
+                CheckLevel.PASS
+                if github_repo.casefold() == expected_repo.casefold()
+                else CheckLevel.FAIL
             )
-        else:
-            try:
-                names = {item["name"] for item in json.loads(result.stdout or "")}
-            except (json.JSONDecodeError, KeyError, TypeError) as exc:
-                checks.append(
-                    DoctorCheck(
-                        CheckLevel.FAIL, "labels", f"invalid gh response: {exc}"
-                    )
-                )
-            else:
-                label_config = getattr(config.github, "labels", None)
-                required = {
-                    getattr(label_config, "trigger", "agent-task"),
-                    getattr(label_config, "approved", "machinist:approved"),
-                }
-                missing = sorted(required - names)
-                checks.append(
-                    DoctorCheck(
-                        CheckLevel.FAIL,
-                        "labels",
-                        "missing required labels: " + ", ".join(missing),
-                    )
-                    if missing
-                    else DoctorCheck(
-                        CheckLevel.PASS,
-                        "labels",
-                        "required labels are present and readable",
-                    )
-                )
-    else:
-        checks.append(DoctorCheck(CheckLevel.FAIL, "labels", "cannot check without gh"))
+            detail = (
+                github_repo
+                if level is CheckLevel.PASS
+                else f"gh resolved {github_repo}, expected {expected_repo}"
+            )
+            checks.append(DoctorCheck(level, "GitHub repository", detail))
+            checks.append(
+                DoctorCheck(CheckLevel.PASS, "default branch", default_branch)
+            )
+
+    label_args = [
+        "gh",
+        "label",
+        "list",
+        "--limit",
+        "1000",
+        "--json",
+        "name",
+        "--repo",
+        repo_target,
+    ]
+    result, error = _run_read_only(
+        runner,
+        label_args,
+        cwd=root,
+        env=environment,
+    )
+    if error or result.returncode != 0:
+        checks.append(
+            DoctorCheck(CheckLevel.FAIL, "labels", error or _command_failure(result))
+        )
+        return
+    try:
+        names = {item["name"] for item in json.loads(result.stdout or "")}
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        checks.append(
+            DoctorCheck(CheckLevel.FAIL, "labels", f"invalid gh response: {exc}")
+        )
+        return
+    label_config = getattr(config.github, "labels", None)
+    required = {
+        getattr(label_config, "trigger", "agent-task"),
+        getattr(label_config, "approved", "machinist:approved"),
+    }
+    missing = sorted(required - names)
+    checks.append(
+        DoctorCheck(
+            CheckLevel.FAIL,
+            "labels",
+            "missing required labels: " + ", ".join(missing),
+        )
+        if missing
+        else DoctorCheck(
+            CheckLevel.PASS,
+            "labels",
+            "required labels are present and readable",
+        )
+    )
 
 
 def run_doctor(
@@ -398,10 +514,10 @@ def run_doctor(
             )
         locations[executable] = location
 
-    repository_ok, derived_repo = _add_repository_checks(
+    repository_ok, derived_target = _add_repository_checks(
         checks, root, config, locations, runner
     )
-    _add_github_checks(checks, root, config, locations, runner, derived_repo)
+    _add_github_checks(checks, root, config, locations, runner, derived_target)
 
     try:
         workspace_root = config.workspace.resolved_root()
@@ -571,44 +687,6 @@ def run_doctor(
                 )
             )
 
-    try:
-        run_files = sorted((root / ".machinist/runs").glob("issue-*-*.json"))
-        needs_attention: list[str] = []
-        malformed: list[str] = []
-        for path in run_files:
-            try:
-                status = json.loads(path.read_text()).get("status")
-            except (OSError, json.JSONDecodeError):
-                malformed.append(path.name)
-                continue
-            if status in {"running", "failed"}:
-                needs_attention.append(path.name)
-    except OSError as exc:
-        checks.append(
-            DoctorCheck(
-                CheckLevel.FAIL, "Task Runs", f"cannot inspect runtime state: {exc}"
-            )
-        )
-    else:
-        if malformed:
-            checks.append(
-                DoctorCheck(
-                    CheckLevel.FAIL,
-                    "Task Runs",
-                    "unreadable runtime state: " + ", ".join(malformed),
-                )
-            )
-        elif needs_attention:
-            checks.append(
-                DoctorCheck(
-                    CheckLevel.WARN,
-                    "Task Runs",
-                    f"{len(needs_attention)} failed or abandoned run(s); inspect, then use 'machinist retry'",
-                )
-            )
-        else:
-            checks.append(
-                DoctorCheck(CheckLevel.PASS, "Task Runs", "no failed or abandoned runs")
-            )
+    checks.append(_task_runs_check(root))
 
     return DoctorReport(tuple(checks))

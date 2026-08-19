@@ -24,8 +24,14 @@ from machinist.process import (
     ProcessCancelledError,
     ProcessOutputLimitError,
     ProcessStartError,
+    ProcessStragglerError,
     ProcessTimeoutError,
     run_supervised,
+)
+from machinist.runtime_paths import (
+    RuntimeDirectory,
+    RuntimePathError,
+    reserve_regular_file,
 )
 
 Runner = Callable[..., subprocess.CompletedProcess]
@@ -44,9 +50,20 @@ class GateStatus(str, Enum):
     START_ERROR = "start_error"
     CANCELLED = "cancelled"
     OUTPUT_LIMIT = "output_limit"
+    STRAGGLER = "straggler"
     MUTATION_DETECTED = "mutation_detected"
     SNAPSHOT_ERROR = "snapshot_error"
     SKIPPED = "skipped"
+
+
+_ALWAYS_BLOCKING_STATUSES = frozenset(
+    {
+        GateStatus.CANCELLED,
+        GateStatus.MUTATION_DETECTED,
+        GateStatus.SNAPSHOT_ERROR,
+        GateStatus.STRAGGLER,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -74,10 +91,13 @@ class GateResult:
 
     @property
     def blocking(self) -> bool:
-        # Cancellation is an operator-level stop, not an advisory finding.
-        return (
-            self.required and not self.passed
-        ) or self.status is GateStatus.CANCELLED
+        # ``required`` controls whether an ordinary command outcome is advisory.
+        # Controller invariants are never advisory: cancellation must stop the
+        # run, and a forbidden-mutation policy must either be proven or fail
+        # closed before the workspace can be committed.
+        return (self.required and not self.passed) or (
+            self.status in _ALWAYS_BLOCKING_STATUSES
+        )
 
     def as_dict(self) -> dict[str, Any]:
         """Return evidence containing only JSON-compatible values."""
@@ -179,12 +199,13 @@ def run_verification_gates(
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
     evidence_characters: int = DEFAULT_EVIDENCE_CHARACTERS,
 ) -> VerificationReport:
-    """Run ordered gates and raise once if any required gate did not pass.
+    """Run ordered gates and raise once if any gate has a blocking outcome.
 
-    Advisory failures are retained in the returned report but do not raise.
-    Required failures do not short-circuit later gates, allowing one run to
-    produce a useful aggregate.  Cancellation stops command dispatch and is
-    always blocking.
+    Ordinary advisory command failures are retained in the returned report but
+    do not raise. Required failures do not short-circuit later gates, allowing
+    one run to produce a useful aggregate. Cancellation, forbidden mutation,
+    inability to enforce a forbidden-mutation snapshot, and background process
+    stragglers are always blocking.
     """
 
     resolved_cwd = Path(cwd).expanduser().resolve()
@@ -203,12 +224,12 @@ def run_verification_gates(
             "mutation-forbidden verification gates require a snapshotter"
         )
 
-    resolved_log_dir = Path(log_dir).expanduser().resolve()
+    raw_log_dir = Path(log_dir).expanduser()
     try:
-        resolved_log_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
+        resolved_log_dir = RuntimeDirectory.bind(raw_log_dir).ensure(create=True)
+    except (OSError, RuntimePathError) as exc:
         raise VerificationConfigurationError(
-            f"could not create verification log directory {resolved_log_dir}: {exc}"
+            f"could not create verification log directory {raw_log_dir}: {exc}"
         ) from exc
     started_at = time.monotonic()
     results: list[GateResult] = []
@@ -217,9 +238,9 @@ def run_verification_gates(
     for index, gate in enumerate(ordered_gates, start=1):
         stdout_log, stderr_log = _gate_log_paths(resolved_log_dir, index, gate.name)
         try:
-            stdout_log.touch()
-            stderr_log.touch()
-        except OSError as exc:
+            reserve_regular_file(stdout_log)
+            reserve_regular_file(stderr_log)
+        except (OSError, RuntimePathError) as exc:
             raise VerificationConfigurationError(
                 f"could not prepare verification logs in {resolved_log_dir}: {exc}"
             ) from exc
@@ -328,6 +349,12 @@ def _run_gate(
         error = str(exc)
     except ProcessOutputLimitError as exc:
         status = GateStatus.OUTPUT_LIMIT
+        error = str(exc)
+    except ProcessStragglerError as exc:
+        status = GateStatus.STRAGGLER
+        returncode = exc.leader_returncode
+        stdout = _as_text(exc.stdout)
+        stderr = _as_text(exc.stderr)
         error = str(exc)
 
     snapshot_after: str | None = None

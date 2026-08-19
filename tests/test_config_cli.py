@@ -74,6 +74,32 @@ def test_validate_classifies_malformed_yaml(tmp_path):
     assert str(path) in result.error.message
 
 
+def test_validate_classifies_duplicate_keys_as_yaml(tmp_path):
+    path = write_config(
+        tmp_path,
+        "github:\n  manage_workflows: true\n  manage_workflows: false\n",
+    )
+
+    result = validate(path)
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.kind is ConfigValidationErrorKind.YAML
+    assert "duplicate key" in result.error.message
+
+
+def test_validate_reports_invalid_utf8_without_escaping(tmp_path):
+    path = tmp_path / "machinist.yaml"
+    path.write_bytes(b"version: 1\n# \xff\n")
+
+    result = validate(path)
+
+    assert not result.ok
+    assert result.error is not None
+    assert result.error.kind is ConfigValidationErrorKind.VALIDATION
+    assert "not valid UTF-8" in result.error.message
+
+
 def test_validate_classifies_schema_validation(tmp_path):
     path = write_config(tmp_path, "version: 2\n")
 

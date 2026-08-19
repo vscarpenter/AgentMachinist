@@ -23,6 +23,7 @@ from machinist.process import (
     ProcessCancelledError,
     ProcessOutputLimitError,
     ProcessStartError,
+    ProcessStragglerError,
     credential_reduced_environment,
     run_supervised,
 )
@@ -107,6 +108,11 @@ class Harness(ABC):
         except ProcessOutputLimitError as exc:
             raise HarnessError(
                 f"{self.name} produced too much {exc.stream}: {exc}"
+            ) from exc
+        except ProcessStragglerError as exc:
+            raise HarnessError(
+                f"{self.name} left background processes running after exit; "
+                "they were terminated"
             ) from exc
         if result.returncode != 0:
             raise HarnessError(

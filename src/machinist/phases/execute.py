@@ -8,11 +8,13 @@ successful push without rerunning the harness.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import stat
 import subprocess
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
@@ -20,13 +22,17 @@ from string import Template
 from typing import Any
 
 from machinist.config import GateMutationPolicy, MachinistConfig
-from machinist.github import PullRequest
+from machinist.github import PullRequest, normalize_repository_identity
+from machinist.managed_paths import ManagedPathError, read_managed_text
+from machinist.runtime_paths import RuntimePathError, write_text_file
 
 _IMPLEMENT_PROMPT = files("machinist") / "templates" / "implement-prompt.md"
 _RECOVERY_MODES = frozenset({"fresh", "resume"})
 _FULL_SHA_LENGTH = 40
-_MAX_FEEDBACK_CHARS = 50_000
+MAX_FEEDBACK_CHARS = 50_000
+MAX_FEEDBACK_FILE_BYTES = MAX_FEEDBACK_CHARS * 4
 _MAX_HARNESS_REPORT_CHARS = 2_000
+_MAX_UTF8_BYTES_PER_CHAR = 4
 
 
 class ExecutePhaseError(Exception):
@@ -60,11 +66,7 @@ def render_implement_prompt(
     feedback: str | None = None,
     instructions: str = "",
 ) -> str:
-    if feedback is not None and len(feedback) > _MAX_FEEDBACK_CHARS:
-        raise ExecutePhaseError(
-            f"operator feedback is too large ({len(feedback)} characters; "
-            f"maximum {_MAX_FEEDBACK_CHARS})"
-        )
+    feedback = normalize_operator_feedback(feedback)
     template = Template(_IMPLEMENT_PROMPT.read_text())
     prompt = template.safe_substitute(number=issue_number, spec=spec_text)
     if feedback:
@@ -84,6 +86,21 @@ def render_implement_prompt(
     return prompt
 
 
+def normalize_operator_feedback(feedback: str | None) -> str | None:
+    """Return meaningful bounded feedback or fail before a Task is claimed."""
+    if feedback is None:
+        return None
+    normalized = feedback.strip()
+    if not normalized:
+        raise ExecutePhaseError("operator feedback must contain non-whitespace text")
+    if len(normalized) > MAX_FEEDBACK_CHARS:
+        raise ExecutePhaseError(
+            f"operator feedback is too large ({len(normalized)} characters; "
+            f"maximum {MAX_FEEDBACK_CHARS})"
+        )
+    return normalized
+
+
 def run_execute_phase(
     issue_number: int,
     config: MachinistConfig,
@@ -101,9 +118,7 @@ def run_execute_phase(
     """Implement an approved Task with durable retry and reconciliation state."""
     started_at = time.monotonic()
     # Validate before performing any GitHub or filesystem operation.
-    render_implement_prompt(issue_number, "", feedback)
-    repo_root = getattr(workspace, "repo_root", Path.cwd())
-    instructions = config.resolve_instructions("execute", repo_root)
+    feedback = normalize_operator_feedback(feedback)
     if recovery not in _RECOVERY_MODES:
         raise ExecutePhaseError(
             f"unknown recovery mode '{recovery}'; expected 'fresh' or 'resume'"
@@ -115,11 +130,13 @@ def run_execute_phase(
         )
 
     branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
+    repository_identity = _assert_repository_custody(config, github, workspace)
     pr = next(
         (
             candidate
             for candidate in github.open_machinist_prs(config.workspace.branch_prefix)
             if candidate.branch == branch
+            and _same_repository_pr(candidate, repository_identity)
         ),
         None,
     )
@@ -127,6 +144,15 @@ def run_execute_phase(
         raise ExecutePhaseError(
             f"no open PR for branch '{branch}'; run 'machinist spec {issue_number}' first"
         )
+    previous = dict(getattr(claim, "previous_evidence", {}) or {})
+    base = _checkpointed_pr_base(previous) or github.default_branch()
+    _validate_pr_base(base, source="GitHub default branch")
+    if pr.base and pr.base != base:
+        raise ExecutePhaseError(
+            f"PR #{pr.number} targets base {pr.base!r}; expected {base!r}; "
+            "approve a PR targeting the bound base branch"
+        )
+    _checkpoint(claim, pr_base=base, pr_observed_base=pr.base or base)
     approved_label = config.github.labels.approved
     if approved_label not in pr.labels:
         raise ExecutePhaseError(
@@ -135,7 +161,6 @@ def run_execute_phase(
         )
 
     approval_sha = github.approval_sha(pr.number)
-    previous = dict(getattr(claim, "previous_evidence", {}) or {})
     reconciled_sha = _reconciled_push(
         previous,
         approval_sha,
@@ -158,6 +183,9 @@ def run_execute_phase(
             harness_report_excerpt=_string(previous.get("harness_report_excerpt")),
             attempt=getattr(claim, "attempt", None),
             duration_seconds=_duration(started_at),
+            branch=branch,
+            expected_base=base,
+            cancel_check=cancel_check,
         )
         return pr
 
@@ -193,9 +221,8 @@ def run_execute_phase(
             feedback_characters=len(feedback or ""),
         )
 
-    base = github.default_branch()
     if recovery == "resume":
-        path, resume_stage = _resume_workspace(
+        path, resume_stage, git_custody = _resume_workspace(
             workspace,
             claim,
             previous,
@@ -203,7 +230,7 @@ def run_execute_phase(
             approval_sha=approval_sha,
         )
     else:
-        path = _provision_fresh_workspace(
+        path, git_custody = _provision_fresh_workspace(
             workspace,
             claim,
             previous,
@@ -225,6 +252,8 @@ def run_execute_phase(
                 approval_sha=approval_sha,
                 implementation_sha=implementation_sha,
                 claim=claim,
+                git_custody=git_custody,
+                cancel_check=cancel_check,
             )
             _complete_delivery(
                 issue_number,
@@ -240,6 +269,9 @@ def run_execute_phase(
                 harness_report_excerpt=_string(previous.get("harness_report_excerpt")),
                 attempt=getattr(claim, "attempt", None),
                 duration_seconds=_duration(started_at),
+                branch=branch,
+                expected_base=base,
+                cancel_check=cancel_check,
             )
         else:
             _assert_approved_head(
@@ -247,18 +279,51 @@ def run_execute_phase(
                 path,
                 branch=branch,
                 approved_sha=approval_sha,
+                git_custody=git_custody,
             )
+            instructions = ""
+            if resume_stage != "post_harness":
+                instructions = config.resolve_instructions("execute", path)
+                instruction_sources = list(config.instructions.execute.paths)
+                if config.instructions.execute.append is not None:
+                    instruction_sources.append("<inline append>")
+                _checkpoint(
+                    claim,
+                    instructions_supplied=bool(instructions),
+                    instruction_characters=len(instructions),
+                    instruction_sha256=hashlib.sha256(
+                        instructions.encode("utf-8")
+                    ).hexdigest(),
+                    instruction_sources=instruction_sources,
+                )
             if recovery == "fresh":
                 _reset_fresh_execution_evidence(claim)
-            spec_file = path / ".machinist" / "specs" / f"issue-{issue_number}-spec.md"
-            if not spec_file.exists():
+            spec_relative = (
+                Path(".machinist") / "specs" / f"issue-{issue_number}-spec.md"
+            )
+            try:
+                spec_text = read_managed_text(
+                    path,
+                    spec_relative,
+                    max_bytes=(config.limits.max_spec_chars * _MAX_UTF8_BYTES_PER_CHAR),
+                )
+            except ManagedPathError as exc:
                 raise ExecutePhaseError(
-                    f"spec file .machinist/specs/{spec_file.name} not found on "
-                    f"branch '{branch}'"
+                    f"cannot safely read approved Spec: {exc}"
+                ) from exc
+            if spec_text is None:
+                raise ExecutePhaseError(
+                    f"spec file {spec_relative} not found on branch '{branch}'"
+                )
+            if len(spec_text) > config.limits.max_spec_chars:
+                raise ExecutePhaseError(
+                    f"approved Spec has {len(spec_text)} characters; maximum is "
+                    f"{config.limits.max_spec_chars}"
                 )
 
             if resume_stage != "post_harness":
                 harness_details = _harness_details(harness)
+                harness_report_excerpt: str | None
                 _checkpoint(
                     claim,
                     harness=harness_details,
@@ -266,7 +331,7 @@ def run_execute_phase(
                 harness_report = harness.implement(
                     render_implement_prompt(
                         issue_number,
-                        spec_file.read_text(),
+                        spec_text,
                         feedback,
                         instructions,
                     ),
@@ -276,17 +341,13 @@ def run_execute_phase(
                     claim,
                     harness_report,
                 )
-                _checkpoint(
-                    claim,
-                    instructions_supplied=bool(instructions),
-                    instruction_characters=len(instructions),
-                )
                 _assert_git_custody(
                     workspace,
                     path,
                     branch=branch,
                     expected_sha=approval_sha,
                     actor=harness.name,
+                    git_custody=git_custody,
                 )
             else:
                 harness_details = _mapping(previous.get("harness")) or _harness_details(
@@ -327,6 +388,7 @@ def run_execute_phase(
                     branch=branch,
                     expected_sha=approval_sha,
                     actor="verification gate",
+                    git_custody=git_custody,
                 )
                 raise
 
@@ -336,6 +398,7 @@ def run_execute_phase(
                 branch=branch,
                 expected_sha=approval_sha,
                 actor="verification gate",
+                git_custody=git_custody,
             )
             if not workspace.has_changes(path):
                 raise ExecutePhaseError(
@@ -351,6 +414,7 @@ def run_execute_phase(
             )
             _checkpoint(claim, change_summary=change_summary.as_dict())
 
+            _raise_if_cancelled(cancel_check, "before commit")
             workspace.commit_all(
                 path,
                 f"feat(agent): implement issue #{issue_number} per approved spec",
@@ -361,6 +425,12 @@ def run_execute_phase(
                     "refusing to push a partially captured implementation"
                 )
             implementation_sha = workspace.head_sha(path)
+            _assert_workspace_metadata_custody(
+                workspace,
+                path,
+                git_custody=git_custody,
+                actor="controller commit",
+            )
             _checkpoint(
                 claim,
                 approved_sha=approval_sha,
@@ -369,6 +439,7 @@ def run_execute_phase(
                 push_observed_sha=None,
                 workspace_head=implementation_sha,
             )
+            _raise_if_cancelled(cancel_check, "before push")
             workspace.push(path, branch, expected_sha=approval_sha)
             observed_sha = workspace.remote_sha(path, branch)
             if observed_sha != implementation_sha:
@@ -391,6 +462,9 @@ def run_execute_phase(
                 harness_report_excerpt=harness_report_excerpt,
                 attempt=getattr(claim, "attempt", None),
                 duration_seconds=_duration(started_at),
+                branch=branch,
+                expected_base=base,
+                cancel_check=cancel_check,
             )
     except Exception:
         workspace.cleanup(path, success=False)
@@ -409,7 +483,7 @@ def _provision_fresh_workspace(
     branch: str,
     base_ref: str,
     approval_sha: str,
-) -> Path:
+) -> tuple[Path, dict[str, object] | None]:
     claim_attempt = getattr(claim, "attempt", None)
     attempt = (
         claim_attempt if isinstance(claim_attempt, int) and claim_attempt > 1 else None
@@ -437,6 +511,7 @@ def _provision_fresh_workspace(
         and previous_path not in prior_paths
     ):
         prior_paths.append(previous_path)
+    git_custody = _capture_workspace_custody(workspace, path)
     _checkpoint(
         claim,
         approved_sha=approval_sha,
@@ -444,8 +519,9 @@ def _provision_fresh_workspace(
         workspace_path=str(path),
         workspace_head=workspace.head_sha(path),
         prior_workspace_paths=prior_paths,
+        git_custody=git_custody,
     )
-    return path
+    return path, git_custody
 
 
 def _reset_fresh_execution_evidence(claim) -> None:
@@ -475,7 +551,7 @@ def _resume_workspace(
     *,
     branch: str,
     approval_sha: str,
-) -> tuple[Path, str]:
+) -> tuple[Path, str, dict[str, object] | None]:
     if claim is None:
         raise ExecutePhaseError("--resume requires a claimed Task Run")
     if previous.get("approved_sha") != approval_sha:
@@ -488,6 +564,12 @@ def _resume_workspace(
         raise ExecutePhaseError(
             "previous Task Run has no retained workspace checkpoint to resume"
         )
+
+    git_custody = _resume_workspace_custody(
+        workspace,
+        Path(raw_path),
+        previous.get("git_custody"),
+    )
 
     intended_sha = previous.get("push_intended_sha")
     implementation_sha = previous.get("implementation_sha")
@@ -517,7 +599,7 @@ def _resume_workspace(
         workspace_path=str(path),
         workspace_head=expected_sha,
     )
-    return path, stage
+    return path, stage, git_custody
 
 
 def _retry_intended_push(
@@ -528,7 +610,15 @@ def _retry_intended_push(
     approval_sha: str,
     implementation_sha: str,
     claim,
+    git_custody: dict[str, object] | None,
+    cancel_check,
 ) -> None:
+    _assert_workspace_metadata_custody(
+        workspace,
+        path,
+        git_custody=git_custody,
+        actor="retained workspace",
+    )
     remote_sha = workspace.remote_sha(path, branch)
     if remote_sha == implementation_sha:
         _checkpoint(claim, push_observed_sha=implementation_sha)
@@ -545,6 +635,7 @@ def _retry_intended_push(
         push_intended_sha=implementation_sha,
         push_observed_sha=None,
     )
+    _raise_if_cancelled(cancel_check, "before resumed push")
     workspace.push(path, branch, expected_sha=approval_sha)
     observed_sha = workspace.remote_sha(path, branch)
     if observed_sha != implementation_sha:
@@ -561,7 +652,14 @@ def _assert_approved_head(
     *,
     branch: str,
     approved_sha: str,
+    git_custody: dict[str, object] | None,
 ) -> None:
+    _assert_workspace_metadata_custody(
+        workspace,
+        path,
+        git_custody=git_custody,
+        actor="provisioned workspace",
+    )
     actual_sha = workspace.head_sha(path)
     if actual_sha != approved_sha:
         raise ExecutePhaseError(
@@ -583,7 +681,14 @@ def _assert_git_custody(
     branch: str,
     expected_sha: str,
     actor: str,
+    git_custody: dict[str, object] | None,
 ) -> None:
+    _assert_workspace_metadata_custody(
+        workspace,
+        path,
+        git_custody=git_custody,
+        actor=actor,
+    )
     actual_head = workspace.head_sha(path)
     if actual_head != expected_sha:
         raise ExecutePhaseError(
@@ -598,6 +703,70 @@ def _assert_git_custody(
         )
 
 
+def _capture_workspace_custody(workspace, path: Path) -> dict[str, object] | None:
+    capture = getattr(workspace, "capture_git_custody", None)
+    if not callable(capture):
+        return None
+    try:
+        token = capture(path)
+    except Exception as exc:
+        raise ExecutePhaseError(
+            f"could not bind controller Git metadata custody: {exc}"
+        ) from exc
+    if not isinstance(token, Mapping):
+        raise ExecutePhaseError("workspace returned an invalid Git-custody checkpoint")
+    return dict(token)
+
+
+def _resume_workspace_custody(
+    workspace,
+    path: Path,
+    raw_token: object,
+) -> dict[str, object] | None:
+    assertion = getattr(workspace, "assert_git_custody", None)
+    if not callable(assertion):
+        return dict(raw_token) if isinstance(raw_token, Mapping) else None
+    if not isinstance(raw_token, Mapping):
+        raise ExecutePhaseError(
+            "retained workspace has no Git-custody checkpoint; start a fresh retry"
+        )
+    token = dict(raw_token)
+    try:
+        assertion(path, token)
+    except Exception as exc:
+        raise ExecutePhaseError(
+            f"retained workspace failed Git metadata custody validation: {exc}"
+        ) from exc
+    return token
+
+
+def _assert_workspace_metadata_custody(
+    workspace,
+    path: Path,
+    *,
+    git_custody: dict[str, object] | None,
+    actor: str,
+) -> None:
+    assertion = getattr(workspace, "assert_git_custody", None)
+    if not callable(assertion):
+        return
+    if git_custody is None:
+        raise ExecutePhaseError(
+            f"{actor} cannot be trusted because no Git-custody checkpoint exists"
+        )
+    try:
+        assertion(path, git_custody)
+    except Exception as exc:
+        raise ExecutePhaseError(
+            f"{actor} changed controller-owned Git metadata; refusing to continue: {exc}"
+        ) from exc
+
+
+def _raise_if_cancelled(cancel_check, stage: str) -> None:
+    if cancel_check is not None and cancel_check():
+        raise ExecutePhaseCancelled(f"execute cancelled {stage}")
+
+
 def _capture_harness_report(claim, report: Any) -> str:
     text = "" if report is None else str(report)
     excerpt = text[-_MAX_HARNESS_REPORT_CHARS:]
@@ -605,8 +774,8 @@ def _capture_harness_report(claim, report: Any) -> str:
         return excerpt
     path = claim.log_path("harness-report.txt")
     try:
-        path.write_text(text)
-    except OSError as exc:
+        write_text_file(path, text)
+    except (OSError, RuntimePathError) as exc:
         raise ExecutePhaseError(
             f"could not persist harness report at {path}: {exc}"
         ) from exc
@@ -723,6 +892,7 @@ def _run_verification(
         report = {
             "success": True,
             "duration_seconds": 0.0,
+            "blocking_failures": [],
             "required_failures": [],
             "advisory_failures": [],
             "gates": [],
@@ -731,7 +901,8 @@ def _run_verification(
         return report
 
     if claim is not None and hasattr(claim, "log_path"):
-        log_dir = claim.log_path("verification-logs")
+        directory_factory = getattr(claim, "log_directory", claim.log_path)
+        log_dir = directory_factory("verification-logs")
         return _invoke_verification_engine(
             path,
             gates,
@@ -871,6 +1042,9 @@ def _fallback_verification(
         stdout_log.write_text(stdout)
         stderr_log.write_text(stderr)
         passed = status == "passed"
+        blocking = status in {"cancelled", "mutation_detected"} or (
+            gate.required and not passed
+        )
         results.append(
             {
                 "name": gate.name,
@@ -879,7 +1053,7 @@ def _fallback_verification(
                 "mutation_policy": gate.mutation_policy.value,
                 "status": status,
                 "passed": passed,
-                "blocking": status == "cancelled" or (gate.required and not passed),
+                "blocking": blocking,
                 "returncode": None if completed is None else completed.returncode,
                 "stdout_excerpt": stdout[-4000:],
                 "stderr_excerpt": stderr[-4000:],
@@ -893,7 +1067,12 @@ def _fallback_verification(
     evidence = {
         "success": not failures,
         "duration_seconds": 0.0,
-        "required_failures": failures,
+        "blocking_failures": failures,
+        "required_failures": [
+            result["name"]
+            for result in results
+            if result["required"] and not result["passed"]
+        ],
         "advisory_failures": [
             result["name"]
             for result in results
@@ -924,7 +1103,7 @@ def _verification_failure_message(report: dict[str, Any]) -> str:
         details.append(
             f"{gate.get('name', 'gate')} ({gate.get('status', 'failed')}){suffix}"
         )
-    return "required verification gates failed: " + "; ".join(details)
+    return "verification gates blocked: " + "; ".join(details)
 
 
 def _complete_delivery(
@@ -942,7 +1121,18 @@ def _complete_delivery(
     harness_report_excerpt: str | None,
     attempt: int | None,
     duration_seconds: float,
+    branch: str,
+    expected_base: str,
+    cancel_check,
 ) -> None:
+    current_pr = _delivery_pr_at_sha(
+        github,
+        original=pr,
+        branch=branch,
+        expected_base=expected_base,
+        implementation_sha=implementation_sha,
+    )
+    _raise_if_cancelled(cancel_check, "before completion delivery")
     body = _completion_comment(
         issue_number,
         implementation_sha,
@@ -959,8 +1149,16 @@ def _complete_delivery(
         completion_comment_intended_sha=implementation_sha,
         completion_duration_seconds=duration_seconds,
     )
+    current_pr = _delivery_pr_at_sha(
+        github,
+        original=current_pr,
+        branch=branch,
+        expected_base=expected_base,
+        implementation_sha=implementation_sha,
+    )
+    _raise_if_cancelled(cancel_check, "before completion comment")
     saved_comment_id = github.upsert_pr_comment(
-        pr.number,
+        current_pr.number,
         body,
         comment_id=comment_id,
     )
@@ -970,9 +1168,127 @@ def _complete_delivery(
         completion_comment_observed_sha=implementation_sha,
     )
     _checkpoint(claim, ready_intended_sha=implementation_sha)
-    if pr.is_draft:
-        github.mark_ready(pr.number)
+    current_pr = _delivery_pr_at_sha(
+        github,
+        original=current_pr,
+        branch=branch,
+        expected_base=expected_base,
+        implementation_sha=implementation_sha,
+    )
+    _raise_if_cancelled(cancel_check, "before marking PR ready")
+    if current_pr.is_draft:
+        github.mark_ready(current_pr.number)
+    observed_pr = _delivery_pr_at_sha(
+        github,
+        original=current_pr,
+        branch=branch,
+        expected_base=expected_base,
+        implementation_sha=implementation_sha,
+    )
+    if observed_pr.is_draft:
+        raise ExecutePhaseError(
+            f"GitHub PR #{observed_pr.number} remained a draft after mark-ready; "
+            "refusing to checkpoint completion"
+        )
+    # Once GitHub has observed the exact PR as ready, delivery is irreversible
+    # and completion must win over a cancellation racing with mark_ready().
     _checkpoint(claim, ready_observed_sha=implementation_sha)
+
+
+def _delivery_pr_at_sha(
+    github,
+    *,
+    original: PullRequest,
+    branch: str,
+    expected_base: str,
+    implementation_sha: str,
+) -> PullRequest:
+    """Re-read the exact PR so origin and GitHub cannot silently diverge."""
+    current = github.pr_for_branch(branch)
+    if current is None:
+        raise ExecutePhaseError(
+            f"PR #{original.number} for branch '{branch}' is no longer available"
+        )
+    expected_repository = normalize_repository_identity(getattr(github, "repo", None))
+    if (
+        current.number != original.number
+        or current.branch != branch
+        or (current.base and current.base != expected_base)
+        or current.state != "OPEN"
+        or not _same_repository_pr(current, expected_repository)
+    ):
+        raise ExecutePhaseError(
+            "GitHub PR identity/state changed after implementation push; "
+            "refusing completion delivery"
+        )
+    if current.head_sha != implementation_sha:
+        raise ExecutePhaseError(
+            "GitHub PR head does not match the pushed implementation "
+            f"({current.head_sha or 'missing'} != {implementation_sha}); "
+            "refusing completion delivery"
+        )
+    return current
+
+
+def _same_repository_pr(pr: PullRequest, expected_repository: str | None) -> bool:
+    if pr.is_cross_repository:
+        return False
+    return not (
+        expected_repository is not None
+        and pr.head_repository is not None
+        and normalize_repository_identity(pr.head_repository) != expected_repository
+    )
+
+
+def _assert_repository_custody(config: MachinistConfig, github, workspace) -> str:
+    resolver = getattr(workspace, "repository_target", None)
+    if not callable(resolver):
+        raise ExecutePhaseError(
+            "cannot prove controller Git origin repository identity"
+        )
+    try:
+        origin_host, raw_origin_identity = resolver()
+        origin_identity = normalize_repository_identity(raw_origin_identity)
+    except Exception as exc:
+        raise ExecutePhaseError(
+            "cannot prove controller Git origin repository identity"
+        ) from exc
+    if not isinstance(origin_host, str) or not origin_host:
+        raise ExecutePhaseError("cannot prove controller Git origin repository host")
+    configured = normalize_repository_identity(config.github.repo)
+    if (
+        (config.github.repo is not None and configured is None)
+        or origin_identity is None
+        or (configured is not None and configured != origin_identity)
+    ):
+        raise ExecutePhaseError(
+            "controller Git origin does not match configured GitHub repository"
+        )
+    client_target = normalize_repository_identity(getattr(github, "repo", None))
+    if client_target is not None and client_target != origin_identity:
+        raise ExecutePhaseError(
+            "configured GitHub repository does not match the GitHub client target"
+        )
+    client_host = getattr(github, "repo_host", None)
+    if (
+        client_host is not None
+        and str(client_host).casefold() != origin_host.casefold()
+    ):
+        raise ExecutePhaseError(
+            "GitHub client host does not match controller Git origin host"
+        )
+    binder = getattr(github, "bind_repository", None)
+    try:
+        if callable(binder):
+            binder(origin_identity, hostname=origin_host)
+        else:
+            github.repo = origin_identity
+            github.repo_host = origin_host
+    except Exception as exc:
+        raise ExecutePhaseError(
+            "could not bind GitHub client to controller origin repository"
+        ) from exc
+    return origin_identity
 
 
 def _completion_comment(
@@ -1063,6 +1379,26 @@ def _reconciled_push(
     return None
 
 
+def _checkpointed_pr_base(previous: dict[str, Any]) -> str | None:
+    """Return the PR base bound by an earlier Execute attempt, if present."""
+    value = previous.get("pr_base")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ExecutePhaseError("prior Execute checkpoint has an invalid PR base")
+    _validate_pr_base(value, source="prior Execute checkpoint")
+    return value
+
+
+def _validate_pr_base(value: str, *, source: str) -> None:
+    if (
+        not value
+        or value != value.strip()
+        or any(character in value for character in ("\0", "\n", "\r"))
+    ):
+        raise ExecutePhaseError(f"{source} returned an invalid PR base")
+
+
 def _checkpoint(claim, **evidence: Any) -> None:
     if claim is not None:
         claim.checkpoint(**evidence)
@@ -1079,8 +1415,7 @@ def _string(value: Any) -> str | None:
 def _harness_details(harness) -> dict[str, Any]:
     harness_config = getattr(harness, "config", None)
     model = getattr(harness_config, "model", None)
-    if hasattr(model, "value"):
-        model = model.value
+    model = getattr(model, "value", model)
     return {
         "name": str(getattr(harness, "name", "unknown")),
         "model": str(model) if model is not None else None,

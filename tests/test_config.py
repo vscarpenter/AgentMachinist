@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from machinist.config import (
+    MAX_CONFIG_BYTES,
     MAX_INSTRUCTION_FILES_PER_PHASE,
     MAX_PHASE_INSTRUCTION_BYTES,
     AllowedHoursConfig,
@@ -119,6 +120,16 @@ def test_timeout_out_of_bounds_is_rejected(tmp_path):
         load_config(path)
 
 
+@pytest.mark.parametrize("field", ["command", "model"])
+@pytest.mark.parametrize("value", ["", "   ", "bad\x00value"])
+def test_harness_command_and_model_reject_blank_or_nul(field, value):
+    with pytest.raises(ValueError, match="non-empty"):
+        HarnessConfig.model_validate({field: value})
+
+    with pytest.raises(ValueError, match="non-empty"):
+        HarnessConfig.model_validate({"spec": {field: value}})
+
+
 def test_missing_file_mentions_init(tmp_path):
     with pytest.raises(ConfigError, match="machinist init"):
         load_config(tmp_path / "machinist.yaml")
@@ -127,6 +138,37 @@ def test_missing_file_mentions_init(tmp_path):
 def test_malformed_yaml_reports_path(tmp_path):
     path = write_config(tmp_path, "harness: [unclosed\n")
     with pytest.raises(ConfigError, match="machinist.yaml"):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "github:\n  manage_workflows: true\ngithub:\n  manage_workflows: false\n",
+        "limits:\n  denied_paths: [secrets]\n  denied_paths: []\n",
+    ],
+)
+def test_duplicate_yaml_keys_are_rejected(tmp_path, text):
+    path = write_config(tmp_path, text)
+
+    with pytest.raises(ConfigError, match="duplicate key"):
+        load_config(path)
+
+
+def test_invalid_utf8_reports_stable_config_error(tmp_path):
+    path = tmp_path / "machinist.yaml"
+    path.write_bytes(b"version: 1\n# \xff\n")
+
+    with pytest.raises(ConfigError, match="not valid UTF-8"):
+        load_config(path)
+
+
+def test_oversized_config_is_rejected_before_reading_payload(tmp_path):
+    path = tmp_path / "machinist.yaml"
+    with path.open("wb") as stream:
+        stream.truncate(MAX_CONFIG_BYTES + 1)
+
+    with pytest.raises(ConfigError, match="too large"):
         load_config(path)
 
 

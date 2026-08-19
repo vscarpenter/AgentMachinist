@@ -1,7 +1,11 @@
 """Tests for the watch daemon's dispatch pass."""
 
+from datetime import UTC, datetime, timedelta
+
+from machinist.admission import queue_admission
 from machinist.config import MachinistConfig
 from machinist.github import DraftPR, Issue, PullRequest
+from machinist.lifecycle import Phase, TaskLifecycle
 from machinist.phases.watch import WatchResult, WatchState, plan_watch_tasks, watch_once
 
 
@@ -289,6 +293,59 @@ def test_admission_hook_can_defer_selected_tasks():
     ]
 
 
+def test_admission_is_rechecked_after_prior_dispatch_consumes_runtime_budget(
+    tmp_path, monkeypatch
+):
+    config = MachinistConfig.model_validate(
+        {
+            "queue": {
+                "task_budget": {
+                    "max_runtime_minutes_per_day": 1,
+                    "timezone": "UTC",
+                }
+            }
+        }
+    )
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    started = datetime(2026, 8, 19, 12, tzinfo=UTC)
+    moments = iter((started, started + timedelta(seconds=61)))
+    monkeypatch.setattr("machinist.lifecycle._now", lambda: next(moments).isoformat())
+    calls = []
+
+    def dispatch(issue_number):
+        calls.append(issue_number)
+        return lifecycle.run(
+            issue_number,
+            Phase.SPEC,
+            lambda _claim: DraftPR(
+                number=90 + issue_number,
+                url=f"https://github.com/x/y/pull/{90 + issue_number}",
+            ),
+        )
+
+    result = watch_once(
+        config,
+        FakeGitHub(issues=[issue(7), issue(8)]),
+        run_spec=dispatch,
+        run_execute=Dispatcher(),
+        state=WatchState(),
+        admit=lambda _task: (
+            queue_admission(
+                config, lifecycle, now=started + timedelta(minutes=2)
+            ).allowed
+        ),
+        lifecycle=lifecycle,
+    )
+
+    assert calls == [7]
+    assert [(task.phase, task.issue_number) for task in result.attempted] == [
+        ("spec", 7)
+    ]
+    assert [(task.phase, task.issue_number) for task in result.deferred] == [
+        ("spec", 8)
+    ]
+
+
 def test_plan_watch_tasks_is_a_dispatch_free_dry_run_surface():
     github = FakeGitHub(
         issues=[issue(7)],
@@ -301,6 +358,73 @@ def test_plan_watch_tasks_is_a_dispatch_free_dry_run_surface():
     assert [(task.phase, task.issue_number) for task in tasks] == [
         ("execute", 42),
         ("spec", 7),
+    ]
+
+
+def test_successful_spec_with_closed_pr_is_not_requeued_by_watch(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(
+        7,
+        Phase.SPEC,
+        lambda claim: DraftPR(
+            number=97,
+            url="https://github.com/x/y/pull/97",
+        ),
+    )
+    run_spec = Dispatcher()
+
+    result = watch_once(
+        MachinistConfig(),
+        FakeGitHub(issues=[issue(7)]),
+        run_spec=run_spec,
+        run_execute=Dispatcher(),
+        state=WatchState(),
+        lifecycle=lifecycle,
+    )
+
+    assert run_spec.calls == []
+    assert result.attempted == ()
+    assert result.events == ()
+
+
+def test_live_watch_dispatches_execute_after_explicit_retry(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    try:
+        lifecycle.run(
+            42,
+            Phase.EXECUTE,
+            lambda claim: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+    except RuntimeError:
+        pass
+    github = FakeGitHub(
+        prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])],
+        approvals={57: "a" * 40},
+    )
+    run_execute = Dispatcher()
+
+    failed = watch_once(
+        MachinistConfig(),
+        github,
+        run_spec=Dispatcher(),
+        run_execute=run_execute,
+        state=WatchState(),
+        lifecycle=lifecycle,
+    )
+    lifecycle.retry(42, Phase.EXECUTE)
+    retried = watch_once(
+        MachinistConfig(),
+        github,
+        run_spec=Dispatcher(),
+        run_execute=run_execute,
+        state=WatchState(),
+        lifecycle=lifecycle,
+    )
+
+    assert failed.attempted == ()
+    assert run_execute.calls == [42]
+    assert [(task.phase, task.issue_number) for task in retried.attempted] == [
+        ("execute", 42)
     ]
 
 

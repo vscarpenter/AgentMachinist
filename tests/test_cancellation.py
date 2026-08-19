@@ -27,6 +27,18 @@ def test_corrupt_marker_fails_closed(tmp_path: Path):
         store.requested(42)
 
 
+def test_oversized_marker_fails_closed_without_reading_its_payload(tmp_path: Path):
+    store = CancellationStore(tmp_path / "runs")
+    store.root.mkdir(parents=True)
+    marker = store.root / "issue-42.json"
+    marker.touch()
+    with marker.open("r+b") as stream:
+        stream.truncate(64 * 1024 + 1)
+
+    with pytest.raises(CancellationError, match="too large"):
+        store.requested(42)
+
+
 @pytest.mark.parametrize("issue", [0, -1, True])
 def test_issue_must_be_positive_integer(tmp_path: Path, issue):
     with pytest.raises(CancellationError):

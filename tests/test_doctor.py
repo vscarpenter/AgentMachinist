@@ -4,8 +4,11 @@ import json
 import subprocess
 from types import SimpleNamespace
 
+import pytest
+
 from machinist.config import MachinistConfig
 from machinist.doctor import CheckLevel, run_doctor
+from machinist.lifecycle import Phase, TaskLifecycle
 
 
 def _runner_for(root, *, auth_returncode=0, ignored=True, calls=None):
@@ -22,7 +25,7 @@ def _runner_for(root, *, auth_returncode=0, ignored=True, calls=None):
             )
         if args[:2] == ["git", "check-ignore"]:
             return subprocess.CompletedProcess(args, 0 if ignored else 1, "", "")
-        if args == ["gh", "auth", "status"]:
+        if args[:3] == ["gh", "auth", "status"]:
             return subprocess.CompletedProcess(
                 args, auth_returncode, "", "not logged in"
             )
@@ -73,6 +76,47 @@ def test_doctor_accumulates_pass_warn_and_fail_without_writing(tmp_path):
     assert not (tmp_path / ".github").exists(), "doctor must remain read-only"
 
 
+def test_doctor_binds_null_repo_to_origin_and_ignores_ambient_routing(
+    tmp_path, monkeypatch
+):
+    (tmp_path / ".git").mkdir()
+    calls = []
+    monkeypatch.setenv("GH_REPO", "attacker/other")
+    monkeypatch.setenv("GH_HOST", "ghe.attacker.test")
+    monkeypatch.setenv("GH_TOKEN", "dotcom-token")
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path, calls=calls),
+    )
+
+    by_name = {check.name: check for check in report.checks}
+    assert by_name["repository identity"].level is CheckLevel.PASS
+    assert by_name["GitHub repository"].level is CheckLevel.PASS
+    gh_calls = [(args, kwargs) for args, kwargs in calls if args[0] == "gh"]
+    assert gh_calls
+    assert any(
+        args[:4] == ["gh", "repo", "view", "owner/project"]
+        for args, _kwargs in gh_calls
+    )
+    assert ["--repo", "owner/project"] in [
+        args[index : index + 2]
+        for args, _kwargs in gh_calls
+        for index in range(len(args) - 1)
+    ]
+    assert any(
+        args[:3] == ["gh", "auth", "status"]
+        and args[-2:] == ["--hostname", "github.com"]
+        for args, _kwargs in gh_calls
+    )
+    for _args, kwargs in gh_calls:
+        assert "GH_REPO" not in kwargs["env"]
+        assert "GH_HOST" not in kwargs["env"]
+
+
 def test_doctor_reports_workflow_drift(tmp_path):
     (tmp_path / ".git").mkdir()
     config = MachinistConfig()
@@ -89,11 +133,40 @@ def test_doctor_reports_workflow_drift(tmp_path):
     assert "sync-workflows" in workflow.detail
 
 
-def test_doctor_warns_about_failed_or_abandoned_task_runs(tmp_path):
+def _write_run_projection(root, status):
+    runs = root / ".machinist/runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / "issue-7-spec.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "issue": 7,
+                "phase": "spec",
+                "status": status,
+                "attempt": 1,
+                "started_at": "2026-08-19T00:00:00+00:00",
+                "updated_at": "2026-08-19T00:00:01+00:00",
+                "error": None,
+                "evidence": {},
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("failed", CheckLevel.WARN),
+        ("running", CheckLevel.WARN),
+        ("cancelled", CheckLevel.WARN),
+        ("abandoned", CheckLevel.WARN),
+        ("retryable", CheckLevel.WARN),
+        ("succeeded", CheckLevel.PASS),
+    ],
+)
+def test_doctor_classifies_every_current_task_run_status(tmp_path, status, expected):
     (tmp_path / ".git").mkdir()
-    runs = tmp_path / ".machinist/runs"
-    runs.mkdir(parents=True)
-    (runs / "issue-7-spec.json").write_text(json.dumps({"status": "running"}))
+    _write_run_projection(tmp_path, status)
 
     report = run_doctor(
         tmp_path,
@@ -104,8 +177,74 @@ def test_doctor_warns_about_failed_or_abandoned_task_runs(tmp_path):
     )
 
     task_runs = next(check for check in report.checks if check.name == "Task Runs")
+    assert task_runs.level is expected
+    assert status in task_runs.detail
+
+
+def test_doctor_fails_closed_for_non_object_projection_and_corrupt_journal(tmp_path):
+    (tmp_path / ".git").mkdir()
+    runs = tmp_path / ".machinist/runs"
+    history = runs / "history/issue-8-spec"
+    history.mkdir(parents=True)
+    (runs / "issue-7-spec.json").write_text("[]\n")
+    (history / "attempt-000001.jsonl").write_text("{not-json}\n")
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path),
+    )
+    task_runs = next(check for check in report.checks if check.name == "Task Runs")
+
+    assert task_runs.level is CheckLevel.FAIL
+    assert "issue-7-spec.json" in task_runs.detail
+    assert "attempt-000001.jsonl" in task_runs.detail
+
+
+def test_doctor_warns_for_journal_only_orphan_evidence(tmp_path):
+    (tmp_path / ".git").mkdir()
+    lifecycle = TaskLifecycle(tmp_path / ".machinist/runs")
+    lifecycle.run(9, Phase.SPEC, lambda claim: None)
+    (lifecycle.runs_dir / "issue-9-spec.json").unlink()
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path),
+    )
+    task_runs = next(check for check in report.checks if check.name == "Task Runs")
+
     assert task_runs.level is CheckLevel.WARN
-    assert "retry" in task_runs.detail
+    assert "journal-only evidence" in task_runs.detail
+    assert "#9 spec attempt 1" in task_runs.detail
+
+
+def test_doctor_passes_succeeded_current_run_while_surfacing_history(tmp_path):
+    (tmp_path / ".git").mkdir()
+    lifecycle = TaskLifecycle(tmp_path / ".machinist/runs")
+    with pytest.raises(RuntimeError):
+        lifecycle.run(
+            10, Phase.EXECUTE, lambda claim: (_ for _ in ()).throw(RuntimeError("boom"))
+        )
+    lifecycle.retry(10, Phase.EXECUTE)
+    lifecycle.run(10, Phase.EXECUTE, lambda claim: None)
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path),
+    )
+    task_runs = next(check for check in report.checks if check.name == "Task Runs")
+
+    assert task_runs.level is CheckLevel.PASS
+    assert "2 recorded attempt(s)" in task_runs.detail
+    assert "1 non-current history attempt(s)" in task_runs.detail
 
 
 def test_doctor_detects_origin_config_mismatch_and_missing_labels(tmp_path):
@@ -121,7 +260,7 @@ def test_doctor_detects_origin_config_mismatch_and_missing_labels(tmp_path):
             )
         if args[:2] == ["git", "check-ignore"]:
             return subprocess.CompletedProcess(args, 0, "", "")
-        if args == ["gh", "auth", "status"]:
+        if args[:3] == ["gh", "auth", "status"]:
             return subprocess.CompletedProcess(args, 0, "", "")
         if args[:3] == ["gh", "repo", "view"]:
             return subprocess.CompletedProcess(
@@ -153,6 +292,32 @@ def test_doctor_detects_origin_config_mismatch_and_missing_labels(tmp_path):
     assert by_name["default branch"].detail == "trunk"
     assert by_name["labels"].level is CheckLevel.FAIL
     assert "agent-task" in by_name["labels"].detail
+
+
+def test_doctor_redacts_origin_credentials_but_keeps_host_and_path(tmp_path):
+    (tmp_path / ".git").mkdir()
+    regular = _runner_for(tmp_path)
+    credentialed = "https://build-user:super-secret-token@github.com/owner/project.git"
+
+    def runner(args, **kwargs):
+        if args == ["git", "remote", "get-url", "origin"]:
+            return subprocess.CompletedProcess(args, 0, credentialed, "")
+        return regular(args, **kwargs)
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}" if name in {"git", "gh"} else None,
+        runner=runner,
+    )
+    by_name = {check.name: check for check in report.checks}
+    serialized = "\n".join(check.detail for check in report.checks)
+
+    assert by_name["origin"].detail == "https://github.com/owner/project.git"
+    assert by_name["repository identity"].detail == "derived owner/project from origin"
+    assert "super-secret-token" not in serialized
+    assert "build-user" not in serialized
 
 
 def test_doctor_bounds_subprocesses_and_reports_timeout(tmp_path):

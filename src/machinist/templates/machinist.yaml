@@ -26,7 +26,7 @@ instructions:
     append: null
 
 github:
-  repo: null                   # "owner/repo"; null = gh derives it from origin
+  repo: null                   # "owner/repo"; null = controller binds the exact Git origin
   spec_source: local           # local = watch owns Phase 1 | github-actions = CI owns it
   # pypi = pin released package in CI | checkout = run this checkout (dogfood)
   spec_install: pypi
@@ -45,8 +45,9 @@ workspace:
 tests:
   command: null                # e.g. "pytest -q" or "npm test"; null skips the gate
 
-# Ordered named gates replace tests.command when configured. Required gates
-# block readiness; advisory gates report evidence without blocking it.
+# Ordered named gates replace tests.command when configured. Required command
+# failures block readiness; advisory command failures report evidence. A gate
+# that violates a forbidden-mutation or cancellation invariant always blocks.
 verification:
   gates: []
   # - name: tests
@@ -65,7 +66,7 @@ notifications:
   backend: desktop             # disabled | desktop | command | webhook
   events: [failure]            # failure | spec_ready | approval_stale | pr_ready
   command: null                # command backend: {argv: ["/path/to/notifier"], timeout_seconds: 5}
-  # Webhook backend reads its URL from an env var; secrets stay out of this file.
+  # Webhook backend reads its URL from an env var; authorization requires HTTPS.
   webhook: null
 
 limits:

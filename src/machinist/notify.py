@@ -20,6 +20,7 @@ from urllib import request as urllib_request
 from urllib.parse import urlsplit
 
 from .config import NotificationBackend, NotificationConfig, NotificationEvent
+from .process import credential_reduced_environment
 
 Runner = Callable[..., subprocess.CompletedProcess]
 Opener = Callable[..., object]
@@ -35,6 +36,23 @@ class NotificationStatus(str, Enum):
     DELIVERED = "delivered"
     SKIPPED = "skipped"
     FAILED = "failed"
+
+
+class _WebhookRedirectDenied(Exception):
+    """A webhook endpoint attempted to redirect the delivery."""
+
+
+class _RejectWebhookRedirects(urllib_request.HTTPRedirectHandler):
+    """Reject redirects before urllib can construct or send another request."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        close = getattr(fp, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+        raise _WebhookRedirectDenied
 
 
 @dataclass(frozen=True)
@@ -117,7 +135,7 @@ def notify_event(
     context: Mapping[str, object] | None = None,
     dedupe_key: str | None = None,
     runner: Runner = subprocess.run,
-    opener: Opener = urllib_request.urlopen,
+    opener: Opener | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> NotificationResult:
     """Route one event according to ``notifications`` configuration.
@@ -130,13 +148,18 @@ def notify_event(
     event_value = event.value if isinstance(event, NotificationEvent) else str(event)
     backend = config.backend.value
     supplied_context = dict(context or {})
-    key_material = {
-        "context": supplied_context,
-        "event": event_value,
-        "message": message,
-        "title": title,
-    }
-    key = dedupe_key or _generated_dedupe_key(key_material, event_value)
+    key_material = _notification_key_material(
+        event_value,
+        title,
+        message,
+        supplied_context,
+    )
+    key = dedupe_key or notification_dedupe_key(
+        event_value,
+        title,
+        message,
+        context=supplied_context,
+    )
 
     if config.backend is NotificationBackend.DISABLED:
         return NotificationResult(
@@ -207,7 +230,21 @@ def notify_event(
     return _delivery_result(backend, event_value, key, error)
 
 
-def _generated_dedupe_key(material: Mapping[str, object], event: str) -> str:
+def notification_dedupe_key(
+    event: NotificationEvent | str,
+    title: str,
+    message: str,
+    *,
+    context: Mapping[str, object] | None = None,
+) -> str:
+    """Return the stable identity used by process-local and durable dedupe."""
+    event_value = event.value if isinstance(event, NotificationEvent) else str(event)
+    material = _notification_key_material(
+        event_value,
+        title,
+        message,
+        dict(context or {}),
+    )
     try:
         canonical = json.dumps(
             material,
@@ -221,7 +258,7 @@ def _generated_dedupe_key(material: Mapping[str, object], event: str) -> str:
         # context value. Avoid repr(context), which may include memory addresses.
         canonical = json.dumps(
             {
-                "event": event,
+                "event": event_value,
                 "message": str(material.get("message", "")),
                 "title": str(material.get("title", "")),
             },
@@ -229,7 +266,21 @@ def _generated_dedupe_key(material: Mapping[str, object], event: str) -> str:
             sort_keys=True,
         )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
-    return f"machinist:{event}:{digest}"
+    return f"machinist:{event_value}:{digest}"
+
+
+def _notification_key_material(
+    event: str,
+    title: str,
+    message: str,
+    context: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        "context": dict(context),
+        "event": event,
+        "message": message,
+        "title": title,
+    }
 
 
 def _deliver_command(
@@ -246,6 +297,7 @@ def _deliver_command(
             text=True,
             timeout=timeout_seconds,
             shell=False,
+            env=credential_reduced_environment(),
         )
         if completed.returncode != 0:
             return _process_error("command", completed)
@@ -259,7 +311,7 @@ def _deliver_webhook(
     authorization_env: str | None,
     timeout_seconds: int,
     payload_json: str,
-    opener: Opener,
+    opener: Opener | None,
     environ: Mapping[str, str],
 ) -> str | None:
     url = environ.get(url_env)
@@ -273,6 +325,7 @@ def _deliver_webhook(
         return f"webhook URL environment variable {url_env} must contain an HTTP(S) URL"
 
     headers = {"Content-Type": "application/json"}
+    authorization = None
     if authorization_env is not None:
         authorization = environ.get(authorization_env)
         if not authorization:
@@ -280,7 +333,8 @@ def _deliver_webhook(
                 "webhook authorization environment variable "
                 f"{authorization_env} is not set"
             )
-        headers["Authorization"] = authorization
+        if parsed.scheme != "https":
+            return "webhook authorization requires an HTTPS URL"
 
     try:
         request = urllib_request.Request(
@@ -289,8 +343,19 @@ def _deliver_webhook(
             headers=headers,
             method="POST",
         )
-        response = opener(request, timeout=timeout_seconds)
+        if authorization is not None:
+            # urllib excludes unredirected headers when constructing a redirect
+            # request. The production opener also rejects every redirect.
+            request.add_unredirected_header("Authorization", authorization)
+        selected_opener = _open_webhook_without_redirects if opener is None else opener
+        response = selected_opener(request, timeout=timeout_seconds)
+    except _WebhookRedirectDenied:
+        return "webhook redirects are not allowed"
     except urllib_error.HTTPError as exc:
+        try:
+            exc.close()
+        except Exception:
+            pass
         return f"webhook returned HTTP {exc.code}"
     except Exception as exc:  # Delivery is advisory; do not expose secret URLs.
         return f"webhook request failed: {type(exc).__name__}"
@@ -317,6 +382,11 @@ def _deliver_webhook(
     if not isinstance(status, int) or not 200 <= status < 300:
         return f"webhook returned HTTP {status}"
     return None
+
+
+def _open_webhook_without_redirects(request, *, timeout: int):
+    opener = urllib_request.build_opener(_RejectWebhookRedirects())
+    return opener.open(request, timeout=timeout)
 
 
 def _delivery_result(

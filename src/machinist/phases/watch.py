@@ -6,9 +6,9 @@ failures, and deferred tasks while remaining iterable over human-readable
 events for compatibility with the original CLI.
 
 Task lifecycle state, not this process-local object, owns retry eligibility.
-Every poll may therefore reconsider an issue: a durable failed record refuses
-cheaply inside the dispatcher, while an explicit ``machinist retry`` becomes
-visible to an already-running watcher on its next pass.
+Durable active and terminal records stay out of the dispatch plan, while an
+explicit ``machinist retry`` becomes visible to an already-running watcher on
+its next pass.
 """
 
 from __future__ import annotations
@@ -87,11 +87,22 @@ def plan_watch_tasks(
     github,
     *,
     rows: Sequence[StatusRow] | None = None,
+    lifecycle=None,
 ) -> tuple[WatchTask, ...]:
-    """Return the ordered eligible work without dispatching a phase."""
+    """Return the ordered eligible work without dispatching a phase.
+
+    ``lifecycle`` is optional for compatibility with callers that only need a
+    GitHub projection.  Daemon callers should supply it so durable local
+    outcomes participate in eligibility decisions.
+    """
 
     tasks: list[WatchTask] = []
-    for row in rows if rows is not None else pipeline_status(config, github):
+    projected_rows = (
+        rows
+        if rows is not None
+        else pipeline_status(config, github, lifecycle=lifecycle)
+    )
+    for row in projected_rows:
         if row.issue_number is None:
             continue
         if row.state == "approved":
@@ -118,6 +129,7 @@ def watch_once(
     notify_stale: Callable[[int, str], None] | None = None,
     max_tasks: int | None = None,
     admit: Admission | None = None,
+    lifecycle=None,
 ) -> WatchResult:
     """Dispatch eligible work, isolating failures and recording deferrals.
 
@@ -130,7 +142,7 @@ def watch_once(
     if max_tasks is not None and max_tasks < 0:
         raise ValueError("max_tasks must be zero or greater")
 
-    rows = pipeline_status(config, github)
+    rows = pipeline_status(config, github, lifecycle=lifecycle)
     stale_now: set[int] = set()
     for row in rows:
         if row.state != "approval stale" or row.issue_number is None:
@@ -146,20 +158,21 @@ def watch_once(
     for issue_number in set(state.notified_stale_approvals) - stale_now:
         state.notified_stale_approvals.pop(issue_number, None)
 
+    events: list[str] = []
+    failures: list[WatchFailure] = []
     attempted: list[WatchTask] = []
     deferred: list[WatchTask] = []
     for task in plan_watch_tasks(config, github, rows=rows):
-        if admit is not None and not admit(task):
-            deferred.append(task)
-            continue
         if max_tasks is not None and len(attempted) >= max_tasks:
             deferred.append(task)
             continue
+        # Admission is intentionally evaluated at the dispatch boundary.  A
+        # prior task in this same pass may have consumed a durable daily task
+        # or runtime budget, requested cancellation, or changed queue control.
+        if admit is not None and not admit(task):
+            deferred.append(task)
+            continue
         attempted.append(task)
-
-    events: list[str] = []
-    failures: list[WatchFailure] = []
-    for task in attempted:
         action = run_execute if task.phase == "execute" else run_spec
         event, failure = _dispatch(
             action,

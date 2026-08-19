@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -17,6 +18,7 @@ from machinist.process import (
     ProcessCancelledError,
     ProcessOutputLimitError,
     ProcessStartError,
+    ProcessStragglerError,
     ProcessTimeoutError,
     credential_reduced_environment,
     run_supervised,
@@ -159,6 +161,103 @@ def test_runner_accepts_the_existing_shell_test_gate_call_shape(tmp_path):
     assert result.stdout == "quality gate passed\n"
 
 
+@pytest.mark.skipif(os.name != "posix", reason="process-group assertions require POSIX")
+def test_successful_process_tree_that_fully_exits_remains_compatible(tmp_path):
+    child_code = "print('child output', flush=True)"
+    parent_code = (
+        "import subprocess, sys; "
+        f"child = subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        "child.wait(); "
+        "print('leader output', flush=True)"
+    )
+
+    result = run_supervised(
+        [sys.executable, "-c", parent_code],
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "child output\nleader output\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="signal assertions require POSIX")
+def test_supervisor_restores_prior_termination_signal_handlers():
+    termination_signals = (signal.SIGTERM, signal.SIGHUP)
+    prior = {
+        current_signal: signal.getsignal(current_signal)
+        for current_signal in termination_signals
+    }
+
+    def custom_handler(_signal_number, _frame):
+        return None
+
+    try:
+        for current_signal in termination_signals:
+            signal.signal(current_signal, custom_handler)
+
+        result = run_supervised(
+            [sys.executable, "-c", "print('done')"],
+            text=True,
+            timeout=5,
+        )
+
+        assert result.returncode == 0
+        assert all(
+            signal.getsignal(current_signal) is custom_handler
+            for current_signal in termination_signals
+        )
+    finally:
+        for current_signal, prior_handler in prior.items():
+            signal.signal(current_signal, prior_handler)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group assertions require POSIX")
+def test_successful_leader_with_background_child_fails_closed_and_cleans_group(
+    tmp_path,
+):
+    child_pid = tmp_path / "background-child.pid"
+    late_mutation = tmp_path / "late-mutation"
+    stdout_log = tmp_path / "stdout.log"
+    stderr_log = tmp_path / "stderr.log"
+    child_code = (
+        "import os, signal, time; from pathlib import Path; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        f"Path({str(child_pid)!r}).write_text(str(os.getpid())); "
+        "time.sleep(0.3); "
+        f"Path({str(late_mutation)!r}).write_text('escaped')"
+    )
+    leader_code = (
+        "import subprocess, sys, time; from pathlib import Path; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        f"pid_path = Path({str(child_pid)!r}); "
+        "deadline = time.monotonic() + 2; "
+        "\nwhile not pid_path.exists() and time.monotonic() < deadline: time.sleep(0.01)\n"
+        "print('leader output', flush=True); "
+        "print('leader warning', file=sys.stderr, flush=True)"
+    )
+
+    with pytest.raises(ProcessStragglerError) as caught:
+        run_supervised(
+            [sys.executable, "-c", leader_code],
+            text=True,
+            timeout=5,
+            termination_grace_seconds=0.02,
+            stdout_log=stdout_log,
+            stderr_log=stderr_log,
+        )
+
+    error = caught.value
+    assert error.leader_returncode == 0
+    assert error.stdout == "leader output\n"
+    assert error.stderr == "leader warning\n"
+    assert stdout_log.read_text() == error.stdout
+    assert stderr_log.read_text() == error.stderr
+    _assert_tree_stopped((child_pid,))
+    time.sleep(0.35)
+    assert not late_mutation.exists()
+
+
 def test_output_limit_fails_loudly_and_keeps_log(tmp_path):
     stdout_log = tmp_path / "oversized.log"
 
@@ -206,6 +305,97 @@ def test_cancellation_terminates_parent_child_and_grandchild(tmp_path):
     _assert_tree_stopped(pid_paths)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="process-group assertions require POSIX")
+def test_cooperative_child_cancellation_is_typed_under_repeated_reaping_races():
+    command = [sys.executable, "-c", "import time; time.sleep(60)"]
+
+    for _ in range(10):
+        with pytest.raises(ProcessCancelledError):
+            run_supervised(
+                command,
+                text=True,
+                timeout=5,
+                cancel_check=lambda: True,
+                termination_grace_seconds=0.02,
+                poll_interval=0.001,
+            )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group assertions require POSIX")
+def test_cooperative_child_timeout_is_typed_under_repeated_reaping_races():
+    command = [sys.executable, "-c", "import time; time.sleep(60)"]
+
+    for _ in range(10):
+        with pytest.raises(ProcessTimeoutError):
+            run_supervised(
+                command,
+                text=True,
+                timeout=0,
+                termination_grace_seconds=0.02,
+                poll_interval=0.001,
+            )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group assertions require POSIX")
+@pytest.mark.parametrize(
+    ("payload", "max_output_bytes"),
+    ((b"\xff", 1024), (b"xx", 1)),
+)
+def test_cancellation_evidence_errors_cannot_mask_operator_intent(
+    tmp_path,
+    payload,
+    max_output_bytes,
+):
+    ready = tmp_path / "ready"
+    code = (
+        "import os, time; from pathlib import Path; "
+        f"Path({str(ready)!r}).write_text('ready'); "
+        f"os.write(1, {payload!r}); "
+        "time.sleep(60)"
+    )
+
+    with pytest.raises(ProcessCancelledError) as caught:
+        run_supervised(
+            [sys.executable, "-c", code],
+            text=True,
+            encoding="utf-8",
+            timeout=5,
+            cancel_check=lambda: ready.exists(),
+            max_output_bytes=max_output_bytes,
+            termination_grace_seconds=0.02,
+            poll_interval=0.01,
+        )
+
+    assert caught.value.stdout is None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group assertions require POSIX")
+@pytest.mark.parametrize(
+    ("payload", "max_output_bytes"),
+    ((b"\xff", 1024), (b"xx", 1)),
+)
+def test_timeout_evidence_errors_cannot_mask_deadline(
+    payload,
+    max_output_bytes,
+):
+    code = (
+        f"import os, time; time.sleep(0.02); os.write(1, {payload!r}); time.sleep(60)"
+    )
+
+    with pytest.raises(ProcessTimeoutError) as caught:
+        run_supervised(
+            [sys.executable, "-c", code],
+            text=True,
+            encoding="utf-8",
+            timeout=0.05,
+            max_output_bytes=max_output_bytes,
+            termination_grace_seconds=0.02,
+            poll_interval=0.1,
+        )
+
+    assert caught.value.output is None
+
+
 def test_start_failure_has_stable_typed_error(tmp_path):
     with pytest.raises(ProcessStartError, match="could not start process") as caught:
         run_supervised(
@@ -215,6 +405,132 @@ def test_start_failure_has_stable_typed_error(tmp_path):
         )
 
     assert isinstance(caught.value.cause, FileNotFoundError)
+
+
+def test_invalid_programmatic_command_has_stable_typed_start_error():
+    with pytest.raises(ProcessStartError, match="could not start process") as caught:
+        run_supervised(["invalid\x00command"], timeout=1, text=True)
+
+    assert isinstance(caught.value.cause, ValueError)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="signal assertions require POSIX")
+@pytest.mark.parametrize(
+    ("termination_signal", "expected_exit"),
+    (
+        (signal.SIGTERM, 128 + signal.SIGTERM),
+        (signal.SIGHUP, 128 + signal.SIGHUP),
+    ),
+)
+def test_controller_signal_cleans_process_tree_and_finishes_lifecycle(
+    tmp_path,
+    termination_signal,
+    expected_exit,
+):
+    runs_dir = tmp_path / "runs"
+    leader_pid = tmp_path / "leader.pid"
+    descendant_pid = tmp_path / "descendant.pid"
+    stdout_log = tmp_path / "signal.stdout.log"
+    stderr_log = tmp_path / "signal.stderr.log"
+    descendant_code = (
+        "import os, signal, time; from pathlib import Path; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "signal.signal(signal.SIGHUP, signal.SIG_IGN); "
+        f"Path({str(descendant_pid)!r}).write_text(str(os.getpid())); "
+        "time.sleep(60)"
+    )
+    leader_code = (
+        "import os, signal, subprocess, sys, time; from pathlib import Path; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "signal.signal(signal.SIGHUP, signal.SIG_IGN); "
+        f"Path({str(leader_pid)!r}).write_text(str(os.getpid())); "
+        "os.write(1, b'\\xff'); "
+        f"subprocess.Popen([sys.executable, '-c', {descendant_code!r}]); "
+        f"descendant = Path({str(descendant_pid)!r}); "
+        "deadline = time.monotonic() + 2; "
+        "\nwhile not descendant.exists() and time.monotonic() < deadline: time.sleep(0.01)\n"
+        "time.sleep(60)"
+    )
+    worker_code = (
+        "import sys; from pathlib import Path; "
+        "from machinist.lifecycle import Phase, TaskLifecycle; "
+        "from machinist.process import run_supervised; "
+        f"lifecycle = TaskLifecycle(Path({str(runs_dir)!r})); "
+        "lifecycle.run(42, Phase.EXECUTE, lambda _claim: run_supervised("
+        f"[sys.executable, '-c', {leader_code!r}], "
+        f"stdout_log={str(stdout_log)!r}, stderr_log={str(stderr_log)!r}, "
+        "timeout=30, text=True, encoding='utf-8', termination_grace_seconds=0.05))"
+    )
+    worker = subprocess.Popen(
+        [sys.executable, "-c", worker_code],
+        cwd=Path(__file__).parents[1],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        projection = runs_dir / "issue-42-execute.json"
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not (
+            projection.exists() and leader_pid.exists() and descendant_pid.exists()
+        ):
+            if worker.poll() is not None:
+                break
+            time.sleep(0.02)
+        assert projection.exists() and leader_pid.exists() and descendant_pid.exists()
+
+        worker.send_signal(termination_signal)
+        stdout, stderr = worker.communicate(timeout=5)
+
+        assert worker.returncode == expected_exit
+        assert stdout == ""
+        assert "Traceback" not in stderr
+        assert stdout_log.read_bytes() == b"\xff"
+        assert stderr_log.read_bytes() == b""
+        _assert_tree_stopped((leader_pid, descendant_pid))
+        payload = json.loads(projection.read_text())
+        assert payload["status"] == "cancelled"
+        assert payload["ended_at"] is not None
+        assert payload["error"] in {
+            "process interrupted by SIGTERM",
+            "process interrupted by SIGHUP",
+        }
+        events = [
+            json.loads(line)
+            for line in (
+                runs_dir / "history" / "issue-42-execute" / "attempt-000001.jsonl"
+            )
+            .read_text()
+            .splitlines()
+        ]
+        assert events[-1]["event"] == "cancelled"
+    finally:
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait(timeout=3)
+        if leader_pid.exists():
+            try:
+                os.killpg(int(leader_pid.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+def test_supervisor_refuses_symlinked_output_log_without_clobbering_target(tmp_path):
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep\n")
+    stdout_log = tmp_path / "stdout.log"
+    stdout_log.symlink_to(victim)
+
+    with pytest.raises(ProcessStartError, match="symlink or non-regular"):
+        run_supervised(
+            [sys.executable, "-c", "print('CLOBBER')"],
+            capture_output=True,
+            text=True,
+            stdout_log=stdout_log,
+        )
+
+    assert victim.read_text() == "keep\n"
 
 
 def _ignoring_process_tree(directory: Path) -> tuple[list[str], tuple[Path, ...]]:

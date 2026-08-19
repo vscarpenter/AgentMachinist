@@ -26,6 +26,8 @@ from machinist.config import (
     MachinistConfig,
     config_json_schema,
     load_config,
+    read_config_text,
+    strict_yaml_load,
 )
 
 
@@ -213,11 +215,11 @@ def set_value(
         raise ConfigError("config key must be a dotted public field name")
     target = Path(path)
     try:
-        raw = yaml.safe_load(target.read_text())
-        value = yaml.safe_load(value_text)
+        raw = strict_yaml_load(read_config_text(target))
+        value = strict_yaml_load(value_text)
     except FileNotFoundError as exc:
         raise ConfigError(f"{target} not found. Run 'machinist init' first.") from exc
-    except (OSError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
         raise ConfigError(f"cannot update {target}: {exc}") from exc
     if raw is None:
         raw = {}

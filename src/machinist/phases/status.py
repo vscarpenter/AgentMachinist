@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from machinist.config import MachinistConfig
+from machinist.github import normalize_repository_identity
 from machinist.lifecycle import Phase, RunStatus
 
 PIPELINE_STATES = (
@@ -32,7 +33,19 @@ def pipeline_status(
 ) -> list[StatusRow]:
     prefix = config.workspace.branch_prefix
     issues = github.issues_with_label(config.github.labels.trigger)
-    prs = github.open_machinist_prs(prefix)
+    expected_repository = normalize_repository_identity(
+        getattr(github, "repo", None)
+    ) or normalize_repository_identity(config.github.repo)
+    prs = [
+        pr
+        for pr in github.open_machinist_prs(prefix)
+        if not pr.is_cross_repository
+        and (
+            expected_repository is None
+            or pr.head_repository is None
+            or normalize_repository_identity(pr.head_repository) == expected_repository
+        )
+    ]
 
     covered = {
         number
@@ -51,8 +64,14 @@ def pipeline_status(
                 # A manually closed Spec PR must not become an apparently new
                 # Task that watch will repeatedly try (and fail) to recreate.
                 state = "spec closed"
-            elif spec_record is not None and spec_record.status is RunStatus.ABANDONED:
-                state = "spec abandoned"
+            elif (
+                spec_record is not None
+                and spec_record.status is not RunStatus.RETRYABLE
+            ):
+                # Durable in-flight and terminal outcomes require an explicit
+                # operator transition. RETRYABLE deliberately projects back
+                # to the remote eligible state so a live watcher can resume it.
+                state = f"spec {spec_record.status.value}"
         issue_rows.append(
             StatusRow(
                 kind="issue",
@@ -86,7 +105,6 @@ def pipeline_status(
             if record is not None and record.status in {
                 RunStatus.RUNNING,
                 RunStatus.FAILED,
-                RunStatus.RETRYABLE,
                 RunStatus.CANCELLED,
                 RunStatus.ABANDONED,
             }:

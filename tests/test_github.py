@@ -13,10 +13,12 @@ class FakeRunner:
 
     def __init__(self, *results):
         self.calls = []
+        self.kwargs = []
         self._results = list(results)
 
     def __call__(self, args, **kwargs):
         self.calls.append(list(args))
+        self.kwargs.append(dict(kwargs))
         if not self._results:
             raise AssertionError(f"unexpected gh call: {args}")
         result = self._results.pop(0)
@@ -35,6 +37,7 @@ ISSUE_JSON = json.dumps(
         "labels": [{"name": "agent-task"}, {"name": "enhancement"}],
     }
 )
+_MISSING = object()
 
 
 def test_get_issue_builds_argv_and_parses_json():
@@ -71,6 +74,47 @@ def test_repo_flag_omitted_when_unset():
     client.get_issue(42)
 
     assert "--repo" not in runner.calls[0]
+
+
+def test_bound_github_dotcom_target_ignores_ambient_repo_and_host(monkeypatch):
+    monkeypatch.setenv("GH_REPO", "attacker/other")
+    monkeypatch.setenv("GH_HOST", "ghe.attacker.test")
+    monkeypatch.setenv("GH_TOKEN", "dotcom-token")
+    monkeypatch.setenv("GH_ENTERPRISE_TOKEN", "enterprise-token")
+    runner = FakeRunner((ISSUE_JSON, 0, ""))
+    client = GitHubClient(runner=runner)
+    client.bind_repository("VSCarpenter/Demo", hostname="GitHub.com")
+
+    client.get_issue(42)
+
+    assert runner.calls[0][-2:] == ["--repo", "vscarpenter/demo"]
+    environment = runner.kwargs[0]["env"]
+    assert "GH_REPO" not in environment
+    assert "GH_HOST" not in environment
+    assert environment["GH_TOKEN"] == "dotcom-token"
+    assert "GH_ENTERPRISE_TOKEN" not in environment
+
+
+def test_bound_enterprise_target_does_not_receive_dotcom_token(monkeypatch):
+    monkeypatch.setenv("GH_REPO", "attacker/other")
+    monkeypatch.setenv("GH_HOST", "ghe.example.test:8443")
+    monkeypatch.setenv("GH_TOKEN", "dotcom-token")
+    monkeypatch.setenv("GH_ENTERPRISE_TOKEN", "enterprise-token")
+    runner = FakeRunner((ISSUE_JSON, 0, ""))
+    client = GitHubClient(runner=runner)
+    client.bind_repository("VSCarpenter/Demo", hostname="ghe.example.test:8443")
+
+    client.get_issue(42)
+
+    assert runner.calls[0][-2:] == [
+        "--repo",
+        "ghe.example.test:8443/vscarpenter/demo",
+    ]
+    environment = runner.kwargs[0]["env"]
+    assert "GH_REPO" not in environment
+    assert "GH_HOST" not in environment
+    assert "GH_TOKEN" not in environment
+    assert environment["GH_ENTERPRISE_TOKEN"] == "enterprise-token"
 
 
 def test_create_draft_pr_returns_number_and_url():
@@ -177,6 +221,9 @@ def test_open_machinist_prs_filters_by_branch_prefix():
                 "isDraft": True,
                 "state": "OPEN",
                 "labels": [{"name": "machinist:approved"}],
+                "isCrossRepository": False,
+                "headRepository": {"nameWithOwner": "VSCarpenter/Demo"},
+                "baseRefName": "main",
             },
             {
                 "number": 58,
@@ -187,6 +234,9 @@ def test_open_machinist_prs_filters_by_branch_prefix():
                 "isDraft": False,
                 "state": "OPEN",
                 "labels": [],
+                "isCrossRepository": False,
+                "headRepository": {"nameWithOwner": "VSCarpenter/Demo"},
+                "baseRefName": "main",
             },
         ]
     )
@@ -205,7 +255,8 @@ def test_open_machinist_prs_filters_by_branch_prefix():
             "--limit",
             "1000",
             "--json",
-            "number,title,url,headRefName,headRefOid,isDraft,state,labels",
+            "number,title,url,headRefName,headRefOid,isDraft,state,labels,"
+            "isCrossRepository,headRepository,baseRefName",
             "--repo",
             "vscarpenter/demo",
         ]
@@ -220,8 +271,51 @@ def test_open_machinist_prs_filters_by_branch_prefix():
             is_draft=True,
             state="OPEN",
             labels=["machinist:approved"],
+            is_cross_repository=False,
+            head_repository="vscarpenter/demo",
+            base="main",
         )
     ]
+
+
+def test_open_machinist_prs_ignores_fork_branch_collision():
+    payload = json.dumps(
+        [
+            {
+                "number": 57,
+                "title": "Fork collision",
+                "url": "https://github.com/vscarpenter/demo/pull/57",
+                "headRefName": "agent/issue-42",
+                "headRefOid": "a" * 40,
+                "isDraft": True,
+                "state": "OPEN",
+                "labels": [{"name": "machinist:approved"}],
+                "isCrossRepository": True,
+                "headRepository": {"nameWithOwner": "attacker/demo"},
+                "baseRefName": "main",
+            },
+            {
+                "number": 59,
+                "title": "Same-repository task",
+                "url": "https://github.com/vscarpenter/demo/pull/59",
+                "headRefName": "agent/issue-42",
+                "headRefOid": "b" * 40,
+                "isDraft": True,
+                "state": "OPEN",
+                "labels": [],
+                "isCrossRepository": False,
+                "headRepository": {"nameWithOwner": "VSCarpenter/Demo"},
+                "baseRefName": "main",
+            },
+        ]
+    )
+    client = GitHubClient(repo="vscarpenter/demo", runner=FakeRunner((payload, 0, "")))
+
+    prs = client.open_machinist_prs("agent/")
+
+    assert [pr.number for pr in prs] == [59]
+    assert prs[0].is_cross_repository is False
+    assert prs[0].head_repository == "vscarpenter/demo"
 
 
 def test_pr_for_branch_searches_all_states_and_returns_exact_closed_match():
@@ -236,6 +330,9 @@ def test_pr_for_branch_searches_all_states_and_returns_exact_closed_match():
                 "isDraft": False,
                 "state": "CLOSED",
                 "labels": [],
+                "isCrossRepository": False,
+                "headRepository": {"nameWithOwner": "VSCarpenter/Demo"},
+                "baseRefName": "main",
             }
         ]
     )
@@ -256,7 +353,8 @@ def test_pr_for_branch_searches_all_states_and_returns_exact_closed_match():
             "--limit",
             "1000",
             "--json",
-            "number,title,url,headRefName,headRefOid,isDraft,state,labels",
+            "number,title,url,headRefName,headRefOid,isDraft,state,labels,"
+            "isCrossRepository,headRepository,baseRefName",
             "--repo",
             "vscarpenter/demo",
         ]
@@ -278,12 +376,101 @@ def test_pr_for_branch_returns_none_when_exact_branch_is_absent():
                 "isDraft": True,
                 "state": "OPEN",
                 "labels": [],
+                "isCrossRepository": False,
+                "headRepository": {"nameWithOwner": "VSCarpenter/Demo"},
+                "baseRefName": "main",
             }
         ]
     )
     client = GitHubClient(runner=FakeRunner((payload, 0, "")))
 
     assert client.pr_for_branch("agent/issue-42") is None
+
+
+def test_pr_for_branch_ignores_exact_named_fork_pr():
+    payload = json.dumps(
+        [
+            {
+                "number": 99,
+                "title": "Fork collision",
+                "url": "https://github.com/vscarpenter/demo/pull/99",
+                "headRefName": "agent/issue-42",
+                "headRefOid": "a" * 40,
+                "isDraft": True,
+                "state": "OPEN",
+                "labels": [{"name": "machinist:approved"}],
+                "isCrossRepository": True,
+                "headRepository": {"nameWithOwner": "attacker/demo"},
+                "baseRefName": "main",
+            }
+        ]
+    )
+    client = GitHubClient(repo="vscarpenter/demo", runner=FakeRunner((payload, 0, "")))
+
+    assert client.pr_for_branch("agent/issue-42") is None
+
+
+def test_pr_for_branch_ignores_mismatched_head_repository_even_if_flag_is_false():
+    payload = json.dumps(
+        [
+            {
+                "number": 99,
+                "title": "Inconsistent repository identity",
+                "url": "https://github.com/vscarpenter/demo/pull/99",
+                "headRefName": "agent/issue-42",
+                "headRefOid": "a" * 40,
+                "isDraft": True,
+                "state": "OPEN",
+                "labels": [],
+                "isCrossRepository": False,
+                "headRepository": {"nameWithOwner": "attacker/demo"},
+                "baseRefName": "main",
+            }
+        ]
+    )
+    client = GitHubClient(repo="vscarpenter/demo", runner=FakeRunner((payload, 0, "")))
+
+    assert client.pr_for_branch("agent/issue-42") is None
+
+
+@pytest.mark.parametrize(
+    ("field", "malformed"),
+    [
+        ("isCrossRepository", _MISSING),
+        ("isCrossRepository", None),
+        ("isCrossRepository", "false"),
+        ("headRepository", _MISSING),
+        ("headRepository", None),
+        ("headRepository", {"name": "demo"}),
+        ("baseRefName", _MISSING),
+        ("baseRefName", ""),
+    ],
+)
+def test_pr_metadata_fails_closed_when_custody_fields_are_malformed(field, malformed):
+    item = {
+        "number": 57,
+        "title": "Spec: Add dark mode (#42)",
+        "url": "https://github.com/vscarpenter/demo/pull/57",
+        "headRefName": "agent/issue-42",
+        "headRefOid": "a" * 40,
+        "isDraft": True,
+        "state": "OPEN",
+        "labels": [],
+        "isCrossRepository": False,
+        "headRepository": {"nameWithOwner": "VSCarpenter/Demo"},
+        "baseRefName": "main",
+    }
+    if malformed is _MISSING:
+        item.pop(field)
+    else:
+        item[field] = malformed
+    client = GitHubClient(
+        repo="vscarpenter/demo",
+        runner=FakeRunner((json.dumps([item]), 0, "")),
+    )
+
+    with pytest.raises(GitHubError, match=field):
+        client.open_machinist_prs("agent/")
 
 
 def test_reopen_update_close_and_remove_pr_label_build_safe_argv():
@@ -438,10 +625,9 @@ def test_default_branch_reads_repo_view():
             "gh",
             "repo",
             "view",
+            "vscarpenter/demo",
             "--json",
             "defaultBranchRef",
-            "--repo",
-            "vscarpenter/demo",
         ]
     ]
 

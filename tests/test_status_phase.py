@@ -15,7 +15,17 @@ def issue(number, title="An issue"):
     )
 
 
-def pr(number, branch, *, draft=True, labels=(), title="Spec PR", head_sha=None):
+def pr(
+    number,
+    branch,
+    *,
+    draft=True,
+    labels=(),
+    title="Spec PR",
+    head_sha=None,
+    cross_repository=False,
+    head_repository=None,
+):
     return PullRequest(
         number=number,
         title=title,
@@ -24,6 +34,8 @@ def pr(number, branch, *, draft=True, labels=(), title="Spec PR", head_sha=None)
         head_sha=head_sha or ("a" * 40),
         is_draft=draft,
         labels=list(labels),
+        is_cross_repository=cross_repository,
+        head_repository=head_repository,
     )
 
 
@@ -75,6 +87,33 @@ def test_issue_covered_by_spec_pr_is_not_double_listed():
     rows = pipeline_status(MachinistConfig(), github)
 
     assert [r.kind for r in rows] == ["pr"]
+
+
+def test_fork_pr_branch_collision_does_not_hide_same_named_issue():
+    github = FakeGitHub(
+        issues=[issue(42)],
+        prs=[pr(99, "agent/issue-42", cross_repository=True)],
+    )
+
+    rows = pipeline_status(MachinistConfig(), github)
+
+    assert [(row.kind, row.number, row.state) for row in rows] == [
+        ("issue", 42, "awaiting spec")
+    ]
+
+
+def test_mismatched_head_repository_collision_does_not_hide_issue():
+    github = FakeGitHub(
+        issues=[issue(42)],
+        prs=[pr(99, "agent/issue-42", head_repository="attacker/y")],
+    )
+    github.repo = "x/y"
+
+    rows = pipeline_status(MachinistConfig(), github)
+
+    assert [(row.kind, row.number, row.state) for row in rows] == [
+        ("issue", 42, "awaiting spec")
+    ]
 
 
 def test_draft_pr_without_label_awaits_approval():
@@ -211,3 +250,44 @@ def test_closed_successful_spec_is_not_requeued_as_awaiting_spec(tmp_path):
     row = pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0]
 
     assert row.state == "spec closed"
+
+
+def test_failed_spec_requires_explicit_retry_before_becoming_eligible(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    try:
+        lifecycle.run(
+            42,
+            Phase.SPEC,
+            lambda claim: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+    except RuntimeError:
+        pass
+    github = FakeGitHub(issues=[issue(42)])
+
+    failed = pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0]
+    lifecycle.retry(42, Phase.SPEC)
+    retryable = pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0]
+
+    assert failed.state == "spec failed"
+    assert retryable.state == "awaiting spec"
+
+
+def test_retryable_execute_projects_back_to_remote_approval(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    try:
+        lifecycle.run(
+            42,
+            Phase.EXECUTE,
+            lambda claim: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+    except RuntimeError:
+        pass
+    lifecycle.retry(42, Phase.EXECUTE)
+    github = FakeGitHub(
+        prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])],
+        approvals={57: "a" * 40},
+    )
+
+    row = pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0]
+
+    assert row.state == "approved"

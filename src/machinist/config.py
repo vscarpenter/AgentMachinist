@@ -18,8 +18,14 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from yaml.constructor import ConstructorError
+from yaml.nodes import MappingNode
+
+from machinist.github import normalize_repository_identity
+from machinist.runtime_paths import RuntimePathError, read_text_file
 
 CONFIG_FILENAME = "machinist.yaml"
+MAX_CONFIG_BYTES = 1024 * 1024
 MAX_INSTRUCTION_FILES_PER_PHASE = 16
 MAX_INSTRUCTION_PATH_BYTES = 1024
 MAX_PHASE_INSTRUCTION_BYTES = 100_000
@@ -27,6 +33,48 @@ MAX_PHASE_INSTRUCTION_BYTES = 100_000
 
 class ConfigError(Exception):
     """A machinist.yaml problem the user must fix."""
+
+
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that refuses silent mapping-key replacement."""
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeySafeLoader, node: MappingNode, deep: bool = False
+) -> dict[Any, Any]:
+    loader.flatten_mapping(node)
+    result: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in result
+        except TypeError as exc:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "found an unhashable mapping key",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        result[key] = loader.construct_object(value_node, deep=deep)
+    return result
+
+
+_UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
+def strict_yaml_load(text: str) -> Any:
+    """Load untrusted YAML safely while rejecting duplicate mapping keys."""
+    return yaml.load(text, Loader=_UniqueKeySafeLoader)
 
 
 class InstructionResolutionError(ConfigError):
@@ -234,6 +282,11 @@ class HarnessPhaseConfig(StrictModel):
     extra_args: list[str] | None = None
     timeout_minutes: int | None = Field(default=None, ge=1, le=240)
 
+    @field_validator("command", "model")
+    @classmethod
+    def _optional_text_is_argv_safe(cls, value: str | None) -> str | None:
+        return _validate_optional_harness_text(value)
+
 
 class HarnessConfig(StrictModel):
     # These fields remain the compatibility surface consumed by 0.3.x callers.
@@ -245,6 +298,11 @@ class HarnessConfig(StrictModel):
     spec_timeout_minutes: int = Field(default=10, ge=1, le=60)
     spec: HarnessPhaseConfig | None = None
     execute: HarnessPhaseConfig | None = None
+
+    @field_validator("command", "model")
+    @classmethod
+    def _optional_text_is_argv_safe(cls, value: str | None) -> str | None:
+        return _validate_optional_harness_text(value)
 
     @model_validator(mode="after")
     def _extra_args_preserve_adapter_controls(self) -> "HarnessConfig":
@@ -327,6 +385,12 @@ class HarnessConfig(StrictModel):
             spec=None,
             execute=None,
         )
+
+
+def _validate_optional_harness_text(value: str | None) -> str | None:
+    if value is not None and (not value.strip() or "\x00" in value):
+        raise ValueError("must be non-empty and contain no NUL bytes")
+    return value
 
 
 def _normalize_instruction_path(value: str) -> str:
@@ -548,7 +612,8 @@ class GitHubConfig(StrictModel):
     @field_validator("repo")
     @classmethod
     def _repo_shape(cls, value: str | None) -> str | None:
-        if value is not None and value.count("/") != 1:
+        normalized = normalize_repository_identity(value)
+        if value is not None and (normalized is None or normalized != value.casefold()):
             raise ValueError("must look like 'owner/repo'")
         return value
 
@@ -935,13 +1000,30 @@ def load_config(path: str | Path = CONFIG_FILENAME) -> MachinistConfig:
     if not path.exists():
         raise ConfigError(f"{path} not found. Run 'machinist init' first.")
     try:
-        data = yaml.safe_load(path.read_text())
+        text = read_config_text(path)
+    except UnicodeError as exc:
+        raise ConfigError(f"{path} is not valid UTF-8 text") from exc
+    except OSError as exc:
+        raise ConfigError(f"cannot read {path}: {exc}") from exc
+    try:
+        data = strict_yaml_load(text)
     except yaml.YAMLError as exc:
         raise ConfigError(f"{path} is not valid YAML: {exc}") from exc
     try:
         return MachinistConfig.model_validate(data or {})
     except ValidationError as exc:
         raise ConfigError(f"{path} is invalid:\n{_format_errors(exc)}") from exc
+
+
+def read_config_text(path: str | Path) -> str:
+    """Read one bounded regular UTF-8 config file without following its leaf."""
+    target = Path(path)
+    try:
+        return read_text_file(target, max_bytes=MAX_CONFIG_BYTES)
+    except UnicodeError as exc:
+        raise ConfigError(f"{target} is not valid UTF-8 text") from exc
+    except RuntimePathError as exc:
+        raise ConfigError(f"cannot safely read {target}: {exc}") from exc
 
 
 def _format_errors(exc: ValidationError) -> str:

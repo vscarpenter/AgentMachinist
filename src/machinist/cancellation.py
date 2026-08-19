@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from machinist.runtime_paths import (
+    RuntimeDirectory,
+    RuntimePathError,
+    atomic_write_text_file,
+    read_text_file,
+    regular_file_exists,
+    unlink_regular_file,
+)
+
+_MAX_MARKER_BYTES = 64 * 1024
 
 
 class CancellationError(Exception):
@@ -29,8 +39,17 @@ class CancellationRequest:
 
 
 class CancellationStore:
-    def __init__(self, runs_dir: Path):
-        self.root = Path(runs_dir) / "cancellations"
+    def __init__(
+        self,
+        runs_dir: Path,
+        *,
+        repo_root: str | Path | None = None,
+    ):
+        try:
+            self._runtime = RuntimeDirectory.bind(runs_dir, repo_root=repo_root)
+            self.root = self._runtime.subdirectory("cancellations", create=False)
+        except RuntimePathError as exc:
+            raise CancellationError(f"unsafe cancellation state path: {exc}") from exc
 
     def request(self, issue: int, reason: str) -> CancellationRequest:
         _validate_issue(issue)
@@ -43,36 +62,36 @@ class CancellationStore:
             requested_at=datetime.now(UTC).isoformat(),
             requester_pid=os.getpid(),
         )
-        self.root.mkdir(parents=True, exist_ok=True)
+        self._ensure_root(create=True)
         target = self._path(issue)
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=f".{target.name}.", suffix=".tmp", dir=self.root, text=True
-        )
         try:
-            with os.fdopen(descriptor, "w") as stream:
-                json.dump(asdict(request), stream, sort_keys=True)
-                stream.write("\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, target)
-        except OSError as exc:
+            atomic_write_text_file(
+                target,
+                json.dumps(asdict(request), sort_keys=True) + "\n",
+            )
+        except (OSError, RuntimePathError) as exc:
             raise CancellationError(f"could not request cancellation: {exc}") from exc
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
         return request
 
     def get(self, issue: int) -> CancellationRequest | None:
         _validate_issue(issue)
+        self._ensure_root(create=False)
         path = self._path(issue)
-        if not path.exists():
-            return None
         try:
-            payload = json.loads(path.read_text())
+            if not regular_file_exists(path):
+                return None
+            payload = json.loads(read_text_file(path, max_bytes=_MAX_MARKER_BYTES))
             request = CancellationRequest(**payload)
-        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        except (
+            OSError,
+            RuntimePathError,
+            UnicodeError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             raise CancellationError(
-                f"cancellation marker {path} is corrupt; refusing to ignore it"
+                f"cancellation marker {path} is corrupt; refusing to ignore it: {exc}"
             ) from exc
         if request.issue != issue or not request.reason.strip():
             raise CancellationError(
@@ -85,13 +104,11 @@ class CancellationStore:
 
     def clear(self, issue: int) -> bool:
         _validate_issue(issue)
+        self._ensure_root(create=False)
         try:
-            self._path(issue).unlink()
-        except FileNotFoundError:
-            return False
-        except OSError as exc:
+            return unlink_regular_file(self._path(issue), missing_ok=True)
+        except (OSError, RuntimePathError) as exc:
             raise CancellationError(f"could not clear cancellation: {exc}") from exc
-        return True
 
     def check(self, issue: int):
         """Return a zero-argument callback accepted by supervised processes."""
@@ -99,6 +116,12 @@ class CancellationStore:
 
     def _path(self, issue: int) -> Path:
         return self.root / f"issue-{issue}.json"
+
+    def _ensure_root(self, *, create: bool) -> Path:
+        try:
+            return self._runtime.subdirectory("cancellations", create=create)
+        except RuntimePathError as exc:
+            raise CancellationError(f"unsafe cancellation state path: {exc}") from exc
 
 
 def _validate_issue(issue: int) -> None:

@@ -19,6 +19,7 @@ from machinist.process import (
     ProcessCancelledError,
     ProcessOutputLimitError,
     ProcessStartError,
+    ProcessStragglerError,
     ProcessTimeoutError,
 )
 from machinist.verification import (
@@ -154,6 +155,59 @@ def test_mutation_forbidden_gate_fails_when_snapshot_changes(tmp_path):
     assert "mutation-forbidden" in result.error
 
 
+def test_advisory_gate_cannot_downgrade_forbidden_mutation(tmp_path):
+    snapshots = iter(("before", "after"))
+    gate = _gate("advisory audit", "audit", required=False)
+
+    with pytest.raises(VerificationFailed) as caught:
+        run_verification_gates(
+            tmp_path,
+            (gate,),
+            log_dir=tmp_path / "logs",
+            snapshotter=lambda _path: next(snapshots),
+            runner=lambda command, **_kwargs: subprocess.CompletedProcess(
+                command, 0, "audit passed", ""
+            ),
+        )
+
+    report = caught.value.report
+    result = report.gates[0]
+    assert result.required is False
+    assert result.status is GateStatus.MUTATION_DETECTED
+    assert result.blocking is True
+    assert report.success is False
+    assert [gate.name for gate in report.failures] == ["advisory audit"]
+    assert report.as_dict()["blocking_failures"] == ["advisory audit"]
+
+
+def test_advisory_forbidden_gate_fails_closed_when_snapshot_is_unavailable(tmp_path):
+    calls = 0
+
+    def snapshot(_path):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("post-gate snapshot unavailable")
+        return "before"
+
+    gate = _gate("advisory audit", "audit", required=False)
+    with pytest.raises(VerificationFailed) as caught:
+        run_verification_gates(
+            tmp_path,
+            (gate,),
+            log_dir=tmp_path / "logs",
+            snapshotter=snapshot,
+            runner=lambda command, **_kwargs: subprocess.CompletedProcess(
+                command, 0, "audit passed", ""
+            ),
+        )
+
+    result = caught.value.report.gates[0]
+    assert result.status is GateStatus.SNAPSHOT_ERROR
+    assert result.blocking is True
+    assert caught.value.report.success is False
+
+
 def test_mutation_allowed_gate_does_not_require_or_call_snapshotter(tmp_path):
     changed = tmp_path / "generated.txt"
     code = f"from pathlib import Path; Path({str(changed)!r}).write_text('ok')"
@@ -261,6 +315,45 @@ def test_cancellation_is_blocking_and_skips_later_commands(tmp_path):
     assert caught.value.report.gates[0].blocking is True
 
 
+def test_advisory_straggler_is_blocking_and_retains_typed_evidence(tmp_path):
+    calls = []
+
+    def runner(command, **_kwargs):
+        calls.append(command)
+        if command == "leaky-check":
+            raise ProcessStragglerError(
+                command,
+                0,
+                stdout="leader completed",
+                stderr="background helper remained",
+            )
+        return subprocess.CompletedProcess(command, 0, "safe", "")
+
+    gates = (
+        _gate("advisory", "leaky-check", required=False),
+        _gate("later", "safe-check", mutation="allow"),
+    )
+
+    with pytest.raises(VerificationFailed) as caught:
+        run_verification_gates(
+            tmp_path,
+            gates,
+            log_dir=tmp_path / "logs",
+            snapshotter=lambda _path: "same",
+            runner=runner,
+        )
+
+    assert calls == ["leaky-check", "safe-check"]
+    result = caught.value.report.gates[0]
+    assert result.status is GateStatus.STRAGGLER
+    assert result.returncode == 0
+    assert result.stdout_excerpt == "leader completed"
+    assert result.stderr_excerpt == "background helper remained"
+    assert result.blocking is True
+    assert caught.value.report.gates[1].status is GateStatus.PASSED
+    assert caught.value.report.success is False
+
+
 def test_snapshot_failure_becomes_typed_gate_evidence_without_running_command(tmp_path):
     calls = []
 
@@ -300,6 +393,26 @@ def test_accepts_legacy_gate_through_the_resolved_config_api(tmp_path):
     assert seen == [("legacy-test", config.harness_for("execute").timeout_minutes * 60)]
     assert report.gates[0].name == "legacy-tests"
     assert report.gates[0].mutation_policy == GateMutationPolicy.ALLOW.value
+
+
+def test_verification_refuses_symlinked_gate_log_without_running_command(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep\n")
+    (logs / "01-safety.stdout.log").symlink_to(victim)
+    calls = []
+
+    with pytest.raises(VerificationConfigurationError, match="symlink or non-regular"):
+        run_verification_gates(
+            tmp_path,
+            (_gate("safety", "printf CLOBBER", mutation="allow"),),
+            log_dir=logs,
+            runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+
+    assert calls == []
+    assert victim.read_text() == "keep\n"
 
 
 def _gate(

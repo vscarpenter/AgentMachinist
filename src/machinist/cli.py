@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -17,11 +18,13 @@ from pydantic import ValidationError
 from machinist.admission import queue_admission
 from machinist.cancellation import CancellationError, CancellationStore
 from machinist.config import (
+    MAX_CONFIG_BYTES,
     ConfigError,
     HarnessName,
     MachinistConfig,
     NotificationEvent,
     load_config,
+    strict_yaml_load,
 )
 from machinist.config_cli import (
     schema as config_schema,
@@ -39,12 +42,28 @@ from machinist.config_cli import (
     write_schema as write_config_schema,
 )
 from machinist.doctor import run_doctor
-from machinist.github import GitHubClient, GitHubError
+from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
 from machinist.harness import HarnessError, get_harness
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
-from machinist.notify import NotificationStatus, notify_event
+from machinist.managed_paths import (
+    ManagedPathError,
+    managed_file_exists,
+    read_managed_text,
+    write_managed_text,
+)
+from machinist.notification_ledger import NotificationLedger
+from machinist.notify import (
+    NotificationStatus,
+    notification_dedupe_key,
+    notify_event,
+)
 from machinist.observability import build_run_report, summarize_run_report
-from machinist.phases.execute import ExecutePhaseError, run_execute_phase
+from machinist.phases.execute import (
+    MAX_FEEDBACK_FILE_BYTES,
+    ExecutePhaseError,
+    normalize_operator_feedback,
+    run_execute_phase,
+)
 from machinist.phases.spec import SpecPhaseError, preview_spec_phase, run_spec_phase
 from machinist.phases.status import pipeline_status
 from machinist.phases.watch import WatchState, plan_watch_tasks, watch_once
@@ -56,8 +75,12 @@ from machinist.portfolio import (
 )
 from machinist.process import run_supervised
 from machinist.queue_control import QueueControl, QueueControlError
-from machinist.service import LaunchdService, ServiceError
-from machinist.workflows import WorkflowDriftError
+from machinist.service import LaunchdService, ServiceError, read_log_tail
+from machinist.workflows import (
+    WorkflowDriftError,
+    preflight_workflow_paths,
+    preflight_workflow_projection,
+)
 from machinist.workflows import sync_workflows as project_workflows
 from machinist.workspace import Workspace, WorkspaceError
 
@@ -65,6 +88,7 @@ _TEMPLATES = files("machinist") / "templates"
 _LABEL_COLORS = {"trigger": "1d76db", "approved": "0e8a16"}
 _RUNTIME_IGNORE = "/.machinist/runs/"
 _SUBPROCESS_TIMEOUT_SECONDS = 30
+_MAX_GITIGNORE_BYTES = 1024 * 1024
 
 
 def _make_harness(config, phase: Phase):
@@ -122,6 +146,36 @@ def _repository_root(cwd: Path) -> Path:
     return root
 
 
+def _bound_github_client(
+    config: MachinistConfig, *, repo_root: Path | None = None
+) -> GitHubClient:
+    """Bind every gh operation to the controller origin's exact authority."""
+    root = (repo_root or Path.cwd()).resolve()
+    host, identity = Workspace(
+        repo_root=root,
+        config=config.workspace,
+    ).repository_target()
+    configured = normalize_repository_identity(config.github.repo)
+    if config.github.repo is not None and configured is None:
+        raise WorkspaceError("configured GitHub repository identity is invalid")
+    if configured is not None and configured != identity:
+        raise WorkspaceError(
+            "controller Git origin does not match configured GitHub repository"
+        )
+
+    github = GitHubClient(repo=identity)
+    binder = getattr(github, "bind_repository", None)
+    if callable(binder):
+        binder(identity, hostname=host)
+    else:
+        # Lightweight test doubles predate the binding API.  Production uses
+        # GitHubClient.bind_repository; retaining this seam keeps command tests
+        # focused on orchestration rather than duplicating the client.
+        github.repo = identity
+        github.repo_host = host
+    return github
+
+
 def _render_init_config(
     *, harness_name: str | None, test_command: str | None, manage_workflows: bool
 ) -> str:
@@ -149,7 +203,7 @@ def _render_init_config(
             1,
         )
     try:
-        MachinistConfig.model_validate(yaml.safe_load(text) or {})
+        MachinistConfig.model_validate(strict_yaml_load(text) or {})
     except (yaml.YAMLError, ValidationError) as exc:
         raise click.ClickException(
             f"generated machinist.yaml is invalid: {exc}"
@@ -158,12 +212,28 @@ def _render_init_config(
 
 
 def _ensure_runtime_ignore(root: Path) -> None:
-    path = root / ".gitignore"
-    original = path.read_text() if path.exists() else ""
+    relative = Path(".gitignore")
+    original = read_managed_text(root, relative, max_bytes=_MAX_GITIGNORE_BYTES) or ""
     if _RUNTIME_IGNORE in original.splitlines():
         return
     separator = "" if not original or original.endswith("\n") else "\n"
-    path.write_text(f"{original}{separator}{_RUNTIME_IGNORE}\n")
+    write_managed_text(root, relative, f"{original}{separator}{_RUNTIME_IGNORE}\n")
+
+
+def _load_setup_config(root: Path) -> MachinistConfig:
+    """Load setup config through the no-follow managed-path reader."""
+    relative = Path("machinist.yaml")
+    text = read_managed_text(root, relative, max_bytes=MAX_CONFIG_BYTES)
+    if text is None:
+        raise ConfigError("machinist.yaml not found. Run 'machinist init' first.")
+    try:
+        data = strict_yaml_load(text)
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"machinist.yaml is not valid YAML: {exc}") from exc
+    try:
+        return MachinistConfig.model_validate(data or {})
+    except ValidationError as exc:
+        raise ConfigError(f"machinist.yaml is invalid:\n{exc}") from exc
 
 
 _MACHINIST_ERRORS = (
@@ -179,6 +249,7 @@ _MACHINIST_ERRORS = (
     QueueControlError,
     PortfolioError,
     ServiceError,
+    ManagedPathError,
 )
 
 
@@ -214,8 +285,25 @@ def init(
 ) -> None:
     """Set up machinist.yaml, .machinist/, and GitHub workflows in this repository."""
     repo_root = _repository_root(Path.cwd())
-    config_path = repo_root / "machinist.yaml"
-    if config_path.exists() and not force:
+    config_relative = Path("machinist.yaml")
+    try:
+        config_exists = managed_file_exists(repo_root, config_relative)
+        # Inspect every setup-managed target before the first mutation.  This
+        # makes --force safe in repositories containing symlink traps and
+        # avoids a partially initialized repository when a later target is
+        # unsafe.
+        read_managed_text(
+            repo_root,
+            Path(".gitignore"),
+            max_bytes=_MAX_GITIGNORE_BYTES,
+        )
+        managed_file_exists(repo_root, Path(".machinist/specs/.gitkeep"))
+        # Both modes own these two managed paths. `--no-workflows` means
+        # remove prior projections, not merely stop writing new ones.
+        preflight_workflow_paths(repo_root)
+    except ManagedPathError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if config_exists and not force:
         raise click.ClickException(
             "machinist.yaml already exists (use --force to overwrite)"
         )
@@ -226,31 +314,46 @@ def init(
         test_command=resolved_test_cmd,
         manage_workflows=install_workflows,
     )
-    config_path.write_text(template_text)
+    planned_config = MachinistConfig.model_validate(
+        strict_yaml_load(template_text) or {}
+    )
+    try:
+        preflight_workflow_projection(
+            repo_root,
+            planned_config,
+            installed_version=_installed_version(),
+        )
+        write_managed_text(repo_root, config_relative, template_text)
+    except (ManagedPathError, WorkflowDriftError) as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo("wrote machinist.yaml")
     if resolved_test_cmd and not test_cmd:
         click.echo(f"auto-detected test runner: '{resolved_test_cmd}'")
 
-    specs_dir = repo_root / ".machinist/specs"
-    specs_dir.mkdir(parents=True, exist_ok=True)
-    (specs_dir / ".gitkeep").touch()
+    try:
+        gitkeep = Path(".machinist/specs/.gitkeep")
+        if not managed_file_exists(repo_root, gitkeep):
+            write_managed_text(repo_root, gitkeep, "")
+        _ensure_runtime_ignore(repo_root)
+    except ManagedPathError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo("created .machinist/specs/")
-    _ensure_runtime_ignore(repo_root)
     click.echo(f"ensured {_RUNTIME_IGNORE} is ignored by Git")
 
     try:
-        config = load_config(config_path)
-        if install_workflows:
-            report = project_workflows(
-                repo_root, config, installed_version=_installed_version(), check=False
-            )
-            for name in report.written:
-                click.echo(f"wrote .github/workflows/{name}")
-    except (ConfigError, WorkflowDriftError) as exc:
+        config = _load_setup_config(repo_root)
+        report = project_workflows(
+            repo_root, config, installed_version=_installed_version(), check=False
+        )
+        for name in report.written:
+            click.echo(f"wrote .github/workflows/{name}")
+        for name in report.removed:
+            click.echo(f"removed .github/workflows/{name}")
+    except (ConfigError, WorkflowDriftError, ManagedPathError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     try:
-        github = GitHubClient(repo=config.github.repo)
+        github = _bound_github_client(config, repo_root=repo_root)
         github.ensure_label(
             config.github.labels.trigger,
             color=_LABEL_COLORS["trigger"],
@@ -265,7 +368,7 @@ def init(
             f"ensured GitHub labels '{config.github.labels.trigger}' "
             f"and '{config.github.labels.approved}'"
         )
-    except GitHubError as exc:
+    except (GitHubError, WorkspaceError) as exc:
         click.echo(f"note: could not create GitHub labels yet ({exc})")
 
     click.echo(
@@ -282,7 +385,7 @@ def init(
 def sync_workflows_command(check: bool) -> None:
     """Project config into managed GitHub workflow files."""
     try:
-        config = load_config()
+        config = _load_setup_config(Path.cwd())
         report = project_workflows(
             Path.cwd(), config, installed_version=_installed_version(), check=check
         )
@@ -375,7 +478,7 @@ def config_set(key: str, value: str, path: Path) -> None:
     """Set a dotted value after full validation; rewrites canonical YAML."""
     try:
         set_config_value(key, value, path)
-    except ConfigError as exc:
+    except (ConfigError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"set {key} in {path} (comments were normalized)")
 
@@ -401,7 +504,7 @@ def approve(
         raise click.UsageError("provide TARGET, --issue NUMBER, or --pr NUMBER")
     try:
         config = load_config()
-        github = GitHubClient(repo=config.github.repo)
+        github = _bound_github_client(config)
         open_prs = github.open_machinist_prs(config.workspace.branch_prefix)
         lookup_issue = issue_target if issue_target is not None else target
         lookup_pr = pr_target if pr_target is not None else target
@@ -501,11 +604,11 @@ def retry(
         record = lifecycle.retry(issue_number, Phase(phase) if phase else None)
         cancellation = CancellationStore(Path(".machinist/runs"))
         cancellation.clear(issue_number)
-        click.echo(
-            f"Issue #{issue_number} {record.phase.value} is retryable "
-            f"(previous attempt {record.attempt})."
-        )
         if run_now:
+            click.echo(
+                f"Retrying issue #{issue_number} {record.phase.value} "
+                f"after attempt {record.attempt}."
+            )
             config = load_config()
             repo_root = Path.cwd()
             cancellation = CancellationStore(repo_root / ".machinist/runs")
@@ -516,7 +619,7 @@ def retry(
                     lambda claim: run_spec_phase(
                         issue_number,
                         config,
-                        github=GitHubClient(repo=config.github.repo),
+                        github=_bound_github_client(config, repo_root=repo_root),
                         harness=_task_harness(
                             config,
                             Phase.SPEC,
@@ -528,6 +631,7 @@ def retry(
                         ),
                         claim=claim,
                         attempt=_fresh_attempt(claim),
+                        cancel_check=cancellation.check(issue_number),
                     ),
                 )
                 click.echo(f"Draft PR #{pr.number}: {pr.url}")
@@ -546,7 +650,7 @@ def retry(
                     lambda claim: run_execute_phase(
                         issue_number,
                         config,
-                        github=GitHubClient(repo=config.github.repo),
+                        github=_bound_github_client(config, repo_root=repo_root),
                         harness=_task_harness(
                             config,
                             Phase.EXECUTE,
@@ -573,6 +677,11 @@ def retry(
                     issue=issue_number,
                     pr=pr.number,
                 )
+        else:
+            click.echo(
+                f"Issue #{issue_number} {record.phase.value} is retryable "
+                f"(previous attempt {record.attempt})."
+            )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -614,8 +723,10 @@ def spec(
         raise click.UsageError("--reason can only be used with --abandon")
     try:
         config = load_config()
-        lifecycle = TaskLifecycle(Path(".machinist/runs"))
-        github = GitHubClient(repo=config.github.repo)
+        runs_dir = Path(".machinist/runs")
+        lifecycle = TaskLifecycle(runs_dir)
+        cancellations = CancellationStore(runs_dir)
+        github = _bound_github_client(config)
         branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
         if dry_run:
             preview = preview_spec_phase(
@@ -629,6 +740,7 @@ def spec(
                     Path(".machinist/runs"),
                 ),
                 workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
+                cancel_check=cancellations.check(issue_number),
             )
             click.echo(preview)
             return
@@ -670,6 +782,7 @@ def spec(
                 claim=claim,
                 revise=revise,
                 attempt=_fresh_attempt(claim),
+                cancel_check=cancellations.check(issue_number),
             ),
             repeat_succeeded=revise,
         )
@@ -677,10 +790,16 @@ def spec(
         raise click.ClickException(str(exc)) from exc
     prefix = "Revised draft" if revise else "Draft"
     click.echo(f"{prefix} PR #{pr.number}: {pr.url}")
-    click.echo(
-        "Review the spec, then approve with the "
-        f"'{config.github.labels.approved}' label or a /machinist-execute comment."
+    record = lifecycle.record(issue_number, Phase.SPEC)
+    spec_sha = record.evidence.get("spec_sha") if record is not None else None
+    approval_hint = (
+        "Review the spec, then approve with "
+        f"'machinist approve --issue {issue_number}' or the "
+        f"'{config.github.labels.approved}' label"
     )
+    if isinstance(spec_sha, str):
+        approval_hint += f", or comment '/machinist-execute {spec_sha}'"
+    click.echo(f"{approval_hint}.")
     _deliver_notification(
         config,
         NotificationEvent.SPEC_READY,
@@ -725,49 +844,58 @@ def watch(
     poll_interval = (
         interval if interval is not None else config.github.poll_interval_seconds
     )
-    github = GitHubClient(repo=config.github.repo)
     repo_root = Path.cwd()
-    lifecycle = TaskLifecycle(repo_root / ".machinist/runs")
-    cancellation_store = CancellationStore(repo_root / ".machinist/runs")
-    queue_control = QueueControl(repo_root / ".machinist/runs")
+    try:
+        github = _bound_github_client(config, repo_root=repo_root)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    try:
+        lifecycle = TaskLifecycle(repo_root / ".machinist/runs", repo_root=repo_root)
+        cancellation_store = CancellationStore(
+            repo_root / ".machinist/runs", repo_root=repo_root
+        )
+        queue_control = QueueControl(repo_root / ".machinist/runs", repo_root=repo_root)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
     configured_max = getattr(getattr(config, "queue", None), "max_tasks_per_pass", None)
     admission_limit = max_tasks if max_tasks is not None else configured_max
 
     if dry_run:
         try:
-            tasks = plan_watch_tasks(config, github)
+            tasks = plan_watch_tasks(config, github, lifecycle=lifecycle)
+            if not tasks:
+                click.echo("Nothing to do.")
+                return
+            admitted = 0
+            for task in tasks:
+                reason = None
+                cancellation = cancellation_store.get(task.issue_number)
+                if cancellation is not None:
+                    reason = f"cancelled: {cancellation.reason}"
+                queue_decision = queue_control.admission(task)
+                if reason is None and not queue_decision:
+                    reason = queue_decision.reason
+                budget_decision = queue_admission(
+                    config,
+                    lifecycle,
+                    additionally_admitted=admitted,
+                )
+                if reason is None and not budget_decision.allowed:
+                    reason = budget_decision.reason
+                if reason is None and admitted >= admission_limit:
+                    reason = f"per-pass limit {admission_limit} reached"
+                if reason is None:
+                    admitted += 1
+                    click.echo(
+                        f"eligible: {task.phase} issue #{task.issue_number} "
+                        f"({task.row.state})"
+                    )
+                else:
+                    click.echo(
+                        f"deferred: {task.phase} issue #{task.issue_number}: {reason}"
+                    )
         except _MACHINIST_ERRORS as exc:
             raise click.ClickException(str(exc)) from exc
-        if not tasks:
-            click.echo("Nothing to do.")
-            return
-        admitted = 0
-        for task in tasks:
-            reason = None
-            cancellation = cancellation_store.get(task.issue_number)
-            if cancellation is not None:
-                reason = f"cancelled: {cancellation.reason}"
-            queue_decision = queue_control.admission(task)
-            if reason is None and not queue_decision:
-                reason = queue_decision.reason
-            budget_decision = queue_admission(
-                config,
-                lifecycle,
-                additionally_admitted=admitted,
-            )
-            if reason is None and not budget_decision.allowed:
-                reason = budget_decision.reason
-            if reason is None and admitted >= admission_limit:
-                reason = f"per-pass limit {admission_limit} reached"
-            if reason is None:
-                admitted += 1
-                click.echo(
-                    f"eligible: {task.phase} issue #{task.issue_number} ({task.row.state})"
-                )
-            else:
-                click.echo(
-                    f"deferred: {task.phase} issue #{task.issue_number}: {reason}"
-                )
         return
 
     def dispatch_spec(issue_number: int):
@@ -787,6 +915,7 @@ def watch(
                 workspace=Workspace(repo_root=repo_root, config=config.workspace),
                 claim=claim,
                 attempt=_fresh_attempt(claim),
+                cancel_check=cancellation_store.check(issue_number),
             ),
         )
         _deliver_notification(
@@ -840,7 +969,6 @@ def watch(
                     f"[{time.strftime('%X')}] polling GitHub (interval {poll_interval}s)..."
                 )
             try:
-                admitted_this_pass = 0
                 deferred_reasons: dict[tuple[str, int], str] = {}
 
                 def admit(
@@ -848,7 +976,6 @@ def watch(
                     *,
                     deferred_reasons: dict[tuple[str, int], str] = deferred_reasons,
                 ) -> bool:
-                    nonlocal admitted_this_pass
                     cancellation = cancellation_store.get(task.issue_number)
                     if cancellation is not None:
                         deferred_reasons[(task.phase, task.issue_number)] = (
@@ -865,10 +992,8 @@ def watch(
                     decision = queue_admission(
                         config,
                         lifecycle,
-                        additionally_admitted=admitted_this_pass,
                     )
                     if decision.allowed:
-                        admitted_this_pass += 1
                         return True
                     deferred_reasons[(task.phase, task.issue_number)] = (
                         decision.reason or "queue policy deferred this Task"
@@ -896,6 +1021,7 @@ def watch(
                     ),
                     max_tasks=admission_limit,
                     admit=admit,
+                    lifecycle=lifecycle,
                 )
             except _MACHINIST_ERRORS as exc:
                 if once:
@@ -988,7 +1114,7 @@ def run(
             lambda claim: run_execute_phase(
                 issue_number,
                 config,
-                github=GitHubClient(repo=config.github.repo),
+                github=_bound_github_client(config),
                 harness=_task_harness(
                     config,
                     Phase.EXECUTE,
@@ -1017,6 +1143,42 @@ def run(
     )
 
 
+def _read_feedback_file(path: Path) -> str:
+    """Read a small regular UTF-8 feedback file without following its leaf."""
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    flags |= getattr(os, "O_NONBLOCK", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(path, flags)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise click.ClickException(f"feedback file {path} is not a regular file")
+        if metadata.st_size > MAX_FEEDBACK_FILE_BYTES:
+            raise click.UsageError(
+                f"feedback file is too large (maximum {MAX_FEEDBACK_FILE_BYTES} UTF-8 bytes)"
+            )
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = -1
+            payload = stream.read(MAX_FEEDBACK_FILE_BYTES + 1)
+        if len(payload) > MAX_FEEDBACK_FILE_BYTES:
+            raise click.UsageError(
+                f"feedback file is too large (maximum {MAX_FEEDBACK_FILE_BYTES} UTF-8 bytes)"
+            )
+        return payload.decode("utf-8")
+    except click.ClickException:
+        raise
+    except UnicodeError as exc:
+        raise click.ClickException(f"feedback file {path} is not valid UTF-8") from exc
+    except OSError as exc:
+        raise click.ClickException(
+            f"could not safely read feedback file {path}: {exc}"
+        ) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 @main.command()
 @click.argument("issue_number", type=int)
 @click.option("--feedback", help="Bounded operator feedback for the amendment.")
@@ -1034,12 +1196,12 @@ def amend(
     if (feedback is None) == (feedback_file is None):
         raise click.UsageError("provide exactly one of --feedback or --feedback-file")
     if feedback_file is not None:
-        try:
-            feedback = feedback_file.read_text()
-        except (OSError, UnicodeError) as exc:
-            raise click.ClickException(
-                f"could not read feedback file {feedback_file}: {exc}"
-            ) from exc
+        feedback = _read_feedback_file(feedback_file)
+    assert feedback is not None
+    try:
+        feedback = normalize_operator_feedback(feedback)
+    except ExecutePhaseError as exc:
+        raise click.UsageError(str(exc)) from exc
     assert feedback is not None
     try:
         config = load_config()
@@ -1056,7 +1218,7 @@ def amend(
             lambda claim: run_execute_phase(
                 issue_number,
                 config,
-                github=GitHubClient(repo=config.github.repo),
+                github=_bound_github_client(config),
                 harness=_task_harness(
                     config,
                     Phase.EXECUTE,
@@ -1100,16 +1262,33 @@ def _deliver_notification(
     **context,
 ) -> None:
     """Best-effort configured delivery; notification failures never fail a Task."""
-    result = notify_event(
-        config.notifications,
+    key = notification_dedupe_key(
         event,
         title,
         message,
         context=context,
     )
-    if result.status is NotificationStatus.FAILED:
+    outcome = NotificationLedger(
+        Path(".machinist/runs"), repo_root=Path.cwd()
+    ).deliver_once(
+        key,
+        lambda: notify_event(
+            config.notifications,
+            event,
+            title,
+            message,
+            context=context,
+            dedupe_key=key,
+        ),
+    )
+    if outcome.warning is not None:
+        click.echo(f"notification warning: {outcome.warning}", err=True)
+    if (
+        outcome.notification is not None
+        and outcome.notification.status is NotificationStatus.FAILED
+    ):
         # Preserve advisory semantics while making manual commands diagnosable.
-        click.echo(f"notification warning: {result.error}", err=True)
+        click.echo(f"notification warning: {outcome.notification.error}", err=True)
 
 
 @main.command()
@@ -1123,8 +1302,8 @@ def _deliver_notification(
 @click.option("--clear", is_flag=True, help="Clear a prior cancellation request.")
 def cancel(issue_number: int, reason: str, clear: bool) -> None:
     """Cancel an active supervised Task or prevent its next dispatch."""
-    store = CancellationStore(Path(".machinist/runs"))
     try:
+        store = CancellationStore(Path(".machinist/runs"), repo_root=Path.cwd())
         if clear:
             removed = store.clear(issue_number)
             click.echo(
@@ -1144,7 +1323,7 @@ def cancel(issue_number: int, reason: str, clear: bool) -> None:
             f"Cancellation requested for issue #{issue_number} at "
             f"{request.requested_at}; {state}."
         )
-    except CancellationError as exc:
+    except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
 
 
@@ -1154,7 +1333,7 @@ def queue_command() -> None:
 
 
 def _queue_control() -> QueueControl:
-    return QueueControl(Path(".machinist/runs"))
+    return QueueControl(Path(".machinist/runs"), repo_root=Path.cwd())
 
 
 @queue_command.command("pause")
@@ -1163,7 +1342,7 @@ def queue_pause(reason: str) -> None:
     """Pause all new watcher dispatches."""
     try:
         state = _queue_control().pause(reason)
-    except (QueueControlError, ValueError) as exc:
+    except (QueueControlError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Queue paused: {state['pause']['reason']}")
 
@@ -1173,7 +1352,7 @@ def queue_resume() -> None:
     """Resume globally paused dispatches; issue deferrals remain."""
     try:
         _queue_control().resume()
-    except QueueControlError as exc:
+    except (QueueControlError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo("Queue resumed.")
 
@@ -1185,7 +1364,7 @@ def queue_defer(issue_number: int, reason: str) -> None:
     """Defer one issue until explicitly allowed."""
     try:
         _queue_control().defer(issue_number, reason)
-    except (QueueControlError, ValueError) as exc:
+    except (QueueControlError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Deferred issue #{issue_number}: {reason}")
 
@@ -1196,7 +1375,7 @@ def queue_allow(issue_number: int) -> None:
     """Remove one issue's deferral."""
     try:
         _queue_control().allow(issue_number)
-    except (QueueControlError, ValueError) as exc:
+    except (QueueControlError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Issue #{issue_number} is allowed.")
 
@@ -1205,7 +1384,10 @@ def queue_allow(issue_number: int) -> None:
 @click.option("--json", "as_json", is_flag=True)
 def queue_show(as_json: bool) -> None:
     """Show durable queue controls."""
-    state = _queue_control().inspect()
+    try:
+        state = _queue_control().inspect()
+    except (QueueControlError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
     if as_json:
         click.echo(json.dumps(state, indent=2, sort_keys=True))
         return
@@ -1312,7 +1494,7 @@ def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> 
         config = load_config()
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
         ws = Workspace(repo_root=Path.cwd(), config=config.workspace)
-        github = None if offline else GitHubClient(repo=config.github.repo)
+        github = None if offline else _bound_github_client(config, repo_root=Path.cwd())
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -1328,11 +1510,14 @@ def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> 
                 "github_pr": lambda: _github_pr_source(github, branch),
             }
         )
-    report = build_run_report(
-        lifecycle,
-        issue=issue_number,
-        remote_sources=remote_sources,
-    )
+    try:
+        report = build_run_report(
+            lifecycle,
+            issue=issue_number,
+            remote_sources=remote_sources,
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
     if as_json:
         click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return
@@ -1470,12 +1655,18 @@ def status(
         raise click.ClickException(str(exc)) from exc
     sources = {}
     if not local_only:
-        github = GitHubClient(repo=config.github.repo)
+        try:
+            github = _bound_github_client(config)
+        except _MACHINIST_ERRORS as exc:
+            raise click.ClickException(str(exc)) from exc
         sources["pipeline"] = lambda: [
             _status_row_dict(row)
             for row in pipeline_status(config, github, lifecycle=lifecycle)
         ]
-    report = build_run_report(lifecycle, remote_sources=sources)
+    try:
+        report = build_run_report(lifecycle, remote_sources=sources)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
     if as_json:
         click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return
@@ -1519,14 +1710,22 @@ def status(
 
 
 @main.command("runs")
-@click.option("--issue", "issue_number", type=int, help="Limit output to one issue.")
+@click.option(
+    "--issue",
+    "issue_number",
+    type=click.IntRange(min=1),
+    help="Limit output to one issue.",
+)
 @click.option(
     "--json", "as_json", is_flag=True, help="Emit the complete JSON read model."
 )
 def runs_command(issue_number: int | None, as_json: bool) -> None:
     """List local current, historical, orphaned, and corrupt Task Runs."""
-    lifecycle = TaskLifecycle(Path(".machinist/runs"))
-    report = build_run_report(lifecycle, issue=issue_number)
+    try:
+        lifecycle = TaskLifecycle(Path(".machinist/runs"), repo_root=Path.cwd())
+        report = build_run_report(lifecycle, issue=issue_number)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
     if as_json:
         click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return
@@ -1641,13 +1840,22 @@ def service_command() -> None:
     """Manage the macOS launchd watcher for this repository."""
 
 
-def _launchd_service() -> LaunchdService:
+def _launchd_service(*, for_install: bool = False) -> LaunchdService:
     if sys.platform != "darwin":
         raise click.ClickException(
             "the managed watcher service currently supports macOS launchd only"
         )
     root = _repository_root(Path.cwd())
-    config = load_config(root / "machinist.yaml")
+    if not for_install:
+        try:
+            return LaunchdService.for_management(root)
+        except ServiceError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    try:
+        config = load_config(root / "machinist.yaml")
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
     executable = shutil.which("machinist")
     if executable is None:
         raise click.ClickException(
@@ -1667,7 +1875,7 @@ def _launchd_service() -> LaunchdService:
 @service_command.command("install")
 def service_install() -> None:
     """Install, register, and immediately start the repository watcher."""
-    service = _launchd_service()
+    service = _launchd_service(for_install=True)
     try:
         service.stop()
         path = service.install()
@@ -1685,6 +1893,14 @@ def service_start() -> None:
     """Start an installed watcher immediately."""
     service = _launchd_service()
     try:
+        status = service.status()
+        if not status.installed:
+            raise ServiceError(
+                f"service plist is not installed at {service.plist_path}; "
+                "run 'machinist service install' first"
+            )
+        if not status.loaded:
+            service.bootstrap()
         service.start()
     except ServiceError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -1696,7 +1912,17 @@ def service_restart() -> None:
     """Restart the watcher process immediately."""
     service = _launchd_service()
     try:
-        service.restart()
+        status = service.status()
+        if not status.installed:
+            raise ServiceError(
+                f"service plist is not installed at {service.plist_path}; "
+                "run 'machinist service install' first"
+            )
+        if status.loaded:
+            service.restart()
+        else:
+            service.bootstrap()
+            service.start()
     except ServiceError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Restarted {service.label}")
@@ -1735,7 +1961,7 @@ def service_status(as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(payload))
         return
-    state = "running" if status.loaded else "stopped"
+    state = "loaded/scheduled" if status.loaded else "not loaded"
     installed = "installed" if status.installed else "not installed"
     click.echo(f"{status.label}: {state}, {installed}")
     if status.error:
@@ -1758,14 +1984,16 @@ def service_logs(lines: int) -> None:
     for path in service.log_paths:
         click.echo(f"==> {path} <==")
         try:
-            content = path.read_text(errors="replace").splitlines()
+            tail = read_log_tail(path, lines=lines)
         except FileNotFoundError:
             click.echo("(no log yet)")
             continue
         except OSError as exc:
             raise click.ClickException(f"cannot read {path}: {exc}") from exc
-        for line in content[-lines:]:
-            click.echo(line)
+        except ServiceError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if tail.text:
+            click.echo(tail.text)
 
 
 @service_command.command("uninstall")

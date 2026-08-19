@@ -11,7 +11,6 @@ import fcntl
 import json
 import os
 import stat
-import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -19,6 +18,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable
+
+from machinist.runtime_paths import (
+    RuntimeDirectory,
+    RuntimePathError,
+    atomic_write_text_file,
+    open_regular_file,
+    read_text_file,
+    regular_file_exists,
+)
 
 _SCHEMA_VERSION = 1
 _STATE_FILENAME = "queue-control.json"
@@ -74,8 +82,17 @@ class _QueueState:
 class QueueControl:
     """Persist pause and per-issue deferral controls for one repository."""
 
-    def __init__(self, runs_dir: str | Path):
-        self.runs_dir = Path(runs_dir)
+    def __init__(
+        self,
+        runs_dir: str | Path,
+        *,
+        repo_root: str | Path | None = None,
+    ):
+        try:
+            self._runtime = RuntimeDirectory.bind(runs_dir, repo_root=repo_root)
+        except RuntimePathError as exc:
+            raise QueueControlError(f"unsafe queue state path: {exc}") from exc
+        self.runs_dir = self._runtime.path
         self.state_path = self.runs_dir / _STATE_FILENAME
         self.lock_path = self.runs_dir / _LOCK_FILENAME
 
@@ -224,24 +241,16 @@ class QueueControl:
 
     def _read_state(self) -> tuple[_QueueState, bool]:
         try:
-            metadata = self.state_path.lstat()
-        except FileNotFoundError:
-            return _QueueState(), False
-        except OSError as exc:
+            if not regular_file_exists(self.state_path):
+                return _QueueState(), False
+        except (OSError, RuntimePathError) as exc:
             raise QueueControlError(
                 f"queue control state is unreadable: {type(exc).__name__}"
             ) from exc
 
-        if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
-            raise QueueControlError(
-                "queue control state is corrupt: not a regular file"
-            )
-        if metadata.st_size > _MAX_STATE_BYTES:
-            raise QueueControlError("queue control state is corrupt: file is too large")
-
         try:
             payload = json.loads(
-                self.state_path.read_text(),
+                read_text_file(self.state_path, max_bytes=_MAX_STATE_BYTES),
                 object_pairs_hook=_object_without_duplicates,
             )
             state = _state_from_payload(payload)
@@ -249,6 +258,7 @@ class QueueControl:
             raise
         except (
             OSError,
+            RuntimePathError,
             UnicodeError,
             json.JSONDecodeError,
             TypeError,
@@ -260,32 +270,20 @@ class QueueControl:
         return state, True
 
     def _write_state(self, state: _QueueState) -> None:
-        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_runs(create=True)
         payload = _state_payload(state)
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=".queue-control.",
-            suffix=".tmp",
-            dir=self.runs_dir,
-            text=True,
-        )
         try:
-            os.fchmod(descriptor, 0o600)
-            with os.fdopen(descriptor, "w") as stream:
-                json.dump(
-                    payload,
-                    stream,
-                    allow_nan=False,
-                    indent=2,
-                    sort_keys=True,
-                )
-                stream.write("\n")
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, self.state_path)
-            _fsync_directory(self.runs_dir)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+            serialized = json.dumps(
+                payload,
+                allow_nan=False,
+                indent=2,
+                sort_keys=True,
+            )
+            atomic_write_text_file(self.state_path, serialized + "\n")
+        except (OSError, RuntimePathError, TypeError, ValueError) as exc:
+            raise QueueControlError(
+                f"could not write queue control state: {exc}"
+            ) from exc
 
     def _inspection(self, state: _QueueState, *, exists: bool) -> dict[str, Any]:
         return {
@@ -304,9 +302,10 @@ class QueueControl:
 
     def _corrupt_inspection(self, exc: BaseException) -> dict[str, Any]:
         try:
+            self._ensure_runs(create=False)
             self.state_path.lstat()
             exists = True
-        except FileNotFoundError:
+        except (FileNotFoundError, QueueControlError):
             exists = False
         except OSError:
             exists = True
@@ -326,24 +325,45 @@ class QueueControl:
 
     @contextmanager
     def _locked(self, *, exclusive: bool) -> Iterator[None]:
-        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        # Reads consume an atomically replaced snapshot and must not create a
+        # directory or lock artifact.  Writers still serialize across threads
+        # and processes before their read/change/write transaction.
+        if not exclusive:
+            self._ensure_runs(create=False)
+            yield
+            return
+
+        self._ensure_runs(create=True)
         thread_lock = _thread_lock(self.lock_path)
         with thread_lock:
-            flags = os.O_CREAT | os.O_RDWR
-            if hasattr(os, "O_NOFOLLOW"):
-                flags |= os.O_NOFOLLOW
-            descriptor = os.open(self.lock_path, flags, 0o600)
+            try:
+                descriptor = open_regular_file(
+                    self.lock_path,
+                    truncate=False,
+                    mode=0o600,
+                )
+            except RuntimePathError as exc:
+                raise QueueControlError(
+                    f"could not open queue control lock: {exc}"
+                ) from exc
             lock_file = os.fdopen(descriptor, "a+")
             try:
+                if not stat.S_ISREG(os.fstat(lock_file.fileno()).st_mode):
+                    raise QueueControlError("queue control lock is not a regular file")
                 os.fchmod(lock_file.fileno(), 0o600)
-                operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-                fcntl.flock(lock_file.fileno(), operation)
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
                 yield
             finally:
                 try:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
                 finally:
                     lock_file.close()
+
+    def _ensure_runs(self, *, create: bool) -> Path:
+        try:
+            return self._runtime.ensure(create=create)
+        except RuntimePathError as exc:
+            raise QueueControlError(f"unsafe queue state path: {exc}") from exc
 
 
 def _state_from_payload(payload: object) -> _QueueState:
@@ -479,6 +499,7 @@ def _validate_timestamp(value: str) -> None:
 
 
 def _issue_number(task_or_issue: object) -> int:
+    value: object
     if isinstance(task_or_issue, bool):
         value = task_or_issue
     elif isinstance(task_or_issue, int):
@@ -500,16 +521,3 @@ def _thread_lock(path: Path) -> Lock:
     key = Path(os.path.abspath(path))
     with _LOCK_REGISTRY_GUARD:
         return _THREAD_LOCKS.setdefault(key, Lock())
-
-
-def _fsync_directory(path: Path) -> None:
-    try:
-        descriptor = os.open(path, os.O_RDONLY)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        pass
-    finally:
-        os.close(descriptor)

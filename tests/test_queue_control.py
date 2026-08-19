@@ -45,6 +45,20 @@ def test_missing_state_allows_dispatch_and_inspects_as_json_safe(tmp_path: Path)
     json.dumps(inspected, allow_nan=False)
 
 
+def test_read_only_admission_and_inspection_create_no_runtime_artifacts(
+    tmp_path: Path,
+):
+    runs = tmp_path / ".machinist" / "runs"
+    control = QueueControl(runs, repo_root=tmp_path)
+    before = set(tmp_path.rglob("*"))
+
+    assert control.admission(7).allowed
+    assert control.inspect()["exists"] is False
+
+    assert set(tmp_path.rglob("*")) == before
+    assert not runs.exists()
+
+
 def test_pause_and_resume_are_durable_and_preserve_reason_timestamp(tmp_path: Path):
     runs = tmp_path / ".machinist/runs"
     control = QueueControl(runs)

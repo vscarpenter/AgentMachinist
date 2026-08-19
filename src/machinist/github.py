@@ -8,6 +8,7 @@ out of this codebase entirely.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -19,7 +20,10 @@ Runner = Callable[..., subprocess.CompletedProcess]
 # exceed that (and PR filtering happens after the fetch), so make gh paginate
 # well beyond its implicit first page instead of silently hiding eligible work.
 _LIST_LIMIT = 1000
-_PR_JSON_FIELDS = "number,title,url,headRefName,headRefOid,isDraft,state,labels"
+_PR_JSON_FIELDS = (
+    "number,title,url,headRefName,headRefOid,isDraft,state,labels,"
+    "isCrossRepository,headRepository,baseRefName"
+)
 _MAX_PR_COMMENT_CHARS = 16_000
 _COMMENT_TRUNCATION_NOTICE = "\n\n_… truncated by AgentMachinist._"
 _COMMAND_TIMEOUT_SECONDS = 30
@@ -54,12 +58,34 @@ class PullRequest:
     head_sha: str = ""
     labels: list[str] = field(default_factory=list)
     state: str = "OPEN"
+    is_cross_repository: bool = False
+    head_repository: str | None = None
+    # Kept trailing/defaulted so existing test doubles and API consumers that
+    # construct PullRequest directly remain source-compatible. Production gh
+    # responses are parsed strictly and always populate this field.
+    base: str = ""
 
 
 class GitHubClient:
     def __init__(self, repo: str | None = None, runner: Runner = subprocess.run):
         self.repo = repo
+        self.repo_host: str | None = None
         self._runner = runner
+
+    def bind_repository(self, identity: str, *, hostname: str = "github.com") -> str:
+        """Bind all subsequent gh calls to one explicit host and owner/repo."""
+        resolved = normalize_repository_identity(identity)
+        current = normalize_repository_identity(self.repo)
+        normalized_host = _normalize_hostname(hostname)
+        if resolved is None or normalized_host is None:
+            raise GitHubError("repository identity must look like 'owner/repo'")
+        if current is not None and current != resolved:
+            raise GitHubError(
+                "GitHub client repository does not match controller origin"
+            )
+        self.repo = resolved
+        self.repo_host = normalized_host
+        return resolved
 
     def get_issue(self, number: int) -> Issue:
         data = self._gh_json(
@@ -112,11 +138,12 @@ class GitHubClient:
             "--json",
             _PR_JSON_FIELDS,
         )
-        return [
+        prs = [
             _pull_request(item)
             for item in data
             if item["headRefName"].startswith(branch_prefix)
         ]
+        return [pr for pr in prs if self._same_repository_pr(pr)]
 
     def pr_for_branch(self, branch: str) -> PullRequest | None:
         """Return the exact branch's open or most-recent historical PR."""
@@ -134,7 +161,11 @@ class GitHubClient:
             _PR_JSON_FIELDS,
         )
         matches = [
-            _pull_request(item) for item in data if item["headRefName"] == branch
+            pr
+            for item in data
+            if item["headRefName"] == branch
+            for pr in (_pull_request(item),)
+            if self._same_repository_pr(pr)
         ]
         if not matches:
             return None
@@ -269,13 +300,22 @@ class GitHubClient:
     def _gh(self, *args: str) -> str:
         argv = ["gh", *args]
         if self.repo is not None:
-            argv += ["--repo", self.repo]
+            repo_target = self.repo
+            if self.repo_host not in (None, "github.com"):
+                repo_target = f"{self.repo_host}/{self.repo}"
+            # `gh repo view` takes its repository as a positional argument;
+            # unlike issue/pr/label commands, it has no --repo flag.
+            if args[:2] == ("repo", "view"):
+                argv.insert(3, repo_target)
+            else:
+                argv += ["--repo", repo_target]
         try:
             result = self._runner(
                 argv,
                 capture_output=True,
                 text=True,
                 timeout=_COMMAND_TIMEOUT_SECONDS,
+                env=self._command_environment(),
             )
         except FileNotFoundError as exc:
             raise GitHubError(
@@ -301,12 +341,15 @@ class GitHubClient:
 
     def _gh_api(self, *args: str) -> str:
         argv = ["gh", "api", *args]
+        if self.repo_host not in (None, "github.com"):
+            argv += ["--hostname", self.repo_host]
         try:
             result = self._runner(
                 argv,
                 capture_output=True,
                 text=True,
                 timeout=_COMMAND_TIMEOUT_SECONDS,
+                env=self._command_environment(),
             )
         except FileNotFoundError as exc:
             raise GitHubError(
@@ -326,8 +369,59 @@ class GitHubClient:
         except json.JSONDecodeError as exc:
             raise GitHubError(f"gh api returned invalid JSON: {exc.msg}") from exc
 
+    def _command_environment(self) -> dict[str, str]:
+        return github_command_environment(self.repo_host)
+
+    def _same_repository_pr(self, pr: PullRequest) -> bool:
+        if pr.is_cross_repository:
+            return False
+        expected = normalize_repository_identity(self.repo)
+        return not (
+            expected is not None
+            and pr.head_repository is not None
+            and pr.head_repository != expected
+        )
+
+
+def github_command_environment(hostname: str | None = None) -> dict[str, str]:
+    """Return a gh environment with routing and token authority bound."""
+    environment = os.environ.copy()
+    ambient_host = _normalize_hostname(environment.get("GH_HOST"))
+    environment.pop("GH_REPO", None)
+    environment.pop("GH_HOST", None)
+    target_host = _normalize_hostname(hostname) or "github.com"
+    if target_host == "github.com":
+        environment.pop("GH_ENTERPRISE_TOKEN", None)
+        environment.pop("GITHUB_ENTERPRISE_TOKEN", None)
+    else:
+        # GitHub.com tokens are not valid authority for a GHES target.  A
+        # generic enterprise token is accepted only when its accompanying
+        # GH_HOST named this exact server; otherwise gh must use its
+        # hostname-keyed credential store.
+        environment.pop("GH_TOKEN", None)
+        environment.pop("GITHUB_TOKEN", None)
+        if ambient_host != target_host:
+            environment.pop("GH_ENTERPRISE_TOKEN", None)
+            environment.pop("GITHUB_ENTERPRISE_TOKEN", None)
+    return environment
+
 
 def _pull_request(item: dict[str, Any]) -> PullRequest:
+    cross_repository = item.get("isCrossRepository")
+    if not isinstance(cross_repository, bool):
+        raise GitHubError(
+            "gh pr returned invalid isCrossRepository metadata; refusing PR custody"
+        )
+    head_repository = _head_repository_identity(item.get("headRepository"))
+    if head_repository is None:
+        raise GitHubError(
+            "gh pr returned invalid headRepository metadata; refusing PR custody"
+        )
+    base = item.get("baseRefName")
+    if not isinstance(base, str) or not base:
+        raise GitHubError(
+            "gh pr returned invalid baseRefName metadata; refusing PR custody"
+        )
     return PullRequest(
         number=item["number"],
         title=item["title"],
@@ -337,7 +431,66 @@ def _pull_request(item: dict[str, Any]) -> PullRequest:
         is_draft=item["isDraft"],
         state=item.get("state", "OPEN"),
         labels=[label["name"] for label in item.get("labels", [])],
+        is_cross_repository=cross_repository,
+        head_repository=head_repository,
+        base=base,
     )
+
+
+def _head_repository_identity(value: Any) -> str | None:
+    if isinstance(value, str):
+        return normalize_repository_identity(value)
+    if not isinstance(value, dict):
+        return None
+    direct = value.get("nameWithOwner")
+    if isinstance(direct, str):
+        return normalize_repository_identity(direct)
+    name = value.get("name")
+    owner = value.get("owner")
+    login = owner.get("login") if isinstance(owner, dict) else None
+    if isinstance(login, str) and isinstance(name, str):
+        return normalize_repository_identity(f"{login}/{name}")
+    return None
+
+
+def normalize_repository_identity(value: str | None) -> str | None:
+    """Return a comparison-safe GitHub ``owner/repo`` identity."""
+    if not isinstance(value, str):
+        return None
+    if value != value.strip() or value.startswith("/") or value.endswith("/"):
+        return None
+    candidate = value
+    if candidate.casefold().endswith(".git"):
+        candidate = candidate[:-4]
+    if candidate.count("/") != 1 or any(
+        character in candidate for character in ("\0", "\n", "\r")
+    ):
+        return None
+    owner, repository = candidate.split("/", 1)
+    if (
+        not owner
+        or not repository
+        or owner in {".", ".."}
+        or repository in {".", ".."}
+        or re.fullmatch(r"[A-Za-z0-9_.-]+", owner) is None
+        or re.fullmatch(r"[A-Za-z0-9_.-]+", repository) is None
+    ):
+        return None
+    return f"{owner}/{repository}".casefold()
+
+
+def _normalize_hostname(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip().casefold()
+    if (
+        not candidate
+        or "/" in candidate
+        or "@" in candidate
+        or any(character in candidate for character in ("\0", "\n", "\r"))
+    ):
+        return None
+    return candidate
 
 
 def _bounded_comment(body: str) -> str:

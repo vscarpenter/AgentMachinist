@@ -9,9 +9,13 @@ import subprocess
 import pytest
 
 from machinist.service import (
+    LOG_TAIL_OUTPUT_LIMIT_BYTES,
+    LOG_TAIL_READ_LIMIT_BYTES,
+    LOG_TAIL_TRUNCATION_MARKER,
     LaunchdService,
     ServiceCommandError,
     ServiceError,
+    read_log_tail,
     service_identifier,
 )
 
@@ -116,6 +120,52 @@ def test_constructing_and_rendering_service_never_invokes_launchctl(tmp_path):
     service.plist_bytes()
 
     assert runner.calls == []
+
+
+def test_management_service_needs_no_current_controller_executable(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runner = FakeRunner(("", 113, "Could not find service"))
+
+    service = LaunchdService.for_management(
+        repo,
+        launch_agents_dir=tmp_path / "Library" / "LaunchAgents",
+        uid=501,
+        runner=runner,
+    )
+
+    assert service.executable is None
+    assert service.status().loaded is False
+    with pytest.raises(ServiceError, match="management-only service cannot install"):
+        service.install()
+    assert runner.calls[0][0][1] == "print"
+
+
+def test_log_tail_bounds_sparse_single_line_and_replaces_invalid_utf8(tmp_path):
+    log = tmp_path / "large.log"
+    with log.open("wb") as stream:
+        stream.seek(LOG_TAIL_READ_LIMIT_BYTES * 8)
+        stream.write(b"x" * (LOG_TAIL_READ_LIMIT_BYTES * 2))
+        stream.write(b"\xfftail")
+
+    tail = read_log_tail(log, lines=1)
+
+    assert tail.truncated is True
+    assert tail.bytes_read == LOG_TAIL_READ_LIMIT_BYTES
+    assert tail.text.startswith(LOG_TAIL_TRUNCATION_MARKER + "\n")
+    assert tail.text.endswith("\ufffdtail")
+    assert len(tail.text.encode("utf-8")) <= LOG_TAIL_OUTPUT_LIMIT_BYTES
+
+
+def test_log_tail_applies_line_limit_with_explicit_marker(tmp_path):
+    log = tmp_path / "multiline.log"
+    log.write_bytes(b"first\nsecond\nthird\n")
+
+    tail = read_log_tail(log, lines=2)
+
+    assert tail.truncated is True
+    assert tail.bytes_read == len(log.read_bytes())
+    assert tail.text == f"{LOG_TAIL_TRUNCATION_MARKER}\nsecond\nthird"
 
 
 def test_install_atomically_replaces_plist_without_following_target_symlink(
@@ -233,6 +283,21 @@ def test_rejects_log_paths_that_escape_repository(tmp_path):
             service.executable,
             launch_agents_dir=service.plist_path.parent,
         )
+
+
+def test_install_rejects_symlinked_service_log_leaf_without_clobbering_target(
+    tmp_path,
+):
+    service = _service(tmp_path)
+    service.logs_dir.mkdir(parents=True)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep\n")
+    service.stdout_log_path.symlink_to(victim)
+
+    with pytest.raises(ServiceError, match="service log file is unsafe"):
+        service.install()
+
+    assert victim.read_text() == "keep\n"
 
 
 def test_bootstrap_and_bootout_use_safe_gui_domain_argv(tmp_path):
