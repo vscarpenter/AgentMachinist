@@ -44,30 +44,38 @@ should remain ignored by Git. Failed workspaces are retained by the default
 ## Recover a failed task
 
 1. Stop or let the current watcher pass finish.
-2. Read the Task Run error and inspect the retained workspace without deleting
-   it.
-3. Fix authentication, configuration, tests, or the issue/spec as appropriate.
-4. Mark one phase retryable:
+2. Inspect the Task Run error with `machinist inspect <issue>` or `machinist status -v`.
+3. Inspect the retained workspace without deleting it.
+4. Fix authentication, configuration, tests, or the issue/spec as appropriate.
+5. Mark the phase retryable or run it immediately:
 
    ```sh
-   machinist retry 42 --phase execute
+   machinist retry 42 --phase execute --run
    ```
 
-5. Restart a long-running watcher or run the phase manually.
+6. Or restart a long-running watcher (`machinist watch`).
 
 Do not edit Task Run JSON by hand. A crash after push is reconciled using its
 checkpoint; tests run again and the harness does not.
 
 ## Approval incidents
 
-- `approval pending`: rerun `machinist approve <pr>` or post the exact comment.
+- `approval pending`: rerun `machinist approve <pr>` (or `machinist approve <issue>`) or post the exact comment.
 - `approval stale`: reread the changed spec, then approve the current head.
 - Unexpected manual label: remove it, review repository workflow permissions,
   and inspect PR events. The label alone cannot authorize execution.
 
 ## Workspace cleanup
 
-Inspect before deleting. For worktrees, from the source checkout:
+Inspect before deleting. You can list and prune managed workspaces directly:
+
+```sh
+machinist clean
+machinist clean --issue 42
+machinist clean --all
+```
+
+Or manage worktrees manually from the source checkout:
 
 ```sh
 git worktree list

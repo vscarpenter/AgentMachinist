@@ -88,6 +88,36 @@ class Workspace:
     def path_changed(self, path: Path, relative: str) -> bool:
         return bool(self._git(path, "status", "--porcelain", "--", relative).strip())
 
+    def workspace_for_task(self, task: str) -> Path:
+        return self.config.resolved_root() / f"{self.repo_root.name}-{task}"
+
+    def list_workspaces(self) -> list[Path]:
+        root = self.config.resolved_root()
+        if not root.exists():
+            return []
+        prefix = f"{self.repo_root.name}-"
+        return sorted([p for p in root.iterdir() if p.is_dir() and p.name.startswith(prefix)])
+
+    def remove_workspace(self, path: Path, *, force: bool = False) -> None:
+        if not path.exists():
+            return
+        if self.config.strategy is WorkspaceStrategy.WORKTREE and (self.repo_root / ".git").exists():
+            args = ["worktree", "remove"]
+            if force:
+                args.append("--force")
+            args.append(str(path))
+            try:
+                self._git(self.repo_root, *args)
+            except WorkspaceError:
+                if path.exists():
+                    shutil.rmtree(path, ignore_errors=True)
+            try:
+                self._git(self.repo_root, "worktree", "prune")
+            except WorkspaceError:
+                pass
+        else:
+            shutil.rmtree(path, ignore_errors=True)
+
     def cleanup(self, path: Path, *, success: bool) -> None:
         policy = self.config.cleanup
         if policy is CleanupPolicy.NEVER:

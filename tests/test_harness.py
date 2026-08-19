@@ -169,3 +169,15 @@ def test_adapters_publish_honest_policy_capabilities():
         capability = get_harness(HarnessConfig(name=name)).capabilities
         assert capability.spec_repository_writes in {"cli-enforced", "advisory"}
         assert capability.implementation_git_control == "prompt-and-postcondition"
+
+
+def test_harness_model_and_extra_args_in_argv():
+    for name in HarnessName:
+        config = HarnessConfig(name=name, model="custom-model", extra_args=["--verbose", "--flag"])
+        harness = get_harness(config)
+        spec_argv = harness.spec_argv("prompt")
+        impl_argv = harness.implement_argv("prompt")
+        assert "--model" in spec_argv and "custom-model" in spec_argv
+        assert "--model" in impl_argv and "custom-model" in impl_argv
+        assert "--verbose" in spec_argv and "--flag" in spec_argv
+        assert "--verbose" in impl_argv and "--flag" in impl_argv

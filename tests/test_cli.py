@@ -11,7 +11,7 @@ from machinist.config import load_config
 def test_help_lists_all_commands():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    for command in ("init", "spec", "approve", "watch", "run", "retry", "status", "doctor", "sync-workflows"):
+    for command in ("init", "spec", "approve", "watch", "run", "retry", "status", "doctor", "sync-workflows", "clean", "inspect"):
         assert command in result.output
 
 
@@ -342,3 +342,218 @@ def test_spec_renders_machinist_errors_without_traceback(monkeypatch):
         assert result.exit_code != 0
         assert "timed out" in result.output
         assert "Traceback" not in result.output
+
+
+def test_init_with_harness_and_test_cmd_flags():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["init", "--no-workflows", "--harness", "opencode", "--test-cmd", "pytest -k fast"])
+        assert result.exit_code == 0
+        config = load_config("machinist.yaml")
+        assert config.harness.name.value == "opencode"
+        assert config.tests.command == "pytest -k fast"
+
+
+def test_init_auto_detects_test_runner():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        result = runner.invoke(main, ["init", "--no-workflows"])
+        assert result.exit_code == 0
+        assert "auto-detected test runner: 'uv run pytest'" in result.output
+        config = load_config("machinist.yaml")
+        assert config.tests.command == "uv run pytest"
+
+
+def test_approve_resolves_issue_number(monkeypatch):
+    from machinist.github import PullRequest
+
+    approved_prs = []
+
+    class FakeGitHub:
+        def __init__(self, repo=None):
+            pass
+
+        def open_machinist_prs(self, branch_prefix):
+            return [
+                PullRequest(
+                    number=18,
+                    title="Spec: Add export (#42)",
+                    url="https://github.com/x/y/pull/18",
+                    branch="agent/issue-42",
+                    is_draft=True,
+                    head_sha="0123456789abcdef0123456789abcdef01234567",
+                )
+            ]
+
+        def approve_pr(self, number, *, label, head_sha):
+            approved_prs.append((number, label, head_sha))
+
+    monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        # Approve using the issue number 42 rather than PR number 18
+        result = runner.invoke(main, ["approve", "42"])
+        assert result.exit_code == 0, result.output
+        assert "Approved PR #18" in result.output
+        assert approved_prs == [(18, "machinist:approved", "0123456789abcdef0123456789abcdef01234567")]
+
+
+def test_retry_with_run_flag(monkeypatch):
+    from machinist.lifecycle import Phase, TaskLifecycle, RunStatus
+    from machinist.github import PullRequest
+
+    executed = []
+
+    def fake_run_execute_phase(issue_number, config, *, github, harness, workspace, test_runner, claim):
+        executed.append(issue_number)
+        return PullRequest(
+            number=18, title="Spec: Task (#42)",
+            url="https://github.com/x/y/pull/18",
+            branch="agent/issue-42", is_draft=False, labels=["machinist:approved"],
+        )
+
+    monkeypatch.setattr("machinist.cli.run_execute_phase", fake_run_execute_phase)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        # Simulate a failed execute phase
+        try:
+            lifecycle.run(42, Phase.EXECUTE, lambda claim: (_ for _ in ()).throw(RuntimeError("fail")))
+        except RuntimeError:
+            pass
+
+        result = runner.invoke(main, ["retry", "42", "--phase", "execute", "--run"])
+        assert result.exit_code == 0, result.output
+        assert "Issue #42 execute is retryable" in result.output
+        assert "PR #18 implemented" in result.output
+        assert executed == [42]
+
+
+def test_run_with_retry_flag(monkeypatch):
+    from machinist.lifecycle import Phase, TaskLifecycle
+    from machinist.github import PullRequest
+
+    executed = []
+
+    def fake_run_execute_phase(issue_number, config, *, github, harness, workspace, test_runner, force, claim):
+        executed.append(issue_number)
+        return PullRequest(
+            number=18, title="Spec: Task (#42)",
+            url="https://github.com/x/y/pull/18",
+            branch="agent/issue-42", is_draft=False, labels=["machinist:approved"],
+        )
+
+    monkeypatch.setattr("machinist.cli.run_execute_phase", fake_run_execute_phase)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        # Simulate a failed execute phase
+        try:
+            lifecycle.run(42, Phase.EXECUTE, lambda claim: (_ for _ in ()).throw(RuntimeError("fail")))
+        except RuntimeError:
+            pass
+
+        result = runner.invoke(main, ["run", "42", "--retry"])
+        assert result.exit_code == 0, result.output
+        assert "PR #18 implemented" in result.output
+        assert executed == [42]
+
+
+def test_clean_command():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        ws_root = Path("~/.machinist/workspaces").expanduser()
+        ws_root.mkdir(parents=True, exist_ok=True)
+        # Create mock task workspace directories
+        ws1 = ws_root / f"{Path.cwd().name}-issue-42"
+        ws2 = ws_root / f"{Path.cwd().name}-issue-43"
+        ws1.mkdir(parents=True, exist_ok=True)
+        ws2.mkdir(parents=True, exist_ok=True)
+
+        result_list = runner.invoke(main, ["clean"])
+        assert result_list.exit_code == 0
+        assert "Found 2 workspace(s)" in result_list.output
+
+        result_issue = runner.invoke(main, ["clean", "--issue", "42"])
+        assert result_issue.exit_code == 0
+        assert not ws1.exists()
+        assert ws2.exists()
+
+        result_all = runner.invoke(main, ["clean", "--all"])
+        assert result_all.exit_code == 0
+        assert not ws2.exists()
+
+
+def test_inspect_command(monkeypatch):
+    from machinist.github import Issue, PullRequest
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    class FakeGitHub:
+        def __init__(self, repo=None):
+            pass
+
+        def get_issue(self, number):
+            return Issue(number=42, title="CSV Export", body="export criteria", url="https://github.com/x/y/issues/42", labels=["agent-task"])
+
+        def open_machinist_prs(self, branch_prefix):
+            return [
+                PullRequest(
+                    number=18,
+                    title="Spec: CSV Export (#42)",
+                    url="https://github.com/x/y/pull/18",
+                    branch="agent/issue-42",
+                    is_draft=True,
+                    head_sha="0123456789abcdef0123456789abcdef01234567",
+                )
+            ]
+
+        def approval_sha(self, number):
+            return "0123456789abcdef0123456789abcdef01234567"
+
+    monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        lifecycle.run(42, Phase.SPEC, lambda claim: None)
+
+        result = runner.invoke(main, ["inspect", "42"])
+        assert result.exit_code == 0, result.output
+        assert "Task Inspection: Issue #42" in result.output
+        assert "CSV Export" in result.output
+        assert "PR:    #18" in result.output
+        assert "Phase [spec]: succeeded" in result.output
+
+
+def test_status_verbose(monkeypatch):
+    from machinist.phases.status import StatusRow
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    rows = [
+        StatusRow(kind="pr", number=18, title="Spec: Export (#42)",
+                  state="execute failed", url="https://github.com/x/y/pull/18",
+                  issue_number=42),
+    ]
+    monkeypatch.setattr("machinist.cli.pipeline_status", lambda config, github, **kwargs: rows)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        try:
+            lifecycle.run(42, Phase.EXECUTE, lambda claim: (_ for _ in ()).throw(RuntimeError("test gate failed")))
+        except RuntimeError:
+            pass
+
+        result = runner.invoke(main, ["status", "-v"])
+        assert result.exit_code == 0, result.output
+        assert "Error: test gate failed" in result.output

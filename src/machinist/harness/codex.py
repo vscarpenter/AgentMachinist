@@ -7,7 +7,19 @@ class Codex(Harness):
     capabilities = HarnessCapabilities("cli-enforced")
 
     def spec_argv(self, prompt: str) -> list[str]:
-        return [self.command, "exec", "--sandbox", "read-only", "--ephemeral", prompt]
+        argv = [self.command, "exec", "--sandbox", "read-only", "--ephemeral"]
+        if self.config.model:
+            argv.extend(["--model", self.config.model])
+        if self.config.extra_args:
+            argv.extend(self.config.extra_args)
+        argv.append(prompt)
+        return argv
 
     def implement_argv(self, prompt: str) -> list[str]:
-        return [self.command, "exec", "--full-auto", prompt]
+        argv = [self.command, "exec", "--full-auto"]
+        if self.config.model:
+            argv.extend(["--model", self.config.model])
+        if self.config.extra_args:
+            argv.extend(self.config.extra_args)
+        argv.append(prompt)
+        return argv

@@ -52,6 +52,8 @@ class SpecInstall(str, Enum):
 class HarnessConfig(StrictModel):
     name: HarnessName = HarnessName.CLAUDE_CODE
     command: str | None = None
+    model: str | None = None
+    extra_args: list[str] = Field(default_factory=list)
     timeout_minutes: int = Field(default=30, ge=1, le=240)
     spec_timeout_minutes: int = Field(default=10, ge=1, le=60)
 

@@ -634,7 +634,88 @@
       text-decoration: none;
       font-weight: 650;
     }
-    .launch-links a:hover { border-color: var(--signal); color: #ffb597; }
+    .fast-track {
+      margin-top: calc(0px - var(--space-5));
+      margin-bottom: var(--space-7);
+      padding: var(--space-5) var(--space-6);
+      border: 1px solid color-mix(in srgb, var(--signal) 50%, var(--line));
+      border-radius: var(--radius-xl);
+      background: color-mix(in srgb, var(--signal-soft) 40%, var(--paper-1));
+      box-shadow: var(--shadow-sm);
+    }
+    .fast-track-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-4);
+      margin-bottom: var(--space-2);
+    }
+    .fast-track-head h3 { margin: 0; color: var(--signal-strong); font-size: 1.05rem; }
+    .fast-track p { margin-bottom: var(--space-4); font-size: 0.92rem; }
+    .fast-track .terminal { box-shadow: none; border: 1px solid var(--line-strong); }
+
+    .harness-card-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--space-3);
+      margin-top: var(--space-5);
+    }
+    .harness-card {
+      padding: var(--space-4);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--paper-0);
+    }
+    .harness-card h4 { margin: 0 0 var(--space-1); font-size: 0.95rem; font-weight: 700; color: var(--blueprint); }
+    .harness-card p { margin: 0; font-size: 0.8rem; }
+    .harness-card code { display: block; margin-top: var(--space-2); font-size: 0.75rem; color: var(--ink-0); }
+
+    .template-card {
+      margin-top: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-lg);
+      background: var(--paper-0);
+    }
+    .template-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-4);
+      margin-bottom: var(--space-2);
+    }
+    .template-card-head h4 { margin: 0; font-size: 0.92rem; color: var(--signal-strong); }
+
+    .tip-box {
+      margin-top: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      border-left: 3px solid var(--blueprint);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      background: var(--blueprint-soft);
+      font-size: 0.92rem;
+    }
+    .tip-box h4 { margin: 0 0 var(--space-2); font-size: 0.95rem; color: var(--blueprint); }
+    .tip-box p { margin: 0; color: var(--ink-1); }
+    .tip-box code { color: var(--ink-0); font-weight: 600; }
+
+    .cmd-table-shell {
+      margin-top: var(--space-7);
+      padding-top: var(--space-6);
+      border-top: 1px solid var(--line);
+    }
+    .cmd-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: var(--space-4);
+      font-size: 0.88rem;
+    }
+    .cmd-table th, .cmd-table td {
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+    .cmd-table th { color: var(--ink-2); font-family: ui-monospace, monospace; font-size: 0.75rem; text-transform: uppercase; }
+    .cmd-table code { color: var(--signal-strong); font-weight: 700; }
 
     footer { padding-block: var(--space-7); color: var(--ink-2); font-size: 0.85rem; }
     .footer-row { display: flex; justify-content: space-between; gap: var(--space-5); border-top: 1px solid var(--line); padding-top: var(--space-5); }
@@ -803,6 +884,30 @@
       </ol>
     </section>
 
+    <section class="shell" style="margin-top:var(--space-6)">
+      <div class="fast-track">
+        <div class="fast-track-head">
+          <h3>Fast Track · The 60-Second Loop</h3>
+          <span class="micro-note" style="color:var(--signal-strong)">For experienced CLI developers</span>
+        </div>
+        <p>Already authenticated with GitHub and your coding harness? Here is the entire issue-to-tested-PR sequence at a glance.</p>
+        <div class="terminal" aria-label="Quick start command block">
+          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist init&#10;# 1. Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# 2. Review draft PR and approve:&#10;machinist approve 42&#10;# 3. Implement per approved spec & test gate:&#10;machinist run 42">Copy flow</button></div>
+          <pre><span class="comment"># 1. Install & initialize in your repository:</span>
+<span class="prompt">$</span> uv tool install agentmachinist &amp;&amp; machinist init
+
+<span class="comment"># 2. File issue with 'agent-task', then generate draft spec PR:</span>
+<span class="prompt">$</span> machinist spec 42
+
+<span class="comment"># 3. Review spec and stamp approval (accepts PR #18 or issue #42):</span>
+<span class="prompt">$</span> machinist approve 42
+
+<span class="comment"># 4. Implement spec, run test gate, and flip PR to ready:</span>
+<span class="prompt">$</span> machinist run 42</pre>
+        </div>
+      </div>
+    </section>
+
     <section class="section shell" id="prepare">
       <header class="section-head">
         <p class="section-kicker">Station 01 / lay out the tools</p>
@@ -841,6 +946,33 @@
           <p class="gauge-value">Ready means authenticated.</p>
           <p class="gauge-label">A version command proves the executable exists. Run your harness once interactively too; AgentMachinist cannot prove provider access for you.</p>
         </aside>
+
+        <div class="harness-card-grid" style="grid-column: 1 / -1">
+          <div class="harness-card">
+            <h4>Claude Code</h4>
+            <p>Anthropic coding CLI</p>
+            <code>claude login</code>
+            <code>name: claude-code</code>
+          </div>
+          <div class="harness-card">
+            <h4>OpenCode</h4>
+            <p>Open-source agent</p>
+            <code>opencode auth</code>
+            <code>name: opencode</code>
+          </div>
+          <div class="harness-card">
+            <h4>Codex</h4>
+            <p>CLI sandbox agent</p>
+            <code>codex login</code>
+            <code>name: codex</code>
+          </div>
+          <div class="harness-card">
+            <h4>Pi</h4>
+            <p>Lightweight agent</p>
+            <code>pi auth</code>
+            <code>name: pi</code>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1018,6 +1150,23 @@ Managed workflows match machinist.yaml.</pre>
             <h3>File one outcome, not a project.</h3>
             <p>Give the issue a clear title, acceptance criteria, and the <code>agent-task</code> label. “Add CSV export for filtered rows” is a first run. “Improve reporting” is not.</p>
             <span class="walk-command">GitHub · add label agent-task</span>
+
+            <div class="template-card">
+              <div class="template-card-head">
+                <h4>GitHub Issue Prompt Template</h4>
+                <button class="copy-button" style="color:var(--ink-0);border-color:var(--line-strong)" type="button" data-copy="### Summary&#10;Add CSV export for filtered rows on the transactions table.&#10;&#10;### Acceptance Criteria&#10;- [ ] Clicking 'Export CSV' downloads only currently filtered rows&#10;- [ ] Preserves visible column order&#10;- [ ] Includes automated test in tests/test_export.py&#10;&#10;### Out of Scope&#10;- PDF export or background email delivery">Copy template</button>
+              </div>
+              <pre class="mono" style="margin:0;font-size:0.78rem;line-height:1.5;color:var(--ink-1);white-space:pre-wrap">### Summary
+Add CSV export for filtered rows on the table.
+
+### Acceptance Criteria
+- [ ] Exports only the currently filtered rows
+- [ ] Preserves visible column order
+- [ ] Has a focused automated test
+
+### Out of Scope
+- Background email delivery</pre>
+            </div>
           </div>
           <figure class="walk-visual">
             <figcaption class="visual-label"><span>GITHUB ISSUE</span><span>good first input</span></figcaption>
@@ -1068,9 +1217,16 @@ Managed workflows match machinist.yaml.</pre>
         <article class="walk-step">
           <div class="walk-copy">
             <span class="walk-index">07 / STAMP THE BLUEPRINT</span>
-            <h3>Approve the PR number, not the issue number.</h3>
-            <p>Read the spec first. Then run <code>machinist approve 18</code> for PR #18, or comment exactly <code>/machinist-execute</code>. Approval is bound to the current commit; edits make it stale.</p>
+            <h3>Approve the PR number or the issue number.</h3>
+            <p>Read the spec first. Run <code>machinist approve 18</code> for PR #18 (or <code>machinist approve 42</code> for issue #42), or comment <code>/machinist-execute</code>. Approval is bound to the current commit; edits make it stale.</p>
             <span class="walk-command">machinist approve 18</span>
+
+            <div class="tip-box">
+              <h4>Want to revise the spec first?</h4>
+              <p>You have two frictionless options before approving:</p>
+              <p style="margin-top:var(--space-2)"><strong>Direct edit:</strong> Checkout <code>agent/issue-42</code>, edit <code>.machinist/specs/issue-42-spec.md</code>, commit, and push. Then run <code>machinist approve 42</code> on the new commit SHA.</p>
+              <p style="margin-top:var(--space-2)"><strong>Re-prompt:</strong> Update the GitHub issue body and run <code>machinist retry 42 --phase spec --run</code>.</p>
+            </div>
           </div>
           <figure class="walk-visual">
             <figcaption class="visual-label"><span>HUMAN GATE</span><span>approval names one commit</span></figcaption>
@@ -1099,6 +1255,15 @@ Managed workflows match machinist.yaml.</pre>
             <h3>Let the machine work. Keep the merge.</h3>
             <p>The watcher or <code>machinist run 42</code> provisions the approved branch, asks the harness to implement, runs your test command, pushes with a lease, and marks the PR ready. You review and merge.</p>
             <span class="walk-command">machinist run 42</span>
+
+            <div class="tip-box">
+              <h4>What if the test gate fails?</h4>
+              <p>The controller keeps the workspace for inspection rather than pushing bad code:</p>
+              <pre class="mono" style="margin:var(--space-2) 0 0;font-size:0.75rem;color:var(--ink-0);white-space:pre-wrap">cd ~/.machinist/workspaces/your-repo-issue-42
+uv run pytest
+# Fix code, verify tests pass, then finalize:
+machinist retry 42 --phase execute --run</pre>
+            </div>
           </div>
           <figure class="walk-visual">
             <figcaption class="visual-label"><span>READY FOR REVIEW</span><span>controller delivered; human decides</span></figcaption>
@@ -1247,6 +1412,70 @@ Managed workflows match machinist.yaml.</pre>
           <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/harnesses.md"><span>Harness support matrix</span><span aria-hidden="true">→</span></a>
           <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md"><span>Trust model</span><span aria-hidden="true">→</span></a>
         </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="commands">
+      <div class="section-head">
+        <p class="section-kicker">Quick Reference</p>
+        <h2>Command Cheatsheet</h2>
+        <p>Keep these core subcommands nearby for day-to-day work.</p>
+      </div>
+      <div class="cmd-table-shell">
+        <table class="cmd-table">
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>machinist init</code></td>
+              <td>Set up <code>machinist.yaml</code>, <code>.machinist/</code>, workflows, and labels. Auto-detects test runners.</td>
+            </tr>
+            <tr>
+              <td><code>machinist doctor</code></td>
+              <td>Read-only diagnostics for Git, <code>gh</code>, harness binaries, test gate, and workflow drift.</td>
+            </tr>
+            <tr>
+              <td><code>machinist status [-v]</code></td>
+              <td>Show pipeline state for all managed issues and PRs (<code>-v</code> shows errors &amp; workspace paths).</td>
+            </tr>
+            <tr>
+              <td><code>machinist spec &lt;n&gt;</code></td>
+              <td>Generate implementation spec and open draft PR for issue <code>&lt;n&gt;</code> (Phase 1).</td>
+            </tr>
+            <tr>
+              <td><code>machinist approve &lt;target&gt;</code></td>
+              <td>Approve draft PR (accepts PR number or issue number) bound to exact commit SHA.</td>
+            </tr>
+            <tr>
+              <td><code>machinist run &lt;n&gt; [--retry]</code></td>
+              <td>Execute implementation and run test gate for issue <code>&lt;n&gt;</code> (Phase 3).</td>
+            </tr>
+            <tr>
+              <td><code>machinist retry &lt;n&gt; [--run]</code></td>
+              <td>Mark failed task run retryable (<code>--run</code> immediately executes the phase).</td>
+            </tr>
+            <tr>
+              <td><code>machinist clean [--issue &lt;n&gt;|--all]</code></td>
+              <td>Safely remove or prune retained worktrees under <code>workspace.root</code>.</td>
+            </tr>
+            <tr>
+              <td><code>machinist inspect &lt;n&gt;</code></td>
+              <td>Display complete diagnostic history, GitHub PR state, approval SHA, and errors for issue <code>&lt;n&gt;</code>.</td>
+            </tr>
+            <tr>
+              <td><code>machinist watch [--once] [-v]</code></td>
+              <td>Daemon loop polling GitHub for labeled issues and approved PRs.</td>
+            </tr>
+            <tr>
+              <td><code>machinist sync-workflows [--check]</code></td>
+              <td>Project configuration into managed <code>.github/workflows/</code> files.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
   </main>

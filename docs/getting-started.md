@@ -97,6 +97,9 @@ the exact 40-character PR head SHA. Choose one method:
 machinist approve 8
 ```
 
+You can pass either the draft PR number (`8`) or the issue number (`7`):
+`machinist approve` automatically resolves the associated PR branch.
+
 Or post the exact PR comment:
 
 ```text
@@ -207,6 +210,7 @@ Start with:
 ```sh
 machinist doctor
 machinist status
+machinist inspect 7
 ```
 
 Common states and responses:
@@ -219,8 +223,8 @@ Common states and responses:
 | `approval stale` | The branch changed after approval; approve the current head. |
 | `approved` | Run `machinist run <issue>` or leave `watch` running. |
 | `in review` | Implementation finished; review the PR. |
-| Previous run failed | Fix the cause, then run `machinist retry <issue>` and restart a long-running watcher. |
-| Workspace already exists | Inspect it first, then remove the worktree/clone intentionally. |
+| Previous run failed | Fix the cause, then run `machinist retry <issue> --run` or `machinist run <issue> --retry`. |
+| Workspace already exists | Inspect it first, or prune it with `machinist clean --issue <issue>` or `machinist clean --all`. |
 | Managed workflow drift | Run `machinist sync-workflows`, inspect, commit, and push. |
 
 Task Run failures and recovery evidence live under `.machinist/runs/` and are

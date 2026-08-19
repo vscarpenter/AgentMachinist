@@ -228,3 +228,26 @@ def test_clone_strategy_provisions_independent_clone(repo, tmp_path):
     assert git(path, "branch", "--show-current") == "agent/issue-7"
     # The clone's origin is the real origin, so push targets the same remote.
     assert git(path, "remote", "get-url", "origin") == str(tmp_path / "origin.git")
+
+
+def test_workspace_management_helpers(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+    # workspace_for_task
+    ws_path = workspace.workspace_for_task("issue-7")
+    assert ws_path == tmp_path / "ws" / f"{repo.name}-issue-7"
+
+    # Initially empty list_workspaces
+    assert workspace.list_workspaces() == []
+
+    # Provision a worktree
+    path = workspace.provision("issue-7", "agent/issue-7", "origin/main")
+    assert path.exists()
+
+    workspaces = workspace.list_workspaces()
+    assert len(workspaces) == 1
+    assert workspaces[0] == path
+
+    # remove_workspace
+    workspace.remove_workspace(path)
+    assert not path.exists()
+    assert workspace.list_workspaces() == []

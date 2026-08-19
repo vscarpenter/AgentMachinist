@@ -7,7 +7,7 @@ class ClaudeCode(Harness):
     capabilities = HarnessCapabilities("cli-enforced")
 
     def spec_argv(self, prompt: str) -> list[str]:
-        return [
+        argv = [
             self.command,
             "-p",
             prompt,
@@ -19,8 +19,18 @@ class ClaudeCode(Harness):
             "Read,Grep,Glob",
             "--no-session-persistence",
         ]
+        if self.config.model:
+            argv.extend(["--model", self.config.model])
+        if self.config.extra_args:
+            argv.extend(self.config.extra_args)
+        return argv
 
     def implement_argv(self, prompt: str) -> list[str]:
         # acceptEdits lets the headless run modify files without stalling
         # on interactive permission prompts.
-        return [self.command, "-p", prompt, "--permission-mode", "acceptEdits"]
+        argv = [self.command, "-p", prompt, "--permission-mode", "acceptEdits"]
+        if self.config.model:
+            argv.extend(["--model", self.config.model])
+        if self.config.extra_args:
+            argv.extend(self.config.extra_args)
+        return argv

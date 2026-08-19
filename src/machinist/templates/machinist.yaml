@@ -7,6 +7,8 @@ version: 1
 harness:
   name: claude-code            # claude-code | opencode | pi | codex
   command: null                # optional: override the harness executable path
+  model: null                  # optional: override model (e.g. "claude-3-7-sonnet")
+  extra_args: []               # optional: additional CLI arguments to pass to harness
   timeout_minutes: 30          # Phase 3 implementation budget (1-240)
   spec_timeout_minutes: 10     # Phase 1 spec-writing budget (1-60)
 

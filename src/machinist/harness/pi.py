@@ -7,7 +7,7 @@ class Pi(Harness):
     capabilities = HarnessCapabilities("cli-enforced")
 
     def spec_argv(self, prompt: str) -> list[str]:
-        return [
+        argv = [
             self.command,
             "-p",
             "--tools",
@@ -16,8 +16,19 @@ class Pi(Harness):
             "--no-skills",
             "--no-prompt-templates",
             "--no-session",
-            prompt,
         ]
+        if self.config.model:
+            argv.extend(["--model", self.config.model])
+        if self.config.extra_args:
+            argv.extend(self.config.extra_args)
+        argv.append(prompt)
+        return argv
 
     def implement_argv(self, prompt: str) -> list[str]:
-        return [self.command, "-p", prompt]
+        argv = [self.command, "-p"]
+        if self.config.model:
+            argv.extend(["--model", self.config.model])
+        if self.config.extra_args:
+            argv.extend(self.config.extra_args)
+        argv.append(prompt)
+        return argv

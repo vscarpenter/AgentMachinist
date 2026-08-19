@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentMachinist — System Explainer Video</title>
+  <style>
+    :root {
+      --bg: #090d13;
+      --paper: #111722;
+      --paper-card: #182232;
+      --paper-card-active: #1e2c40;
+      --ink: #f1f5f9;
+      --ink-muted: #94a3b8;
+      --ink-dim: #64748b;
+      --orange: #ff6036;
+      --orange-soft: rgba(255, 96, 54, 0.15);
+      --orange-glow: rgba(255, 96, 54, 0.35);
+      --blue: #38bdf8;
+      --blue-soft: rgba(56, 189, 248, 0.15);
+      --green: #22c55e;
+      --green-soft: rgba(34, 197, 94, 0.15);
+      --purple: #c084fc;
+      --purple-soft: rgba(192, 132, 252, 0.15);
+      --border: rgba(255, 255, 255, 0.1);
+      --border-active: rgba(255, 96, 54, 0.6);
+      --radius: 12px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      overflow-x: hidden;
+    }
+
+    /* Video Player Canvas Container */
+    .video-frame {
+      width: 100%;
+      max-width: 960px;
+      aspect-ratio: 16 / 9;
+      background: #0d121b;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px -10px var(--orange-glow);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top HUD / Header */
+    .video-hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(17, 23, 34, 0.85);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+    }
+    .hud-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: -0.02em;
+    }
+    .hud-logo {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: var(--orange);
+      stroke-width: 2.2;
+    }
+    .hud-badge {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      background: var(--orange-soft);
+      color: var(--orange);
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 96, 54, 0.3);
+    }
+    .hud-scene-title {
+      font-size: 0.85rem;
+      color: var(--ink-muted);
+      font-weight: 500;
+    }
+    .hud-timer {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--ink-muted);
+    }
+
+    /* Screen / Stage Area */
+    .stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      padding: 2rem 2.5rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.97) translateY(8px);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.5s;
+    }
+    .scene.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1) translateY(0);
+    }
+
+    /* Scene 1: Title Screen */
+    .scene-title-wrapper {
+      text-align: center;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .title-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--orange);
+      background: var(--orange-soft);
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      margin-bottom: 1rem;
+      border: 1px solid rgba(255, 96, 54, 0.3);
+    }
+    .scene-title-wrapper h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #ffffff 40%, var(--ink-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .scene-title-wrapper p.lead {
+      font-size: 1.15rem;
+      color: var(--ink-muted);
+      line-height: 1.6;
+      max-width: 620px;
+      margin: 0 auto 1.5rem;
+    }
+    .harness-pills {
+      display: flex;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+    .harness-pill {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      color: var(--blue);
+    }
+
+    /* Scene 2: The Problem */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .card-pain {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .card-pain h3 {
+      color: #f87171;
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card-pain ul {
+      list-style: none;
+      color: var(--ink-muted);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .card-pain li {
+      margin-bottom: 0.5rem;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+    .card-pain li::before {
+      content: "✕";
+      position: absolute;
+      left: 0;
+      color: #f87171;
+      font-weight: bold;
+    }
+
+    .card-solution {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .card-solution h3 {
+      color: #4ade80;
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card-solution ul {
+      list-style: none;
+      color: var(--ink-muted);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .card-solution li {
+      margin-bottom: 0.5rem;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+    .card-solution li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #4ade80;
+      font-weight: bold;
+    }
+
+    /* Scene 3: The 3-Phase Assembly Line */
+    .pipeline-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .pipeline-steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.85rem;
+      position: relative;
+    }
+    .pipeline-step {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 0.9rem;
+      text-align: center;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    .pipeline-step.highlight {
+      border-color: var(--orange);
+      background: var(--paper-card-active);
+      box-shadow: 0 0 20px -5px var(--orange-glow);
+      transform: translateY(-4px);
+    }
+    .step-num {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--orange-soft);
+      color: var(--orange);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 24px;
+      margin-bottom: 0.4rem;
+    }
+    .step-title {
+      font-weight: 700;
+      font-size: 0.92rem;
+      margin-bottom: 0.25rem;
+      color: var(--ink);
+    }
+    .step-desc {
+      font-size: 0.75rem;
+      color: var(--ink-muted);
+      line-height: 1.4;
+    }
+    .pipeline-step::after {
+      content: "→";
+      position: absolute;
+      right: -0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-dim);
+      font-size: 1rem;
+      font-weight: bold;
+      z-index: 2;
+    }
+    .pipeline-step:last-child::after { display: none; }
+
+    .pipeline-callout {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: var(--radius);
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.88rem;
+    }
+    .callout-rule {
+      color: var(--blue);
+      font-weight: 600;
+    }
+    .callout-sub {
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+    }
+
+    /* Scene 4: Live Terminal Simulation */
+    .term-sim {
+      background: #080c14;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      font-family: var(--font-mono);
+    }
+    .term-sim-header {
+      background: #101622;
+      padding: 0.5rem 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .term-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .term-dot.r { background: #ef4444; }
+    .term-dot.y { background: #f59e0b; }
+    .term-dot.g { background: #10b981; }
+    .term-sim-title {
+      font-size: 0.72rem;
+      color: var(--ink-dim);
+      margin-left: 0.4rem;
+    }
+    .term-sim-body {
+      padding: 1.1rem 1.25rem;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      min-height: 220px;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+    }
+    .c-prompt { color: var(--orange); }
+    .c-cmd { color: #f8fafc; font-weight: bold; }
+    .c-ok { color: #4ade80; }
+    .c-blue { color: #38bdf8; }
+    .c-dim { color: #64748b; }
+    .c-warn { color: #fbbf24; }
+
+    /* Scene 5: Safety Boundary & Adapters */
+    .safety-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 1.5rem;
+      align-items: stretch;
+    }
+    .safety-features {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .safety-item {
+      display: flex;
+      gap: 0.75rem;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+    }
+    .safety-icon {
+      font-size: 1.2rem;
+      line-height: 1;
+    }
+    .safety-text h4 {
+      font-size: 0.88rem;
+      color: var(--ink);
+      margin-bottom: 0.15rem;
+    }
+    .safety-text p {
+      font-size: 0.78rem;
+      color: var(--ink-muted);
+      line-height: 1.4;
+    }
+    .adapters-box {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .adapters-box h4 {
+      font-size: 0.9rem;
+      color: var(--blue);
+      margin-bottom: 0.75rem;
+    }
+    .adapter-tags {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .adapter-tag {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      background: var(--paper-card);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Scene 6: Outro / Ready to Launch */
+    .outro-card {
+      text-align: center;
+      max-width: 640px;
+      margin: 0 auto;
+      background: linear-gradient(180deg, rgba(255, 96, 54, 0.08) 0%, rgba(17, 23, 34, 0.4) 100%);
+      border: 1px solid rgba(255, 96, 54, 0.3);
+      border-radius: var(--radius);
+      padding: 2.25rem 2rem;
+    }
+    .outro-card h2 {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.03em;
+    }
+    .outro-card p {
+      color: var(--ink-muted);
+      margin-bottom: 1.5rem;
+      font-size: 1rem;
+    }
+    .install-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: #080c14;
+      border: 1px solid var(--orange);
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      color: #f8fafc;
+      box-shadow: 0 0 25px -5px var(--orange-glow);
+    }
+    .install-box span.prompt { color: var(--orange); }
+
+    /* Bottom Subtitles & Caption Bar */
+    .caption-bar {
+      padding: 0.85rem 1.5rem;
+      background: rgba(10, 14, 22, 0.9);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 10;
+    }
+    .caption-pill {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--orange);
+      background: var(--orange-soft);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 96, 54, 0.3);
+      white-space: nowrap;
+    }
+    .caption-text {
+      font-size: 0.92rem;
+      color: var(--ink);
+      font-weight: 500;
+      line-height: 1.4;
+      flex: 1;
+      transition: color 0.2s;
+    }
+
+    /* Timeline & Playback Controls */
+    .playback-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: 0.65rem 1.25rem;
+      background: #0b0f17;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      z-index: 10;
+    }
+    .play-btn {
+      background: var(--orange);
+      border: none;
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .play-btn:hover {
+      transform: scale(1.08);
+      background: #ff744f;
+    }
+    .play-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+    .progress-bar-bg {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--orange), #ff9478);
+      border-radius: 3px;
+      transition: width 0.1s linear;
+    }
+
+    .scene-nav {
+      display: flex;
+      gap: 0.4rem;
+    }
+    .scene-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--ink-muted);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      padding: 0.2rem 0.45rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .scene-btn:hover, .scene-btn.active {
+      border-color: var(--orange);
+      color: var(--orange);
+      background: var(--orange-soft);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="video-frame" id="player">
+    <!-- Top HUD -->
+    <header class="video-hud">
+      <div class="hud-brand">
+        <svg class="hud-logo" viewBox="0 0 32 32">
+          <path d="M6 9h20v14H6z"/>
+          <path d="M10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8"/>
+        </svg>
+        <span>AgentMachinist</span>
+        <span class="hud-badge">v0.3.0</span>
+      </div>
+      <div class="hud-scene-title" id="hud-scene-name">Scene 1 · Introduction</div>
+      <div class="hud-timer" id="hud-time">00:00 / 01:00</div>
+    </header>
+
+    <!-- Stage / Screens -->
+    <main class="stage">
+      <!-- Scene 1: Intro -->
+      <section class="scene active" id="scene-1">
+        <div class="scene-title-wrapper">
+          <div class="title-eyebrow">⚡ Local-First Issue-to-PR Pipeline</div>
+          <h1>Machining GitHub Issues Into Tested Pull Requests</h1>
+          <p class="lead">Connect your GitHub issues to autonomous coding harnesses, with guaranteed human-approved specifications before code is written.</p>
+          <div class="harness-pills">
+            <span class="harness-pill">Claude Code</span>
+            <span class="harness-pill">OpenCode</span>
+            <span class="harness-pill">Codex</span>
+            <span class="harness-pill">Pi</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 2: The Problem & Solution -->
+      <section class="scene" id="scene-2">
+        <div class="problem-grid">
+          <div class="card-pain">
+            <h3>Uncontrolled AI Agents</h3>
+            <ul>
+              <li>Hallucinate unwanted architecture changes</li>
+              <li>Push unverified commits directly to main</li>
+              <li>Break existing test suites without warning</li>
+              <li>Lack clear checkpoint between planning and coding</li>
+            </ul>
+          </div>
+          <div class="card-solution">
+            <h3>The Machinist Guardrails</h3>
+            <ul>
+              <li>Generates an immutable Spec PR first</li>
+              <li>Requires human approval bound to exact commit SHA</li>
+              <li>Executes inside isolated Git worktrees</li>
+              <li>Enforces local test gate before readying PR</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 3: The 3-Phase Assembly Line -->
+      <section class="scene" id="scene-3">
+        <div class="pipeline-container">
+          <div class="pipeline-steps">
+            <div class="pipeline-step" id="p-step-1">
+              <span class="step-num">01</span>
+              <div class="step-title">Trigger</div>
+              <div class="step-desc">Issue labeled <code>agent-task</code> with clear criteria</div>
+            </div>
+            <div class="pipeline-step" id="p-step-2">
+              <span class="step-num">02</span>
+              <div class="step-title">Spec Plan</div>
+              <div class="step-desc">Harness writes plan to Draft PR without code changes</div>
+            </div>
+            <div class="pipeline-step" id="p-step-3">
+              <span class="step-num">03</span>
+              <div class="step-title">SHA Approval</div>
+              <div class="step-desc">Human approves exact commit SHA</div>
+            </div>
+            <div class="pipeline-step" id="p-step-4">
+              <span class="step-num">04</span>
+              <div class="step-title">Test & Ready</div>
+              <div class="step-desc">Harness implements; test gate passes; PR ready</div>
+            </div>
+          </div>
+          <div class="pipeline-callout">
+            <span class="callout-rule">🔒 Absolute Invariant: AgentMachinist NEVER clicks merge.</span>
+            <span class="callout-sub">You retain 100% final review custody.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 4: Live Execution Simulation -->
+      <section class="scene" id="scene-4">
+        <div class="term-sim">
+          <div class="term-sim-header">
+            <span class="term-dot r"></span>
+            <span class="term-dot y"></span>
+            <span class="term-dot g"></span>
+            <span class="term-sim-title">bash — machinist operator loop</span>
+          </div>
+          <div class="term-sim-body" id="term-content"><span class="c-prompt">$</span> <span class="c-cmd">machinist spec 42</span>
+<span class="c-dim">... reading issue #42: "Add CSV export for filtered rows"</span>
+<span class="c-ok">✓</span> Created draft PR #18 with .machinist/specs/issue-42-spec.md
+<span class="c-dim">... awaiting human review and approval</span>
+
+<span class="c-prompt">$</span> <span class="c-cmd">machinist approve 42</span>
+<span class="c-ok">✓</span> Approved PR #18 bound to commit <span class="c-blue">a17c98d42e6f</span>
+
+<span class="c-prompt">$</span> <span class="c-cmd">machinist run 42</span>
+<span class="c-dim">... provisioned worktree ~/.machinist/workspaces/repo-issue-42</span>
+<span class="c-dim">... claude-code implemented requirements</span>
+<span class="c-dim">... running test gate: uv run pytest</span>
+<span class="c-ok">✓</span> 185 passed in 4.2s (quality gate passed!)
+<span class="c-ok">✓</span> Pushed with lease; converted PR #18 to READY FOR REVIEW</div>
+        </div>
+      </section>
+
+      <!-- Scene 5: Safety Boundary -->
+      <section class="scene" id="scene-5">
+        <div class="safety-grid">
+          <div class="safety-features">
+            <div class="safety-item">
+              <span class="safety-icon">🛡️</span>
+              <div class="safety-text">
+                <h4>Credential Stripping</h4>
+                <p>GitHub tokens and SSH sockets are scrubbed from harness environments.</p>
+              </div>
+            </div>
+            <div class="safety-item">
+              <span class="safety-icon">🌿</span>
+              <div class="safety-text">
+                <h4>Isolated Worktrees</h4>
+                <p>Builds happen in clean worktrees; automatically pruned upon test success.</p>
+              </div>
+            </div>
+            <div class="safety-item">
+              <span class="safety-icon">🔑</span>
+              <div class="safety-text">
+                <h4>Leased Pushes</h4>
+                <p>Pushes refuse if remote heads have diverged, preventing lost work.</p>
+              </div>
+            </div>
+          </div>
+          <div class="adapters-box">
+            <h4>Pluggable Coding Harnesses</h4>
+            <div class="adapter-tags">
+              <div class="adapter-tag"><span>Claude Code</span><span class="c-blue">Anthropic CLI</span></div>
+              <div class="adapter-tag"><span>OpenCode</span><span class="c-ok">Open Source</span></div>
+              <div class="adapter-tag"><span>Codex</span><span class="c-warn">Sandbox CLI</span></div>
+              <div class="adapter-tag"><span>Pi</span><span class="c-blue">Lightweight</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 6: Get Started -->
+      <section class="scene" id="scene-6">
+        <div class="outro-card">
+          <h2>Ready to Supercharge Your Solo Workflow?</h2>
+          <p>AgentMachinist is available today on PyPI. Get started in under 60 seconds.</p>
+          <div class="install-box">
+            <span class="prompt">$</span>
+            <code>uv tool install agentmachinist && machinist init</code>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Caption Bar -->
+    <div class="caption-bar">
+      <span class="caption-pill" id="caption-tag">VOICEOVER</span>
+      <div class="caption-text" id="caption-text">Welcome to AgentMachinist: the issue-to-reviewed-PR build pipeline for solo developers.</div>
+    </div>
+
+    <!-- Playback Controls -->
+    <footer class="playback-controls">
+      <button class="play-btn" id="play-pause-btn" type="button" aria-label="Play or Pause">
+        <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <div class="progress-bar-bg" id="progress-bg">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div class="scene-nav">
+        <button class="scene-btn active" data-scene="1">1. Intro</button>
+        <button class="scene-btn" data-scene="2">2. Guardrails</button>
+        <button class="scene-btn" data-scene="3">3. Assembly Line</button>
+        <button class="scene-btn" data-scene="4">4. Live Demo</button>
+        <button class="scene-btn" data-scene="5">5. Safety</button>
+        <button class="scene-btn" data-scene="6">6. Launch</button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (() => {
+      const scenes = [
+        {
+          id: 1,
+          name: "Scene 1 · Introduction",
+          duration: 7000,
+          caption: "Welcome to AgentMachinist: the local-first, issue-to-reviewed-PR pipeline built specifically for solo developers."
+        },
+        {
+          id: 2,
+          name: "Scene 2 · Why Guardrails Matter",
+          duration: 7500,
+          caption: "Uncontrolled AI agents often hallucinate and push broken commits. AgentMachinist provides an ironclad checkpoint between planning and coding."
+        },
+        {
+          id: 3,
+          name: "Scene 3 · The 3-Phase Assembly Line",
+          duration: 8000,
+          caption: "Every task follows four explicit gates: Issue trigger, automated draft spec, human commit-SHA approval, and tested execution."
+        },
+        {
+          id: 4,
+          name: "Scene 4 · Live CLI Walkthrough",
+          duration: 8500,
+          caption: "From `machinist spec` to `machinist approve` and `machinist run`: the harness implements in an isolated worktree and runs your test gate."
+        },
+        {
+          id: 5,
+          name: "Scene 5 · Safety Boundary & Adapters",
+          duration: 7000,
+          caption: "Scrubbed environment credentials, leased pushes, and first-class support for Claude Code, OpenCode, Codex, and Pi."
+        },
+        {
+          id: 6,
+          name: "Scene 6 · Get Started",
+          duration: 7000,
+          caption: "Install AgentMachinist 0.3.0 from PyPI with `uv tool install agentmachinist` and start shipping with confidence."
+        }
+      ];
+
+      const totalDuration = scenes.reduce((acc, s) => acc + s.duration, 0);
+      let currentSceneIndex = 0;
+      let isPlaying = false;
+      let elapsedTime = 0;
+      let timerInterval = null;
+
+      const sceneEls = scenes.map(s => document.getElementById(`scene-${s.id}`));
+      const sceneBtns = document.querySelectorAll('.scene-btn');
+      const hudSceneName = document.getElementById('hud-scene-name');
+      const hudTime = document.getElementById('hud-time');
+      const captionText = document.getElementById('caption-text');
+      const progressFill = document.getElementById('progress-fill');
+      const playBtn = document.getElementById('play-pause-btn');
+      const playIcon = document.getElementById('play-icon');
+
+      function formatTime(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
+        const s = (totalSec % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+      }
+
+      function updateUI() {
+        const s = scenes[currentSceneIndex];
+        hudSceneName.textContent = s.name;
+        captionText.textContent = s.caption;
+        hudTime.textContent = `${formatTime(elapsedTime)} / ${formatTime(totalDuration)}`;
+        progressFill.style.width = `${(elapsedTime / totalDuration) * 100}%`;
+
+        sceneEls.forEach((el, idx) => {
+          el.classList.toggle('active', idx === currentSceneIndex);
+        });
+
+        sceneBtns.forEach((btn, idx) => {
+          btn.classList.toggle('active', idx === currentSceneIndex);
+        });
+
+        // Pipeline animation highlight in scene 3
+        if (s.id === 3) {
+          const stepIndex = Math.min(3, Math.floor(((elapsedTime % s.duration) / s.duration) * 4));
+          for (let i = 1; i <= 4; i++) {
+            const stepEl = document.getElementById(`p-step-${i}`);
+            if (stepEl) stepEl.classList.toggle('highlight', i === stepIndex + 1);
+          }
+        }
+      }
+
+      function goToScene(index) {
+        currentSceneIndex = index;
+        let cumulative = 0;
+        for (let i = 0; i < index; i++) cumulative += scenes[i].duration;
+        elapsedTime = cumulative;
+        updateUI();
+      }
+
+      function tick() {
+        elapsedTime += 100;
+        if (elapsedTime >= totalDuration) {
+          elapsedTime = totalDuration;
+          pause();
+        } else {
+          let cumulative = 0;
+          for (let i = 0; i < scenes.length; i++) {
+            cumulative += scenes[i].duration;
+            if (elapsedTime < cumulative) {
+              currentSceneIndex = i;
+              break;
+            }
+          }
+        }
+        updateUI();
+      }
+
+      function play() {
+        isPlaying = true;
+        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        timerInterval = setInterval(tick, 100);
+      }
+
+      function pause() {
+        isPlaying = false;
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        clearInterval(timerInterval);
+      }
+
+      playBtn.addEventListener('click', () => {
+        if (isPlaying) pause();
+        else play();
+      });
+
+      sceneBtns.forEach((btn, idx) => {
+        btn.addEventListener('click', () => {
+          goToScene(idx);
+        });
+      });
+
+      document.getElementById('progress-bg').addEventListener('click', (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        elapsedTime = ratio * totalDuration;
+        let cumulative = 0;
+        for (let i = 0; i < scenes.length; i++) {
+          cumulative += scenes[i].duration;
+          if (elapsedTime < cumulative) {
+            currentSceneIndex = i;
+            break;
+          }
+        }
+        updateUI();
+      });
+
+      // Auto-start playback on load
+      play();
+    })();
+  </script>
+</body>
+</html>
