@@ -10,7 +10,7 @@ Deepen AgentMachinist's Task lifecycle so Approval names an immutable Spec, loca
 ## Requirements
 
 1. Approval MUST record the exact Task branch head SHA and Execute MUST refuse missing or stale Approval.
-2. Manual labels, `/machinist-execute`, and a local `machinist approve <pr>` path MUST all be able to create SHA-bound Approval.
+2. Manual labels, `/machinist-execute <full-sha>`, and a local `machinist approve <pr>` path MUST all be able to create SHA-bound Approval.
 3. Task Runs MUST use an atomic local Claim, persist running/succeeded/failed state under `.machinist/runs/`, survive watcher restarts, and require an explicit retry after failure.
 4. Local and GitHub Actions Spec dispatch MUST be mutually selected by configuration; the local watcher MUST not dispatch Spec when CI owns it.
 5. Generated workflows MUST project configured labels and the installed AgentMachinist version, and drift MUST be detectable and repairable.

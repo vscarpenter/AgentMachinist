@@ -17,7 +17,8 @@ approval automation never checks out or executes PR-head code.
 ## Enforced controls
 
 - Exact SHA-bound approval plus configured label.
-- Exact `/machinist-execute` command and trusted author association.
+- Exact `/machinist-execute <full-spec-commit-sha>` command and trusted author
+  association; label approvals bind the SHA from the authorization event.
 - Codex read-only sandbox, Pi read-tool allowlist, and Claude plan/read-tool
   arguments during spec generation.
 - Rejection of any dirty repository after spec generation.

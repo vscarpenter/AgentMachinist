@@ -17,6 +17,18 @@ does not validate subscription state or model access; `doctor` verifies only
 that the executable is discoverable. Run the harness interactively once if an
 otherwise healthy setup exits with an auth error.
 
+Current authentication entry points are:
+
+| Harness | Check | Sign in or configure |
+| --- | --- | --- |
+| Claude Code | `claude auth status` | `claude auth login` |
+| Codex | `codex login status` | `codex login` |
+| OpenCode | `opencode auth list` | `opencode auth login` |
+| Pi | `pi auth check --model <model>` | Configure credentials for the selected provider or model, then rerun the check. |
+
+These CLIs evolve independently. Confirm the command with the installed
+harness's `--help` output when upgrading.
+
 The GitHub Actions spec template installs Claude Code and requires
 `ANTHROPIC_API_KEY`. Selecting another local harness does not rewrite that
 provider-specific installation step.
@@ -28,6 +40,16 @@ Harness subprocesses retain provider variables such as `ANTHROPIC_API_KEY` or
 and SSH-agent variables and disables terminal credential prompting. This is
 credential reduction, not credential isolation; see the
 [trust model](trust-model.md).
+
+## Model and additional arguments
+
+`harness.model` passes one model selection to the adapter. `harness.extra_args`
+is an advanced option applied to both Spec and Execute. AgentMachinist rejects
+adapter-owned sandbox, permission, model, session, and tool flags, including
+duplicate forms that could override its controls. Other additional arguments
+are appended to the adapter command and may change behavior as harness CLIs
+evolve, so keep `extra_args` empty unless you have reviewed the final command
+and updated your threat assessment.
 
 ## Compatibility checks
 
