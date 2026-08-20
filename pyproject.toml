@@ -1,6 +1,6 @@
 [project]
 name = "agentmachinist"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local-first issue-to-PR build pipeline for coding harnesses"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -10,7 +10,7 @@ keywords = ["agents", "ci", "github", "claude-code", "developer-tools"]
 dependencies = [
     "click>=8.1",
     "pydantic>=2.7",
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.1",
 ]
 
 [project.urls]
@@ -22,27 +22,66 @@ Issues = "https://github.com/vscarpenter/AgentMachinist/issues"
 machinist = "machinist.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "hatchling==1.32.0",
+    "mypy==2.3.1",
+    "pytest>=8.0",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.3",
+    "types-pyyaml==6.0.12.20260815",
+]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/machinist"]
 
 [tool.hatch.build.targets.sdist]
-exclude = [
-  "/.github",
-  "/.machinist",
-  "/.superpowers",
-  "/docs",
-  "/tasks",
-  "/AgentMachinist-Prompt.md",
-  "/CLAUDE.md",
-  "/CONTEXT.md",
+include = [
+  "/src/machinist",
+  "/tests",
+  "/scripts",
+  "/pyproject.toml",
+  "/uv.lock",
+  "/README.md",
+  "/LICENSE",
+  "/CHANGELOG.md",
+  "/CONTRIBUTING.md",
+  "/SECURITY.md",
+  "/.gitignore",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Keep the first lint ratchet focused: syntax/import correctness and the
+# high-signal bugbear rules, with stylistic layout owned by `ruff format`.
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+show_error_codes = true
+warn_unused_configs = true
+# TODO(static-types): expand this zero-error gate to all of src/machinist once
+# the CLI read-model and dynamic Harness runner annotations are made precise.
+files = [
+    "src/machinist/config.py",
+    "src/machinist/lifecycle.py",
+    "src/machinist/workspace.py",
+    "src/machinist/process.py",
+    "src/machinist/verification.py",
+]
+
+[tool.coverage.run]
+source = ["machinist"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

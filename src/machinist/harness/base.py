@@ -7,17 +7,26 @@ translation live here so adapters stay one screen long.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Callable, ClassVar
+from pathlib import Path
+from typing import ClassVar
 
 from machinist.config import HarnessConfig
+from machinist.process import (
+    HARNESS_CREDENTIAL_ALLOWLIST,
+    ProcessCancelledError,
+    ProcessOutputLimitError,
+    ProcessStartError,
+    ProcessStragglerError,
+    credential_reduced_environment,
+    run_supervised,
+)
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -26,23 +35,18 @@ class HarnessError(Exception):
     """A harness invocation failed or timed out."""
 
 
+class HarnessCancelledError(HarnessError):
+    """The operator cooperatively cancelled a supervised harness."""
+
+    cancelled = True
+
+
 @dataclass(frozen=True)
 class HarnessCapabilities:
     """Controls the adapter actually requests, not security guarantees."""
 
     spec_repository_writes: str
     implementation_git_control: str = "prompt-and-postcondition"
-
-
-_CONTROLLER_CREDENTIALS = {
-    "GH_TOKEN",
-    "GITHUB_TOKEN",
-    "GIT_ASKPASS",
-    "SSH_ASKPASS",
-    "SSH_AUTH_SOCK",
-    "GIT_SSH",
-    "GIT_SSH_COMMAND",
-}
 
 
 class Harness(ABC):
@@ -57,7 +61,12 @@ class Harness(ABC):
 
     def __init__(self, config: HarnessConfig, runner: Runner = subprocess.run):
         self.config = config
-        self._runner = runner
+        # The registry historically passed subprocess.run explicitly.  Treat
+        # that default as a request for the supervised implementation while
+        # preserving injected runners used by adapters and tests.
+        self._uses_supervisor = runner is subprocess.run or runner is run_supervised
+        self._runner = run_supervised if self._uses_supervisor else runner
+        self.cancel_check: Callable[[], bool] | None = None
 
     @property
     def command(self) -> str:
@@ -84,28 +93,52 @@ class Harness(ABC):
             raise HarnessError(
                 f"harness executable '{argv[0]}' not found; install it or set harness.command"
             ) from exc
+        except ProcessStartError as exc:
+            if isinstance(exc.cause, FileNotFoundError):
+                raise HarnessError(
+                    f"harness executable '{argv[0]}' not found; install it or set harness.command"
+                ) from exc
+            raise HarnessError(f"{self.name} could not start: {exc.cause}") from exc
         except subprocess.TimeoutExpired as exc:
-            raise HarnessError(f"{self.name} timed out after {timeout_minutes} minutes") from exc
+            raise HarnessError(
+                f"{self.name} timed out after {timeout_minutes} minutes"
+            ) from exc
+        except ProcessCancelledError as exc:
+            raise HarnessCancelledError(f"{self.name} was cancelled") from exc
+        except ProcessOutputLimitError as exc:
+            raise HarnessError(
+                f"{self.name} produced too much {exc.stream}: {exc}"
+            ) from exc
+        except ProcessStragglerError as exc:
+            raise HarnessError(
+                f"{self.name} left background processes running after exit; "
+                "they were terminated"
+            ) from exc
         if result.returncode != 0:
             raise HarnessError(
                 f"{self.name} exited with {result.returncode}: {result.stderr.strip()}"
             )
         return result.stdout
 
-    def _run_with_heartbeat(self, argv: list[str], cwd: Path, timeout_minutes: int) -> subprocess.CompletedProcess:
-        environment = {
-            key: value
-            for key, value in os.environ.items()
-            if key not in _CONTROLLER_CREDENTIALS
+    def _run_with_heartbeat(
+        self, argv: list[str], cwd: Path, timeout_minutes: int
+    ) -> subprocess.CompletedProcess:
+        environment = credential_reduced_environment(allow=HARNESS_CREDENTIAL_ALLOWLIST)
+        kwargs = {
+            "cwd": cwd,
+            "timeout": timeout_minutes * 60,
+            "capture_output": True,
+            "text": True,
+            "env": environment,
         }
-        environment["GIT_TERMINAL_PROMPT"] = "0"
-        kwargs = dict(
-            cwd=cwd,
-            timeout=timeout_minutes * 60,
-            capture_output=True,
-            text=True,
-            env=environment,
-        )
+        if self._uses_supervisor:
+            return self._runner(
+                argv,
+                **kwargs,
+                progress_callback=self._report_progress if self.on_progress else None,
+                progress_interval=self.heartbeat_seconds,
+                cancel_check=self.cancel_check,
+            )
         if self.on_progress is None:
             return self._runner(argv, **kwargs)
         start = time.monotonic()
@@ -119,3 +152,11 @@ class Harness(ABC):
                     self.on_progress(
                         f"{self.name} still working ({elapsed // 60}m {elapsed % 60:02d}s elapsed)"
                     )
+
+    def _report_progress(self, elapsed_seconds: float) -> None:
+        if self.on_progress is None:
+            return
+        elapsed = int(elapsed_seconds)
+        self.on_progress(
+            f"{self.name} still working ({elapsed // 60}m {elapsed % 60:02d}s elapsed)"
+        )

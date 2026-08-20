@@ -11,6 +11,8 @@ build/
 # Tooling
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
 
 # macOS
 .DS_Store

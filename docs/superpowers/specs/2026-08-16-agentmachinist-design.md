@@ -14,7 +14,7 @@ developer on a Mac. It bridges GitHub issues to local coding harnesses
    **draft PR** referencing the issue.
 2. **Approve** — a human reviews the spec in the draft PR and approves it by
    applying the `machinist:approved` label (directly, or via a
-   `/machinist-execute` comment that a small GitHub Action converts to the label).
+   `/machinist-execute <full-sha>` comment that a small GitHub Action converts to the label).
 3. **Execute** — the local daemon (`machinist watch`) or a manual
    `machinist run <issue>` checks out the spec branch in an isolated workspace,
    invokes the harness to implement the spec, runs the configured test command,
@@ -67,7 +67,7 @@ harness:
   timeout_minutes: 30          # Phase 3 implementation budget (1–240)
   spec_timeout_minutes: 10     # Phase 1 spec budget (1–60)
 github:
-  repo: null                   # "owner/repo"; null = gh derives from origin
+  repo: null                   # "owner/repo"; null = controller binds the exact Git origin
   labels:
     trigger: agent-task
     approved: "machinist:approved"
@@ -91,7 +91,7 @@ validation failures with the file path and a readable message.
 - `get_issue(n)` → `Issue(number, title, body, url, labels)` via `gh issue view --json`
 - `create_draft_pr(branch, base, title, body)` → `DraftPR(number, url)` via `gh pr create --draft`
 - `ensure_label(name, color, description)` — idempotent via `gh label create --force`
-- Nonzero `gh` exit → `GitHubError` carrying stderr. `--repo` appended only when configured.
+- Nonzero `gh` exit → `GitHubError` carrying stderr. Before use, the controller binds an explicit host/owner/repo target derived from the verified Git origin.
 
 Polling reads (`issues_with_label`, `approved_prs`) land with `watch` in the
 next milestone; the wrapper's plumbing (`_gh`, `_gh_json`) is built now.
@@ -103,7 +103,7 @@ next milestone; the wrapper's plumbing (`_gh`, `_gh_json`) is built now.
   nonzero exit — no tracebacks for expected failures.
 - Harness invocations run under their configured timeout; timeout kills the
   subprocess and fails the phase.
-- The `/machinist-execute` comment workflow only honors comments whose
+- The `/machinist-execute <full-sha>` comment workflow only honors comments whose
   `author_association` is OWNER/MEMBER/COLLABORATOR.
 
 ## Testing strategy

@@ -799,12 +799,12 @@
   <main id="main">
     <section class="hero shell" id="top">
       <div class="hero-copy reveal">
-        <p class="hero-kicker">A visual field guide for the 0.3 release</p>
+        <p class="hero-kicker">A visual field guide for the 0.4 release</p>
         <h1>Your first issue, machined into a PR.</h1>
         <p class="hero-lede">Set up AgentMachinist, choose who writes the spec, approve the exact plan you read, and let your coding harness build behind a test gate.</p>
         <div class="version-note" role="note">
           <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <p><strong>AgentMachinist 0.3.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints an older version, run <code>uv tool upgrade agentmachinist</code>.</p>
+          <p><strong>AgentMachinist 0.4.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints an older version, run <code>uv tool upgrade agentmachinist</code>.</p>
         </div>
       </div>
 
@@ -892,17 +892,25 @@
         </div>
         <p>Already authenticated with GitHub and your coding harness? Here is the entire issue-to-tested-PR sequence at a glance.</p>
         <div class="terminal" aria-label="Quick start command block">
-          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist init&#10;# 1. Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# 2. Review draft PR and approve:&#10;machinist approve 42&#10;# 3. Implement per approved spec & test gate:&#10;machinist run 42">Copy flow</button></div>
+          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist init&#10;# Review machinist.yaml, the detected test gate, and generated files, then:&#10;machinist doctor&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and approve its issue explicitly:&#10;machinist approve --issue 42&#10;# Implement per approved spec & test gate:&#10;machinist run 42">Copy flow</button></div>
           <pre><span class="comment"># 1. Install & initialize in your repository:</span>
 <span class="prompt">$</span> uv tool install agentmachinist &amp;&amp; machinist init
 
-<span class="comment"># 2. File issue with 'agent-task', then generate draft spec PR:</span>
+<span class="comment"># 2. Review the detected test gate and generated files; verify:</span>
+<span class="prompt">$</span> machinist doctor &amp;&amp; machinist sync-workflows --check
+<span class="prompt">$</span> git status --short
+<span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+<span class="prompt">$</span> git add -p .github/workflows
+<span class="prompt">$</span> git diff --cached
+<span class="prompt">$</span> git commit -m "chore: configure AgentMachinist" &amp;&amp; git push
+
+<span class="comment"># 3. File issue with 'agent-task', then generate draft spec PR:</span>
 <span class="prompt">$</span> machinist spec 42
 
-<span class="comment"># 3. Review spec and stamp approval (accepts PR #18 or issue #42):</span>
-<span class="prompt">$</span> machinist approve 42
+<span class="comment"># 4. Review spec and stamp approval (accepts PR #18 or issue #42):</span>
+<span class="prompt">$</span> machinist approve --issue 42
 
-<span class="comment"># 4. Implement spec, run test gate, and flip PR to ready:</span>
+<span class="comment"># 5. Implement spec, run test gate, and flip PR to ready:</span>
 <span class="prompt">$</span> machinist run 42</pre>
         </div>
       </div>
@@ -951,13 +959,13 @@
           <div class="harness-card">
             <h4>Claude Code</h4>
             <p>Anthropic coding CLI</p>
-            <code>claude login</code>
+            <code>claude auth login</code>
             <code>name: claude-code</code>
           </div>
           <div class="harness-card">
             <h4>OpenCode</h4>
             <p>Open-source agent</p>
-            <code>opencode auth</code>
+            <code>opencode auth login</code>
             <code>name: opencode</code>
           </div>
           <div class="harness-card">
@@ -969,10 +977,11 @@
           <div class="harness-card">
             <h4>Pi</h4>
             <p>Lightweight agent</p>
-            <code>pi auth</code>
+            <code>pi auth check --model &lt;model&gt;</code>
             <code>name: pi</code>
           </div>
         </div>
+        <p style="grid-column: 1 / -1">AgentMachinist owns each adapter's sandbox and permission controls. Configure <code>extra_args</code> only for advanced provider options; adapter-owned safety flags are rejected.</p>
       </div>
     </section>
 
@@ -983,7 +992,7 @@
           <h2>Install, then check the number.</h2>
           <ol>
             <li>Install the current release directly from PyPI.</li>
-            <li>Confirm the CLI reports <strong>0.3.0</strong>.</li>
+            <li>Confirm the CLI reports <strong>0.4.0</strong>.</li>
             <li>Change into the repository you want agents to work on.</li>
           </ol>
           <p class="micro-note">Already installed an earlier version? Run <code>uv tool upgrade agentmachinist</code> instead.</p>
@@ -993,7 +1002,7 @@
           <pre><span class="prompt">$</span> uv tool install agentmachinist
 
 <span class="prompt">$</span> machinist --version
-machinist, version 0.3.0
+machinist, version 0.4.0
 
 <span class="prompt">$</span> cd ~/code/your-project</pre>
         </div>
@@ -1065,7 +1074,7 @@ machinist, version 0.3.0
               <h3>GitHub Actions setup</h3>
               <ol>
                 <li>Set <code>github.spec_source: github-actions</code>.</li>
-                <li>Leave <code>github.spec_install: pypi</code> so the workflow pins the released controller. Set <code>checkout</code> to run it from your repository with uv — how AgentMachinist dogfoods itself.</li>
+                <li>Leave <code>github.spec_install: pypi</code> so the workflow pins the released controller. Use <code>checkout</code> only when developing or dogfooding AgentMachinist itself; it runs the controller from that repository with uv.</li>
                 <li>Run <code>machinist sync-workflows</code> and commit the generated spec workflow.</li>
                 <li>Add <code>ANTHROPIC_API_KEY</code> as a repository secret. The bundled CI path is Claude-specific.</li>
                 <li>Keep a local watcher for approved execution; CI owns only the spec phase.</li>
@@ -1079,8 +1088,8 @@ machinist, version 0.3.0
     <section class="section shell" id="configure">
       <header class="section-head">
         <p class="section-kicker">Station 04 / initialize the project</p>
-        <h2>Three lines deserve your attention.</h2>
-        <p><code>machinist init</code> creates the file. Your job is to choose a harness, leave spec ownership explicit, and give implementation a real test gate.</p>
+        <h2>Four lines deserve your attention.</h2>
+        <p><code>machinist init</code> creates the file. Your job is to choose a harness, keep dispatcher and workflow ownership explicit, and give implementation a real test gate.</p>
       </header>
 
       <div class="config-layout">
@@ -1091,13 +1100,18 @@ version: 1
 harness:
   name: <span class="code-hot">claude-code</span>
   command: null
+  model: null
+  extra_args: []
   timeout_minutes: 30
   spec_timeout_minutes: 10
+  spec: null
+  execute: null
 
 github:
   repo: null
   spec_source: <span class="code-hot">local</span>
   spec_install: pypi
+  manage_workflows: true
   labels:
     trigger: agent-task
     approved: "machinist:approved"
@@ -1113,16 +1127,17 @@ tests:
   command: <span class="code-hot">uv run pytest</span></pre>
         </div>
         <div class="annotations">
-          <article class="annotation"><h3>Pick the harness you use</h3><p><code>claude-code</code>, <code>opencode</code>, <code>pi</code>, or <code>codex</code>. Local runs reuse its provider authentication.</p></article>
-          <article class="annotation"><h3>Keep one spec owner</h3><p><code>local</code> is simplest for a first run. Changing ownership requires <code>machinist sync-workflows</code>. In CI mode, <code>spec_install</code> chooses between the pinned PyPI release and your checkout.</p></article>
-          <article class="annotation"><h3>Make tests real</h3><p>A null command skips the gate. Use the same command you trust before merging a human PR.</p></article>
+          <article class="annotation"><h3>Pick the harness you use</h3><p><code>claude-code</code>, <code>opencode</code>, <code>pi</code>, or <code>codex</code>. Local runs reuse its provider authentication. <code>model</code> is optional. AgentMachinist rejects adapter-owned safety flags in <code>extra_args</code>; keep other additions empty unless you have reviewed the final adapter command.</p></article>
+          <article class="annotation"><h3>Keep ownership explicit</h3><p><code>local</code> is simplest for a first run. Changing dispatcher ownership requires <code>machinist sync-workflows</code>. <code>manage_workflows: false</code> means you own custom workflows and <code>doctor</code> intentionally skips managed drift checks.</p></article>
+          <article class="annotation"><h3>Make tests real</h3><p>When no named <code>verification.gates</code> exist, a null command skips verification. Configure either the command you trust before merging a human PR or named gates with the same standard.</p></article>
         </div>
       </div>
+      <p class="micro-note">This is an abridged first-run configuration. Before dispatch, use <code>machinist config validate</code> and <code>machinist config show</code>. Advanced configuration supports separate Spec/Execute harness profiles, bounded instruction overlays, ordered named verification gates, notifications, admission budgets, and change limits; the full reference is linked below.</p>
 
       <div class="terminal" style="margin-top: var(--space-6)" aria-label="Initialization and diagnostic commands">
-        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist init&#10;# edit machinist.yaml, then:&#10;machinist doctor&#10;machinist sync-workflows --check">Copy commands</button></div>
+        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist init&#10;# Review machinist.yaml, the detected test gate, and generated files, then:&#10;machinist doctor&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
         <pre><span class="prompt">$</span> machinist init
-<span class="comment"># edit machinist.yaml, then:</span>
+<span class="comment"># Review machinist.yaml, the detected test gate, and generated files, then:</span>
 <span class="prompt">$</span> machinist doctor
 PASS repository               /Users/you/code/your-project
 PASS GitHub authentication    gh auth is active
@@ -1132,7 +1147,16 @@ PASS workflows                managed workflows match config
 PASS Task Runs                no failed or abandoned runs
 
 <span class="prompt">$</span> machinist sync-workflows --check
-Managed workflows match machinist.yaml.</pre>
+Managed workflows match machinist.yaml.
+
+<span class="comment"># Review every generated file before making setup durable:</span>
+<span class="prompt">$</span> git status --short
+<span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+<span class="prompt">$</span> git add -p .github/workflows
+<span class="prompt">$</span> git diff --cached
+<span class="prompt">$</span> git commit -m "chore: configure AgentMachinist"
+<span class="prompt">$</span> git push</pre>
+        <p class="micro-note"><code>machinist init</code> adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. <code>--no-workflows</code> records <code>manage_workflows: false</code> for externally managed workflows; <code>doctor</code> then reports that its managed drift check was intentionally skipped.</p>
       </div>
     </section>
 
@@ -1218,14 +1242,17 @@ Add CSV export for filtered rows on the table.
           <div class="walk-copy">
             <span class="walk-index">07 / STAMP THE BLUEPRINT</span>
             <h3>Approve the PR number or the issue number.</h3>
-            <p>Read the spec first. Run <code>machinist approve 18</code> for PR #18 (or <code>machinist approve 42</code> for issue #42), or comment <code>/machinist-execute</code>. Approval is bound to the current commit; edits make it stale.</p>
-            <span class="walk-command">machinist approve 18</span>
+            <p>Read the spec first. Run <code>machinist approve --pr 18</code> for PR #18 (or <code>machinist approve --issue 42</code> for issue #42), or copy the SHA-bound <code>/machinist-execute &lt;full-spec-commit-sha&gt;</code> command from the PR body. The positional form is accepted only when the number is unambiguous. Approval is bound to the authorized commit; edits make it stale.</p>
+            <span class="walk-command">machinist approve --pr 18</span>
 
             <div class="tip-box">
-              <h4>Want to revise the spec first?</h4>
-              <p>You have two frictionless options before approving:</p>
-              <p style="margin-top:var(--space-2)"><strong>Direct edit:</strong> Checkout <code>agent/issue-42</code>, edit <code>.machinist/specs/issue-42-spec.md</code>, commit, and push. Then run <code>machinist approve 42</code> on the new commit SHA.</p>
-              <p style="margin-top:var(--space-2)"><strong>Re-prompt:</strong> Update the GitHub issue body and run <code>machinist retry 42 --phase spec --run</code>.</p>
+              <h4>Want to revise or reject the Spec?</h4>
+              <p>Regenerate a successful Spec on its existing branch and draft PR, then review and approve the new head:</p>
+              <pre class="mono" style="margin:var(--space-2) 0 0;font-size:0.75rem;color:var(--ink-0);white-space:pre-wrap">machinist spec 42 --revise
+
+# Or explicitly reject it and close the open draft PR:
+machinist spec 42 --abandon --reason "requirements changed"</pre>
+              <p style="margin-top:var(--space-2)"><code>--reason</code> is optional. Abandonment records the outcome and removes the trigger and approval labels; it never merges.</p>
             </div>
           </div>
           <figure class="walk-visual">
@@ -1258,11 +1285,14 @@ Add CSV export for filtered rows on the table.
 
             <div class="tip-box">
               <h4>What if the test gate fails?</h4>
-              <p>The controller keeps the workspace for inspection rather than pushing bad code:</p>
-              <pre class="mono" style="margin:var(--space-2) 0 0;font-size:0.75rem;color:var(--ink-0);white-space:pre-wrap">cd ~/.machinist/workspaces/your-repo-issue-42
-uv run pytest
-# Fix code, verify tests pass, then finalize:
-machinist retry 42 --phase execute --run</pre>
+              <p>The controller keeps the failed workspace instead of pushing bad code. Inspect it, then choose whether its edits belong in the next attempt:</p>
+              <pre class="mono" style="margin:var(--space-2) 0 0;font-size:0.75rem;color:var(--ink-0);white-space:pre-wrap">machinist inspect 42
+
+# Validate and continue the retained managed workspace:
+machinist retry 42 --phase execute --run --resume
+
+# Or start again from the approved head (the default):
+machinist retry 42 --phase execute --run --fresh</pre>
             </div>
           </div>
           <figure class="walk-visual">
@@ -1296,7 +1326,7 @@ machinist retry 42 --phase execute --run</pre>
 
       <aside class="walk-coda">
         <h3>After the merge, the loop closes itself.</h3>
-        <p>Merging closes the issue automatically — the spec PR carries <code>Closes #42</code>. The isolated workspace was already removed when the tests passed (<code>cleanup: on_success</code>), and GitHub deletes the branch if your repository auto-deletes merged heads. Run <code>machinist status</code>: an empty board means the shop is ready for the next labeled issue.</p>
+        <p>Merging closes the issue automatically — the spec PR carries <code>Closes #42</code>. The isolated workspace was already removed after the successful Execute run completed (<code>cleanup: on_success</code>), and GitHub deletes the branch if your repository auto-deletes merged heads. Run <code>machinist status</code>: an empty board means the shop is ready for the next labeled issue.</p>
       </aside>
     </section>
 
@@ -1368,15 +1398,15 @@ machinist retry 42 --phase execute --run</pre>
         </details>
         <details>
           <summary>Status says approval pending</summary>
-          <div class="detail-body"><p>The label exists, but no trusted marker names the current SHA. Approve the PR again with the CLI or exact comment.</p><code>machinist approve &lt;pr&gt;</code></div>
+          <div class="detail-body"><p>The label exists, but no trusted marker names the current SHA. Approve the PR again with the CLI or exact comment.</p><code>machinist approve --pr &lt;pr&gt;</code></div>
         </details>
         <details>
           <summary>Status says approval stale</summary>
-          <div class="detail-body"><p>The spec branch changed after approval. Read the new diff, then approve the current head. This is a safety stop, not a synchronization bug.</p><code>machinist approve &lt;pr&gt;</code></div>
+          <div class="detail-body"><p>The spec branch changed after approval. Read the new diff, then approve the current head. This is a safety stop, not a synchronization bug.</p><code>machinist approve --pr &lt;pr&gt;</code></div>
         </details>
         <details>
           <summary>A Task Run failed</summary>
-          <div class="detail-body"><p>Inspect the retained workspace and error first. Fix the cause, mark the phase retryable, then restart a long-running watcher.</p><code>machinist retry &lt;issue&gt; --phase execute</code></div>
+          <div class="detail-body"><p>Inspect the error and retained workspace first. Use <code>--resume</code> to validate and continue that managed workspace, or <code>--fresh</code> to provision another attempt from the approved head. Fresh is the default when neither flag is supplied.</p><code>machinist retry &lt;issue&gt; --phase execute --run --resume</code></div>
         </details>
         <details>
           <summary>The workspace already exists</summary>
@@ -1384,7 +1414,15 @@ machinist retry 42 --phase execute --run</pre>
         </details>
         <details>
           <summary>Tests failed</summary>
-          <div class="detail-body"><p>Nothing new is pushed by the controller. Open the retained workspace, reproduce the test command, and decide whether the spec, implementation, or test needs correction.</p><code>machinist status</code></div>
+          <div class="detail-body"><p>Nothing new is pushed by the controller. Inspect the retained edits and test output, fix the underlying cause, then explicitly resume those edits or start fresh.</p><code>machinist retry &lt;issue&gt; --phase execute --run --fresh</code></div>
+        </details>
+        <details>
+          <summary>A running task must stop</summary>
+          <div class="detail-body"><p>Request cooperative cancellation. The durable marker also blocks a later watcher dispatch; clear it only after inspecting the cancelled run and resolving the cause.</p><code>machinist cancel &lt;issue&gt; --reason "requirements changed"</code></div>
+        </details>
+        <details>
+          <summary>The macOS watcher is quiet</summary>
+          <div class="detail-body"><p>Check whether its LaunchAgent is loaded, then read the bounded recent stdout and stderr. Service logs remain after stop or uninstall.</p><code>machinist service status</code><br><code>machinist service logs --lines 100</code></div>
         </details>
       </div>
     </section>
@@ -1400,6 +1438,7 @@ machinist retry 42 --phase execute --run</pre>
             <li><label><input type="checkbox" value="version"> <span><code>machinist --version</code> matches this guide</span></label></li>
             <li><label><input type="checkbox" value="config"> <span>Harness, spec owner, and test command are set</span></label></li>
             <li><label><input type="checkbox" value="doctor"> <span><code>machinist doctor</code> has no FAIL checks</span></label></li>
+            <li><label><input type="checkbox" value="persisted"> <span>Generated files and the runtime ignore are reviewed, committed, and pushed</span></label></li>
             <li><label><input type="checkbox" value="issue"> <span>A small issue has acceptance criteria and <code>agent-task</code></span></label></li>
             <li><label><input type="checkbox" value="merge"> <span>I know the machine never merges for me</span></label></li>
           </ul>
@@ -1439,36 +1478,64 @@ machinist retry 42 --phase execute --run</pre>
               <td>Read-only diagnostics for Git, <code>gh</code>, harness binaries, test gate, and workflow drift.</td>
             </tr>
             <tr>
-              <td><code>machinist status [-v]</code></td>
-              <td>Show pipeline state for all managed issues and PRs (<code>-v</code> shows errors &amp; workspace paths).</td>
+              <td><code>machinist config validate|show|schema|set</code></td>
+              <td>Validate, resolve, export, or atomically update <code>machinist.yaml</code>.</td>
             </tr>
             <tr>
-              <td><code>machinist spec &lt;n&gt;</code></td>
-              <td>Generate implementation spec and open draft PR for issue <code>&lt;n&gt;</code> (Phase 1).</td>
+              <td><code>machinist status [--local|--all] [--json]</code></td>
+              <td>Show GitHub state, local evidence, or every repository in the optional registry.</td>
             </tr>
             <tr>
-              <td><code>machinist approve &lt;target&gt;</code></td>
-              <td>Approve draft PR (accepts PR number or issue number) bound to exact commit SHA.</td>
+              <td><code>machinist spec &lt;n&gt; [--dry-run|--revise|--abandon]</code></td>
+              <td>Preview or generate a Spec, revise its existing draft PR, or abandon it. Add <code>--reason "text"</code> with abandonment.</td>
+            </tr>
+            <tr>
+              <td><code>machinist approve [--issue &lt;n&gt;|--pr &lt;n&gt;]</code></td>
+              <td>Approve a draft PR by explicit issue or PR number, bound to its exact commit SHA.</td>
             </tr>
             <tr>
               <td><code>machinist run &lt;n&gt; [--retry]</code></td>
               <td>Execute implementation and run test gate for issue <code>&lt;n&gt;</code> (Phase 3).</td>
             </tr>
             <tr>
-              <td><code>machinist retry &lt;n&gt; [--run]</code></td>
-              <td>Mark failed task run retryable (<code>--run</code> immediately executes the phase).</td>
+              <td><code>machinist amend &lt;n&gt; --feedback "text"</code></td>
+              <td>Rework a ready PR from explicit feedback after fresh approval of its current head.</td>
+            </tr>
+            <tr>
+              <td><code>machinist cancel &lt;n&gt; [--reason "text"|--clear]</code></td>
+              <td>Cooperatively stop or block an issue, or clear its durable cancellation marker.</td>
+            </tr>
+            <tr>
+              <td><code>machinist retry &lt;n&gt; --phase execute --run [--resume|--fresh]</code></td>
+              <td>Retry Execute using retained edits or a new workspace. Fresh is the default when neither recovery flag is supplied.</td>
             </tr>
             <tr>
               <td><code>machinist clean [--issue &lt;n&gt;|--all]</code></td>
               <td>Safely remove or prune retained worktrees under <code>workspace.root</code>.</td>
             </tr>
             <tr>
-              <td><code>machinist inspect &lt;n&gt;</code></td>
-              <td>Display complete diagnostic history, GitHub PR state, approval SHA, and errors for issue <code>&lt;n&gt;</code>.</td>
+              <td><code>machinist inspect &lt;n&gt; [--offline] [--json]</code></td>
+              <td>Display complete local history and, unless offline, GitHub and approval evidence.</td>
             </tr>
             <tr>
-              <td><code>machinist watch [--once] [-v]</code></td>
-              <td>Daemon loop polling GitHub for labeled issues and approved PRs.</td>
+              <td><code>machinist runs [--issue &lt;n&gt;] [--json]</code></td>
+              <td>Read current, historical, orphaned, and corrupt local Task Run records.</td>
+            </tr>
+            <tr>
+              <td><code>machinist watch [--once] [--dry-run] [--max-tasks &lt;n&gt;]</code></td>
+              <td>Preview eligibility or poll GitHub and dispatch only admitted Tasks.</td>
+            </tr>
+            <tr>
+              <td><code>machinist queue pause|resume|defer|allow|show</code></td>
+              <td>Persist global and per-issue controls over new watcher dispatches.</td>
+            </tr>
+            <tr>
+              <td><code>machinist service install|start|restart|stop|status|logs|uninstall</code></td>
+              <td>Manage the per-repository macOS launchd watcher and its retained logs.</td>
+            </tr>
+            <tr>
+              <td><code>machinist repo add|remove|list</code></td>
+              <td>Maintain the optional local repository portfolio used by <code>status --all</code>.</td>
             </tr>
             <tr>
               <td><code>machinist sync-workflows [--check]</code></td>
@@ -1481,7 +1548,7 @@ machinist retry 42 --phase execute --run</pre>
   </main>
 
   <footer class="shell">
-    <div class="footer-row"><span>AgentMachinist 0.3 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
+    <div class="footer-row"><span>AgentMachinist 0.4 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
   </footer>
 
   <div id="live-region" class="mono" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>

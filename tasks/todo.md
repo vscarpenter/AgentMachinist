@@ -1,3 +1,20 @@
+# Documentation reconciliation for comprehensive review (COMPLETE)
+
+- [x] Make initialization review, commit, and push explicit in canonical docs.
+- [x] Capture the original `.machinist/runs/` ignore risk during the audit.
+- [x] Archive the superseded visual handbook in favor of the first-run guide.
+- [x] Correct harness authentication commands and advanced config coverage.
+- [x] Document successful-Spec revision and abandonment with the final CLI.
+- [x] Replace retained-workspace inspection-only guidance with explicit resume
+      and fresh recovery modes.
+- [x] Replace the manual runtime-ignore step after `machinist init` began
+      managing it idempotently.
+- [x] Document launchd service lifecycle, queue admission, cancellation,
+      amendment, preview, and fresh/resume operator workflows.
+- [x] Document config tooling, phase harnesses, instruction overlays, named
+      gates, notifications, budgets, limits, JSON/offline evidence, and the
+      repository portfolio.
+
 # AgentMachinist — build system hardening (COMPLETE)
 
 Plan: `docs/superpowers/plans/2026-08-17-build-system-hardening.md`
@@ -81,10 +98,11 @@ and claude-code as the proven harness.
 - [x] Suite green (101); live smoke passed: machinist watch --once on empty pipeline
 
 M3 complete 2026-08-16. All designed commands ship. Local branch
-agent/issue-1 deleted post-merge. Remaining ideas (backlog, not
-milestones): exercise the clone strategy in anger; CI spec workflow
-needs ANTHROPIC_API_KEY to be tried; PyPI publish; failure-notification
-(watch currently just logs).
+agent/issue-1 deleted post-merge. Historical backlog at that point included
+exercising clone strategy in anger, the CI Spec provider secret, publishing,
+and failure notifications. Notification delivery is now implemented with
+desktop, argv-command, and webhook backends; this note is retained only as the
+M3 snapshot.
 
 # AgentMachinist — M2: execute phase (COMPLETE)
 
@@ -106,9 +124,9 @@ needs ANTHROPIC_API_KEY to be tried; PyPI publish; failure-notification
       Full issue→spec→approve→execute loop has now run end-to-end.
       Remaining human step: review + merge PR #3 (closes #1).
 
-Next milestone: M3 — `machinist watch` polling daemon (pipeline_status
-reads already provide the polling backbone; add dispatch + de-dup so an
-in-flight issue isn't re-run each poll).
+Historical next step (subsequently completed): M3 added the `machinist watch`
+polling dispatcher and local claim/de-duplication. See the completed M3 section
+above for the shipped behavior.
 
 # AgentMachinist — M1: spec phase end-to-end (complete)
 
@@ -151,20 +169,12 @@ stays on the gh wrapper (auth portability beats a PyGithub dependency).
   comment /machinist-execute." Phase 2 for issue #1 completed via label
   2026-08-16; machinist status shows 'approved'.
 
-## Resuming From Here
+## Historical M1 handoff (superseded)
 
-- Done: M0 + M1. `machinist spec <n>` is fully wired: issue → harness spec
-  (read-only print mode, isolated worktree) → spec file → branch → push →
-  approval label ensured → draft PR with Closes #<n>. Not yet exercised
-  against a real GitHub issue (needs one to exist; creates a real PR).
-- Next: M2 — phases/execute.py + `machinist run <n>`: provision workspace on
-  the existing agent/issue-<n> branch, read the spec file, harness.implement
-  (acceptEdits), run tests.command gate, commit/push, mark PR ready
-  (gh pr ready). Then M3: watch daemon polling trigger label + approved PRs.
-- Blockers: none.
-- Assumptions: spec-phase PR body uses 'Closes #<n>' so merging the
-  implementation closes the issue. opencode/pi/codex headless flags remain
-  best-effort defaults (harness.command overrides).
+At the end of M1, Spec was wired but Execute and Watch were still the stated
+next milestones. Both were subsequently delivered and live-dogfooded; the M2
+and M3 completion sections above are authoritative. The original assumption
+that the Spec PR carries `Closes #<n>` remains part of the shipped lifecycle.
 
 ## Lifecycle #1 complete (2026-08-16)
 

@@ -11,11 +11,26 @@ harness:
   extra_args: []               # optional: additional CLI arguments to pass to harness
   timeout_minutes: 30          # Phase 3 implementation budget (1-240)
   spec_timeout_minutes: 10     # Phase 1 spec-writing budget (1-60)
+  # Optional Phase 1 overrides: name, model, command, extra_args, timeout_minutes.
+  spec: null
+  execute: null                # optional Phase 3 overrides; omitted values inherit from above
+
+# Optional repository-specific prompt additions. Paths are ordered, UTF-8,
+# repository-relative files; inline append text follows file contents.
+instructions:
+  spec:
+    paths: []                  # e.g. [docs/agent-spec-guidance.md]
+    append: null
+  execute:
+    paths: []                  # e.g. [AGENTS.md, docs/implementation-guidance.md]
+    append: null
 
 github:
-  repo: null                   # "owner/repo"; null = gh derives it from origin
+  repo: null                   # "owner/repo"; null = controller binds the exact Git origin
   spec_source: local           # local = watch owns Phase 1 | github-actions = CI owns it
-  spec_install: pypi           # pypi = pin released package in CI | checkout = uv run from this repo (dogfood)
+  # pypi = pin released package in CI | checkout = run this checkout (dogfood)
+  spec_install: pypi
+  manage_workflows: true       # false = workflows are intentionally managed outside AgentMachinist
   labels:
     trigger: agent-task        # issues with this label enter the pipeline
     approved: "machinist:approved"   # PRs with this label get implemented
@@ -29,3 +44,35 @@ workspace:
 
 tests:
   command: null                # e.g. "pytest -q" or "npm test"; null skips the gate
+
+# Ordered named gates replace tests.command when configured. Required command
+# failures block readiness; advisory command failures report evidence. A gate
+# that violates a forbidden-mutation or cancellation invariant always blocks.
+verification:
+  gates: []
+  # - name: tests
+  #   command: uv run pytest
+  #   timeout_minutes: 30
+  #   required: true
+  #   mutation_policy: forbid  # forbid | allow
+
+queue:
+  max_tasks_per_pass: 1        # conservative admission limit for each poll pass
+  # Optional start/end/timezone/days window; supports overnight windows.
+  allowed_hours: null
+  task_budget: null            # optional: {max_tasks_per_day: 5, max_runtime_minutes_per_day: 240}
+
+notifications:
+  backend: desktop             # disabled | desktop | command | webhook
+  events: [failure]            # failure | spec_ready | approval_stale | pr_ready
+  command: null                # command backend: {argv: ["/path/to/notifier"], timeout_seconds: 5}
+  # Webhook backend reads its URL from an env var; authorization requires HTTPS.
+  webhook: null
+
+limits:
+  max_issue_body_chars: 50000
+  max_spec_chars: 100000
+  max_changed_files: 100
+  max_changed_bytes: 5242880
+  denied_paths: [.machinist]
+  allow_binary: false
