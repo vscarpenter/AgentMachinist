@@ -213,3 +213,13 @@ test (10x15s; version mismatch still fails hard) with a contract test in
 test_release_workflows.py. First-run guide updated to document the
 interactive init questions, pre-answer flags, and --no-input; version
 pins bumped to 0.6.0 everywhere test_docs.py checks.
+
+## Release 0.7.0 (2026-08-20)
+
+`machinist update-check` (plus the advisory `doctor` updates row) shipped
+as 0.7.0, alongside the job-card TL;DR docs page. Version bumped in
+pyproject/uv.lock, changelog dated, release-pinned references updated in
+README, CLAUDE.md, first-run-guide.html, explainer.html, and
+job-card.html. Pushed to main and published the v0.7.0 GitHub Release;
+the Trusted Publishing workflow re-runs the suite, smoke-tests the wheel,
+and publishes to PyPI.

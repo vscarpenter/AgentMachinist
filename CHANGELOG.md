@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-08-20
 
 - Add `machinist update-check`: compare the installed release against PyPI and
   print the upgrade command matching how this copy was installed (`uv tool`,
@@ -9,6 +9,8 @@
   be read. `machinist doctor` reports the same comparison as an advisory
   `updates` row that warns but never fails. Set `MACHINIST_NO_UPDATE_CHECK=1`
   to suppress both probes.
+- Add a job-card TL;DR page to the docs comparing local dispatch with
+  GitHub Actions dispatch.
 
 ## 0.6.0 — 2026-08-20
 
