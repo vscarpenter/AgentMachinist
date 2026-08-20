@@ -39,6 +39,24 @@ machinist --version
 
 Upgrade later with `uv tool upgrade agentmachinist`.
 
+To find out whether an upgrade is waiting, run:
+
+```sh
+machinist update-check
+```
+
+It reads the latest published release from PyPI, compares it with the copy you
+are running, and — when a newer release exists — prints the upgrade command
+that matches how this copy was installed (`uv tool upgrade`, `pipx upgrade`,
+`pip install --upgrade`, or `git pull && uv sync` for a source checkout). The
+command needs no repository and no `machinist.yaml`, exits non-zero only when
+PyPI could not be reached, and supports `--json` for scripts.
+`machinist doctor` runs the same check and reports an available release as a
+warning.
+
+Set `MACHINIST_NO_UPDATE_CHECK=1` to disable both probes; nothing else in the
+pipeline contacts PyPI.
+
 ## Set up your repository
 
 From the repository root:
@@ -616,6 +634,8 @@ Common states and responses:
 | Configuration is unclear | Run `machinist config validate` and `machinist config show`; neither starts a Task. |
 | GitHub is unavailable | Preserve local evidence with `machinist status --local`, `machinist runs`, or `machinist inspect <issue> --offline`. |
 | launchd watcher is quiet | Run `machinist service status` and `machinist service logs --lines 100`. |
+| Unsure whether the CLI is current | Run `machinist update-check`; it prints the upgrade command for this installation. |
+| `doctor` warns that PyPI is unreachable | The update probe is advisory. Set `MACHINIST_NO_UPDATE_CHECK=1` on offline machines. |
 
 Task Run failures and recovery evidence live under `.machinist/runs/`. The
 initializer adds `/.machinist/runs/` to `.gitignore`, and `doctor` fails its

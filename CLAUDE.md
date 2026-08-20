@@ -46,6 +46,7 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
 - `cli.py` — Click entrypoints: `init [--harness --test-cmd]`, `doctor`,
   `sync-workflows [--check]`, `spec`, `approve`, `run [--force --retry]`,
   `watch [--once -v --interval]`, `retry [--phase --run]`, `status [-v]`,
+  `update-check [--json --timeout]`,
   `clean [--issue --all --force]`, `inspect`. Ergonomics worth knowing:
   `init` auto-detects the test gate from the project manifest
   (`_detect_test_command`: pyproject/uv.lock → `uv run pytest`, package.json
@@ -98,6 +99,15 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `machinist-approve.yml`); drift detection for `--check`/doctor.
 - `doctor.py` — read-only diagnostics (git/gh/harness on PATH, gh auth, test
   gate configured, workflow drift, failed/abandoned Task Runs).
+- `updates.py` — advisory release-update checks: reads the latest published
+  version from PyPI's JSON API (bounded read, https-only, injectable opener),
+  compares it with a PEP 440 subset parser (`parse_version`/`is_newer`; never
+  claims an update from unparsable input, a yanked release, or a pre-release
+  reached by a stable install), and derives the upgrade command from how the
+  copy was installed (uv tool, pipx, editable checkout, pip fallback). Every
+  failure degrades to `UpdateStatus.UNKNOWN`; `MACHINIST_NO_UPDATE_CHECK`
+  disables the probe, and `tests/conftest.py` sets it so the suite stays
+  offline.
 - `notify.py` — best-effort desktop notifications: macOS `osascript` first,
   then Linux `notify-send`, each gated on `shutil.which`. All failures
   deliberately swallowed; stdout remains the record of what happened.

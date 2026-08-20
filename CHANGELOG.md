@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add `machinist update-check`: compare the installed release against PyPI and
+  print the upgrade command matching how this copy was installed (`uv tool`,
+  `pipx`, `pip`, or an editable source checkout). `--json` emits a stable
+  scriptable result; the command exits non-zero only when the index could not
+  be read. `machinist doctor` reports the same comparison as an advisory
+  `updates` row that warns but never fails. Set `MACHINIST_NO_UPDATE_CHECK=1`
+  to suppress both probes.
+
 ## 0.6.0 — 2026-08-20
 
 - Retry the release workflow's published-package smoke test while PyPI's

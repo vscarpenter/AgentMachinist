@@ -76,6 +76,7 @@ files = [
     "src/machinist/lifecycle.py",
     "src/machinist/workspace.py",
     "src/machinist/process.py",
+    "src/machinist/updates.py",
     "src/machinist/verification.py",
 ]
 

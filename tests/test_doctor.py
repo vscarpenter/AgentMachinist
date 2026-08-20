@@ -422,3 +422,97 @@ def test_doctor_rejects_non_claude_managed_github_actions(tmp_path):
 
     assert spec_source.level is CheckLevel.FAIL
     assert "installs only claude-code" in spec_source.detail
+
+
+def _doctor_update_check(status, **overrides):
+    from machinist.updates import UpdateCheck, UpdateStatus
+
+    fields = {
+        "status": UpdateStatus(status),
+        "installed": "0.2.0",
+        "latest": "0.7.1",
+        "upgrade_command": "uv tool upgrade agentmachinist",
+    }
+    fields.update(overrides)
+    return UpdateCheck(**fields)
+
+
+def _doctor_with_update_probe(tmp_path, probe):
+    (tmp_path / ".git").mkdir()
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/usr/bin/{name}" if name in {"git", "gh"} else None,
+        runner=_runner_for(tmp_path),
+        update_probe=probe,
+    )
+    return next(check for check in report.checks if check.name == "updates")
+
+
+def test_doctor_warns_when_a_newer_release_is_published(tmp_path):
+    check = _doctor_with_update_probe(
+        tmp_path, lambda installed: _doctor_update_check("available")
+    )
+
+    assert check.level is CheckLevel.WARN
+    assert "0.7.1" in check.detail
+    assert "uv tool upgrade agentmachinist" in check.detail
+
+
+def test_doctor_passes_when_the_installation_is_current(tmp_path):
+    check = _doctor_with_update_probe(
+        tmp_path,
+        lambda installed: _doctor_update_check("current", latest="0.2.0"),
+    )
+
+    assert check.level is CheckLevel.PASS
+    assert "latest release" in check.detail
+
+
+def test_doctor_warns_but_never_fails_when_the_index_is_unreachable(tmp_path):
+    (tmp_path / ".git").mkdir()
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/usr/bin/{name}" if name in {"git", "gh"} else None,
+        runner=_runner_for(tmp_path),
+        update_probe=lambda installed: _doctor_update_check(
+            "unknown", latest=None, error="URLError: offline"
+        ),
+    )
+
+    check = next(item for item in report.checks if item.name == "updates")
+    assert check.level is CheckLevel.WARN
+    assert "offline" in check.detail
+    assert CheckLevel.FAIL not in {
+        item.level for item in report.checks if item.name == "updates"
+    }
+
+
+def test_doctor_survives_a_raising_update_probe(tmp_path):
+    def probe(installed):
+        raise RuntimeError("probe exploded")
+
+    check = _doctor_with_update_probe(tmp_path, probe)
+
+    assert check.level is CheckLevel.WARN
+    assert "probe exploded" in check.detail
+
+
+def test_doctor_reports_a_disabled_update_check_as_a_pass(tmp_path):
+    # The autouse fixture sets MACHINIST_NO_UPDATE_CHECK, so the default probe
+    # short-circuits before any request.
+    (tmp_path / ".git").mkdir()
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/usr/bin/{name}" if name in {"git", "gh"} else None,
+        runner=_runner_for(tmp_path),
+    )
+
+    check = next(item for item in report.checks if item.name == "updates")
+    assert check.level is CheckLevel.PASS
+    assert "disabled" in check.detail
