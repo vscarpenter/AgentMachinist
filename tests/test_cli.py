@@ -1604,6 +1604,179 @@ def test_init_auto_detects_test_runner():
         assert config.tests.command == "uv run pytest"
 
 
+def _force_interactive(monkeypatch):
+    monkeypatch.setattr(
+        "machinist.cli._stdin_is_interactive", lambda: True, raising=False
+    )
+
+
+def test_init_interactive_wizard_applies_answers(monkeypatch):
+    _force_interactive(monkeypatch)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main,
+            ["init"],
+            input="local\nn\ncodex\ngo\n\nnone\n",
+        )
+
+        assert result.exit_code == 0, result.output
+        config = load_config("machinist.yaml")
+        assert config.github.spec_source.value == "local"
+        assert config.github.manage_workflows is False
+        assert config.harness.name.value == "codex"
+        assert config.tests.command == "go test ./..."
+        assert config.notifications.backend.value == "disabled"
+        assert not Path(".github").exists()
+
+
+def test_init_interactive_github_actions_locks_harness_to_claude_code(monkeypatch):
+    _force_interactive(monkeypatch)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main,
+            ["init"],
+            input="github-actions\ny\nskip\n\n",
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "supports only" in result.output
+        config = load_config("machinist.yaml")
+        assert config.github.spec_source.value == "github-actions"
+        assert config.harness.name.value == "claude-code"
+        assert config.tests.command is None
+        assert Path(".github/workflows/machinist-spec.yml").is_file()
+
+
+def test_init_interactive_confirms_detected_test_command(monkeypatch):
+    _force_interactive(monkeypatch)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        result = runner.invoke(
+            main,
+            ["init"],
+            input="\nn\n\ny\nall\n",
+        )
+
+        assert result.exit_code == 0, result.output
+        config = load_config("machinist.yaml")
+        assert config.tests.command == "uv run pytest"
+        assert [event.value for event in config.notifications.events] == [
+            "failure",
+            "spec_ready",
+            "approval_stale",
+            "pr_ready",
+        ]
+
+
+def test_init_interactive_rejects_detected_then_suggests_by_language(monkeypatch):
+    _force_interactive(monkeypatch)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        result = runner.invoke(
+            main,
+            ["init"],
+            input="\nn\n\nn\npython\n\n\n",
+        )
+
+        assert result.exit_code == 0, result.output
+        config = load_config("machinist.yaml")
+        assert config.tests.command == "pytest"
+
+
+def test_init_interactive_flags_pre_answer_and_skip_questions(monkeypatch):
+    _force_interactive(monkeypatch)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main,
+            [
+                "init",
+                "--no-workflows",
+                "--spec-source",
+                "local",
+                "--harness",
+                "opencode",
+                "--test-cmd",
+                "make test",
+                "--notifications",
+                "desktop",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Spec dispatch" not in result.output
+        assert "Notify on" not in result.output
+        config = load_config("machinist.yaml")
+        assert config.harness.name.value == "opencode"
+        assert config.tests.command == "make test"
+        assert config.notifications.backend.value == "desktop"
+
+
+def test_init_no_input_skips_wizard(monkeypatch):
+    _force_interactive(monkeypatch)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["init", "--no-workflows", "--no-input"])
+
+        assert result.exit_code == 0, result.output
+        assert "Spec dispatch" not in result.output
+        config = load_config("machinist.yaml")
+        assert config.github.spec_source.value == "local"
+        assert config.notifications.backend.value == "desktop"
+
+
+def test_init_spec_source_flag_writes_ci_dispatch_workflow():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["init", "--spec-source", "github-actions"])
+
+        assert result.exit_code == 0, result.output
+        config = load_config("machinist.yaml")
+        assert config.github.spec_source.value == "github-actions"
+        assert Path(".github/workflows/machinist-spec.yml").is_file()
+
+
+def test_init_notifications_flag_disables_backend():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main, ["init", "--no-workflows", "--notifications", "disabled"]
+        )
+
+        assert result.exit_code == 0, result.output
+        config = load_config("machinist.yaml")
+        assert config.notifications.backend.value == "disabled"
+
+
+def test_init_conflicting_flags_fail_before_writing():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main, ["init", "--spec-source", "github-actions", "--harness", "codex"]
+        )
+
+        assert result.exit_code != 0
+        assert "claude-code" in result.output
+        assert not Path("machinist.yaml").exists()
+
+
+def test_init_test_cmd_replaces_template_comment_tail():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main, ["init", "--no-workflows", "--test-cmd", "pytest -q"]
+        )
+
+        assert result.exit_code == 0, result.output
+        text = Path("machinist.yaml").read_text()
+        line = next(entry for entry in text.splitlines() if "pytest -q" in entry)
+        assert line == '  command: "pytest -q"'
+
+
 def test_approve_resolves_issue_number(monkeypatch):
     from machinist.github import PullRequest
 

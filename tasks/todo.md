@@ -183,3 +183,17 @@ machinist run → pytest gate → ready-for-review → human merge (ff526e1)
 → issue auto-closed, remote branch auto-deleted. Merged main: 92 tests
 green including the agent's 6 drift tests. The system built its own
 getting-started guide as its first shipped deliverable.
+
+## Interactive init wizard (2026-08-20, complete)
+
+Approved design: `machinist init` asks first-run questions in a TTY
+(dispatch mode, managed workflows, harness, test gate, notifications),
+each with a one-line explanation; flags pre-answer, `--no-input` and
+non-TTY keep today's silent behavior. New flags `--spec-source`,
+`--notifications`, `--no-input`. Also fixes the stale tests.command
+comment tail.
+
+- [x] RED: CLI tests for wizard flows, new flags, no-input, comment tail
+- [x] GREEN: init_wizard.py + cli.py wiring + _render_init_config params
+- [x] Docs: README, docs/getting-started.md, CHANGELOG.md
+- [x] Full suite green, commit

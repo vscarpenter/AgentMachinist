@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Ask first-run setup questions in `machinist init` when run in a terminal —
+  dispatch mode, managed workflows, harness, test gate, and notifications —
+  each with a one-line explanation and a safe default. New flags
+  `--spec-source`, `--notifications`, and `--no-input`; existing flags
+  pre-answer their questions. Configured test commands no longer keep the
+  template's example comment on the same line.
+
 ## 0.4.0 — 2026-08-19
 
 - Serve the first-run guide rendered via GitHub Pages and link it from the README; refresh the guide's content, navigation, and dark-mode contrast.

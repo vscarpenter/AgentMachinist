@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -44,6 +45,7 @@ from machinist.config_cli import (
 from machinist.doctor import run_doctor
 from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
 from machinist.harness import HarnessError, get_harness
+from machinist.init_wizard import InitAnswers, run_init_wizard
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
 from machinist.managed_paths import (
     ManagedPathError,
@@ -108,6 +110,11 @@ def _installed_version() -> str:
         return version("agentmachinist")
     except PackageNotFoundError:
         return "0.0.0+local"
+
+
+def _stdin_is_interactive() -> bool:
+    """init prompts only when a human is attached; CI and pipes stay silent."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 def _detect_test_command(root: Path) -> str | None:
@@ -177,7 +184,13 @@ def _bound_github_client(
 
 
 def _render_init_config(
-    *, harness_name: str | None, test_command: str | None, manage_workflows: bool
+    *,
+    harness_name: str | None,
+    test_command: str | None,
+    manage_workflows: bool,
+    spec_source: str | None = None,
+    notification_backend: str | None = None,
+    notification_events: list[str] | None = None,
 ) -> str:
     """Render and validate the commented template before replacing any config."""
     text = (_TEMPLATES / "machinist.yaml").read_text()
@@ -185,15 +198,27 @@ def _render_init_config(
         text = text.replace("name: claude-code", f"name: {harness_name}", 1)
     if test_command:
         # JSON string syntax is a valid YAML scalar and safely preserves ': ',
-        # '#', quotes, backslashes, and newlines from a shell command.
-        marker = "tests:\n  command: null"
-        if marker not in text:
+        # '#', quotes, backslashes, and newlines from a shell command.  The
+        # replacement spans the whole template line so its example comment
+        # does not survive next to the real command.
+        text, replaced = re.subn(
+            r"tests:\n  command: null[^\n]*",
+            lambda _: f"tests:\n  command: {json.dumps(test_command)}",
+            text,
+            count=1,
+        )
+        if not replaced:
             raise click.ClickException(
                 "packaged machinist.yaml template has no legacy tests.command field"
             )
+    if spec_source:
+        text = text.replace("spec_source: local", f"spec_source: {spec_source}", 1)
+    if notification_backend:
+        text = text.replace("backend: desktop", f"backend: {notification_backend}", 1)
+    if notification_events:
         text = text.replace(
-            marker,
-            f"tests:\n  command: {json.dumps(test_command)}",
+            "events: [failure]",
+            f"events: [{', '.join(notification_events)}]",
             1,
         )
     if "manage_workflows:" in text:
@@ -264,7 +289,7 @@ def main() -> None:
 @click.option(
     "--workflows/--no-workflows",
     "install_workflows",
-    default=True,
+    default=None,
     help="Install the GitHub Actions workflow templates.",
 )
 @click.option(
@@ -277,11 +302,29 @@ def main() -> None:
     "--test-cmd",
     help="Test command to run for the implementation test gate.",
 )
+@click.option(
+    "--spec-source",
+    type=click.Choice(["local", "github-actions"]),
+    help="Who runs the Spec phase: the local watch daemon or GitHub Actions CI.",
+)
+@click.option(
+    "--notifications",
+    type=click.Choice(["desktop", "disabled"]),
+    help="Desktop notification backend for pipeline events.",
+)
+@click.option(
+    "--no-input",
+    is_flag=True,
+    help="Skip interactive questions; use flags and auto-detection only.",
+)
 def init(
     force: bool,
-    install_workflows: bool,
+    install_workflows: bool | None,
     harness_name: str | None = None,
     test_cmd: str | None = None,
+    spec_source: str | None = None,
+    notifications: str | None = None,
+    no_input: bool = False,
 ) -> None:
     """Set up machinist.yaml, .machinist/, and GitHub workflows in this repository."""
     repo_root = _repository_root(Path.cwd())
@@ -308,11 +351,33 @@ def init(
             "machinist.yaml already exists (use --force to overwrite)"
         )
 
-    resolved_test_cmd = test_cmd or _detect_test_command(repo_root)
+    detected_test_cmd = _detect_test_command(repo_root)
+    interactive = not no_input and _stdin_is_interactive()
+    if interactive:
+        answers = run_init_wizard(
+            detected_test_command=detected_test_cmd,
+            spec_source=spec_source,
+            harness_name=harness_name,
+            test_command=test_cmd,
+            install_workflows=install_workflows,
+            notifications=notifications,
+        )
+    else:
+        answers = InitAnswers(
+            spec_source=spec_source,
+            harness_name=harness_name,
+            test_command=test_cmd or detected_test_cmd,
+            install_workflows=True if install_workflows is None else install_workflows,
+            notification_backend=notifications,
+            notification_events=None,
+        )
     template_text = _render_init_config(
-        harness_name=harness_name,
-        test_command=resolved_test_cmd,
-        manage_workflows=install_workflows,
+        harness_name=answers.harness_name,
+        test_command=answers.test_command,
+        manage_workflows=answers.install_workflows,
+        spec_source=answers.spec_source,
+        notification_backend=answers.notification_backend,
+        notification_events=answers.notification_events,
     )
     planned_config = MachinistConfig.model_validate(
         strict_yaml_load(template_text) or {}
@@ -327,8 +392,8 @@ def init(
     except (ManagedPathError, WorkflowDriftError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo("wrote machinist.yaml")
-    if resolved_test_cmd and not test_cmd:
-        click.echo(f"auto-detected test runner: '{resolved_test_cmd}'")
+    if not interactive and answers.test_command and not test_cmd:
+        click.echo(f"auto-detected test runner: '{answers.test_command}'")
 
     try:
         gitkeep = Path(".machinist/specs/.gitkeep")

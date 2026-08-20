@@ -52,13 +52,36 @@ workflow, and the configured labels. It also idempotently adds
 `/.machinist/runs/` to `.gitignore` so runtime records are not committed. It
 does not overwrite an existing config unless you pass `--force`.
 
+In a terminal, `init` walks you through the choices that matter on the first
+run, each with a one-line explanation and a safe default:
+
+- **Dispatch mode** — `local` (the `machinist watch` daemon runs the Spec
+  phase on your machine) or `github-actions` (CI runs it; requires an
+  `ANTHROPIC_API_KEY` repository secret).
+- **Managed workflows** — install the Machinist-owned
+  `.github/workflows/machinist-*.yml` files.
+- **Harness** — `claude-code`, `codex`, `opencode`, or `pi`. With
+  `github-actions` dispatch and managed workflows, the harness is
+  `claude-code` because the managed CI spec workflow currently supports only
+  a claude-code Spec harness.
+- **Test gate** — confirm the auto-detected command, or pick your language
+  for a suggested one (`pytest`, `npm test`, `cargo test`, `go test ./...`,
+  `mvn test`), type your own, or skip the gate.
+- **Notifications** — failures only, all key events, or none.
+
+Flags pre-answer their questions and skip them: `--spec-source`, `--harness`,
+`--test-cmd`, `--workflows/--no-workflows`, and `--notifications`. Passing
+`--no-input`, or running without a terminal (CI, pipes), skips every question
+and uses the defaults plus test-command auto-detection.
+
 `--no-workflows` is the explicit externally-managed mode. It writes
 `github.manage_workflows: false`, skips workflow generation, and makes
 `doctor` report that managed drift checking is disabled. To return ownership to
 AgentMachinist, set that field to `true`, run `machinist sync-workflows`, review
 the generated files, and commit them.
 
-Before committing the generated files, set a real test gate:
+If you skipped the test-gate question or ran non-interactively without a
+detectable manifest, set a real test gate before committing:
 
 ```yaml
 tests:

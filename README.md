@@ -28,7 +28,7 @@ supported harness executable (`claude`, `opencode`, `pi`, or `codex`).
 ```sh
 cd your-repository
 machinist init
-# Review the detected tests.command and generated files, then:
+# Answer the setup questions, review the generated files, then:
 machinist doctor
 machinist sync-workflows --check
 git status --short
@@ -39,6 +39,13 @@ git commit -m "chore: configure AgentMachinist"
 git push
 machinist watch
 ```
+
+In a terminal, `machinist init` asks a short set of setup questions — dispatch
+mode, managed workflows, harness, test gate, and notifications — each with a
+one-line explanation and a safe default. Flags such as `--harness`,
+`--test-cmd`, `--spec-source`, and `--notifications` pre-answer their
+questions; `--no-input` (or a non-interactive shell) skips the questions and
+uses the defaults plus test-command auto-detection.
 
 Review the staged diff before committing. Managed workflows must be pushed
 before GitHub comment or label approval can record SHA-bound evidence.
@@ -83,7 +90,7 @@ PR.
 
 | Command | Purpose |
 | --- | --- |
-| `machinist init` | Create config, spec storage, labels, and managed workflows. |
+| `machinist init` | Create config, spec storage, labels, and managed workflows; asks setup questions in a terminal (`--no-input` skips them). |
 | `machinist doctor` | Run read-only setup and workflow-drift diagnostics. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration. |
