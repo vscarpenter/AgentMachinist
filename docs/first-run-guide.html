@@ -799,12 +799,12 @@
   <main id="main">
     <section class="hero shell" id="top">
       <div class="hero-copy reveal">
-        <p class="hero-kicker">A visual field guide for the 0.5 release</p>
+        <p class="hero-kicker">A visual field guide for the 0.6 release</p>
         <h1>Your first issue, machined into a PR.</h1>
         <p class="hero-lede">Set up AgentMachinist, choose who writes the spec, approve the exact plan you read, and let your coding harness build behind a test gate.</p>
         <div class="version-note" role="note">
           <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <p><strong>AgentMachinist 0.5.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints an older version, run <code>uv tool upgrade agentmachinist</code>.</p>
+          <p><strong>AgentMachinist 0.6.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints an older version, run <code>uv tool upgrade agentmachinist</code>.</p>
         </div>
       </div>
 
@@ -892,11 +892,11 @@
         </div>
         <p>Already authenticated with GitHub and your coding harness? Here is the entire issue-to-tested-PR sequence at a glance.</p>
         <div class="terminal" aria-label="Quick start command block">
-          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist init&#10;# Review machinist.yaml, the detected test gate, and generated files, then:&#10;machinist doctor&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and approve its issue explicitly:&#10;machinist approve --issue 42&#10;# Implement per approved spec & test gate:&#10;machinist run 42">Copy flow</button></div>
-          <pre><span class="comment"># 1. Install & initialize in your repository:</span>
+          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist init&#10;# Answer the setup questions, review the generated files, then:&#10;machinist doctor&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and approve its issue explicitly:&#10;machinist approve --issue 42&#10;# Implement per approved spec & test gate:&#10;machinist run 42">Copy flow</button></div>
+          <pre><span class="comment"># 1. Install, then answer init's setup questions in your repository:</span>
 <span class="prompt">$</span> uv tool install agentmachinist &amp;&amp; machinist init
 
-<span class="comment"># 2. Review the detected test gate and generated files; verify:</span>
+<span class="comment"># 2. Review the generated files; verify:</span>
 <span class="prompt">$</span> machinist doctor &amp;&amp; machinist sync-workflows --check
 <span class="prompt">$</span> git status --short
 <span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
@@ -992,7 +992,7 @@
           <h2>Install, then check the number.</h2>
           <ol>
             <li>Install the current release directly from PyPI.</li>
-            <li>Confirm the CLI reports <strong>0.5.0</strong>.</li>
+            <li>Confirm the CLI reports <strong>0.6.0</strong>.</li>
             <li>Change into the repository you want agents to work on.</li>
           </ol>
           <p class="micro-note">Already installed an earlier version? Run <code>uv tool upgrade agentmachinist</code> instead.</p>
@@ -1002,7 +1002,7 @@
           <pre><span class="prompt">$</span> uv tool install agentmachinist
 
 <span class="prompt">$</span> machinist --version
-machinist, version 0.5.0
+machinist, version 0.6.0
 
 <span class="prompt">$</span> cd ~/code/your-project</pre>
         </div>
@@ -1064,8 +1064,8 @@ machinist, version 0.5.0
             <div class="mode-panel" id="local-steps" data-mode-panel="local">
               <h3>Local setup</h3>
               <ol>
-                <li>Run <code>machinist init</code>. The default config already selects <code>local</code>.</li>
-                <li>Set your harness and test command in <code>machinist.yaml</code>.</li>
+                <li>Run <code>machinist init</code>. Accept <code>local</code> at the dispatch question — it is the default.</li>
+                <li>Pick your harness and confirm the detected test command at the prompts (or edit <code>machinist.yaml</code> later).</li>
                 <li>Run <code>machinist doctor</code>, then start <code>machinist watch</code>.</li>
                 <li>Keep one watcher per repository. Local claims are not distributed locks.</li>
               </ol>
@@ -1073,7 +1073,7 @@ machinist, version 0.5.0
             <div class="mode-panel" id="ci-steps" data-mode-panel="ci" hidden>
               <h3>GitHub Actions setup</h3>
               <ol>
-                <li>Set <code>github.spec_source: github-actions</code>.</li>
+                <li>Answer <code>github-actions</code> at init's dispatch question (or set <code>github.spec_source: github-actions</code>). With managed workflows this selects the <code>claude-code</code> harness, the only one the bundled CI spec workflow supports.</li>
                 <li>Leave <code>github.spec_install: pypi</code> so the workflow pins the released controller. Use <code>checkout</code> only when developing or dogfooding AgentMachinist itself; it runs the controller from that repository with uv.</li>
                 <li>Run <code>machinist sync-workflows</code> and commit the generated spec workflow.</li>
                 <li>Add <code>ANTHROPIC_API_KEY</code> as a repository secret. The bundled CI path is Claude-specific.</li>
@@ -1089,7 +1089,7 @@ machinist, version 0.5.0
       <header class="section-head">
         <p class="section-kicker">Station 04 / initialize the project</p>
         <h2>Four lines deserve your attention.</h2>
-        <p><code>machinist init</code> creates the file. Your job is to choose a harness, keep dispatcher and workflow ownership explicit, and give implementation a real test gate.</p>
+        <p><code>machinist init</code> creates the file — and in a terminal it now asks about each of these choices directly: dispatch mode, managed workflows, harness, test gate, and notifications, each with a one-line explanation and a safe default. Answer them once and the config below is correct on the first write.</p>
       </header>
 
       <div class="config-layout">
@@ -1137,7 +1137,21 @@ tests:
       <div class="terminal" style="margin-top: var(--space-6)" aria-label="Initialization and diagnostic commands">
         <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist init&#10;# Review machinist.yaml, the detected test gate, and generated files, then:&#10;machinist doctor&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
         <pre><span class="prompt">$</span> machinist init
-<span class="comment"># Review machinist.yaml, the detected test gate, and generated files, then:</span>
+Configuring machinist.yaml — press Enter to accept a [default],
+or rerun with --no-input to skip these questions.
+
+Dispatch mode — who runs the Spec phase when you label an issue:
+  local           this machine runs it via 'machinist watch'
+  github-actions  GitHub CI runs it (requires an ANTHROPIC_API_KEY repository secret)
+Spec dispatch [local]:
+
+<span class="comment"># … managed workflows, harness, and notifications questions follow …</span>
+
+Test gate — command that must pass before an implementation PR is
+marked ready for review.
+Use detected test command 'uv run pytest'? [Y/n]:
+
+<span class="comment"># Review the generated files, then:</span>
 <span class="prompt">$</span> machinist doctor
 PASS repository               /Users/you/code/your-project
 PASS GitHub authentication    gh auth is active
@@ -1156,7 +1170,7 @@ Managed workflows match machinist.yaml.
 <span class="prompt">$</span> git diff --cached
 <span class="prompt">$</span> git commit -m "chore: configure AgentMachinist"
 <span class="prompt">$</span> git push</pre>
-        <p class="micro-note"><code>machinist init</code> adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. <code>--no-workflows</code> records <code>manage_workflows: false</code> for externally managed workflows; <code>doctor</code> then reports that its managed drift check was intentionally skipped.</p>
+        <p class="micro-note"><code>machinist init</code> adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. Flags pre-answer questions and skip them: <code>--spec-source</code>, <code>--harness</code>, <code>--test-cmd</code>, and <code>--notifications</code>; <code>--no-input</code> (or any non-interactive shell) skips every question and keeps the silent defaults with test-command auto-detection. <code>--no-workflows</code> records <code>manage_workflows: false</code> for externally managed workflows; <code>doctor</code> then reports that its managed drift check was intentionally skipped.</p>
       </div>
     </section>
 
@@ -1471,7 +1485,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
           <tbody>
             <tr>
               <td><code>machinist init</code></td>
-              <td>Set up <code>machinist.yaml</code>, <code>.machinist/</code>, workflows, and labels. Auto-detects test runners.</td>
+              <td>Set up <code>machinist.yaml</code>, <code>.machinist/</code>, workflows, and labels. Asks setup questions in a terminal (<code>--no-input</code> skips them); auto-detects test runners.</td>
             </tr>
             <tr>
               <td><code>machinist doctor</code></td>
@@ -1548,7 +1562,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
   </main>
 
   <footer class="shell">
-    <div class="footer-row"><span>AgentMachinist 0.5 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
+    <div class="footer-row"><span>AgentMachinist 0.6 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
   </footer>
 
   <div id="live-region" class="mono" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>

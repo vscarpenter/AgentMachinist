@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.5.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.6.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -193,8 +193,10 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-08-20)
 
-- v0.5.0 is the current release; it adds the interactive `machinist init`
-  wizard (`--spec-source`, `--notifications`, `--no-input`). CI runs on
+- v0.6.0 is the current release; 0.5.0 added the interactive
+  `machinist init` wizard (`--spec-source`, `--notifications`,
+  `--no-input`) and 0.6.0 retries the release smoke test while PyPI's
+  index propagates. CI runs on
   Ubuntu and macOS across Python
   3.12, 3.13, and 3.14, plus minimum-dependency, Ruff, mypy, coverage,
   package, and aggregate `CI gate` jobs.

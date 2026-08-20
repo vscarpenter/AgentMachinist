@@ -150,7 +150,18 @@ jobs:
           done
 
       - name: Smoke-test the published command
+        # The JSON API above can show the release before uv's simple-index
+        # resolver does, so retry resolution; a wrong version still fails hard.
         run: |
-          OUTPUT="$(uv tool run --isolated --no-cache --from "agentmachinist==$PACKAGE_VERSION" machinist --version)"
-          echo "$OUTPUT"
-          grep -F "$PACKAGE_VERSION" <<< "$OUTPUT"
+          for attempt in {1..10}; do
+            if OUTPUT="$(uv tool run --isolated --no-cache --from "agentmachinist==$PACKAGE_VERSION" machinist --version)"; then
+              echo "$OUTPUT"
+              grep -F "$PACKAGE_VERSION" <<< "$OUTPUT"
+              exit 0
+            fi
+            if [[ "$attempt" -eq 10 ]]; then
+              echo "agentmachinist $PACKAGE_VERSION could not be installed from PyPI" >&2
+              exit 1
+            fi
+            sleep 15
+          done

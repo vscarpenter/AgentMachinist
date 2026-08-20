@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.6.0 — 2026-08-20
+
+- Retry the release workflow's published-package smoke test while PyPI's
+  simple index propagates; the JSON API can show a release seconds before
+  the resolver does, which failed the v0.5.0 run's first attempt.
+- Refresh the first-run field guide to document the interactive
+  `machinist init` questions and the flags that pre-answer them.
+
 ## 0.5.0 — 2026-08-20
 
 - Ask first-run setup questions in `machinist init` when run in a terminal —

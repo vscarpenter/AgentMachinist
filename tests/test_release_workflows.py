@@ -73,6 +73,21 @@ def test_release_hashes_assets_and_smoke_tests_the_exact_published_version():
     assert '--from "agentmachinist==$PACKAGE_VERSION"' in verify_commands
 
 
+def test_smoke_test_retries_while_the_simple_index_propagates():
+    # The JSON API can show a release seconds before uv's simple-index
+    # resolver does (v0.5.0 failed 11s after upload), so the smoke test
+    # itself must retry — not just the JSON poll that precedes it.
+    jobs = _load_workflow("release.yml")["jobs"]
+    smoke = next(
+        step
+        for step in jobs["verify-published"]["steps"]
+        if step.get("name") == "Smoke-test the published command"
+    )["run"]
+    assert "for attempt in {1..10}" in smoke
+    assert "sleep 15" in smoke
+    assert smoke.index("for attempt") < smoke.index("uv tool run")
+
+
 def test_ci_has_bounded_cross_platform_and_minimum_dependency_lanes():
     workflow = _load_workflow("ci.yml")
     jobs = workflow["jobs"]
