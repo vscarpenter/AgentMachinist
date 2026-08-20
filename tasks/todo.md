@@ -197,3 +197,11 @@ comment tail.
 - [x] GREEN: init_wizard.py + cli.py wiring + _render_init_config params
 - [x] Docs: README, docs/getting-started.md, CHANGELOG.md
 - [x] Full suite green, commit
+
+## Release 0.5.0 (2026-08-20)
+
+Interactive `machinist init` wizard shipped as 0.5.0. Version bumped in
+pyproject/uv.lock, changelog dated, release-pinned references updated in
+README, CLAUDE.md, first-run-guide.html, and explainer.html. Pushed to
+main and published the v0.5.0 GitHub Release; the Trusted Publishing
+workflow re-runs the suite, smoke-tests the wheel, and publishes to PyPI.
