@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 — 2026-08-20
+
 - Ask first-run setup questions in `machinist init` when run in a terminal —
   dispatch mode, managed workflows, harness, test gate, and notifications —
   each with a one-line explanation and a safe default. New flags

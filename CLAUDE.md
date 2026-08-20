@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.4.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.5.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -191,9 +191,11 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-08-19)
+## Current state (2026-08-20)
 
-- v0.4.0 is the current release. CI runs on Ubuntu and macOS across Python
+- v0.5.0 is the current release; it adds the interactive `machinist init`
+  wizard (`--spec-source`, `--notifications`, `--no-input`). CI runs on
+  Ubuntu and macOS across Python
   3.12, 3.13, and 3.14, plus minimum-dependency, Ruff, mypy, coverage,
   package, and aggregate `CI gate` jobs.
 - Safe recovery, Spec revision/abandonment, amendments, cancellation, queue
@@ -206,6 +208,3 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
   proven harness (other adapters' flags verified against docs, less
   exercised). The CI spec workflow requires an `ANTHROPIC_API_KEY` repository
   secret and installs Claude Code regardless of the configured local harness.
-  `machinist init --test-cmd`/auto-detect rewrites the template comment by
-  substring replace, leaving a stale comment tail in the generated
-  `machinist.yaml` (cosmetic; the YAML is valid).
