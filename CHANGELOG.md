@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0 — 2026-08-19
+
 - Serve the first-run guide rendered via GitHub Pages and link it from the README; refresh the guide's content, navigation, and dark-mode contrast.
 - Make retry and cleanup safe: preserve dirty Workshops unless forced, add explicit fresh/resume recovery, prevent rejected-commit reuse, bind execution to the approved SHA, and persist append-only attempt evidence.
 - Add first-class Spec revision/abandonment, implementation amendments, cooperative cancellation, queue controls and budgets, named verification gates, configurable notifications, phase-specific harnesses, and repository instruction overlays.

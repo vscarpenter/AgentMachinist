@@ -11,9 +11,9 @@ machinist status
 ```
 
 Resolve `FAIL` checks before unattended work. Decide explicitly whether a
-`tests.command: null` warning is acceptable. A Task Runs warning points to a
-failed or process-abandoned record that should be inspected and explicitly
-retried.
+warning that no verification gates are configured is acceptable. A Task Runs
+warning points to a failed or process-abandoned record that should be inspected
+and explicitly retried.
 
 ## Run modes
 

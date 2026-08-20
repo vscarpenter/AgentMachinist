@@ -12,7 +12,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 The controller—not the harness—owns commits, pushes, PR transitions, and task
 records. AgentMachinist never merges.
 
-Current release: [AgentMachinist 0.3.0 on PyPI](https://pypi.org/project/agentmachinist/0.3.0/).
+Current release: [AgentMachinist 0.4.0 on PyPI](https://pypi.org/project/agentmachinist/0.4.0/).
 
 ## Install
 
@@ -32,7 +32,8 @@ machinist init
 machinist doctor
 machinist sync-workflows --check
 git status --short
-git add machinist.yaml .machinist/specs/.gitkeep .github/workflows .gitignore
+git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add -p .github/workflows
 git diff --cached
 git commit -m "chore: configure AgentMachinist"
 git push

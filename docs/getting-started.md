@@ -72,15 +72,16 @@ machinist doctor
 machinist sync-workflows --check
 ```
 
-Resolve every `FAIL`. Treat a null test command warning as an explicit decision,
-not a harmless default.
+Resolve every `FAIL`. Treat a warning that no verification gates are configured
+as an explicit decision, not a harmless default.
 
 Review and persist the setup before the first task. The approval workflow must
 exist on GitHub before a comment or label can record SHA-bound approval:
 
 ```sh
 git status --short
-git add machinist.yaml .machinist/specs/.gitkeep .github/workflows .gitignore
+git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add -p .github/workflows
 git diff --cached
 git commit -m "chore: configure AgentMachinist"
 git push
@@ -275,9 +276,10 @@ binds the exact GitHub host, owner, and repository from the controller's Git
 origin; an explicit `repo` must match it. Workspace cleanup can be `always`,
 `on_success`, or `never`;
 keeping failed workspaces is useful for diagnosis. `tests.command: null` skips
-the gate and is surfaced as a doctor warning. The later sections describe the
-phase profiles, named gates, admission controls, notifications, and safety
-limits.
+the legacy command; verification is skipped only when no named
+`verification.gates` are configured, which is surfaced as a doctor warning.
+The later sections describe the phase profiles, named gates, admission
+controls, notifications, and safety limits.
 
 Use the config commands before starting a Task:
 

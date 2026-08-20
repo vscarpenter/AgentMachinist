@@ -25,7 +25,9 @@ _GUIDE_PATH = _REPO_ROOT / "docs" / "getting-started.md"
 _FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
 _ONBOARDING_PATH = _REPO_ROOT / "docs" / "onboarding.html"
 _HARNESS_PATH = _REPO_ROOT / "docs" / "harnesses.md"
+_EXPLAINER_PATH = _REPO_ROOT / "docs" / "explainer.html"
 _README_PATH = _REPO_ROOT / "README.md"
+_CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
 _CHANGELOG_PATH = _REPO_ROOT / "CHANGELOG.md"
 
 if not (_REPO_ROOT / "docs").exists():
@@ -212,9 +214,14 @@ def test_setup_docs_require_review_commit_and_push():
     html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
     for text in (readme, guide, html):
         assert ".machinist/runs/" in text
+        assert "git add -p .github/workflows" in text
         assert "git diff --cached" in text
         assert "git commit" in text
         assert "git push" in text
+        assert (
+            "git add machinist.yaml .machinist/specs/.gitkeep "
+            ".github/workflows .gitignore"
+        ) not in text
     assert "--no-workflows" in guide
     assert "manage_workflows: false" in guide
     assert "drift checking is disabled" in guide
@@ -315,6 +322,14 @@ def test_solo_operator_surfaces_and_advanced_config_are_documented():
     assert "uninstall" in operator and "preserves logs" in operator
 
 
+def test_first_run_guide_describes_verification_and_cleanup_precisely():
+    html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    assert "when no named <code>verification.gates</code> exist" in html
+    assert "after the successful execute run completed" in html
+    assert "removed when the tests passed" not in html
+    assert "this is an abridged first-run configuration" in html
+
+
 def test_release_docs_describe_current_package_version():
     version = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"][
         "version"
@@ -332,6 +347,10 @@ def test_release_docs_describe_current_package_version():
         f"https://pypi.org/project/agentmachinist/{version}/"
         in _README_PATH.read_text()
     )
+    assert f"current release: {version}" in _CLAUDE_PATH.read_text().lower()
+    explainer = _EXPLAINER_PATH.read_text().lower()
+    assert f'<span class="hud-badge">v{version}</span>' in explainer
+    assert f"install agentmachinist {version} from pypi" in explainer
     release_text = _README_PATH.read_text().lower().split("## releasing", 1)[1]
     assert "sha-256" in release_text
     assert "trusted publishing" in release_text

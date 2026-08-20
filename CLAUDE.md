@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.3.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.4.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -191,19 +191,16 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-08-18)
+## Current state (2026-08-19)
 
-- v0.3.0 is the latest PyPI release; 185 tests green; CI runs on ubuntu +
-  macos across Python 3.12 and 3.13.
-- `main` is ahead of 0.3.0 by one unreleased feature commit (`b01512a`): the
-  ergonomics/model-selection/workspace-hygiene work described above.
+- v0.4.0 is the current release. CI runs on Ubuntu and macOS across Python
+  3.12, 3.13, and 3.14, plus minimum-dependency, Ruff, mypy, coverage,
+  package, and aggregate `CI gate` jobs.
+- Safe recovery, Spec revision/abandonment, amendments, cancellation, queue
+  controls, named verification gates, notifications, run inspection,
+  repository portfolios, and the managed macOS watcher service all ship.
 - All designed commands ship; two full issue→merge lifecycles have run
   end-to-end (issue #1 and issue #4), the second fully daemon-driven.
-- Known documentation debt from `b01512a` — fix before the next release:
-  the README command table and `CHANGELOG.md` "Unreleased" still omit
-  `clean`, `inspect`, the new flags, and `harness.model`/`extra_args`.
-  `tests/test_docs.py` does not catch this (it asserts documented ⊆ actual,
-  never the reverse).
 - Known limits: macOS is the proven OS for the daemon; Linux notifications
   exist via `notify-send` but are unexercised in practice. claude-code is the
   proven harness (other adapters' flags verified against docs, less

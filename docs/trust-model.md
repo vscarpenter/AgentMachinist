@@ -25,7 +25,8 @@ approval automation never checks out or executes PR-head code.
 - Post-implementation checks for harness-created commits, changed remote branch
   heads, and edits under `.machinist/`.
 - Push lease against the approved head SHA.
-- Test gate before push when `tests.command` is configured.
+- Required verification gates before push when `tests.command` or named
+  `verification.gates` are configured.
 - Atomic local Task Run records and explicit retry.
 
 “Enforced” here means AgentMachinist or the selected CLI checks it. It does not
@@ -44,10 +45,12 @@ mean a hostile process with the same OS identity cannot work around it.
 
 Therefore, documentation must not claim that a harness “has no Git access.”
 
-## Test command
+## Verification commands
 
-The test command is repository-controlled shell text and runs as the local
-user. A null command skips the gate. A passing command proves only what that
+The legacy test command and every named verification gate are
+repository-controlled shell text and run as the local user. A null
+`tests.command` skips only the legacy command; verification is skipped when no
+named gates are configured either. A passing command proves only what that
 suite covers; it is not runtime, deployment, or security proof.
 
 ## Recommended deployment boundary
