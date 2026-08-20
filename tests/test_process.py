@@ -349,8 +349,8 @@ def test_cancellation_evidence_errors_cannot_mask_operator_intent(
     ready = tmp_path / "ready"
     code = (
         "import os, time; from pathlib import Path; "
-        f"Path({str(ready)!r}).write_text('ready'); "
         f"os.write(1, {payload!r}); "
+        f"Path({str(ready)!r}).write_text('ready'); "
         "time.sleep(60)"
     )
 
@@ -375,22 +375,36 @@ def test_cancellation_evidence_errors_cannot_mask_operator_intent(
     ((b"\xff", 1024), (b"xx", 1)),
 )
 def test_timeout_evidence_errors_cannot_mask_deadline(
+    tmp_path,
     payload,
     max_output_bytes,
 ):
+    ready = tmp_path / "ready"
     code = (
-        f"import os, time; time.sleep(0.02); os.write(1, {payload!r}); time.sleep(60)"
+        "import os, time; from pathlib import Path; "
+        f"os.write(1, {payload!r}); "
+        f"Path({str(ready)!r}).write_text('ready'); "
+        "time.sleep(60)"
     )
+
+    def wait_for_evidence() -> bool:
+        deadline = time.monotonic() + 5
+        while not ready.exists():
+            if time.monotonic() >= deadline:
+                pytest.fail("child did not write interruption evidence")
+            time.sleep(0.001)
+        return False
 
     with pytest.raises(ProcessTimeoutError) as caught:
         run_supervised(
             [sys.executable, "-c", code],
             text=True,
             encoding="utf-8",
-            timeout=0.05,
+            timeout=0,
+            cancel_check=wait_for_evidence,
             max_output_bytes=max_output_bytes,
             termination_grace_seconds=0.02,
-            poll_interval=0.1,
+            poll_interval=0.001,
         )
 
     assert caught.value.output is None

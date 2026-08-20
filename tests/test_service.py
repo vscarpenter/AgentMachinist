@@ -309,13 +309,13 @@ def test_bootstrap_and_bootout_use_safe_gui_domain_argv(tmp_path):
     stopped = service.bootout()
 
     assert started.argv == (
-        "/bin/launchctl",
+        str(service.launchctl_path),
         "bootstrap",
         "gui/501",
         str(service.plist_path),
     )
     assert stopped.argv == (
-        "/bin/launchctl",
+        str(service.launchctl_path),
         "bootout",
         f"gui/501/{service.label}",
     )
@@ -340,7 +340,7 @@ def test_status_uses_launchctl_print_and_preserves_human_output(tmp_path):
     assert status.output == "state = running\n\tpid = 4321\n"
     assert status.error is None
     assert runner.calls[0][0] == [
-        "/bin/launchctl",
+        str(service.launchctl_path),
         "print",
         f"gui/501/{service.label}",
     ]
@@ -365,7 +365,7 @@ def test_start_kickstarts_registered_job_without_shell_or_output_parsing(tmp_pat
     result = service.start()
 
     assert result.argv == (
-        "/bin/launchctl",
+        str(service.launchctl_path),
         "kickstart",
         f"gui/501/{service.label}",
     )
@@ -378,7 +378,7 @@ def test_restart_uses_kickstart_k(tmp_path):
     result = service.restart()
 
     assert result.argv == (
-        "/bin/launchctl",
+        str(service.launchctl_path),
         "kickstart",
         "-k",
         f"gui/501/{service.label}",
