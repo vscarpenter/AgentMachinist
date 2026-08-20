@@ -23,6 +23,12 @@ uv tool install agentmachinist
 You also need `git`, an authenticated [`gh`](https://cli.github.com), and one
 supported harness executable (`claude`, `opencode`, `pi`, or `codex`).
 
+`machinist update-check` compares the installed release against PyPI and
+prints the upgrade command for how this copy was installed (`uv tool`, `pipx`,
+`pip`, or a source checkout). `machinist doctor` reports the same result as a
+diagnostic row. Set `MACHINIST_NO_UPDATE_CHECK=1` to suppress both probes on
+offline or CI machines.
+
 ## Start
 
 ```sh
@@ -92,6 +98,7 @@ PR.
 | --- | --- |
 | `machinist init` | Create config, spec storage, labels, and managed workflows; asks setup questions in a terminal (`--no-input` skips them). |
 | `machinist doctor` | Run read-only setup and workflow-drift diagnostics. |
+| `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI and print how to upgrade. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration. |
 | `machinist spec <issue> [--dry-run]` | Preview a Spec, or generate it and open its draft PR. |

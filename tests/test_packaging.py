@@ -124,6 +124,7 @@ def test_static_type_gate_is_zero_error_core_with_explicit_expansion_debt():
         "src/machinist/workspace.py",
         "src/machinist/process.py",
         "src/machinist/verification.py",
+        "src/machinist/updates.py",
     }
 
     assert set(mypy["files"]) == expected_core

@@ -304,6 +304,7 @@ def test_solo_operator_surfaces_and_advanced_config_are_documented():
         "machinist inspect 42 --offline --json",
         "machinist repo add",
         "machinist watch --dry-run",
+        "machinist update-check",
     ):
         assert command in combined
 

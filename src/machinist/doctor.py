@@ -17,6 +17,7 @@ from machinist.github import github_command_environment
 from machinist.harness import get_harness
 from machinist.lifecycle import RunStatus, TaskLifecycle
 from machinist.observability import build_run_report
+from machinist.updates import UpdateCheck, UpdateStatus, check_for_update
 from machinist.workflows import WorkflowDriftError, sync_workflows
 from machinist.workspace import github_repository_target
 
@@ -484,6 +485,22 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
     )
 
 
+def _update_check(
+    installed_version: str, probe: Callable[[str], UpdateCheck]
+) -> DoctorCheck:
+    """Report an available release without ever blocking the diagnosis."""
+    try:
+        result = probe(installed_version)
+    except Exception as exc:  # noqa: BLE001 - an advisory probe cannot fail doctor
+        return DoctorCheck(CheckLevel.WARN, "updates", f"update check failed: {exc}")
+    level = (
+        CheckLevel.WARN
+        if result.status in {UpdateStatus.AVAILABLE, UpdateStatus.UNKNOWN}
+        else CheckLevel.PASS
+    )
+    return DoctorCheck(level, "updates", result.summary())
+
+
 def run_doctor(
     repo_root: Path,
     config: MachinistConfig,
@@ -491,6 +508,7 @@ def run_doctor(
     installed_version: str,
     which: Callable[[str], str | None] = shutil.which,
     runner=subprocess.run,
+    update_probe: Callable[[str], UpdateCheck] = check_for_update,
 ) -> DoctorReport:
     """Accumulate diagnostics without creating or changing repository files."""
     root = Path(repo_root).expanduser().resolve()
@@ -688,5 +706,6 @@ def run_doctor(
             )
 
     checks.append(_task_runs_check(root))
+    checks.append(_update_check(installed_version, update_probe))
 
     return DoctorReport(tuple(checks))

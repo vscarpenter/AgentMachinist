@@ -60,6 +60,7 @@ def test_help_lists_all_commands():
         "status",
         "runs",
         "doctor",
+        "update-check",
         "sync-workflows",
         "clean",
         "inspect",
@@ -2352,3 +2353,101 @@ def test_status_verbose(monkeypatch):
         result = runner.invoke(main, ["status", "-v"])
         assert result.exit_code == 0, result.output
         assert "Error: test gate failed" in result.output
+
+
+def _update_result(status, **overrides):
+    from machinist.updates import UpdateCheck, UpdateStatus
+
+    fields = {
+        "status": UpdateStatus(status),
+        "installed": "0.6.0",
+        "latest": "0.7.1",
+        "upgrade_command": "uv tool upgrade agentmachinist",
+    }
+    fields.update(overrides)
+    return UpdateCheck(**fields)
+
+
+def test_update_check_reports_an_available_release_with_instructions(monkeypatch):
+    seen = {}
+
+    def fake_check(installed, **kwargs):
+        seen["installed"] = installed
+        seen["timeout"] = kwargs.get("timeout_seconds")
+        return _update_result("available")
+
+    monkeypatch.setattr("machinist.cli.check_for_update", fake_check)
+
+    result = CliRunner().invoke(main, ["update-check", "--timeout", "9"])
+
+    assert result.exit_code == 0, result.output
+    assert seen["timeout"] == 9
+    assert "0.7.1" in result.output
+    assert "uv tool upgrade agentmachinist" in result.output
+    assert "CHANGELOG.md" in result.output
+
+
+def test_update_check_is_quiet_when_the_installation_is_current(monkeypatch):
+    monkeypatch.setattr(
+        "machinist.cli.check_for_update",
+        lambda installed, **kwargs: _update_result("current", latest="0.6.0"),
+    )
+
+    result = CliRunner().invoke(main, ["update-check"])
+
+    assert result.exit_code == 0, result.output
+    assert "latest release on PyPI" in result.output
+    assert "upgrade" not in result.output.lower()
+
+
+def test_update_check_json_is_scriptable(monkeypatch):
+    monkeypatch.setattr(
+        "machinist.cli.check_for_update",
+        lambda installed, **kwargs: _update_result("available"),
+    )
+
+    result = CliRunner().invoke(main, ["update-check", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "package": "agentmachinist",
+        "installed": "0.6.0",
+        "latest": "0.7.1",
+        "status": "available",
+        "update_available": True,
+        "upgrade_command": "uv tool upgrade agentmachinist",
+        "error": None,
+    }
+
+
+def test_update_check_exits_nonzero_when_the_index_is_unreachable(monkeypatch):
+    monkeypatch.setattr(
+        "machinist.cli.check_for_update",
+        lambda installed, **kwargs: _update_result(
+            "unknown", latest=None, error="URLError: offline"
+        ),
+    )
+
+    result = CliRunner().invoke(main, ["update-check"])
+
+    assert result.exit_code == 1
+    assert "offline" in result.output
+    assert "uv tool upgrade agentmachinist" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_update_check_honors_the_opt_out_environment_variable():
+    # conftest sets MACHINIST_NO_UPDATE_CHECK, so this exercises the real
+    # check end to end without contacting any index.
+    result = CliRunner().invoke(main, ["update-check"])
+
+    assert result.exit_code == 0, result.output
+    assert "MACHINIST_NO_UPDATE_CHECK" in result.output
+
+
+def test_update_check_needs_no_repository_or_config():
+    runner = _BaseCliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["update-check"])
+
+    assert result.exit_code == 0, result.output

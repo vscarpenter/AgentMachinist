@@ -78,6 +78,11 @@ from machinist.portfolio import (
 from machinist.process import run_supervised
 from machinist.queue_control import QueueControl, QueueControlError
 from machinist.service import LaunchdService, ServiceError, read_log_tail
+from machinist.updates import (
+    DEFAULT_TIMEOUT_SECONDS,
+    UpdateStatus,
+    check_for_update,
+)
 from machinist.workflows import (
     WorkflowDriftError,
     preflight_workflow_paths,
@@ -479,6 +484,28 @@ def doctor() -> None:
         click.echo(f"{check.level.value:<4} {check.name:<24} {check.detail}")
     if not report.ok:
         raise click.ClickException("doctor found blocking problems")
+
+
+@main.command("update-check")
+@click.option(
+    "--timeout",
+    "timeout_seconds",
+    type=click.IntRange(1, 60),
+    default=DEFAULT_TIMEOUT_SECONDS,
+    show_default=True,
+    help="Seconds to wait for the package index.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable result.")
+def update_check_command(timeout_seconds: int, as_json: bool) -> None:
+    """Check PyPI for a newer AgentMachinist release and print how to upgrade."""
+    result = check_for_update(_installed_version(), timeout_seconds=timeout_seconds)
+    if as_json:
+        click.echo(json.dumps(result.as_dict(), sort_keys=True))
+    else:
+        for line in result.report_lines():
+            click.echo(line)
+    if result.status is UpdateStatus.UNKNOWN:
+        raise click.exceptions.Exit(1)
 
 
 @main.group("config")

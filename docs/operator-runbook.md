@@ -10,7 +10,12 @@ machinist sync-workflows --check
 machinist status
 ```
 
-Resolve `FAIL` checks before unattended work. Decide explicitly whether a
+Resolve `FAIL` checks before unattended work. `doctor` also reports whether a
+newer release is published; `machinist update-check` prints the same result
+with the upgrade command for this installation, and
+`machinist update-check --json` is the scriptable form. Both probes are
+advisory: they never fail a pipeline command, and `MACHINIST_NO_UPDATE_CHECK=1`
+disables them on offline hosts. Decide explicitly whether a
 warning that no verification gates are configured is acceptable. A Task Runs
 warning points to a failed or process-abandoned record that should be inspected
 and explicitly retried.
