@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A one-page TL;DR of the AgentMachinist pipeline: local and GitHub Actions dispatch side by side, from repository prep to merged pull request.">
+  <meta name="theme-color" content="#f3f1eb">
+  <title>Machinist Job Card</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --paper-0: #fbfaf6;
+      --paper-1: #f3f1eb;
+      --paper-2: #e8e5dc;
+      --ink-0: #17212a;
+      --ink-1: #34434f;
+      --ink-2: #65727c;
+      --line: #c8c7c1;
+      --line-strong: #90969a;
+      --blueprint: #285f78;
+      --blueprint-soft: #dce8ec;
+      --signal: #c84f24;
+      --signal-strong: #9f3716;
+      --signal-soft: #f4ded4;
+      --warning: #8a5a13;
+      --warning-soft: #f2e7cf;
+      --terminal: #17212a;
+      --terminal-ink: #e9eee9;
+      --terminal-muted: #a9b7ba;
+      --shadow-sm: 0 1px 2px rgb(23 33 42 / 0.06), 0 4px 10px rgb(23 33 42 / 0.04);
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 14px;
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-5: 1.5rem;
+      --space-6: 2rem;
+      --space-7: 3rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --paper-0: #10171d;
+        --paper-1: #151f27;
+        --paper-2: #202d36;
+        --ink-0: #edf0ec;
+        --ink-1: #c6d0d2;
+        --ink-2: #91a0a6;
+        --line: #34434d;
+        --line-strong: #63727a;
+        --blueprint: #77b4c9;
+        --blueprint-soft: #183542;
+        --signal: #f08457;
+        --signal-strong: #ff9d76;
+        --signal-soft: #45281f;
+        --warning: #e1b86d;
+        --warning-soft: #3b301b;
+        --terminal: #090e12;
+        --terminal-ink: #e5ebe8;
+        --terminal-muted: #8da0a4;
+        --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.06);
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --paper-0: #10171d;
+      --paper-1: #151f27;
+      --paper-2: #202d36;
+      --ink-0: #edf0ec;
+      --ink-1: #c6d0d2;
+      --ink-2: #91a0a6;
+      --line: #34434d;
+      --line-strong: #63727a;
+      --blueprint: #77b4c9;
+      --blueprint-soft: #183542;
+      --signal: #f08457;
+      --signal-strong: #ff9d76;
+      --signal-soft: #45281f;
+      --warning: #e1b86d;
+      --warning-soft: #3b301b;
+      --terminal: #090e12;
+      --terminal-ink: #e5ebe8;
+      --terminal-muted: #8da0a4;
+      --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.06);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper-0);
+      color: var(--ink-0);
+      font-family: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+    a { color: var(--blueprint); text-underline-offset: 0.2em; }
+    a:hover { color: var(--signal-strong); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { text-wrap: balance; }
+    :focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; }
+    code, pre, .mono {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    }
+
+    .shell { width: min(100% - 2rem, 68rem); margin-inline: auto; padding-block: var(--space-7); }
+
+    /* ── Header ───────────────────────────── */
+    .kicker {
+      margin-bottom: var(--space-3);
+      color: var(--signal-strong);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.78rem;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin-bottom: var(--space-4);
+      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      font-weight: 650;
+      letter-spacing: -0.045em;
+      line-height: 1.02;
+    }
+    .lede {
+      max-width: 40rem;
+      margin-bottom: var(--space-6);
+      font-size: clamp(1.05rem, 2vw, 1.2rem);
+      color: var(--ink-1);
+    }
+
+    h2 {
+      margin-bottom: var(--space-4);
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      line-height: 1.08;
+    }
+    h3 {
+      margin-bottom: var(--space-2);
+      font-size: 1.15rem;
+      font-weight: 650;
+      letter-spacing: -0.018em;
+    }
+    p { color: var(--ink-1); }
+
+    /* ── Pipeline strip ───────────────────── */
+    .pipeline-scroll { overflow-x: auto; margin-bottom: var(--space-7); }
+    .pipeline {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      min-width: max-content;
+      padding: var(--space-4) var(--space-5);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-sm);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.8rem;
+    }
+    .pipeline .step { white-space: nowrap; color: var(--ink-1); }
+    .pipeline .arrow { color: var(--line-strong); }
+    .pipeline .gate {
+      white-space: nowrap;
+      padding: 0.15rem var(--space-2);
+      border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--line));
+      border-radius: var(--radius-sm);
+      background: var(--warning-soft);
+      color: var(--warning);
+      font-weight: 650;
+    }
+    .pipeline .gate::before { content: "◆ "; font-size: 0.68rem; }
+
+    /* ── Terminal-style code ──────────────── */
+    pre {
+      margin: var(--space-3) 0 var(--space-2);
+      padding: var(--space-4) var(--space-5);
+      border-radius: var(--radius-md);
+      background: var(--terminal);
+      color: var(--terminal-ink);
+      font-size: 0.82rem;
+      line-height: 1.65;
+      overflow-x: auto;
+    }
+    pre .comment { color: var(--terminal-muted); }
+    code {
+      font-size: 0.88em;
+      padding: 0.08em 0.35em;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--paper-2);
+    }
+    pre code { padding: 0; border: none; background: none; font-size: inherit; }
+
+    /* ── Prep card ────────────────────────── */
+    .prep {
+      margin-bottom: var(--space-7);
+      padding: var(--space-5) var(--space-6);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--ink-2);
+      border-radius: var(--radius-lg);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-sm);
+    }
+    .prep p { max-width: 62ch; }
+    .op-index {
+      display: inline-block;
+      margin-bottom: var(--space-2);
+      color: var(--ink-2);
+      font: 750 0.8rem ui-monospace, "SFMono-Regular", Menlo, monospace;
+      letter-spacing: 0.08em;
+    }
+
+    /* ── Two-track grid ───────────────────── */
+    .tracks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 var(--space-5);
+    }
+    .track-head {
+      padding: var(--space-4) var(--space-5);
+      border: 1px solid var(--line);
+      border-top: 4px solid;
+      border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-sm);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-sm);
+    }
+    .track-head.local { border-top-color: var(--blueprint); }
+    .track-head.ci { border-top-color: var(--signal); }
+    .track-head h2 { margin-bottom: var(--space-1); font-size: 1.45rem; }
+    .track-head.local h2 { color: var(--blueprint); }
+    .track-head.ci h2 { color: var(--signal-strong); }
+    .track-head p { margin: 0; font-size: 0.88rem; color: var(--ink-2); }
+    .track-head .cfg { font-size: 0.8rem; }
+
+    .stage-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-3);
+      margin-top: var(--space-6);
+      padding-bottom: var(--space-2);
+      border-bottom: 1px solid var(--line);
+    }
+    .stage-bar .op-index { margin: 0; }
+    .stage-bar h3 { margin: 0; }
+    .gate-tag, .auto-tag {
+      margin-left: auto;
+      white-space: nowrap;
+      font: 650 0.68rem ui-monospace, "SFMono-Regular", Menlo, monospace;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .gate-tag {
+      padding: 0.15rem var(--space-2);
+      border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--line));
+      border-radius: var(--radius-sm);
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+    .gate-tag::before { content: "◆ "; }
+    .auto-tag { color: var(--ink-2); }
+
+    .cell {
+      margin-top: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--paper-1);
+      box-shadow: var(--shadow-sm);
+    }
+    .cell.local { border-left: 4px solid var(--blueprint); }
+    .cell.ci { border-left: 4px solid var(--signal); }
+    .cell.span { grid-column: 1 / -1; border-left: 4px solid var(--line-strong); }
+    .cell > :last-child { margin-bottom: 0; }
+    .chip {
+      display: inline-block;
+      margin-bottom: var(--space-2);
+      padding: 0.15rem var(--space-2);
+      border-radius: var(--radius-sm);
+      font: 650 0.66rem ui-monospace, "SFMono-Regular", Menlo, monospace;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .chip.local { color: var(--blueprint); background: var(--blueprint-soft); }
+    .chip.ci { color: var(--signal-strong); background: var(--signal-soft); }
+    .chip.both { color: var(--ink-2); background: var(--paper-2); }
+    .cell p { margin-bottom: var(--space-2); font-size: 0.92rem; }
+    .cell p.note { font-size: 0.85rem; color: var(--ink-2); }
+
+    /* ── Guardrails ───────────────────────── */
+    .guardrails { margin-top: var(--space-7); }
+    .rails {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: var(--space-4);
+    }
+    .rail {
+      padding: var(--space-4) var(--space-5);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--paper-1);
+      font-size: 0.88rem;
+    }
+    .rail strong {
+      display: block;
+      margin-bottom: var(--space-1);
+      color: var(--ink-0);
+      font: 750 0.72rem ui-monospace, "SFMono-Regular", Menlo, monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .rail span { color: var(--ink-2); }
+
+    footer {
+      margin-top: var(--space-6);
+      padding-top: var(--space-4);
+      border-top: 1px solid var(--line);
+      color: var(--ink-2);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+    }
+    footer a { color: var(--blueprint); }
+
+    @media (max-width: 44rem) {
+      .tracks { grid-template-columns: 1fr; }
+      .track-head.ci { margin-top: var(--space-4); }
+      .gate-tag, .auto-tag { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <p class="kicker">AgentMachinist · Job card · Rev 0.6.0</p>
+    <h1>Machinist Job Card</h1>
+    <p class="lede">One GitHub issue in, one reviewed pull request out. The
+    machine writes the spec and the code; you approve the exact spec commit
+    and you do the merge. Two dispatch modes, same operations.</p>
+  </header>
+
+  <div class="pipeline-scroll">
+    <div class="pipeline">
+      <span class="step">issue + label</span><span class="arrow">→</span>
+      <span class="step">spec commit</span><span class="arrow">→</span>
+      <span class="step">draft PR</span><span class="arrow">→</span>
+      <span class="gate">approve SHA</span><span class="arrow">→</span>
+      <span class="step">implement</span><span class="arrow">→</span>
+      <span class="step">test gate</span><span class="arrow">→</span>
+      <span class="step">ready PR</span><span class="arrow">→</span>
+      <span class="gate">you merge</span>
+    </div>
+  </div>
+
+  <section class="prep">
+    <span class="op-index">OP 00</span>
+    <h2>Prep — get the repo onto GitHub first</h2>
+    <p>Machinist works against a GitHub remote: specs are pushed as branches,
+    approvals live on pull requests. Before <code>machinist init</code>, commit
+    everything and put the repository on GitHub.</p>
+    <pre><code>git init &amp;&amp; git add . &amp;&amp; git commit -m "initial commit"
+gh repo create my-project --private --source . --push
+gh auth status                       <span class="comment"># must be authenticated</span>
+uv tool install agentmachinist
+claude --version                     <span class="comment"># or opencode / pi / codex on PATH</span></code></pre>
+  </section>
+
+  <div class="tracks">
+    <div class="track-head local">
+      <h2>Local</h2>
+      <p>Your machine runs everything. <span class="cfg mono">spec_source: local</span></p>
+    </div>
+    <div class="track-head ci">
+      <h2>GitHub Actions</h2>
+      <p>CI writes the spec; you approve from the GitHub UI. <span class="cfg mono">spec_source: github-actions</span></p>
+    </div>
+
+    <div class="stage-bar">
+      <span class="op-index">OP 01</span>
+      <h3>Initialize</h3>
+    </div>
+    <div class="cell local">
+      <span class="chip local">Local</span>
+      <pre><code>machinist init        <span class="comment"># dispatch mode: local</span>
+machinist doctor
+git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add -p .github/workflows
+git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
+      <p class="note">The wizard asks dispatch mode, harness, test gate, and
+      notifications — each with a safe default.</p>
+    </div>
+    <div class="cell ci">
+      <span class="chip ci">GitHub Actions</span>
+      <pre><code>machinist init --spec-source github-actions
+gh secret set ANTHROPIC_API_KEY      <span class="comment"># CI spec harness needs it</span>
+machinist sync-workflows
+git add -p .github/workflows &amp;&amp; git commit &amp;&amp; git push</code></pre>
+      <p class="note">Workflows must be pushed before GitHub can record a
+      SHA-bound approval. The CI spec workflow is claude-code only.</p>
+    </div>
+
+    <div class="stage-bar">
+      <span class="op-index">OP 02</span>
+      <h3>Create the issue</h3>
+    </div>
+    <div class="cell span">
+      <span class="chip both">Same on both tracks</span>
+      <pre><code>gh issue create --title "Add CSV export" --label agent-task</code></pre>
+      <p class="note">Write a focused issue with acceptance criteria. The
+      <code>agent-task</code> label is the trigger — no label, no dispatch.</p>
+    </div>
+
+    <div class="stage-bar">
+      <span class="op-index">OP 03</span>
+      <h3>Spec</h3>
+      <span class="auto-tag">machine</span>
+    </div>
+    <div class="cell local">
+      <span class="chip local">Local</span>
+      <pre><code>machinist spec 7      <span class="comment"># or: machinist watch --once</span>
+machinist spec 7 --dry-run           <span class="comment"># read-only preview</span></code></pre>
+      <p class="note">Harness reads the issue read-only in an isolated
+      workshop, writes <code>.machinist/specs/issue-7-spec.md</code>, and the
+      controller pushes <code>agent/issue-7</code> as a draft PR.</p>
+    </div>
+    <div class="cell ci">
+      <span class="chip ci">GitHub Actions</span>
+      <p>Nothing to run. Applying the label triggers
+      <code>machinist-spec.yml</code>, which generates the spec in CI and opens
+      the draft PR.</p>
+      <p class="note">Your local <code>watch</code> daemon leaves labeled
+      issues alone — exactly one dispatcher owns this phase.</p>
+    </div>
+
+    <div class="stage-bar">
+      <span class="op-index">OP 04</span>
+      <h3>Approve the spec</h3>
+      <span class="gate-tag">Human gate</span>
+    </div>
+    <div class="cell local">
+      <span class="chip local">Local</span>
+      <pre><code>machinist approve --issue 7          <span class="comment"># or --pr 8</span></code></pre>
+      <p class="note">Read the spec in the draft PR first. Approval binds the
+      label plus the exact 40-character head SHA.</p>
+    </div>
+    <div class="cell ci">
+      <span class="chip ci">GitHub Actions</span>
+      <p>On the draft PR, post the comment from the PR body:</p>
+      <pre><code>/machinist-execute &lt;full-spec-commit-sha&gt;</code></pre>
+      <p class="note">Or apply the <code>machinist:approved</code> label.
+      <code>machinist-approve.yml</code> records the SHA-bound marker — and
+      only from owners, members, or collaborators.</p>
+    </div>
+
+    <div class="stage-bar">
+      <span class="op-index">OP 05</span>
+      <h3>Execute</h3>
+      <span class="auto-tag">machine</span>
+    </div>
+    <div class="cell span">
+      <span class="chip both">Always on your machine — CI only ever owns the spec phase</span>
+      <pre><code>machinist run 7       <span class="comment"># or leave `machinist watch` running to dispatch it</span></code></pre>
+      <p class="note">Harness implements against the approved spec, the test
+      gate runs (e.g. <code>uv run pytest</code>), the controller commits,
+      pushes with <code>--force-with-lease</code>, and flips the PR from draft
+      to ready. Edited the spec after approving? The approval goes stale and
+      execution refuses until you approve the new head.</p>
+    </div>
+
+    <div class="stage-bar">
+      <span class="op-index">OP 06</span>
+      <h3>Review &amp; merge</h3>
+      <span class="gate-tag">Human gate</span>
+    </div>
+    <div class="cell span">
+      <span class="chip both">Same on both tracks</span>
+      <p>A ready PR means implementation finished and the test gate passed.
+      Review it like any teammate's PR and merge it yourself — AgentMachinist
+      never merges. For rework: <code>machinist amend 7 --feedback "…"</code>
+      after a fresh approval.</p>
+    </div>
+  </div>
+
+  <section class="guardrails">
+    <h2>Guardrails</h2>
+    <div class="rails">
+      <div class="rail"><strong>SHA-bound approval</strong>
+        <span>Approval authorizes one exact spec commit. Any new head on the
+        branch makes it stale.</span></div>
+      <div class="rail"><strong>Controller owns git</strong>
+        <span>The harness never commits or pushes; postconditions abort the
+        run if it tries.</span></div>
+      <div class="rail"><strong>Draft = machine's</strong>
+        <span>Never mark the draft ready yourself — that transition is the
+        signal that tests passed.</span></div>
+      <div class="rail"><strong>Explicit retry</strong>
+        <span>A failed run blocks re-dispatch until
+        <code>machinist retry 7</code>. Nothing silently reruns.</span></div>
+    </div>
+  </section>
+
+  <footer>machinist status · machinist inspect 7 · machinist doctor — when
+  anything looks off · full walkthrough: <a href="first-run-guide.html">first-run
+  field guide</a></footer>
+</div>
+</body>
+</html>
