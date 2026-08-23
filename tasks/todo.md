@@ -249,3 +249,19 @@ agentic review phase (playbook Stage 5) — revisit after a few lifecycles
 run with the feedback loop; the unique piece to build first is a
 spec-compliance review pass, since the approved spec commit is already an
 exact review contract.
+
+## Release 0.8.0 (2026-08-23)
+
+The three AI-native SDLC playbook adoptions shipped as 0.8.0: the harness
+verification feedback loop (`verification.harness_may_run_gates`), the
+test-deletion guard (`limits.allow_test_deletions`), and the spec
+template's Risks section with the standalone-readable quality bar.
+Version bumped in pyproject/uv.lock, changelog dated, release-pinned
+references updated in README, CLAUDE.md, first-run-guide.html,
+explainer.html, and job-card.html (including the "0.8 release" hero
+kicker test_docs.py pins). Managed workflows needed no reprojection
+(dogfood config uses spec_install: checkout). Pushed to main, CI green
+on 7d71138, published the v0.8.0 GitHub Release; the Trusted Publishing
+workflow's build, publish, verify-published, and release-assets jobs all
+succeeded, PyPI serves 0.8.0, and the wheel, sdist, and SHA256SUMS are
+attached to the release.
