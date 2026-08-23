@@ -173,6 +173,17 @@ def test_render_spec_prompt_delimits_repository_instructions():
     assert "Prefer the public API." in prompt
 
 
+def test_render_spec_prompt_requires_risks_and_standalone_quality_bar():
+    prompt = render_spec_prompt(ISSUE)
+
+    # The spec is the approval-gate artifact: it must surface risks and be
+    # implementable by someone who never saw the originating conversation.
+    assert "## Risks" in prompt
+    assert prompt.index("## Proposed approach") < prompt.index("## Risks")
+    assert prompt.index("## Risks") < prompt.index("## Testing plan")
+    assert "unfamiliar with this conversation" in prompt
+
+
 def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     github, harness = FakeGitHub(), FakeHarness()
     workspace = FakeWorkspace(tmp_path)

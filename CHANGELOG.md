@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Ask the Spec harness for a `## Risks` section (between the approach and the
+  testing plan) and require the spec to be implementable by a developer who
+  never saw the originating conversation, so the human approval gate reviews
+  risk explicitly.
+
 ## 0.7.0 — 2026-08-20
 
 - Add `machinist update-check`: compare the installed release against PyPI and
