@@ -1233,7 +1233,7 @@ Add CSV export for filtered rows on the table.
           </div>
           <figure class="walk-visual">
             <figcaption class="visual-label"><span>DRAFT PULL REQUEST</span><span>machine wrote the plan</span></figcaption>
-            <svg viewBox="0 0 680 360" role="img" aria-label="A draft pull request showing an implementation specification with summary, requirements, approach, testing plan, and out-of-scope sections.">
+            <svg viewBox="0 0 680 360" role="img" aria-label="A draft pull request showing an implementation specification with summary, requirements, approach, risks, testing plan, and out-of-scope sections.">
               <g font-family="Avenir Next, system-ui, sans-serif">
                 <rect x="30" y="28" width="620" height="304" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
                 <rect x="54" y="51" width="58" height="22" rx="11" fill="var(--warning-soft)"/><text x="83" y="66" text-anchor="middle" fill="var(--warning)" font-size="10" font-weight="700">DRAFT</text>
@@ -1294,7 +1294,7 @@ machinist spec 42 --abandon --reason "requirements changed"</pre>
           <div class="walk-copy">
             <span class="walk-index">08 / BUILD, TEST, REVIEW</span>
             <h3>Let the machine work. Keep the merge.</h3>
-            <p>The watcher or <code>machinist run 42</code> provisions the approved branch, asks the harness to implement, runs your test command, pushes with a lease, and marks the PR ready. You review and merge.</p>
+            <p>The watcher or <code>machinist run 42</code> provisions the approved branch, asks the harness to implement — iterating against your configured test gate until it passes — then runs the gate itself as the authoritative check, pushes with a lease, and marks the PR ready. You review and merge.</p>
             <span class="walk-command">machinist run 42</span>
 
             <div class="tip-box">
@@ -1370,7 +1370,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
           <p>AgentMachinist keeps Git custody and detects ordinary harness violations, but the harness still runs as your operating-system user.</p>
           <ul>
             <li>Spec runs request the strongest available read-only mode and reject file mutations.</li>
-            <li>Implementation checks for harness commits, remote pushes, and <code>.machinist/</code> edits.</li>
+            <li>Implementation checks for harness commits, remote pushes, <code>.machinist/</code> edits, and deleted test files.</li>
             <li>Common GitHub and SSH-agent credentials are removed from the harness environment.</li>
             <li>These controls are not a VM, container, or protection from a malicious local executable.</li>
           </ul>

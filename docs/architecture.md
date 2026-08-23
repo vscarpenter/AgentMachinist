@@ -10,7 +10,7 @@ ready-for-review pull request—not merge or deployment.
 | --- | --- |
 | GitHub | Issues, PRs, branch heads, approval marker comments, labels. |
 | AgentMachinist | Eligibility, local claims, Task Runs, workspaces, commits, leased pushes, PR readiness. |
-| Harness | Read repository context and return a spec or working-tree edits. |
+| Harness | Read repository context and return a spec or working-tree edits; may pre-run the configured verification gates to iterate. |
 | Human | Issue intent, spec approval, code review, merge. |
 
 The controller keeps Git authority. Prompts tell the harness not to use Git;
@@ -91,12 +91,18 @@ remote head. Explicit feedback is bounded and recorded with Execute evidence.
 ## Verification and process supervision
 
 Execute resolves either ordered `verification.gates` or the legacy
-`tests.command` into one verification engine. Required command failures prevent
+`tests.command` into one verification engine. By default the implement prompt
+lists those gate commands and asks the harness to run required gates and
+iterate until they pass before finishing; the `claude-code` adapter allowlists
+exactly those commands, and `verification.harness_may_run_gates: false`
+withholds both. The controller's own gate run afterwards remains the
+authoritative check. Required command failures prevent
 readiness; ordinary advisory command failures remain evidence. Cancellation,
 forbidden mutation, or inability to snapshot the working tree always blocks
 fail-closed, even for an advisory gate. Before commit or push, the controller
 also enforces configured file-count, byte-count, denied-path, and binary-file
-limits.
+limits, and refuses deleted test files (heuristic path patterns; renames
+count) unless `limits.allow_test_deletions` is set.
 
 Harnesses and gates run under a process supervisor with bounded output,
 timeouts, credential reduction, process-group termination, and cooperative

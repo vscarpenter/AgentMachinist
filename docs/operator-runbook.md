@@ -149,6 +149,13 @@ Do not edit Task Run JSON by hand. `--resume` validates the managed workspace
 against the recorded branch and head before reusing it. `--fresh` starts from
 the approved head without treating diagnostic edits as implementation input.
 
+A run that fails with `implementation deleted test file(s)` hit the
+test-deletion guard. Read the retained workspace's diff first: if the harness
+deleted tests to get past the gate, retry fresh; if the approved Spec
+legitimately removes or renames tests, set
+`limits.allow_test_deletions: true`, retry, and turn the setting back off
+afterwards.
+
 ## Cancel or amend a task
 
 To cooperatively terminate an active supervised harness/gate process and block
@@ -191,8 +198,9 @@ machinist config schema --output machinist.schema.json
 
 `machinist config set <dotted-key> <yaml-value>` atomically rewrites the
 validated config as canonical YAML and normalizes comments. Phase-specific
-harness profiles, instruction overlays, named verification gates,
-notifications, admission budgets, and change limits are documented in the
+harness profiles, instruction overlays, named verification gates, the harness
+verification feedback loop, the test-deletion guard, notifications, admission
+budgets, and change limits are documented in the
 [getting-started reference](getting-started.md).
 
 ## Approval incidents
