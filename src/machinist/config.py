@@ -902,6 +902,9 @@ class LimitsConfig(StrictModel):
     max_changed_bytes: int = Field(default=5 * 1024 * 1024, ge=1)
     denied_paths: list[str] = Field(default_factory=lambda: [".machinist"])
     allow_binary: bool = False
+    # A harness must never green the gate by deleting the tests that fail it.
+    # Opt in per repository when an approved Spec legitimately removes tests.
+    allow_test_deletions: bool = False
 
     @field_validator("denied_paths")
     @classmethod

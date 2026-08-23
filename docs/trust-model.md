@@ -24,6 +24,9 @@ approval automation never checks out or executes PR-head code.
 - Rejection of any dirty repository after spec generation.
 - Post-implementation checks for harness-created commits, changed remote branch
   heads, and edits under `.machinist/`.
+- Rejection of deleted test files (heuristic path patterns; renames count as a
+  deletion) unless `limits.allow_test_deletions` is set. Modifying a test is
+  not detectable this way — weakened tests still need human review.
 - Push lease against the approved head SHA.
 - Required verification gates before push when `tests.command` or named
   `verification.gates` are configured.

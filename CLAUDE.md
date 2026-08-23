@@ -88,8 +88,12 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   working-tree change made by the harness.
 - `phases/execute.py` — Phase 3: approval guards (label + SHA marker match +
   draft-ness), harness with edit permissions, git-custody postconditions,
-  test gate, commit, leased push, mark PR ready. Contains partial-push
-  recovery via checkpoint evidence.
+  test-deletion guard (`limits.allow_test_deletions` opts out), test gate,
+  commit, leased push, mark PR ready. The implement prompt lists the gate
+  commands and asks the harness to iterate until they pass
+  (`verification.harness_may_run_gates` opts out); the claude-code adapter
+  allowlists exactly those commands via `Harness.allowed_commands`. Contains
+  partial-push recovery via checkpoint evidence.
 - `phases/status.py` — classifies pipeline state; `PIPELINE_STATES` is the
   canonical list (docs tests assert against it).
 - `phases/watch.py` — one dispatch pass; the daemon loop lives in `cli.py`.

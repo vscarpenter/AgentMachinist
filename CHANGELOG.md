@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Refuse to commit an implementation that deleted a test file (heuristic path
+  patterns; a rename counts as a deletion), closing the "green the gate by
+  deleting the failing test" loophole deterministically. Change summaries now
+  record deleted files. Opt out per repository with
+  `limits.allow_test_deletions: true` when an approved Spec legitimately
+  removes tests.
 - Give the implementation harness a verification feedback loop: the implement
   prompt now lists the configured gate commands and asks the harness to run
   required gates and iterate until they pass before finishing (fixing the

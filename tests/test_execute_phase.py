@@ -423,6 +423,79 @@ def test_happy_path_implements_tests_pushes_and_marks_ready(tmp_path):
     assert ("cleanup", True) in workspace.calls
 
 
+@pytest.mark.parametrize(
+    "deleted_test",
+    [
+        "tests/test_api.py",
+        "pkg/__tests__/panel.js",
+        "src/panel.spec.ts",
+        "internal/config_test.go",
+        "test_helpers.py",
+        "conftest.py",
+    ],
+)
+def test_execute_blocks_test_file_deletions_by_default(tmp_path, deleted_test):
+    github = FakeGitHub(prs=[make_pr()])
+    workspace = FakeWorkspace(tmp_path)
+    workspace._changed_files = ["impl.py", deleted_test]
+    harness = FakeHarness(on_implement=touch_file(workspace))
+
+    with pytest.raises(ExecutePhaseError, match="deleted test file"):
+        run_execute_phase(
+            42,
+            config_with_tests(),
+            github=github,
+            harness=harness,
+            workspace=workspace,
+            test_runner=passing_tests,
+        )
+
+    assert not any(call[0] == "commit_all" for call in workspace.calls)
+
+
+def test_execute_allows_test_deletions_when_opted_in(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    workspace = FakeWorkspace(tmp_path)
+    workspace._changed_files = ["impl.py", "tests/test_api.py"]
+    harness = FakeHarness(on_implement=touch_file(workspace))
+    config = MachinistConfig.model_validate(
+        {
+            "tests": {"command": "pytest -q"},
+            "limits": {"allow_test_deletions": True},
+        }
+    )
+
+    run_execute_phase(
+        42,
+        config,
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+    )
+
+    assert ("mark_ready", 57) in github.calls
+
+
+def test_execute_permits_non_test_deletions(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    workspace = FakeWorkspace(tmp_path)
+    # docs/testing.md and old_module.py are deletions but not test files.
+    workspace._changed_files = ["impl.py", "docs/testing.md", "old_module.py"]
+    harness = FakeHarness(on_implement=touch_file(workspace))
+
+    run_execute_phase(
+        42,
+        config_with_tests(),
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+    )
+
+    assert ("mark_ready", 57) in github.calls
+
+
 def test_execute_rejects_configured_repo_mismatch_before_github_read(tmp_path):
     github = FakeGitHub(prs=[make_pr()])
     workspace = FakeWorkspace(tmp_path)

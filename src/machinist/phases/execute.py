@@ -8,6 +8,7 @@ successful push without rerunning the harness.
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import os
 import stat
@@ -54,6 +55,7 @@ class _ChangeSummary:
     files: tuple[str, ...]
     changed_bytes: int
     binary_files: tuple[str, ...] = ()
+    deleted_files: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -61,7 +63,24 @@ class _ChangeSummary:
             "file_count": len(self.files),
             "bytes": self.changed_bytes,
             "binary_files": list(self.binary_files),
+            "deleted_files": list(self.deleted_files),
         }
+
+
+# Deterministic heuristics for "this path is a test". Renames appear as a
+# deletion plus an addition, so renaming a test file also trips the check;
+# limits.allow_test_deletions is the per-repository escape hatch.
+_TEST_DIRECTORY_SEGMENTS = frozenset({"tests", "test", "__tests__", "spec"})
+_TEST_BASENAME_PATTERNS = ("test_*", "*_test.*", "*.test.*", "*.spec.*", "conftest.py")
+
+
+def _is_test_path(relative: str) -> bool:
+    path = PurePosixPath(relative)
+    if any(part in _TEST_DIRECTORY_SEGMENTS for part in path.parts[:-1]):
+        return True
+    return any(
+        fnmatch.fnmatch(path.name, pattern) for pattern in _TEST_BASENAME_PATTERNS
+    )
 
 
 def render_implement_prompt(
@@ -845,6 +864,7 @@ def _enforce_change_limits(
 
     changed_bytes = 0
     binary_files: list[str] = []
+    deleted_files: list[str] = []
     for relative in changed_files:
         relative_path = PurePosixPath(relative)
         if relative_path.is_absolute() or ".." in relative_path.parts:
@@ -857,6 +877,7 @@ def _enforce_change_limits(
         except FileNotFoundError:
             # A deletion still counts toward the file limit; there is no new
             # content to charge against the byte or binary limit.
+            deleted_files.append(relative)
             continue
         except OSError as exc:
             raise ExecutePhaseError(
@@ -903,7 +924,23 @@ def _enforce_change_limits(
         raise ExecutePhaseError(
             f"implementation changed binary file(s) while limits.allow_binary is false: {joined}"
         )
-    return _ChangeSummary(changed_files, changed_bytes, tuple(binary_files))
+
+    if not config.limits.allow_test_deletions:
+        deleted_tests = [
+            relative for relative in deleted_files if _is_test_path(relative)
+        ]
+        if deleted_tests:
+            joined = ", ".join(deleted_tests[:10])
+            raise ExecutePhaseError(
+                f"implementation deleted test file(s): {joined}; if the approved "
+                "Spec requires this, set limits.allow_test_deletions true"
+            )
+    return _ChangeSummary(
+        changed_files,
+        changed_bytes,
+        tuple(binary_files),
+        tuple(deleted_files),
+    )
 
 
 def _run_verification(

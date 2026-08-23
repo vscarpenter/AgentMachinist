@@ -223,3 +223,29 @@ README, CLAUDE.md, first-run-guide.html, explainer.html, and
 job-card.html. Pushed to main and published the v0.7.0 GitHub Release;
 the Trusted Publishing workflow re-runs the suite, smoke-tests the wheel,
 and publishes to PyPI.
+
+## AI-native SDLC playbook adoptions (2026-08-23)
+
+Design approved in-session: three changes pulled from the AI-native SDLC
+playbook review. One conventional commit each, TDD, changelog entries
+under a new Unreleased heading.
+
+- [x] A `feat(spec)`: spec-prompt.md gains a `## Risks` section and the
+      "implementable by a stranger" quality bar; test pins the section.
+- [x] B `feat(harness)`: verification feedback loop — implement prompt
+      lists resolved gates with run-and-iterate instructions;
+      `harness.allowed_commands` attribute (base default `()`); claude-code
+      implement argv appends `--allowedTools Bash(<cmd>)` / `Bash(<cmd>:*)`;
+      config opt-out `verification.harness_may_run_gates` (default true);
+      docs: harnesses.md, trust-model.md, config docs.
+- [x] C `feat(execute)`: test-deletion custody check — `_ChangeSummary`
+      gains deleted_files; `_enforce_change_limits` aborts when a deleted
+      path matches test patterns unless `limits.allow_test_deletions`
+      (default false).
+
+All three shipped as commits on main (unreleased; changelog under
+Unreleased, roll into the next release). Deferred by decision: the
+agentic review phase (playbook Stage 5) — revisit after a few lifecycles
+run with the feedback loop; the unique piece to build first is a
+spec-compliance review pass, since the approved spec commit is already an
+exact review contract.

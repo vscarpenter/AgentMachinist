@@ -311,6 +311,7 @@ limits:
   max_changed_bytes: 5242880
   denied_paths: [.machinist]
   allow_binary: false
+  allow_test_deletions: false
 ```
 
 Unknown keys fail validation. With `repo: null`, AgentMachinist derives and
@@ -435,6 +436,16 @@ improve first-pass quality. Set `harness_may_run_gates: false` to keep the
 gate commands out of the harness entirely. Gate runs by the harness count
 against `harness.timeout_minutes`, so budget the timeout for at least one
 full gate cycle.
+
+As the deterministic backstop for "fix the code, never the tests", Execute
+refuses to commit an implementation that deleted a test file (matched by
+common path heuristics: `tests/`, `test/`, `__tests__/`, and `spec/`
+directories, plus `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, and
+`conftest.py` basenames). Renaming a test file appears as a deletion and is
+also refused. When an approved Spec legitimately removes or renames tests,
+set `limits.allow_test_deletions: true` for that run and turn it back off
+afterwards. Modified tests are not flagged — updating tests is normal Spec
+work — so weakened assertions still need human review on the PR.
 
 ## Choosing a harness
 
