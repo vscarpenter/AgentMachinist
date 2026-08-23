@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-08-23
 
 - Refuse to commit an implementation that deleted a test file (heuristic path
   patterns; a rename counts as a deletion), closing the "green the gate by

@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.7.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.8.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -205,10 +205,13 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-08-20)
+## Current state (2026-08-23)
 
-- v0.7.0 is the current release; 0.6.0 retries the release smoke test
-  while PyPI's index propagates, and 0.7.0 adds
+- v0.8.0 is the current release; it adds three AI-native SDLC playbook
+  adoptions: the harness verification feedback loop
+  (`verification.harness_may_run_gates` opts out), the test-deletion guard
+  (`limits.allow_test_deletions` opts out), and the spec template's
+  `## Risks` section with the standalone-readable quality bar. 0.7.0 added
   `machinist update-check` (with a matching advisory `doctor` row) that
   compares the installed release against PyPI. CI runs on
   Ubuntu and macOS across Python
