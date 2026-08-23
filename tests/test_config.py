@@ -568,6 +568,15 @@ def test_legacy_test_command_normalizes_to_required_mutating_gate():
     assert config.tests.command == "pytest -q"  # old consumer API remains intact
 
 
+def test_harness_may_run_gates_defaults_on_and_can_be_disabled():
+    assert MachinistConfig().verification.harness_may_run_gates is True
+
+    disabled = MachinistConfig.model_validate(
+        {"verification": {"harness_may_run_gates": False}}
+    )
+    assert disabled.verification.harness_may_run_gates is False
+
+
 def test_named_verification_gates_preserve_order_and_policy():
     config = MachinistConfig.model_validate(
         {

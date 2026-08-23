@@ -291,6 +291,7 @@ tests:
 
 verification:
   gates: []
+  harness_may_run_gates: true
 
 queue:
   max_tasks_per_pass: 1
@@ -423,6 +424,17 @@ inability to take the before/after snapshot always blocks fail-closed,
 regardless of `required`. Configure either named gates or `tests.command`,
 never both. Execute also enforces changed-file, changed-byte, denied-path, and
 binary-file limits before the controller commits or pushes.
+
+By default (`verification.harness_may_run_gates: true`) the implementation
+prompt also lists the gate commands and asks the harness to run each required
+gate itself and iterate until it passes before finishing — fixing the code,
+never weakening a test. For `claude-code`, whose headless edit mode otherwise
+denies command execution, exactly those commands are allowlisted. The
+controller still runs every gate afterwards; the harness's own runs only
+improve first-pass quality. Set `harness_may_run_gates: false` to keep the
+gate commands out of the harness entirely. Gate runs by the harness count
+against `harness.timeout_minutes`, so budget the timeout for at least one
+full gate cycle.
 
 ## Choosing a harness
 

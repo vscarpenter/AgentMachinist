@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Give the implementation harness a verification feedback loop: the implement
+  prompt now lists the configured gate commands and asks the harness to run
+  required gates and iterate until they pass before finishing (fixing the
+  code, never weakening a test), and the `claude-code` adapter allowlists
+  exactly those commands, whose execution its headless edit mode otherwise
+  denies. The controller's own gate run afterwards remains the authoritative
+  check. Opt out with `verification.harness_may_run_gates: false`.
 - Ask the Spec harness for a `## Risks` section (between the approach and the
   testing plan) and require the spec to be implementable by a developer who
   never saw the originating conversation, so the human approval gate reviews

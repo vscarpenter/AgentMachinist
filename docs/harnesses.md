@@ -5,10 +5,22 @@ adapter arguments; all adapters also face the controller's dirty-tree check.
 
 | Config value | Executable | Spec control | Implementation control | CI template |
 | --- | --- | --- | --- | --- |
-| `claude-code` | `claude` | Plan permission mode, Read/Grep/Glob tools, no session persistence | Edit mode; prompt plus Git postconditions | Supported |
+| `claude-code` | `claude` | Plan permission mode, Read/Grep/Glob tools, no session persistence | Edit mode with gate commands allowlisted; prompt plus Git postconditions | Supported |
 | `codex` | `codex` | Read-only sandbox and ephemeral session | Full-auto workspace edits; prompt plus Git postconditions | Local only |
 | `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools; prompt plus Git postconditions | Local only |
 | `opencode` | `opencode` | Pure plan agent; treated as advisory | Normal run agent; prompt plus Git postconditions | Local only |
+
+## Verification feedback loop
+
+When gates are configured and `verification.harness_may_run_gates` is true
+(the default), the implementation prompt lists each gate command and asks the
+harness to run required gates and iterate until they pass before finishing.
+`codex`, `pi`, and `opencode` execute modes already permit command execution,
+so only the prompt changes for them. `claude-code`'s headless edit mode
+denies commands, so the adapter additionally allowlists exactly the
+configured gate commands (`--allowedTools "Bash(<command>)"
+"Bash(<command>:*)"`). The controller's own gate run afterwards stays
+authoritative.
 
 ## Authentication
 

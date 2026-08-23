@@ -100,6 +100,39 @@ def test_claude_code_implement_argv_can_edit_files():
     argv = harness.implement_argv("build it")
     assert argv[:3] == ["claude", "-p", "build it"]
     assert "--permission-mode" in argv
+    # Without allowed commands there must be no Bash allowlist at all.
+    assert "--allowedTools" not in argv
+
+
+def test_claude_code_implement_argv_allowlists_exact_gate_commands():
+    # The verification feedback loop grants exactly the configured gate
+    # commands (exact and prefix forms), nothing broader.
+    harness = get_harness(HarnessConfig(name=HarnessName.CLAUDE_CODE))
+    harness.allowed_commands = ("uv run pytest", "make lint")
+    argv = harness.implement_argv("build it")
+    index = argv.index("--allowedTools")
+    assert argv[index + 1 : index + 5] == [
+        "Bash(uv run pytest)",
+        "Bash(uv run pytest:*)",
+        "Bash(make lint)",
+        "Bash(make lint:*)",
+    ]
+
+
+def test_allowed_commands_never_reach_spec_argv():
+    harness = get_harness(HarnessConfig(name=HarnessName.CLAUDE_CODE))
+    harness.allowed_commands = ("uv run pytest",)
+    assert "--allowedTools" not in harness.spec_argv("write a spec")
+
+
+def test_allowed_commands_leave_other_implement_argvs_unchanged():
+    # codex --full-auto, opencode run, and pi -p already permit command
+    # execution in their execute modes; the allowlist is claude-code-only.
+    for name in (HarnessName.CODEX, HarnessName.OPENCODE, HarnessName.PI):
+        harness = get_harness(HarnessConfig(name=name))
+        baseline = harness.implement_argv("p")
+        harness.allowed_commands = ("uv run pytest",)
+        assert harness.implement_argv("p") == baseline, name.value
 
 
 def test_generate_spec_runs_in_cwd_with_spec_timeout(tmp_path):

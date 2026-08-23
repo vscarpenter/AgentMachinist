@@ -29,6 +29,13 @@ class ClaudeCode(Harness):
         # acceptEdits lets the headless run modify files without stalling
         # on interactive permission prompts.
         argv = [self.command, "-p", prompt, "--permission-mode", "acceptEdits"]
+        if self.allowed_commands:
+            # acceptEdits still denies headless Bash, so verification-gate
+            # commands need explicit allow rules: exact plus prefix, letting
+            # the harness iterate on subsets (e.g. one failing test file).
+            argv.append("--allowedTools")
+            for command in self.allowed_commands:
+                argv.extend([f"Bash({command})", f"Bash({command}:*)"])
         if self.config.model:
             argv.extend(["--model", self.config.model])
         if self.config.extra_args:

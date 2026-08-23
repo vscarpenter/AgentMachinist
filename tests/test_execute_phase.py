@@ -312,6 +312,79 @@ def test_render_implement_prompt_appends_bounded_operator_feedback():
         render_implement_prompt(42, "spec", "  \n\t  ")
 
 
+def test_render_implement_prompt_lists_gates_with_feedback_loop_rules():
+    gates = config_with_tests("uv run pytest").resolved_verification_gates()
+
+    prompt = render_implement_prompt(42, "## Spec\nDo it.\n", gates=gates)
+
+    assert "## Verifying your work" in prompt
+    assert "`uv run pytest`" in prompt
+    assert "(required)" in prompt
+    assert "never delete, skip, or weaken a test" in prompt
+
+
+def test_render_implement_prompt_marks_advisory_gates():
+    config = MachinistConfig.model_validate(
+        {
+            "verification": {
+                "gates": [{"name": "lint", "command": "ruff check .", "required": False}]
+            }
+        }
+    )
+
+    prompt = render_implement_prompt(
+        42, "spec", gates=config.resolved_verification_gates()
+    )
+
+    assert "lint (advisory): `ruff check .`" in prompt
+
+
+def test_render_implement_prompt_omits_verification_section_without_gates():
+    assert "Verifying your work" not in render_implement_prompt(42, "spec")
+
+
+def test_execute_grants_gate_commands_and_verification_prompt(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+
+    run_execute_phase(
+        42,
+        config_with_tests("uv run pytest"),
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+    )
+
+    assert harness.allowed_commands == ("uv run pytest",)
+    assert "## Verifying your work" in harness.prompts[0]
+
+
+def test_execute_withholds_gate_commands_when_disabled(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+    config = MachinistConfig.model_validate(
+        {
+            "tests": {"command": "uv run pytest"},
+            "verification": {"harness_may_run_gates": False},
+        }
+    )
+
+    run_execute_phase(
+        42,
+        config,
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+    )
+
+    assert harness.allowed_commands == ()
+    assert "Verifying your work" not in harness.prompts[0]
+
+
 def test_happy_path_implements_tests_pushes_and_marks_ready(tmp_path):
     github = FakeGitHub(prs=[make_pr()])
     workspace = FakeWorkspace(tmp_path)

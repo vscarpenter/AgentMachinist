@@ -58,6 +58,10 @@ class Harness(ABC):
     # callback keeps callers (and humans) sure the process is alive.
     heartbeat_seconds: float = 30.0
     on_progress: Callable[[str], None] | None = None
+    # Verification-gate commands the implementation phase may execute for its
+    # own feedback loop; the controller sets this before implement(). Adapters
+    # whose execute mode already permits command execution ignore it.
+    allowed_commands: tuple[str, ...] = ()
 
     def __init__(self, config: HarnessConfig, runner: Runner = subprocess.run):
         self.config = config

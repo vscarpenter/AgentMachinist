@@ -53,6 +53,15 @@ repository-controlled shell text and run as the local user. A null
 named gates are configured either. A passing command proves only what that
 suite covers; it is not runtime, deployment, or security proof.
 
+By default the implementation harness is told the gate commands and may run
+exactly those commands itself to iterate before it finishes
+(`verification.harness_may_run_gates`). This grants no execution capability
+the pipeline does not already exercise: the controller runs the same
+repository-controlled commands on harness-authored code immediately
+afterwards, and that controller run remains the authoritative gate. Set
+`verification.harness_may_run_gates: false` to withhold both the commands and
+(for `claude-code`) the corresponding `--allowedTools` grants.
+
 ## Recommended deployment boundary
 
 For higher-risk repositories, run AgentMachinist in a dedicated OS account or

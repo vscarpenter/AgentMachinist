@@ -678,6 +678,10 @@ class VerificationGateConfig(StrictModel):
 
 class VerificationConfig(StrictModel):
     gates: list[VerificationGateConfig] = Field(default_factory=list)
+    # When true, Execute tells the harness about the gate commands and lets it
+    # run exactly those commands to iterate before finishing. The controller's
+    # own gate run afterwards remains the authoritative check either way.
+    harness_may_run_gates: bool = True
 
     @field_validator("gates")
     @classmethod

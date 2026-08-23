@@ -14,14 +14,18 @@ import stat
 import subprocess
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from string import Template
 from typing import Any
 
-from machinist.config import GateMutationPolicy, MachinistConfig
+from machinist.config import (
+    GateMutationPolicy,
+    MachinistConfig,
+    VerificationGateConfig,
+)
 from machinist.github import PullRequest, normalize_repository_identity
 from machinist.managed_paths import ManagedPathError, read_managed_text
 from machinist.runtime_paths import RuntimePathError, write_text_file
@@ -65,10 +69,27 @@ def render_implement_prompt(
     spec_text: str,
     feedback: str | None = None,
     instructions: str = "",
+    gates: Sequence[VerificationGateConfig] = (),
 ) -> str:
     feedback = normalize_operator_feedback(feedback)
     template = Template(_IMPLEMENT_PROMPT.read_text())
     prompt = template.safe_substitute(number=issue_number, spec=spec_text)
+    if gates:
+        listing = "\n".join(
+            f"- {gate.name} "
+            f"({'required' if gate.required else 'advisory'}): `{gate.command}`"
+            for gate in gates
+        )
+        prompt += (
+            "\n\n## Verifying your work\n\n"
+            "This repository verifies the implementation with these gate "
+            "commands before anything is committed:\n\n"
+            f"{listing}\n\n"
+            "Run each required gate command from the repository root and "
+            "iterate until it passes before you finish. If a gate fails, fix "
+            "the code — never delete, skip, or weaken a test to make it "
+            "pass. Include each gate's final result in your final message.\n"
+        )
     if feedback:
         prompt += (
             "\n\n## Operator feedback for this amendment\n\n"
@@ -328,12 +349,19 @@ def run_execute_phase(
                     claim,
                     harness=harness_details,
                 )
+                gates = (
+                    config.resolved_verification_gates()
+                    if config.verification.harness_may_run_gates
+                    else ()
+                )
+                harness.allowed_commands = tuple(gate.command for gate in gates)
                 harness_report = harness.implement(
                     render_implement_prompt(
                         issue_number,
                         spec_text,
                         feedback,
                         instructions,
+                        gates=gates,
                     ),
                     cwd=path,
                 )
