@@ -327,7 +327,9 @@ def test_render_implement_prompt_marks_advisory_gates():
     config = MachinistConfig.model_validate(
         {
             "verification": {
-                "gates": [{"name": "lint", "command": "ruff check .", "required": False}]
+                "gates": [
+                    {"name": "lint", "command": "ruff check .", "required": False}
+                ]
             }
         }
     )

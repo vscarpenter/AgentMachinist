@@ -571,9 +571,7 @@ def test_legacy_test_command_normalizes_to_required_mutating_gate():
 def test_allow_test_deletions_defaults_off_and_can_be_enabled():
     assert MachinistConfig().limits.allow_test_deletions is False
 
-    enabled = MachinistConfig.model_validate(
-        {"limits": {"allow_test_deletions": True}}
-    )
+    enabled = MachinistConfig.model_validate({"limits": {"allow_test_deletions": True}})
     assert enabled.limits.allow_test_deletions is True
 
 
