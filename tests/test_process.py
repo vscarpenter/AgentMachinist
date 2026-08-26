@@ -354,13 +354,27 @@ def test_cancellation_evidence_errors_cannot_mask_operator_intent(
         "time.sleep(60)"
     )
 
+    deadline = time.monotonic() + 10
+
+    def cancel_check():
+        # The supervisor calls this first in every poll iteration and is
+        # single threaded, so blocking here until the child has written its
+        # oversized or undecodable output makes both conditions true in the
+        # same iteration. Returning ready.exists() directly leaves a gap
+        # between the child's write and its marker, and the output-limit
+        # check can fire inside that gap on a loaded machine.
+        while not ready.exists():
+            assert time.monotonic() < deadline, "child never signalled readiness"
+            time.sleep(0.005)
+        return True
+
     with pytest.raises(ProcessCancelledError) as caught:
         run_supervised(
             [sys.executable, "-c", code],
             text=True,
             encoding="utf-8",
             timeout=5,
-            cancel_check=lambda: ready.exists(),
+            cancel_check=cancel_check,
             max_output_bytes=max_output_bytes,
             termination_grace_seconds=0.02,
             poll_interval=0.01,
