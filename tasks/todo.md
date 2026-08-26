@@ -312,3 +312,34 @@ Assumptions worth revisiting:
   controller, the `claude-code` spec argv, or `gh` writes the shared config on
   git 2.55.0 and Claude Code 2.1.246, so it was likely their own tooling.
   Their answer on #16 may still be worth reading.
+
+## Release 0.8.2 (2026-08-26)
+
+Shipped the label-approval authorization fix (#20) and the test-determinism
+work (#19). Both findings came from an external reviewer who traced the
+approval flow end to end and ran the suite as root.
+
+- #20: applying the approval label now requires write or admin access,
+  resolved through the collaborator permission API and failing closed. Both
+  approval paths record the approver's login on the approval comment. The
+  marker format is unchanged; `test_github.py` pins that contract.
+- #19: an autouse fixture pins a non-root UID in `test_service.py` (the UID
+  check runs before every path check, so root saw the wrong error), and the
+  cancellation-evidence test's cancel check now blocks until the child's
+  marker appears so it cannot race its own fixture.
+- PyPI serves 0.8.2; build, publish, verify-published, and release-assets all
+  succeeded on 3e9889a.
+
+### Open items
+
+- Existing installs need `machinist sync-workflows` to adopt the actor check.
+- The reviewer's third suggestion, an explicit approver allowlist, is
+  deliberately deferred: it adds `machinist.yaml` surface and the write-access
+  floor may be sufficient. Revisit if the floor proves too coarse.
+- Custody key classification is still a denylist. See the assumptions logged
+  under issue #16 above.
+- Branch protection on `main` requires one approving review with
+  `require_last_push_approval`, which a solo maintainer cannot satisfy: GitHub
+  forbids self-approval. Three consecutive merges/pushes used the admin
+  override. Either drop the required-review count to 0 and keep required
+  status checks, or add a reviewer.
