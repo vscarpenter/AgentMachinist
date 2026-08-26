@@ -316,8 +316,14 @@ limits:
 
 Unknown keys fail validation. With `repo: null`, AgentMachinist derives and
 binds the exact GitHub host, owner, and repository from the controller's Git
-origin; an explicit `repo` must match it. Workspace cleanup can be `always`,
-`on_success`, or `never`;
+origin; an explicit `repo` must match it. `workspace.strategy` is `worktree` by
+default, which is fast because the Workshop shares your repository's object
+store. It also shares `config`, `hooks/`, and `info/` with your checkout, so
+the Git metadata custody guard watches files you edit yourself, and installing
+a hook while a Task runs will stop that Task. Choose `clone` when you want each
+Workshop to own its Git metadata; see
+[the trust model](trust-model.md) for what the guard covers. Workspace cleanup
+can be `always`, `on_success`, or `never`;
 keeping failed workspaces is useful for diagnosis. `tests.command: null` skips
 the legacy command; verification is skipped only when no named
 `verification.gates` are configured, which is surfaced as a doctor warning.

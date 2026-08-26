@@ -73,6 +73,7 @@ warn_unused_configs = true
 # the CLI read-model and dynamic Harness runner annotations are made precise.
 files = [
     "src/machinist/config.py",
+    "src/machinist/gitconfig.py",
     "src/machinist/lifecycle.py",
     "src/machinist/workspace.py",
     "src/machinist/process.py",

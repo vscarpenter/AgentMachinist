@@ -1226,3 +1226,80 @@ def test_git_timeout_becomes_typed_workspace_error(repo, tmp_path):
 
     with pytest.raises(WorkspaceError, match="timed out"):
         workspace.head_sha(repo)
+
+
+# --- Issue #16: a worktree shares .git/config and .git/hooks with its parent ---
+
+
+@pytest.fixture
+def worktree_custody(repo, tmp_path):
+    """A provisioned worktree plus a fresh custody token for it."""
+    workspace = make_workspace(repo, tmp_path)
+    path = workspace.provision("issue-16", "agent/issue-16", "origin/main")
+    return workspace, path, workspace.capture_git_custody(path)
+
+
+def test_custody_tolerates_benign_edits_to_the_shared_parent_config(
+    worktree_custody, tmp_path
+):
+    workspace, path, token = worktree_custody
+    repo_root = workspace.repo_root
+
+    git(repo_root, "config", "--local", "diff.tool", "vimdiff")
+    git(repo_root, "config", "--local", "user.name", "Someone Else")
+    git(repo_root, "remote", "add", "upstream", str(tmp_path / "origin.git"))
+
+    workspace.assert_git_custody(path, token)
+
+
+def test_custody_blocks_a_planted_fsmonitor_in_the_shared_parent_config(
+    worktree_custody,
+):
+    workspace, path, token = worktree_custody
+
+    git(workspace.repo_root, "config", "--local", "core.fsmonitor", "/tmp/evil")
+
+    with pytest.raises(WorkspaceError, match="core.fsmonitor"):
+        workspace.assert_git_custody(path, token)
+
+
+def test_custody_blocks_an_added_include_in_the_shared_parent_config(worktree_custody):
+    workspace, path, token = worktree_custody
+
+    git(workspace.repo_root, "config", "--local", "include.path", "/tmp/evil.cfg")
+
+    with pytest.raises(WorkspaceError, match="include.path"):
+        workspace.assert_git_custody(path, token)
+
+
+def test_custody_rejection_points_at_the_clone_strategy_remedy(worktree_custody):
+    workspace, path, token = worktree_custody
+
+    git(workspace.repo_root, "config", "--local", "core.pager", "/tmp/evil")
+
+    with pytest.raises(WorkspaceError) as excinfo:
+        workspace.assert_git_custody(path, token)
+    message = str(excinfo.value)
+    assert "worktree" in message
+    assert "workspace.strategy: clone" in message
+
+
+def test_custody_still_byte_checks_shared_hooks(worktree_custody):
+    """Hook bodies are code, so they stay strictly compared."""
+    workspace, path, token = worktree_custody
+    hook = workspace.repo_root / ".git" / "hooks" / "pre-commit"
+
+    hook.write_text("#!/bin/sh\nexit 0\n")
+
+    with pytest.raises(WorkspaceError, match="Git metadata changed"):
+        workspace.assert_git_custody(path, token)
+
+
+def test_custody_falls_back_to_byte_comparison_for_unparsable_config(worktree_custody):
+    workspace, path, token = worktree_custody
+    config = workspace.repo_root / ".git" / "config"
+
+    config.write_text(config.read_text() + "[core.deprecated]\n\tkey = value\n")
+
+    with pytest.raises(WorkspaceError, match="could not be read as Git config"):
+        workspace.assert_git_custody(path, token)

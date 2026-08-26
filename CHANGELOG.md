@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Fix a false custody failure under `workspace.strategy: worktree`
+  (issue #16). A worktree shares `config`, `hooks/`, and `info/` with its
+  parent, so the Git metadata custody guard was byte-comparing the
+  developer's own `.git/config`. Editing your Git config, adding a remote, or
+  installing a hook while a Task ran aborted the phase with
+  `controller-owned Git metadata changed during an untrusted phase`.
+  Watched config files are now compared by the keys that can execute a
+  program, name a path Git will trust, or redirect the network, so benign
+  edits pass and planted `core.fsmonitor`, `core.hooksPath`, filter, alias,
+  credential, `url.*`, `include.path`, and `remote.origin.url` values still
+  fail closed. Hooks, `info/`, and `objects/` stay byte-compared. The
+  rejection now names the exact keys that moved and, under `worktree`, points
+  at `workspace.strategy: clone`.
+- Task Run records now store hashes of sensitive Git config values rather than
+  a digest of the whole file, so a credentialed origin or an
+  `http.*.extraheader` cannot reach a run record or an error message.
+- The Git-custody checkpoint version is now 2. A Workshop retained across the
+  upgrade fails its custody check and needs `machinist retry` to re-provision.
+
 ## 0.8.0 — 2026-08-23
 
 - Refuse to commit an implementation that deleted a test file (heuristic path

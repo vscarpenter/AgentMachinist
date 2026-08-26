@@ -24,6 +24,11 @@ from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from machinist.config import CleanupPolicy, WorkspaceConfig, WorkspaceStrategy
+from machinist.gitconfig import (
+    changed_sensitive_keys,
+    is_sensitive_key,
+    sensitive_key_digests,
+)
 from machinist.github import normalize_repository_identity
 from machinist.process import credential_reduced_environment
 
@@ -40,7 +45,7 @@ _TARGET_BRANCH_MARKER = "agentmachinist-target-branch"
 _START_SHA_MARKER = "agentmachinist-start-sha"
 _OWNER_MARKER = "agentmachinist-owner.json"
 _OWNER_SCHEMA_VERSION = 1
-_CUSTODY_VERSION = 1
+_CUSTODY_VERSION = 2
 _MAX_CUSTODY_METADATA_FILE_BYTES = 1024 * 1024
 _MAX_CUSTODY_METADATA_TOTAL_BYTES = 8 * 1024 * 1024
 _MAX_CUSTODY_METADATA_ENTRIES = 4096
@@ -952,10 +957,16 @@ class Workspace:
 
         effective_config = self._effective_local_config(target)
         watched: dict[str, bool] = {}
+        # Config files are compared by sensitive key rather than by bytes: a
+        # worktree shares them with the developer's own repository, so benign
+        # edits must not read as custody violations (issue #16).
+        config_nodes: set[str] = set()
 
-        def watch(node: Path, *, recursive: bool = False) -> None:
+        def watch(node: Path, *, recursive: bool = False, config: bool = False) -> None:
             key = str(node.absolute())
             watched[key] = watched.get(key, False) or recursive
+            if config:
+                config_nodes.add(key)
             if node.is_symlink():
                 try:
                     resolved = node.resolve(strict=False)
@@ -974,6 +985,9 @@ class Workspace:
             common_dir / "config",
             common_dir / "config.worktree",
             git_dir / "config.worktree",
+        ):
+            watch(node, config=True)
+        for node in (
             common_dir / "info" / "attributes",
             common_dir / "info" / "exclude",
             common_dir / "info" / "grafts",
@@ -984,13 +998,19 @@ class Workspace:
         watch(common_dir / "hooks", recursive=True)
         watch(common_dir / "refs" / "replace", recursive=True)
         for origin_path in self._config_origin_paths(effective_config, target):
-            watch(origin_path)
+            watch(origin_path, config=True)
 
         fingerprint_budget = _MetadataFingerprintBudget()
         records = [
             {
                 "path": name,
                 "recursive": recursive,
+                "config": name in config_nodes,
+                "config_keys": (
+                    self._config_key_digests(Path(name))
+                    if name in config_nodes
+                    else None
+                ),
                 "digest": self._fingerprint_metadata(
                     Path(name),
                     recursive=recursive,
@@ -1006,9 +1026,9 @@ class Workspace:
             "common_git_dir": str(common_dir),
             "origin_identity_sha256": self._origin_identity(origin_url),
             "origin_display": self._redact_origin(origin_url),
-            "effective_config_sha256": hashlib.sha256(
-                effective_config.encode(errors="surrogateescape")
-            ).hexdigest(),
+            "effective_config_sha256": self._sensitive_effective_digest(
+                effective_config
+            ),
             "watched": records,
         }
         self._custody[target] = token
@@ -1063,11 +1083,24 @@ class Workspace:
                 recursive=bool(record["recursive"]),
                 budget=fingerprint_budget,
             )
-            if actual != record["digest"]:
+            if actual == record["digest"]:
+                continue
+            if record.get("config"):
+                changed = self._changed_config_keys(node, record)
+                if not changed:
+                    # A benign edit to a config file the Workshop shares with
+                    # the controller's own repository. Nothing that can execute
+                    # code or redirect the network moved.
+                    continue
                 raise WorkspaceError(
                     "controller-owned Git metadata changed during an untrusted "
-                    f"phase: {node}"
+                    f"phase: {node} (sensitive keys: {', '.join(changed)})"
+                    + self._shared_metadata_hint(node)
                 )
+            raise WorkspaceError(
+                "controller-owned Git metadata changed during an untrusted "
+                f"phase: {node}" + self._shared_metadata_hint(node)
+            )
 
         expected_identity = str(token["origin_identity_sha256"])
         if (
@@ -1077,9 +1110,7 @@ class Workspace:
             raise WorkspaceError("workspace origin identity does not match controller")
 
         effective = self._effective_local_config(target)
-        effective_digest = hashlib.sha256(
-            effective.encode(errors="surrogateescape")
-        ).hexdigest()
+        effective_digest = self._sensitive_effective_digest(effective)
         if effective_digest != token["effective_config_sha256"]:
             raise WorkspaceError(
                 "effective local Git config changed during an untrusted phase"
@@ -1226,6 +1257,85 @@ class Workspace:
                 node = cwd / node
             origins.add(node.absolute())
         return origins
+
+    def _config_key_digests(self, node: Path) -> dict[str, str] | None:
+        """Digest the sensitive keys of one config file, or None if unreadable."""
+        text = self._read_config_text(node)
+        return None if text is None else sensitive_key_digests(text)
+
+    def _changed_config_keys(
+        self, node: Path, record: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        """Name the sensitive keys that moved in a watched config file.
+
+        Reading and classifying happens here rather than through ``git
+        config`` so a planted ``core.fsmonitor`` or clean filter never gets a
+        Git subprocess to execute in. Anything unreadable on either side is a
+        custody failure, never a benign edit.
+        """
+        expected = record.get("config_keys")
+        actual = self._config_key_digests(node)
+        if not isinstance(expected, dict) or actual is None:
+            raise WorkspaceError(
+                f"watched Git metadata could not be read as Git config: {node}"
+                + self._shared_metadata_hint(node)
+            )
+        return changed_sensitive_keys(
+            {str(key): str(value) for key, value in expected.items()}, actual
+        )
+
+    @staticmethod
+    def _read_config_text(node: Path) -> str | None:
+        try:
+            descriptor = os.open(node, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            with os.fdopen(descriptor, "rb") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    return None
+                raw = stream.read(_MAX_CUSTODY_METADATA_FILE_BYTES + 1)
+        except OSError:
+            return None
+        if len(raw) > _MAX_CUSTODY_METADATA_FILE_BYTES:
+            return None
+        try:
+            return raw.decode()
+        except UnicodeDecodeError:
+            return None
+
+    @staticmethod
+    def _sensitive_effective_digest(config_output: str) -> str:
+        """Digest only the effective config keys that can execute or redirect.
+
+        ``git config --null --show-origin --list`` emits alternating records:
+        the origin, then ``key\nvalue``.
+        """
+        parts = config_output.split("\0")
+        pairs = []
+        for index in range(1, len(parts), 2):
+            key, _, value = parts[index].partition("\n")
+            if is_sensitive_key(key):
+                pairs.append(f"{key}\n{value}")
+        digest = hashlib.sha256()
+        for pair in sorted(pairs):
+            digest.update(pair.encode(errors="surrogateescape"))
+            digest.update(b"\0")
+        return digest.hexdigest()
+
+    def _shared_metadata_hint(self, node: Path) -> str:
+        """Explain the worktree strategy's shared Git metadata, when relevant."""
+        if self.config.strategy is not WorkspaceStrategy.WORKTREE:
+            return ""
+        try:
+            controller_common = self._resolve_git_layout_raw(self.repo_root)[1]
+        except WorkspaceError:
+            return ""
+        if controller_common not in node.parents:
+            return ""
+        return (
+            "\nUnder 'workspace.strategy: worktree' this file belongs to your main "
+            "repository and is shared with every Workshop, so editing your own "
+            "checkout while a Task runs trips this guard. Set "
+            "'workspace.strategy: clone' to give each Workshop its own Git metadata."
+        )
 
     @staticmethod
     def _resolve_git_layout_raw(path: Path) -> tuple[Path, Path, Path]:
@@ -1403,6 +1513,16 @@ class Workspace:
                 or not Path(record["path"]).is_absolute()
                 or not isinstance(record.get("recursive"), bool)
                 or not isinstance(record.get("digest"), str)
+                or not isinstance(record.get("config"), bool)
+            ):
+                raise WorkspaceError("invalid Git-custody metadata record")
+            keys = record.get("config_keys")
+            if keys is not None and (
+                not isinstance(keys, dict)
+                or not all(
+                    isinstance(name, str) and isinstance(value, str)
+                    for name, value in keys.items()
+                )
             ):
                 raise WorkspaceError("invalid Git-custody metadata record")
 

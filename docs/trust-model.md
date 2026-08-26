@@ -27,6 +27,9 @@ approval automation never checks out or executes PR-head code.
 - Rejection of deleted test files (heuristic path patterns; renames count as a
   deletion) unless `limits.allow_test_deletions` is set. Modifying a test is
   not detectable this way — weakened tests still need human review.
+- Git metadata custody: the Workshop's `.git` pointer, config, hooks, and
+  alternates are fingerprinted before the harness runs and re-checked before
+  every later Git call. See Git metadata custody below.
 - Push lease against the approved head SHA.
 - Required verification gates before push when `tests.command` or named
   `verification.gates` are configured.
@@ -47,6 +50,38 @@ mean a hostile process with the same OS identity cannot work around it.
   cloud credentials, or tokens loaded by plugins—may still be reachable.
 
 Therefore, documentation must not claim that a harness “has no Git access.”
+
+## Git metadata custody
+
+Before an untrusted phase starts, the controller fingerprints the Workshop's
+Git metadata: the `.git` pointer, `commondir`, config files, `info/`,
+`objects/info/alternates`, `shallow`, `refs/replace`, and every hook. It
+re-checks that fingerprint before each later Git call, and the check runs
+before the first Git subprocess so a planted `core.fsmonitor`, clean filter,
+or hook never gets a process to execute in.
+
+Config files are compared by key rather than by bytes. A change trips the
+guard when it touches a key that can execute a program, name a path Git will
+trust, or redirect the network: `core.fsmonitor`, `core.hooksPath`,
+`core.pager`, `core.sshCommand`, `core.worktree`, `filter.*.clean`,
+`filter.*.smudge`, `diff.*.command`, `alias.*`, `credential.*`, `url.*`,
+`include.path`, `remote.origin.url`, and the rest of the same family. Editing
+`diff.tool`, `user.name`, or adding a second remote does not trip it.
+
+Hooks, `info/`, and `objects/` stay compared byte for byte. A hook body is
+code, so there is no benign subset to carve out.
+
+**`workspace.strategy: worktree` shares this metadata with your own
+repository.** A Git worktree gets its own `HEAD`, index, and refs, and shares
+`config`, `hooks/`, `info/`, and `objects/` with the parent. So the watched
+config is your main repository's, and installing a hook or a `core.pager` in
+your own checkout while a Task runs will stop that Task. Use
+`workspace.strategy: clone` when you want each Workshop to own its Git
+metadata outright.
+
+Task Run records store hashes of sensitive config values rather than the
+values, so a credentialed origin or an `http.*.extraheader` never lands in a
+run record or an error message.
 
 ## Verification commands
 
@@ -79,5 +114,8 @@ merge protection and required CI reviews on the repository.
 - Cross-host duplicate execution is not prevented by the local claim.
 - A harness-side remote effect can be detected without being reversible.
 - Model output can be wrong while tests pass.
+- Under `workspace.strategy: worktree`, Git metadata custody covers a
+  directory you also edit, so the guard reports your own changes as well as
+  a harness's.
 
 The final control is still human review plus repository branch protection.
