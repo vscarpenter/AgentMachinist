@@ -358,3 +358,33 @@ def test_release_docs_describe_current_package_version():
     assert "exact version" in release_text
     assert release_text.index("smoke-tests") < release_text.index("publishes")
     assert release_text.index("publishes") < release_text.index("attach")
+
+
+def test_workflow_drift_advisory_is_documented_where_operators_read():
+    """0.8.3 made watch and update-check report drift; the docs must say so.
+
+    This suite already pins that documented commands exist in the CLI. It did
+    not pin the other direction, which is how the advisory shipped
+    undocumented. Asserting merely that "drift" and "sync-workflows" appear is
+    not enough: both predate the change. The claim worth pinning is that drift
+    reporting is tied to the two commands an operator runs after upgrading.
+    """
+    surfaces = {
+        "README.md": _README_PATH,
+        "docs/getting-started.md": _GUIDE_PATH,
+        "docs/operator-runbook.md": _REPO_ROOT / "docs" / "operator-runbook.md",
+    }
+    for name, path in surfaces.items():
+        lines = path.read_text().lower().splitlines()
+        tied = [
+            line
+            for line in lines
+            if "drift" in line and ("update-check" in line or "watch" in line)
+        ]
+        assert tied, f"{name} never says which command reports workflow drift"
+
+    # The advisory must stay out of the scriptable output, and saying so is the
+    # only thing that stops a future change from quietly breaking scripts.
+    for name in ("README.md", "docs/operator-runbook.md"):
+        text = surfaces[name].read_text().lower()
+        assert "never appears in `update-check --json`" in text, name

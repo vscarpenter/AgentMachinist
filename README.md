@@ -29,6 +29,13 @@ prints the upgrade command for how this copy was installed (`uv tool`, `pipx`,
 diagnostic row. Set `MACHINIST_NO_UPDATE_CHECK=1` to suppress both probes on
 offline or CI machines.
 
+Upgrading the package is not always the whole upgrade. Managed workflows are
+projected files, so a workflow change only takes effect once you run
+`machinist sync-workflows`. `machinist watch` reports that drift at startup and
+`machinist update-check` reports it alongside the release comparison, so you do
+not have to run `doctor` to find out. The advisory never blocks a command and
+never appears in `update-check --json`.
+
 ## Start
 
 ```sh
@@ -98,7 +105,7 @@ PR.
 | --- | --- |
 | `machinist init` | Create config, spec storage, labels, and managed workflows; asks setup questions in a terminal (`--no-input` skips them). |
 | `machinist doctor` | Run read-only setup and workflow-drift diagnostics. |
-| `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI and print how to upgrade. |
+| `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration. |
 | `machinist spec <issue> [--dry-run]` | Preview a Spec, or generate it and open its draft PR. |
