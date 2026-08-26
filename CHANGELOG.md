@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Gate the label-based approval path on the actor's repository permission.
+  The managed approve workflow bound the PR head and minted trusted approval
+  evidence whenever the approval label appeared, without checking who applied
+  it. GitHub grants label permission at triage level, and triage cannot push
+  code, so label authority could become implementation-approval authority.
+  Applying the approval label now requires write or admin access, and the
+  check fails closed when the permission cannot be read. Reported by an
+  external reviewer.
+- Record the approver on the approval comment. Both paths now post
+  `Approved by @<login> for <sha>.` alongside the machine-readable marker, so
+  the PR itself shows who authorized the run. The marker format is unchanged
+  and older approval comments still parse.
+- Existing repositories must run `machinist sync-workflows` to adopt the
+  actor check. `machinist doctor` reports the drift until they do.
+
 ## 0.8.1 — 2026-08-26
 
 - Fix a false custody failure under `workspace.strategy: worktree`

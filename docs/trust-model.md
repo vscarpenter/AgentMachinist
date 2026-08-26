@@ -19,6 +19,12 @@ approval automation never checks out or executes PR-head code.
 - Exact SHA-bound approval plus configured label.
 - Exact `/machinist-execute <full-spec-commit-sha>` command and trusted author
   association; label approvals bind the SHA from the authorization event.
+- Actor authorization on both approval paths. A `/machinist-execute` comment is
+  honored only from OWNER, MEMBER, or COLLABORATOR. Applying the approval label
+  is honored only from an actor with write or admin access, because GitHub
+  grants label permission at triage level and triage cannot push code. The
+  check fails closed: an unreadable permission mints no approval evidence. The
+  approver's login is recorded on the approval comment.
 - Codex read-only sandbox, Pi read-tool allowlist, and Claude plan/read-tool
   arguments during spec generation.
 - Rejection of any dirty repository after spec generation.

@@ -1,8 +1,12 @@
-# agentmachinist-managed-sha256: b156e972cb3d749cca8188b0344ea934a3b9c55ede82a63acd3602c2a455e39b
-# AgentMachinist — bind approval to the PR's exact head commit.
+# agentmachinist-managed-sha256: 6b79dd928bb34aceeaab76d706a8d8a10b0a72346e81bed915a2fb7f2a7d0666
+# AgentMachinist - bind approval to the PR's exact head commit.
 #
-# Only comments from the repo owner, org members, or collaborators are
-# honored; anyone else commenting the command is ignored.
+# Both authorization paths check the actor before any approval evidence is
+# minted. A '/machinist-execute' comment is honored only from the repo owner,
+# an org member, or a collaborator. Applying the approval label is honored
+# only from an actor with write or admin access, because GitHub grants label
+# permission at triage level and triage cannot push code. The approver's
+# login is recorded on the approval comment either way.
 
 name: Machinist Approve
 
@@ -39,6 +43,32 @@ jobs:
           }
           printf 'APPROVED_SHA=%s\n' "${BASH_REMATCH[1],,}" >> "$GITHUB_ENV"
 
+      - name: Require write access to approve by label
+        if: github.event_name == 'pull_request_target'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.event.sender.login }}
+        run: |
+          # Fails closed: an API error leaves PERMISSION empty, which falls
+          # through to the rejection below rather than approving anything.
+          PERMISSION="$(gh api \
+            "repos/${{ github.repository }}/collaborators/$ACTOR/permission" \
+            --jq .permission || true)"
+          case "$PERMISSION" in
+            admin | write) ;;
+            *)
+              echo "$ACTOR has '${PERMISSION:-unknown}' access; approving by label requires write access" >&2
+              exit 1
+              ;;
+          esac
+          printf 'APPROVER=%s\n' "$ACTOR" >> "$GITHUB_ENV"
+
+      - name: Record the approving comment author
+        if: github.event_name == 'issue_comment'
+        env:
+          ACTOR: ${{ github.event.comment.user.login }}
+        run: printf 'APPROVER=%s\n' "$ACTOR" >> "$GITHUB_ENV"
+
       - name: Bind approval to the authorized PR head
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,7 +86,7 @@ jobs:
             exit 1
           }
           gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" \
-            --body "<!-- agentmachinist:approval sha=$HEAD_SHA -->"
+            --body "Approved by @$APPROVER for \`$HEAD_SHA\`. <!-- agentmachinist:approval sha=$HEAD_SHA -->"
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
             gh pr edit "$PR_NUMBER" --repo "${{ github.repository }}" \
               --add-label "machinist:approved"

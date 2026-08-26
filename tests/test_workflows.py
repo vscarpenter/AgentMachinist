@@ -49,6 +49,21 @@ def test_render_binds_authorization_event_to_exact_sha_and_pinned_version():
     assert "pull_request_target:" in approval
 
 
+def test_label_approval_requires_write_access_and_records_the_approver():
+    """Labelling is a triage-level power; approving execution is not."""
+    approval = expected_workflows(config(), installed_version="0.2.0")[
+        "machinist-approve.yml"
+    ]
+
+    assert "collaborators/$ACTOR/permission" in approval
+    assert "ACTOR: ${{ github.event.sender.login }}" in approval
+    assert "admin | write)" in approval
+    # An unreadable or unrecognized permission must not approve anything.
+    assert "requires write access" in approval
+    # The approver is recorded alongside the machine-readable marker.
+    assert "Approved by @$APPROVER" in approval
+
+
 def test_checkout_spec_install_uses_uv_run_from_the_repository():
     cfg = MachinistConfig.model_validate(
         {
