@@ -343,3 +343,45 @@ approval flow end to end and ran the suite as root.
   forbids self-approval. Three consecutive merges/pushes used the admin
   override. Either drop the required-review count to 0 and keep required
   status checks, or add a reviewer.
+
+## Release 0.8.3 (2026-08-26)
+
+Closed the delivery gap that let the 0.8.2 approval fix be installed without
+taking effect, plus the documentation corrections that shipped alongside it.
+
+- #22 / PR #27: `machinist watch` reports managed-workflow drift at startup and
+  `machinist update-check` reports it alongside the release comparison. The
+  advisory never blocks a command, degrades to silence on any probe failure,
+  and stays out of `update-check --json`. `doctor` was already failing on
+  drift; the problem was reach, not severity.
+- #21 / PR #26: `architecture.md` said "Manual label events also stamp the
+  head" with no permission caveat, describing the gap 0.8.2 closed. Both paths
+  are now documented, and the architecture reference gained the Git metadata
+  custody section it never had.
+- #25 closed without action. The five required status checks stay; the
+  approving-review requirement is unsatisfiable for a solo maintainer and is
+  documented as a known bypass.
+- PyPI serves 0.8.3. All four release jobs succeeded on cf73923.
+
+### Resuming From Here
+
+Done: issues #21, #22, #25 closed. Releases 0.8.1, 0.8.2, and 0.8.3 shipped.
+
+Next: nothing scheduled. Two issues remain open and both are deliberately
+parked.
+
+Blockers: none. Suite green at 816 tests, ruff and mypy clean, no workflow
+drift.
+
+Open issues and why they are waiting:
+- #23 explicit approver allowlist. Open design questions (config surface
+  versus workflow-only, controller re-verification, team handles). The
+  external reviewer who raised it may follow up, which is worth waiting for.
+- #24 custody config classification is a denylist. Blocked on real-world data
+  to estimate the false-positive rate of a section allowlist. Narrowing
+  already applies only to shared config files after #18, so the blast radius
+  is limited to worktree Workshops.
+
+Note for future sessions: the PyPI JSON index at /pypi/<name>/json can lag a
+release by several minutes. Trust the release workflow's verify-published job
+and the /pypi/<name>/<version>/json endpoint over the cached index.
