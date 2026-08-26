@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.3 — 2026-08-26
 
 - Warn about managed-workflow drift on the paths operators already walk.
   A workflow fix ships in a projected file rather than in library code, so

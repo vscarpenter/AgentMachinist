@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.8.2).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.8.3).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -211,7 +211,14 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-08-26)
 
-- v0.8.2 is the current release; it closes a label-approval authorization
+- v0.8.3 is the current release; it makes managed-workflow drift visible on
+  the upgrade path. A workflow fix ships in a projected file rather than in
+  library code, so upgrading the package alone left the old workflow in place.
+  `machinist watch` now reports drift at startup and `machinist update-check`
+  reports it alongside the release comparison, both pointing at `machinist
+  sync-workflows`. The advisory never blocks a command and stays out of
+  `update-check --json`; `doctor` still fails on drift. 0.8.2 closed a
+  label-approval authorization
   gap. The managed approve workflow minted trusted approval evidence whenever
   the approval label appeared, without checking who applied it, and GitHub
   grants label permission at triage level. Applying the label now requires
