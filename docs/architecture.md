@@ -49,8 +49,24 @@ Approval evidence is an HTML comment marker:
 ```
 
 The workflow records the marker before adding the label. Execution requires
-both the label and a marker matching the current PR head. Manual label events
-also stamp the head. A later branch update naturally invalidates approval.
+both the label and a marker matching the current PR head. A later branch
+update naturally invalidates approval.
+
+Both authorization paths check the actor before any evidence is minted. A
+`/machinist-execute` comment is honored only from OWNER, MEMBER, or
+COLLABORATOR. Applying the approval label stamps the head only when the actor
+has write or admin access, because GitHub grants label permission at triage
+level and triage cannot push code. The permission check fails closed: a
+permission that cannot be read mints no evidence. The approver's login is
+recorded alongside the marker, so the comment reads:
+
+```text
+Approved by @<login> for `<40-hex-head-sha>`. <!-- agentmachinist:approval sha=<40-hex-head-sha> -->
+```
+
+The controller matches the marker anywhere in a trusted comment, so the
+recorded approver is human-readable context rather than part of the parsed
+contract.
 
 ## Claims, Task Runs, and recovery
 
@@ -141,6 +157,50 @@ When `github.spec_source` is `github-actions`, `github.spec_install` is `pypi`
 or `checkout`. Consumer repositories should keep `pypi`. This project's
 dogfood config uses `checkout` so Spec Task Runs exercise the commit under
 test.
+
+## Git metadata custody
+
+Git metadata is executable. A planted `core.fsmonitor`, clean filter, or hook
+runs the next time the controller invokes Git, so the Workshop's metadata is
+fingerprinted before an untrusted phase and re-checked before every later Git
+call. The check reads the filesystem directly, ahead of the first Git
+subprocess, so hostile metadata never gets a process to execute in.
+
+Fingerprinted: the `.git` pointer and `commondir`, config files, controller
+markers, `info/attributes`, `info/exclude`, `info/grafts`,
+`objects/info/alternates`, `shallow`, `refs/replace`, and every hook.
+
+**A worktree Workshop shares metadata with your own repository.** A Git
+worktree gets its own `HEAD`, index, and refs; `config`, `hooks/`, `info/`,
+and `objects/` belong to the parent. So under `workspace.strategy: worktree`
+the watched config is the one you edit yourself. Under
+`workspace.strategy: clone` the Workshop owns all of it.
+
+That distinction sets how each file is compared:
+
+| Metadata | Comparison |
+| --- | --- |
+| Config files shared with your repository | By sensitive key |
+| Config files the Workshop owns | Byte for byte |
+| Hooks, `info/`, `objects/`, `refs/replace` | Byte for byte |
+
+A shared config file trips the guard only when a change touches a key that can
+execute a program, name a path Git will trust, or redirect the network.
+Editing `diff.tool` or adding a second remote does not. Planting
+`core.fsmonitor`, a clean filter, an alias, a credential helper, a
+`url.*.insteadOf` rewrite, an `include.path`, or a new `remote.origin.url`
+does. Hooks have no benign subset, so they stay byte-compared even when
+shared.
+
+Classification runs on a parser that refuses to guess. Anything it cannot read
+with confidence falls back to byte comparison, and an unreadable config file is
+a custody failure rather than an assumed-benign edit. Task Run records store
+hashes of sensitive config values rather than the values, keeping a
+credentialed origin or an `http.*.extraheader` out of run records and error
+messages.
+
+See [the trust model](trust-model.md) for the full key list and
+[the operator runbook](operator-runbook.md) for recovery.
 
 ## Push safety
 
