@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.8.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.8.1).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -205,10 +205,17 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-08-23)
+## Current state (2026-08-26)
 
-- v0.8.0 is the current release; it adds three AI-native SDLC playbook
-  adoptions: the harness verification feedback loop
+- v0.8.1 is the current release; it fixes a false Git-custody failure under
+  `workspace.strategy: worktree` (issue #16). A worktree shares `config`,
+  `hooks/`, and `info/` with its parent, so the custody guard was
+  byte-comparing the developer's own `.git/config`. Config files a Workshop
+  *shares* now compare by sensitive key (`gitconfig.py`, a subprocess-free
+  parser); everything a Workshop owns, plus hooks and `info/`, stays
+  byte-strict. Custody checkpoint version is now 2, so a Workshop retained
+  across the upgrade needs `machinist retry`. 0.8.0 added three AI-native SDLC
+  playbook adoptions: the harness verification feedback loop
   (`verification.harness_may_run_gates` opts out), the test-deletion guard
   (`limits.allow_test_deletions` opts out), and the spec template's
   `## Risks` section with the standalone-readable quality bar. 0.7.0 added

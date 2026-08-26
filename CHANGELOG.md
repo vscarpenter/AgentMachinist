@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1 — 2026-08-26
 
 - Fix a false custody failure under `workspace.strategy: worktree`
   (issue #16). A worktree shares `config`, `hooks/`, and `info/` with its
