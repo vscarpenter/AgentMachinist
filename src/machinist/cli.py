@@ -188,6 +188,34 @@ def _bound_github_client(
     return github
 
 
+def _workflow_drift_notice() -> str | None:
+    """Return an upgrade advisory when managed workflows are out of date.
+
+    A managed-workflow change ships in a projected file rather than in library
+    code, so upgrading the package alone leaves the old workflow in place. That
+    is how a security fix can be installed but not in effect. This runs on the
+    paths an operator already walks so the gap is not silent.
+
+    Advisory only: any failure returns None rather than blocking the caller.
+    """
+    try:
+        config = load_config()
+        if not getattr(config.github, "manage_workflows", True):
+            return None
+        project_workflows(
+            Path.cwd(), config, installed_version=_installed_version(), check=True
+        )
+    except WorkflowDriftError:
+        return (
+            "Managed GitHub workflows do not match this installation. "
+            "Run 'machinist sync-workflows' to apply them; until then this "
+            "repository keeps the workflows projected by an earlier version."
+        )
+    except Exception:  # noqa: BLE001 - an advisory must never break a command
+        return None
+    return None
+
+
 def _render_init_config(
     *,
     harness_name: str | None,
@@ -504,6 +532,10 @@ def update_check_command(timeout_seconds: int, as_json: bool) -> None:
     else:
         for line in result.report_lines():
             click.echo(line)
+        notice = _workflow_drift_notice()
+        if notice is not None:
+            click.echo("")
+            click.echo(notice)
     if result.status is UpdateStatus.UNKNOWN:
         raise click.exceptions.Exit(1)
 
@@ -932,6 +964,10 @@ def watch(
         config = load_config()
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
+
+    drift_notice = _workflow_drift_notice()
+    if drift_notice is not None:
+        click.echo(drift_notice)
 
     poll_interval = (
         interval if interval is not None else config.github.poll_interval_seconds
