@@ -1000,15 +1000,26 @@ class Workspace:
         for origin_path in self._config_origin_paths(effective_config, target):
             watch(origin_path, config=True)
 
+        # Only metadata the Workshop shares with the controller's own
+        # repository gets the narrowed comparison. A Workshop that owns its
+        # .git has no benign mid-run edits, so it stays byte-strict.
+        shared_config_nodes = {
+            name
+            for name in config_nodes
+            if self._is_shared_metadata(
+                Path(name), git_dir=git_dir, controller_common=controller_common
+            )
+        }
+
         fingerprint_budget = _MetadataFingerprintBudget()
         records = [
             {
                 "path": name,
                 "recursive": recursive,
-                "config": name in config_nodes,
+                "shared_config": name in shared_config_nodes,
                 "config_keys": (
                     self._config_key_digests(Path(name))
-                    if name in config_nodes
+                    if name in shared_config_nodes
                     else None
                 ),
                 "digest": self._fingerprint_metadata(
@@ -1064,6 +1075,7 @@ class Workspace:
         # planted hook, fsmonitor/filter config, included config, or origin
         # rewrite without giving that metadata a chance to execute.
         git_dir, common_dir, _git_entry = self._resolve_git_layout_raw(target)
+        controller_common = self._resolve_git_layout_raw(self.repo_root)[1]
         if (
             str(git_dir) != token["git_dir"]
             or str(common_dir) != token["common_git_dir"]
@@ -1085,8 +1097,11 @@ class Workspace:
             )
             if actual == record["digest"]:
                 continue
-            if record.get("config"):
-                changed = self._changed_config_keys(node, record)
+            shared = self._is_shared_metadata(
+                node, git_dir=git_dir, controller_common=controller_common
+            )
+            if record.get("shared_config"):
+                changed = self._changed_config_keys(node, record, shared=shared)
                 if not changed:
                     # A benign edit to a config file the Workshop shares with
                     # the controller's own repository. Nothing that can execute
@@ -1095,11 +1110,11 @@ class Workspace:
                 raise WorkspaceError(
                     "controller-owned Git metadata changed during an untrusted "
                     f"phase: {node} (sensitive keys: {', '.join(changed)})"
-                    + self._shared_metadata_hint(node)
+                    + self._shared_metadata_hint(shared)
                 )
             raise WorkspaceError(
                 "controller-owned Git metadata changed during an untrusted "
-                f"phase: {node}" + self._shared_metadata_hint(node)
+                f"phase: {node}" + self._shared_metadata_hint(shared)
             )
 
         expected_identity = str(token["origin_identity_sha256"])
@@ -1263,8 +1278,22 @@ class Workspace:
         text = self._read_config_text(node)
         return None if text is None else sensitive_key_digests(text)
 
+    def _is_shared_metadata(
+        self, node: Path, *, git_dir: Path, controller_common: Path
+    ) -> bool:
+        """Report whether the developer's own repository also owns this file.
+
+        Only a worktree Workshop shares Git metadata. Files under the
+        Workshop's private ``.git/worktrees/<name>/`` are its own, so they stay
+        byte-compared even though they sit inside the controller's ``.git``.
+        """
+        if self.config.strategy is not WorkspaceStrategy.WORKTREE:
+            return False
+        parents = node.parents
+        return controller_common in parents and git_dir not in parents
+
     def _changed_config_keys(
-        self, node: Path, record: Mapping[str, object]
+        self, node: Path, record: Mapping[str, object], *, shared: bool
     ) -> tuple[str, ...]:
         """Name the sensitive keys that moved in a watched config file.
 
@@ -1278,7 +1307,7 @@ class Workspace:
         if not isinstance(expected, dict) or actual is None:
             raise WorkspaceError(
                 f"watched Git metadata could not be read as Git config: {node}"
-                + self._shared_metadata_hint(node)
+                + self._shared_metadata_hint(shared)
             )
         return changed_sensitive_keys(
             {str(key): str(value) for key, value in expected.items()}, actual
@@ -1320,15 +1349,10 @@ class Workspace:
             digest.update(b"\0")
         return digest.hexdigest()
 
-    def _shared_metadata_hint(self, node: Path) -> str:
+    @staticmethod
+    def _shared_metadata_hint(shared: bool) -> str:
         """Explain the worktree strategy's shared Git metadata, when relevant."""
-        if self.config.strategy is not WorkspaceStrategy.WORKTREE:
-            return ""
-        try:
-            controller_common = self._resolve_git_layout_raw(self.repo_root)[1]
-        except WorkspaceError:
-            return ""
-        if controller_common not in node.parents:
+        if not shared:
             return ""
         return (
             "\nUnder 'workspace.strategy: worktree' this file belongs to your main "
@@ -1513,7 +1537,7 @@ class Workspace:
                 or not Path(record["path"]).is_absolute()
                 or not isinstance(record.get("recursive"), bool)
                 or not isinstance(record.get("digest"), str)
-                or not isinstance(record.get("config"), bool)
+                or not isinstance(record.get("shared_config"), bool)
             ):
                 raise WorkspaceError("invalid Git-custody metadata record")
             keys = record.get("config_keys")

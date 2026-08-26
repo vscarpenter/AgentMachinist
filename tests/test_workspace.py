@@ -1303,3 +1303,38 @@ def test_custody_falls_back_to_byte_comparison_for_unparsable_config(worktree_cu
 
     with pytest.raises(WorkspaceError, match="could not be read as Git config"):
         workspace.assert_git_custody(path, token)
+
+
+def test_custody_byte_checks_workspace_owned_config_under_clone(repo, tmp_path):
+    """A clone owns its .git, so nothing there changes benignly mid-run."""
+    workspace = make_workspace(repo, tmp_path, strategy=WorkspaceStrategy.CLONE)
+    path = workspace.provision("issue-16", "agent/issue-16", "origin/main")
+    token = workspace.capture_git_custody(path)
+
+    git(path, "config", "--local", "diff.tool", "vimdiff")
+
+    with pytest.raises(WorkspaceError, match="Git metadata changed"):
+        workspace.assert_git_custody(path, token)
+
+
+def test_custody_byte_checks_the_worktrees_own_config(worktree_custody):
+    """config.worktree belongs to this Workshop alone, not to the developer."""
+    workspace, path, token = worktree_custody
+    git_dir = Path(git(path, "rev-parse", "--absolute-git-dir"))
+
+    (git_dir / "config.worktree").write_text("[diff]\n\ttool = vimdiff\n")
+
+    with pytest.raises(WorkspaceError, match="Git metadata changed"):
+        workspace.assert_git_custody(path, token)
+
+
+def test_clone_custody_rejection_omits_the_worktree_remedy(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path, strategy=WorkspaceStrategy.CLONE)
+    path = workspace.provision("issue-16", "agent/issue-16", "origin/main")
+    token = workspace.capture_git_custody(path)
+
+    git(path, "config", "--local", "core.pager", "/tmp/evil")
+
+    with pytest.raises(WorkspaceError) as excinfo:
+        workspace.assert_git_custody(path, token)
+    assert "workspace.strategy: clone" not in str(excinfo.value)
