@@ -140,7 +140,11 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    trusted comment marker `<!-- agentmachinist:approval sha=<head-sha> -->`
    matching the current PR head. Marker authors must be
    OWNER/MEMBER/COLLABORATOR or github-actions. GitHub's review Approve
-   button is *not* the mechanism.
+   button is *not* the mechanism. The managed approve workflow gates both
+   paths on the actor before minting evidence: a `/machinist-execute` comment
+   needs OWNER/MEMBER/COLLABORATOR, and the label path needs write or admin
+   access, because GitHub grants label permission at triage level. The
+   approver's login is recorded on the approval comment.
 3. **Draft-ness outranks the label**: a non-draft PR is "in review" and never
    re-executable without `run --force` (which demands fresh approval).
 4. **Leased pushes**: implementation pushes use `--force-with-lease` against

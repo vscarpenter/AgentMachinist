@@ -220,7 +220,14 @@ budgets, and change limits are documented in the
 - `approval pending`: rerun `machinist approve --pr <pr>` (or `machinist approve --issue <issue>`) or post the exact comment.
 - `approval stale`: reread the changed spec, then approve the current head.
 - Unexpected manual label: remove it, review repository workflow permissions,
-  and inspect PR events. The label alone cannot authorize execution.
+  and inspect PR events. The label alone cannot authorize execution, and the
+  managed workflow refuses to mint evidence unless the labeling actor has
+  write or admin access.
+- Approval evidence records who approved. Read the approval comment on the PR
+  to see the login the workflow bound the SHA for. If that login is not who
+  you expected, revoke their access before retrying anything.
+- Existing installs must run `machinist sync-workflows` to pick up the actor
+  check; `machinist doctor` reports the drift until they do.
 
 ## Workspace cleanup
 

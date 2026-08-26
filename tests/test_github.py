@@ -575,6 +575,28 @@ def test_approval_sha_returns_latest_valid_marker():
     assert client.approval_sha(57) == "b" * 40
 
 
+def test_approval_sha_reads_a_marker_that_records_the_approver():
+    """The workflow names the approver alongside the machine-readable marker."""
+    payload = json.dumps(
+        {
+            "comments": [
+                {
+                    "body": (
+                        "Approved by @someone for `" + "c" * 40 + "`. "
+                        "<!-- agentmachinist:approval sha=" + "c" * 40 + " -->"
+                    ),
+                    "authorAssociation": "NONE",
+                    "author": {"login": "github-actions"},
+                }
+            ]
+        }
+    )
+    runner = FakeRunner((payload, 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    assert client.approval_sha(57) == "c" * 40
+
+
 def test_approval_sha_ignores_markers_from_untrusted_commenters():
     payload = json.dumps(
         {
