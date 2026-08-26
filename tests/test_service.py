@@ -8,6 +8,7 @@ import subprocess
 
 import pytest
 
+import machinist.service as service_module
 from machinist.service import (
     LOG_TAIL_OUTPUT_LIMIT_BYTES,
     LOG_TAIL_READ_LIMIT_BYTES,
@@ -60,6 +61,28 @@ def _service(
         path_environment=path_environment,
         start_interval=start_interval,
     )
+
+
+@pytest.fixture(autouse=True)
+def non_root_uid(monkeypatch):
+    """Keep these tests independent of the identity running the suite.
+
+    LaunchdService validates the UID before it validates any path, so under
+    root a path assertion sees "a positive non-root user ID is required"
+    instead of the rejection it is actually asserting.
+    """
+    monkeypatch.setattr(service_module.os, "getuid", lambda: 501)
+
+
+def test_rejects_a_root_user_id(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    program = tmp_path / "machinist"
+    program.write_text("#!/bin/sh\n")
+    program.chmod(0o755)
+
+    with pytest.raises(ServiceError, match="positive non-root user ID"):
+        LaunchdService(repo, program, launch_agents_dir=tmp_path / "agents", uid=0)
 
 
 def test_identifier_is_stable_safe_and_unique_per_repository(tmp_path):
