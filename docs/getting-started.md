@@ -180,6 +180,9 @@ honors it only from owners, members, or collaborators and refuses the approval
 if the PR head changed before the job ran. Applying the configured
 `machinist:approved` label manually binds the approval to the head SHA carried
 by that label event, so a queued force-push cannot silently authorize new code.
+The label path requires write or admin access, because GitHub grants label
+permission at triage level and triage cannot push code. Either way the
+approver's login is recorded on the approval comment.
 
 If anyone changes the spec branch afterward, `machinist status` reports
 `approval stale` and execution refuses. Approve the new head again.
