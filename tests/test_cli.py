@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from machinist.cli import main
+from machinist.cli import _workflow_drift_notice, main
 from machinist.config import load_config
+from machinist.workflows import WorkflowDriftError
 
 _BaseCliRunner = CliRunner
 
@@ -2451,3 +2452,84 @@ def test_update_check_needs_no_repository_or_config():
         result = runner.invoke(main, ["update-check"])
 
     assert result.exit_code == 0, result.output
+
+
+# --- Issue #22: a managed-workflow fix only lands after sync-workflows ---
+
+
+def _raise_drift(*args, **kwargs):
+    raise WorkflowDriftError("machinist-approve.yml differs from the projection")
+
+
+def test_update_check_reports_workflow_drift_alongside_the_release(monkeypatch):
+    monkeypatch.setattr(
+        "machinist.cli.check_for_update",
+        lambda installed, **kwargs: _update_result("current", latest="0.6.0"),
+    )
+    monkeypatch.setattr("machinist.cli.project_workflows", _raise_drift)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init"])
+        result = runner.invoke(main, ["update-check"])
+
+    assert result.exit_code == 0, result.output
+    assert "sync-workflows" in result.output
+
+
+def test_update_check_json_stays_scriptable_when_workflows_drift(monkeypatch):
+    """The advisory is operator prose; it must never contaminate --json."""
+    monkeypatch.setattr(
+        "machinist.cli.check_for_update",
+        lambda installed, **kwargs: _update_result("available"),
+    )
+    monkeypatch.setattr("machinist.cli.project_workflows", _raise_drift)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init"])
+        result = runner.invoke(main, ["update-check", "--json"])
+
+    assert result.exit_code == 0, result.output
+    json.loads(result.output)
+
+
+def test_update_check_is_silent_when_workflows_match(monkeypatch):
+    monkeypatch.setattr(
+        "machinist.cli.check_for_update",
+        lambda installed, **kwargs: _update_result("current", latest="0.6.0"),
+    )
+    monkeypatch.setattr("machinist.cli.project_workflows", lambda *a, **k: None)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init"])
+        result = runner.invoke(main, ["update-check"])
+
+    assert "sync-workflows" not in result.output
+
+
+def test_workflow_drift_notice_is_advisory_and_never_raises(monkeypatch):
+    """A broken drift probe must not take down the command that called it."""
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("projection blew up")
+
+    monkeypatch.setattr("machinist.cli.project_workflows", explode)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init"])
+        assert _workflow_drift_notice() is None
+
+
+def test_watch_warns_when_managed_workflows_drift(monkeypatch):
+    monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
+    monkeypatch.setattr("machinist.cli.project_workflows", _raise_drift)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init"])
+        result = runner.invoke(main, ["watch", "--once"])
+
+    assert "sync-workflows" in result.output

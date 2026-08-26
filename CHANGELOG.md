@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Warn about managed-workflow drift on the paths operators already walk.
+  A workflow fix ships in a projected file rather than in library code, so
+  upgrading the package alone left the old workflow in place, which is how the
+  0.8.2 approval fix could be installed without being in effect. `machinist
+  watch` now reports drift at startup and `machinist update-check` reports it
+  alongside the release comparison, both pointing at `machinist
+  sync-workflows`. The advisory never blocks a command and never appears in
+  `update-check --json`. `machinist doctor` continues to fail on drift.
+
 ## 0.8.2 — 2026-08-26
 
 - Gate the label-based approval path on the actor's repository permission.
