@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.8.1).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.8.2).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -211,7 +211,13 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-08-26)
 
-- v0.8.1 is the current release; it fixes a false Git-custody failure under
+- v0.8.2 is the current release; it closes a label-approval authorization
+  gap. The managed approve workflow minted trusted approval evidence whenever
+  the approval label appeared, without checking who applied it, and GitHub
+  grants label permission at triage level. Applying the label now requires
+  write or admin access, the check fails closed, and both paths record the
+  approver's login on the approval comment. Existing repositories must run
+  `machinist sync-workflows` to adopt it. 0.8.1 fixed a false Git-custody failure under
   `workspace.strategy: worktree` (issue #16). A worktree shares `config`,
   `hooks/`, and `info/` with its parent, so the custody guard was
   byte-comparing the developer's own `.git/config`. Config files a Workshop

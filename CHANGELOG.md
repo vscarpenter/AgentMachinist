@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.2 — 2026-08-26
 
 - Gate the label-based approval path on the actor's repository permission.
   The managed approve workflow bound the PR head and minted trusted approval
