@@ -265,3 +265,50 @@ on 7d71138, published the v0.8.0 GitHub Release; the Trusted Publishing
 workflow's build, publish, verify-published, and release-assets jobs all
 succeeded, PyPI serves 0.8.0, and the wheel, sdist, and SHA256SUMS are
 attached to the release.
+
+## Issue #16: worktree custody guard trips on the developer's shared .git/config
+
+Reported by @anandvmp-pintlab. Root cause: `capture_git_custody` builds its
+watch list from `common_dir`, which under `workspace.strategy: worktree`
+resolves to the *parent repository's* `.git/`. The guard therefore byte-hashes
+the developer's own `.git/config`, `.git/hooks/`, and `.git/info/`. Any benign
+edit during the harness window aborts the phase. `clone` strategy is unaffected
+because the workspace owns its `.git/`.
+
+Approved scope: operator-facing fix plus semantic narrowing of the config
+comparison. Hooks, `info/`, and `objects/` stay byte-strict.
+
+- [x] Failing tests: benign config keys must not trip; execution/network keys must
+- [x] Failing test: error names the changed keys and the strategy remediation
+- [x] Git config parser (no subprocess; fail closed to byte comparison)
+- [x] Narrow config comparison to changed-key analysis
+- [x] Strategy-aware error message
+- [x] Docs: trust-model section, operator-runbook entry, getting-started note
+- [x] CHANGELOG
+- [x] Full suite + ruff + mypy
+
+Shipped as aa15c00 (guard) and b8a93db (docs) on
+`fix/worktree-shared-config-custody`.
+
+### Resuming From Here
+
+Done: config files compare by sensitive key instead of bytes; hooks, `info/`,
+and `objects/` stay byte-strict; Task Run records hold per-key value hashes
+instead of a whole-file digest; custody version bumped to 2; trust-model,
+runbook, getting-started, and changelog updated.
+
+Next: push the branch and open the PR, then close issue #16 once merged.
+
+Blockers: none. The suite is green (805 tests), ruff and mypy clean.
+
+Assumptions worth revisiting:
+- Classification is a denylist over sections and key leaf names. Git adds
+  config keys every release, so a new execution-capable key would read as
+  inert until the set is extended. An allowlist of provably inert keys would
+  fail closed instead, at the cost of tripping on unfamiliar benign keys.
+- `remote.origin.url` is pinned sensitive; other remotes' URLs are inert
+  because the controller never fetches or pushes by remote name.
+- The reporter's actual config writer was never identified. Nothing in the
+  controller, the `claude-code` spec argv, or `gh` writes the shared config on
+  git 2.55.0 and Claude Code 2.1.246, so it was likely their own tooling.
+  Their answer on #16 may still be worth reading.
