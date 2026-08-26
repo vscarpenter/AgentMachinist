@@ -15,7 +15,14 @@ newer release is published; `machinist update-check` prints the same result
 with the upgrade command for this installation, and
 `machinist update-check --json` is the scriptable form. Both probes are
 advisory: they never fail a pipeline command, and `MACHINIST_NO_UPDATE_CHECK=1`
-disables them on offline hosts. Decide explicitly whether a
+disables them on offline hosts.
+
+`update-check` also reports managed-workflow drift, and `machinist watch`
+reports it at startup. A workflow fix ships in a projected file rather than in
+library code, so upgrading the package alone leaves the previous workflow in
+place; the advisory names `machinist sync-workflows` so the gap is not silent.
+It never blocks a command and never appears in `update-check --json`. `doctor`
+remains the check that fails on drift. Decide explicitly whether a
 warning that no verification gates are configured is acceptable. A Task Runs
 warning points to a failed or process-abandoned record that should be inspected
 and explicitly retried.
@@ -30,6 +37,11 @@ and explicitly retried.
 Run one local watcher per repository. The claim is local, not cross-host. If
 `github.spec_source` is `github-actions`, the local watcher handles approved
 execution but deliberately skips spec generation.
+
+`watch` prints a managed-workflow drift advisory at startup when the projection
+no longer matches this installation. It is a warning, not a gate: a package
+upgrade must not stop a running daemon. Run `machinist sync-workflows` to clear
+it.
 
 On macOS, AgentMachinist can manage that scheduler integration directly;
 `install` writes the plist, registers it, and starts it immediately:

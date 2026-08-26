@@ -49,10 +49,18 @@ It reads the latest published release from PyPI, compares it with the copy you
 are running, and — when a newer release exists — prints the upgrade command
 that matches how this copy was installed (`uv tool upgrade`, `pipx upgrade`,
 `pip install --upgrade`, or `git pull && uv sync` for a source checkout). The
-command needs no repository and no `machinist.yaml`, exits non-zero only when
-PyPI could not be reached, and supports `--json` for scripts.
+command runs without a repository or a `machinist.yaml`, exits non-zero only
+when PyPI could not be reached, and supports `--json` for scripts.
 `machinist doctor` runs the same check and reports an available release as a
 warning.
+
+Run inside a configured repository, it adds one more line: whether the managed
+GitHub workflows still match this installation. Managed workflows are projected
+files, so a workflow change takes effect only after `machinist sync-workflows`.
+Upgrading the package alone can leave the previous workflow in place, and that
+line is how you find out without running `doctor`. `machinist watch` prints the
+same advisory at startup. It never blocks a command and never appears in
+`update-check --json`.
 
 Set `MACHINIST_NO_UPDATE_CHECK=1` to disable both probes; nothing else in the
 pipeline contacts PyPI.
@@ -662,11 +670,11 @@ Common states and responses:
 | Task should not start again | Run `machinist cancel <issue> --reason "..."`; clear it directly or explicitly retry only when dispatch is safe. |
 | Queue or issue is intentionally waiting | Run `machinist queue show`; use `queue resume` or `queue allow <issue>` as appropriate. |
 | Workspace already exists | Inspect it first, or prune it with `machinist clean --issue <issue>` or `machinist clean --all`. |
-| Managed workflow drift | Run `machinist sync-workflows`, inspect, commit, and push. |
+| Managed workflow drift | `watch` and `update-check` report it. Run `machinist sync-workflows`, inspect, commit, and push. |
 | Configuration is unclear | Run `machinist config validate` and `machinist config show`; neither starts a Task. |
 | GitHub is unavailable | Preserve local evidence with `machinist status --local`, `machinist runs`, or `machinist inspect <issue> --offline`. |
 | launchd watcher is quiet | Run `machinist service status` and `machinist service logs --lines 100`. |
-| Unsure whether the CLI is current | Run `machinist update-check`; it prints the upgrade command for this installation. |
+| Unsure whether the CLI is current | Run `machinist update-check`; it prints the upgrade command for this installation and flags managed-workflow drift. |
 | `doctor` warns that PyPI is unreachable | The update probe is advisory. Set `MACHINIST_NO_UPDATE_CHECK=1` on offline machines. |
 
 Task Run failures and recovery evidence live under `.machinist/runs/`. The
