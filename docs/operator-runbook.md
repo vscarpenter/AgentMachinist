@@ -156,6 +156,18 @@ legitimately removes or renames tests, set
 `limits.allow_test_deletions: true`, retry, and turn the setting back off
 afterwards.
 
+A run that fails with `controller-owned Git metadata changed during an
+untrusted phase` hit the Git metadata custody guard. The message names the file
+and, for a config file, the exact keys that moved. Under
+`workspace.strategy: worktree` that file is usually your own repository's,
+because a worktree shares `config`, `hooks/`, and `info/` with its parent, so
+check first whether you installed a hook or changed Git config while the Task
+was running. If you did, retry the Task and keep your own Git edits out of the
+harness window, or set `workspace.strategy: clone` so each Workshop owns its
+Git metadata. If you did not, treat the named keys as a custody incident:
+inspect the retained workspace, revert the metadata, and rotate any credential
+the changed keys could have reached before retrying.
+
 ## Cancel or amend a task
 
 To cooperatively terminate an active supervised harness/gate process and block
