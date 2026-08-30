@@ -977,7 +977,7 @@
           <div class="harness-card">
             <h4>Pi</h4>
             <p>Lightweight agent</p>
-            <code>pi auth check --model &lt;model&gt;</code>
+            <code>pi auth check --model &lt;model&gt; --json --no-refresh</code>
             <code>name: pi</code>
           </div>
         </div>
@@ -1410,7 +1410,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
       <div class="trouble-grid">
         <details>
           <summary>Doctor reports a FAIL</summary>
-          <div class="detail-body"><p>Fix that prerequisite before running a task. Common causes are missing <code>gh</code> auth, a missing harness executable, or workflow drift.</p><code>machinist doctor</code></div>
+          <div class="detail-body"><p>Fix that prerequisite before running a task. Common causes are missing <code>gh</code> auth, a missing harness executable, a failing verification gate, or workflow drift.</p><code>machinist doctor --run-gates</code></div>
         </details>
         <details>
           <summary>Status says approval pending</summary>
@@ -1507,7 +1507,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
             </tr>
             <tr>
               <td><code>machinist approve [--issue &lt;n&gt;|--pr &lt;n&gt;]</code></td>
-              <td>Approve a draft PR by explicit issue or PR number, bound to its exact commit SHA.</td>
+              <td>Request approval for a draft PR by explicit issue or PR number. The managed workflow verifies write access and records evidence for the exact head SHA.</td>
             </tr>
             <tr>
               <td><code>machinist run &lt;n&gt; [--retry]</code></td>
@@ -1552,6 +1552,10 @@ machinist retry 42 --phase execute --run --fresh</pre>
             <tr>
               <td><code>machinist repo add|remove|list</code></td>
               <td>Maintain the optional local repository portfolio used by <code>status --all</code>.</td>
+            </tr>
+            <tr>
+              <td><code>machinist sync-labels [--check|--apply]</code></td>
+              <td>Check required GitHub labels without mutation, or explicitly create and update them.</td>
             </tr>
             <tr>
               <td><code>machinist sync-workflows [--check]</code></td>

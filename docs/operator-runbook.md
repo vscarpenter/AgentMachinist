@@ -240,7 +240,10 @@ budgets, and change limits are documented in the
 
 ## Approval incidents
 
-- `approval pending`: rerun `machinist approve --pr <pr>` (or `machinist approve --issue <issue>`) or post the exact comment.
+- `approval pending`: inspect the managed approval workflow before requesting
+  approval again. The label is visible, but trusted evidence for the current
+  SHA is not. Retry with `machinist approve --pr <pr>` (or
+  `machinist approve --issue <issue>`) only if the workflow failed.
 - `approval stale`: reread the changed spec, then approve the current head.
 - Unexpected manual label: remove it, review repository workflow permissions,
   and inspect PR events. The label alone cannot authorize execution, and the

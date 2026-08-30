@@ -1,5 +1,11 @@
 # Build System Hardening Implementation Plan
 
+> [!IMPORTANT]
+> **Historical design record.** This plan preserves the v0.2 implementation
+> context and is not current operating documentation. See
+> [Getting Started](../../getting-started.md) and
+> [Architecture and lifecycle](../../architecture.md) for current behavior.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close identity drift between package version, checked-in workflows, and smoke tests; dogfood Phase 1 from this checkout; and make the next version bump a single, test-enforced process.

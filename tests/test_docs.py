@@ -26,6 +26,9 @@ _FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
 _ONBOARDING_PATH = _REPO_ROOT / "docs" / "onboarding.html"
 _HARNESS_PATH = _REPO_ROOT / "docs" / "harnesses.md"
 _EXPLAINER_PATH = _REPO_ROOT / "docs" / "explainer.html"
+_JOB_CARD_PATH = _REPO_ROOT / "docs" / "job-card.html"
+_TRUST_MODEL_PATH = _REPO_ROOT / "docs" / "trust-model.md"
+_DOCS_INDEX_PATH = _REPO_ROOT / "docs" / "README.md"
 _README_PATH = _REPO_ROOT / "README.md"
 _CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
 _CHANGELOG_PATH = _REPO_ROOT / "CHANGELOG.md"
@@ -51,10 +54,18 @@ _REQUIRED_HEADINGS = (
 )
 
 _REQUIRED_DOCS = (
+    "README.md",
     "architecture.md",
     "operator-runbook.md",
     "trust-model.md",
     "harnesses.md",
+)
+
+_HISTORICAL_DOCS = (
+    _REPO_ROOT / "docs/superpowers/plans/2026-08-17-build-system-hardening.md",
+    _REPO_ROOT / "docs/superpowers/specs/2026-08-16-agentmachinist-design.md",
+    _REPO_ROOT
+    / "docs/superpowers/specs/2026-08-17-reliability-and-usability-hardening.md",
 )
 
 
@@ -291,6 +302,75 @@ def test_adoption_docs_expose_readiness_progress_and_platform_boundaries():
     assert "test-command auto-detection" not in combined
     assert "auto-detects test runners" not in combined
     assert "full-auto workspace edits" not in combined
+
+
+def test_all_public_docs_share_current_approval_and_readiness_contract():
+    trust = " ".join(_TRUST_MODEL_PATH.read_text().lower().split())
+    operator = " ".join(
+        (_REPO_ROOT / "docs/operator-runbook.md").read_text().lower().split()
+    )
+    first_run = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    job_card = " ".join(_JOB_CARD_PATH.read_text().lower().split())
+    explainer = " ".join(_EXPLAINER_PATH.read_text().lower().split())
+
+    assert (
+        "both comment and label approval paths independently require write or admin access"
+        in trust
+    )
+    assert (
+        "inspect the managed approval workflow before requesting approval again"
+        in operator
+    )
+    assert (
+        "the managed workflow checks write or admin access and the current head"
+        in job_card
+    )
+    assert "pi auth check --model &lt;model&gt; --json --no-refresh" in first_run
+    assert "machinist sync-labels [--check|--apply]" in first_run
+    assert "machinist doctor --run-gates — when" in job_card
+    assert "machinist approve --issue 42" in explainer
+    assert "machinist doctor --run-gates" in explainer
+
+    combined = "\n".join((trust, operator, first_run, job_card, explainer))
+    for stale_claim in (
+        "guaranteed human-approved",
+        "immutable spec pr",
+        "machinist approve 42",
+        "approved pr #18 bound",
+        "automatically pruned upon test success",
+        "ironclad checkpoint",
+        "only from owners, members, or collaborators",
+    ):
+        assert stale_claim not in combined
+
+
+def test_explainer_is_current_discoverable_and_has_page_metadata():
+    index = (_REPO_ROOT / "docs/index.html").read_text().lower()
+    explainer = _EXPLAINER_PATH.read_text().lower()
+
+    assert 'href="explainer.html"' in index
+    assert '<meta name="description"' in explainer
+    assert '<meta name="theme-color"' in explainer
+    assert '<link rel="canonical"' in explainer
+    assert "reviewable pull requests" in explainer
+    assert "failed runs retain" in explainer
+    assert 'href="#main"' in explainer
+    assert 'role="slider"' in explainer
+    assert 'aria-pressed="true"' in explainer
+    assert "prefers-reduced-motion" in explainer
+
+
+def test_historical_design_records_are_clearly_labeled():
+    for path in _HISTORICAL_DOCS:
+        opening = "\n".join(path.read_text().splitlines()[:12]).lower()
+        assert "historical design record" in opening, path
+        assert "../../getting-started.md" in opening, path
+        assert "../../architecture.md" in opening, path
+
+    docs_index = _DOCS_INDEX_PATH.read_text().lower()
+    assert "current operating documentation" in docs_index
+    assert "historical design records" in docs_index
+    assert "https://agentmachinist.vinny.dev/explainer.html" in docs_index
 
 
 def test_readme_lists_recovery_inspection_and_cleanup_commands():

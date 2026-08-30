@@ -1,8 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="color-scheme: dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A one-minute visual explanation of AgentMachinist's issue-to-reviewable-PR workflow, human Approval gate, verification, and recovery boundaries.">
+  <meta name="theme-color" content="#090d13">
+  <link rel="canonical" href="https://agentmachinist.vinny.dev/explainer.html">
   <title>AgentMachinist — System Explainer Video</title>
   <style>
     :root {
@@ -15,7 +18,6 @@
       --ink-dim: #64748b;
       --orange: #ff6036;
       --orange-soft: rgba(255, 96, 54, 0.15);
-      --orange-glow: rgba(255, 96, 54, 0.35);
       --blue: #38bdf8;
       --blue-soft: rgba(56, 189, 248, 0.15);
       --green: #22c55e;
@@ -30,6 +32,18 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    .skip-link {
+      position: fixed;
+      top: 0.75rem;
+      left: 0.75rem;
+      z-index: 20;
+      padding: 0.6rem 0.85rem;
+      background: var(--ink);
+      color: var(--bg);
+      border-radius: 4px;
+      transform: translateY(-180%);
+    }
+    .skip-link:focus { transform: translateY(0); }
     body {
       background: var(--bg);
       color: var(--ink);
@@ -51,7 +65,8 @@
       background: #0d121b;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px -10px var(--orange-glow);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
       position: relative;
       overflow: hidden;
       display: flex;
@@ -275,12 +290,13 @@
       padding: 1.1rem 0.9rem;
       text-align: center;
       position: relative;
-      transition: all 0.3s ease;
+      transition: border-color 0.3s ease, background 0.3s ease,
+        box-shadow 0.3s ease, transform 0.3s ease;
     }
     .pipeline-step.highlight {
       border-color: var(--orange);
       background: var(--paper-card-active);
-      box-shadow: 0 0 20px -5px var(--orange-glow);
+      box-shadow: 0 12px 24px -18px rgba(0, 0, 0, 0.9);
       transform: translateY(-4px);
     }
     .step-num {
@@ -476,7 +492,7 @@
       font-family: var(--font-mono);
       font-size: 0.95rem;
       color: #f8fafc;
-      box-shadow: 0 0 25px -5px var(--orange-glow);
+      box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.9);
     }
     .install-box span.prompt { color: var(--orange); }
 
@@ -525,8 +541,8 @@
       background: var(--orange);
       border: none;
       color: #fff;
-      width: 32px;
-      height: 32px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       cursor: pointer;
       display: grid;
@@ -538,18 +554,33 @@
       background: #ff744f;
     }
     .play-btn svg { width: 14px; height: 14px; fill: currentColor; }
+    .play-btn:focus-visible,
+    .progress-bar-bg:focus-visible,
+    .scene-btn:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 3px;
+    }
 
     .progress-bar-bg {
       flex: 1;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
+      height: 44px;
+      background: transparent;
       cursor: pointer;
       position: relative;
       overflow: hidden;
     }
+    .progress-bar-bg::before {
+      content: "";
+      position: absolute;
+      inset: 19px 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
     .progress-bar-fill {
-      height: 100%;
+      position: absolute;
+      top: 19px;
+      left: 0;
+      height: 6px;
       width: 0%;
       background: linear-gradient(90deg, var(--orange), #ff9478);
       border-radius: 3px;
@@ -567,24 +598,110 @@
       font-family: var(--font-mono);
       font-size: 0.7rem;
       padding: 0.2rem 0.45rem;
+      min-height: 44px;
       border-radius: 4px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
     }
     .scene-btn:hover, .scene-btn.active {
       border-color: var(--orange);
       color: var(--orange);
       background: var(--orange-soft);
     }
+    @media (prefers-reduced-motion: reduce) {
+      .scene,
+      .pipeline-step,
+      .play-btn,
+      .progress-bar-fill,
+      .scene-btn,
+      .caption-text {
+        transition: none;
+      }
+    }
+    @media (max-width: 740px) {
+      body {
+        min-height: auto;
+        align-items: stretch;
+        padding: 0.5rem;
+      }
+      .video-frame {
+        aspect-ratio: auto;
+        min-height: 820px;
+      }
+      .video-hud {
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+      }
+      .hud-scene-title {
+        order: 3;
+        flex-basis: 100%;
+      }
+      .stage {
+        min-height: 560px;
+        padding: 0;
+      }
+      .scene {
+        justify-content: flex-start;
+        overflow-y: auto;
+        padding: 1.25rem;
+      }
+      .scene-title-wrapper {
+        margin: auto;
+      }
+      .scene-title-wrapper h1 {
+        font-size: clamp(2rem, 10vw, 2.75rem);
+      }
+      .harness-pills,
+      .playback-controls {
+        flex-wrap: wrap;
+      }
+      .problem-grid,
+      .safety-grid {
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+      }
+      .pipeline-steps {
+        grid-template-columns: 1fr 1fr;
+      }
+      .pipeline-step::after {
+        display: none;
+      }
+      .pipeline-callout,
+      .caption-bar {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .term-sim-body {
+        min-height: 0;
+        font-size: 0.68rem;
+        overflow-wrap: anywhere;
+      }
+      .install-box {
+        display: flex;
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
+      .scene-nav {
+        order: 3;
+        width: 100%;
+        overflow-x: auto;
+      }
+      .scene-btn {
+        flex: 0 0 auto;
+      }
+    }
   </style>
 </head>
 <body>
+
+  <a class="skip-link" href="#main">Skip to explainer</a>
 
   <div class="video-frame" id="player">
     <!-- Top HUD -->
     <header class="video-hud">
       <div class="hud-brand">
-        <svg class="hud-logo" viewBox="0 0 32 32">
+        <svg class="hud-logo" viewBox="0 0 32 32" aria-hidden="true">
           <path d="M6 9h20v14H6z"/>
           <path d="M10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8"/>
         </svg>
@@ -596,13 +713,13 @@
     </header>
 
     <!-- Stage / Screens -->
-    <main class="stage">
+    <main class="stage" id="main">
       <!-- Scene 1: Intro -->
       <section class="scene active" id="scene-1">
         <div class="scene-title-wrapper">
           <div class="title-eyebrow">⚡ Local-First Issue-to-PR Pipeline</div>
-          <h1>Machining GitHub Issues Into Tested Pull Requests</h1>
-          <p class="lead">Connect your GitHub issues to autonomous coding harnesses, with guaranteed human-approved specifications before code is written.</p>
+          <h1>Machining GitHub Issues Into Reviewable Pull Requests</h1>
+          <p class="lead">Connect GitHub issues to coding harnesses through a human Approval bound to the exact Spec head before implementation starts.</p>
           <div class="harness-pills">
             <span class="harness-pill">Claude Code</span>
             <span class="harness-pill">OpenCode</span>
@@ -627,10 +744,10 @@
           <div class="card-solution">
             <h3>The Machinist Guardrails</h3>
             <ul>
-              <li>Generates an immutable Spec PR first</li>
+              <li>Generates a draft Spec PR before implementation</li>
               <li>Requires human approval bound to exact commit SHA</li>
               <li>Executes inside isolated Git worktrees</li>
-              <li>Enforces local test gate before readying PR</li>
+              <li>Runs every configured verification gate before readying the PR</li>
             </ul>
           </div>
         </div>
@@ -663,7 +780,7 @@
           </div>
           <div class="pipeline-callout">
             <span class="callout-rule">🔒 Absolute Invariant: AgentMachinist NEVER clicks merge.</span>
-            <span class="callout-sub">You retain 100% final review custody.</span>
+            <span class="callout-sub">Final review and merge stay with you.</span>
           </div>
         </div>
       </section>
@@ -682,8 +799,9 @@
 <span class="c-ok">✓</span> Created draft PR #18 with .machinist/specs/issue-42-spec.md
 <span class="c-dim">... awaiting human review and approval</span>
 
-<span class="c-prompt">$</span> <span class="c-cmd">machinist approve 42</span>
-<span class="c-ok">✓</span> Approved PR #18 bound to commit <span class="c-blue">a17c98d42e6f</span>
+<span class="c-prompt">$</span> <span class="c-cmd">machinist approve --issue 42</span>
+<span class="c-dim">... approval requested; workflow checking write access and current head</span>
+<span class="c-ok">✓</span> Approval recorded for <span class="c-blue">a17c98d42e6f</span> by @operator
 
 <span class="c-prompt">$</span> <span class="c-cmd">machinist run 42</span>
 <span class="c-dim">... provisioned worktree ~/.machinist/workspaces/repo-issue-42</span>
@@ -709,7 +827,7 @@
               <span class="safety-icon">🌿</span>
               <div class="safety-text">
                 <h4>Isolated Worktrees</h4>
-                <p>Builds happen in clean worktrees; automatically pruned upon test success.</p>
+                <p>Builds happen in managed worktrees; failed runs retain Evidence for inspection.</p>
               </div>
             </div>
             <div class="safety-item">
@@ -735,18 +853,18 @@
       <!-- Scene 6: Get Started -->
       <section class="scene" id="scene-6">
         <div class="outro-card">
-          <h2>Ready to Supercharge Your Solo Workflow?</h2>
-          <p>AgentMachinist is available today on PyPI. Get started in under 60 seconds.</p>
+          <h2>Ready to make the first cut?</h2>
+          <p>Install from PyPI, configure a real verification gate, and prove readiness before the first Task.</p>
           <div class="install-box">
             <span class="prompt">$</span>
-            <code>uv tool install agentmachinist && machinist init</code>
+            <code>uv tool install agentmachinist &amp;&amp; machinist init &amp;&amp; machinist doctor --run-gates</code>
           </div>
         </div>
       </section>
     </main>
 
     <!-- Bottom Caption Bar -->
-    <div class="caption-bar">
+    <div class="caption-bar" aria-live="polite">
       <span class="caption-pill" id="caption-tag">VOICEOVER</span>
       <div class="caption-text" id="caption-text">Welcome to AgentMachinist: the issue-to-reviewed-PR build pipeline for solo developers.</div>
     </div>
@@ -756,16 +874,16 @@
       <button class="play-btn" id="play-pause-btn" type="button" aria-label="Play or Pause">
         <svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
       </button>
-      <div class="progress-bar-bg" id="progress-bg">
+      <div class="progress-bar-bg" id="progress-bg" role="slider" tabindex="0" aria-label="Explainer progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
         <div class="progress-bar-fill" id="progress-fill"></div>
       </div>
       <div class="scene-nav">
-        <button class="scene-btn active" data-scene="1">1. Intro</button>
-        <button class="scene-btn" data-scene="2">2. Guardrails</button>
-        <button class="scene-btn" data-scene="3">3. Assembly Line</button>
-        <button class="scene-btn" data-scene="4">4. Live Demo</button>
-        <button class="scene-btn" data-scene="5">5. Safety</button>
-        <button class="scene-btn" data-scene="6">6. Launch</button>
+        <button class="scene-btn active" type="button" data-scene="1" aria-pressed="true">1. Intro</button>
+        <button class="scene-btn" type="button" data-scene="2" aria-pressed="false">2. Guardrails</button>
+        <button class="scene-btn" type="button" data-scene="3" aria-pressed="false">3. Assembly line</button>
+        <button class="scene-btn" type="button" data-scene="4" aria-pressed="false">4. Live demo</button>
+        <button class="scene-btn" type="button" data-scene="5" aria-pressed="false">5. Safety</button>
+        <button class="scene-btn" type="button" data-scene="6" aria-pressed="false">6. Launch</button>
       </div>
     </footer>
   </div>
@@ -783,13 +901,13 @@
           id: 2,
           name: "Scene 2 · Why Guardrails Matter",
           duration: 7500,
-          caption: "Uncontrolled AI agents often hallucinate and push broken commits. AgentMachinist provides an ironclad checkpoint between planning and coding."
+          caption: "Uncontrolled coding agents can make unwanted changes or push unsafe commits. AgentMachinist places a fail-closed human checkpoint between planning and coding."
         },
         {
           id: 3,
           name: "Scene 3 · The 3-Phase Assembly Line",
           duration: 8000,
-          caption: "Every task follows four explicit gates: Issue trigger, automated draft spec, human commit-SHA approval, and tested execution."
+          caption: "Every Task follows four explicit steps: issue trigger, draft Spec, human commit-SHA Approval, and verified execution."
         },
         {
           id: 4,
@@ -801,13 +919,13 @@
           id: 5,
           name: "Scene 5 · Safety Boundary & Adapters",
           duration: 7000,
-          caption: "Scrubbed environment credentials, leased pushes, and first-class support for Claude Code, OpenCode, Codex, and Pi."
+          caption: "Reduced controller credentials, leased pushes, and first-class support for Claude Code, OpenCode, Codex, and Pi."
         },
         {
           id: 6,
           name: "Scene 6 · Get Started",
           duration: 7000,
-          caption: "Install AgentMachinist 0.8.3 from PyPI with `uv tool install agentmachinist` and start shipping with confidence."
+          caption: "Install AgentMachinist 0.8.3 from PyPI, configure verification, and run `machinist doctor --run-gates` before the first Task."
         }
       ];
 
@@ -823,6 +941,7 @@
       const hudTime = document.getElementById('hud-time');
       const captionText = document.getElementById('caption-text');
       const progressFill = document.getElementById('progress-fill');
+      const progressTrack = document.getElementById('progress-bg');
       const playBtn = document.getElementById('play-pause-btn');
       const playIcon = document.getElementById('play-icon');
 
@@ -838,7 +957,9 @@
         hudSceneName.textContent = s.name;
         captionText.textContent = s.caption;
         hudTime.textContent = `${formatTime(elapsedTime)} / ${formatTime(totalDuration)}`;
-        progressFill.style.width = `${(elapsedTime / totalDuration) * 100}%`;
+        const progressPercent = (elapsedTime / totalDuration) * 100;
+        progressFill.style.width = `${progressPercent}%`;
+        progressTrack.setAttribute('aria-valuenow', Math.round(progressPercent).toString());
 
         sceneEls.forEach((el, idx) => {
           el.classList.toggle('active', idx === currentSceneIndex);
@@ -846,6 +967,7 @@
 
         sceneBtns.forEach((btn, idx) => {
           btn.classList.toggle('active', idx === currentSceneIndex);
+          btn.setAttribute('aria-pressed', idx === currentSceneIndex ? 'true' : 'false');
         });
 
         // Pipeline animation highlight in scene 3
@@ -886,12 +1008,14 @@
 
       function play() {
         isPlaying = true;
+        playBtn.setAttribute('aria-label', 'Pause explainer');
         playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
         timerInterval = setInterval(tick, 100);
       }
 
       function pause() {
         isPlaying = false;
+        playBtn.setAttribute('aria-label', 'Play explainer');
         playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
         clearInterval(timerInterval);
       }
@@ -907,9 +1031,8 @@
         });
       });
 
-      document.getElementById('progress-bg').addEventListener('click', (e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      function seekTo(ratio) {
+        ratio = Math.max(0, Math.min(1, ratio));
         elapsedTime = ratio * totalDuration;
         let cumulative = 0;
         for (let i = 0; i < scenes.length; i++) {
@@ -920,10 +1043,35 @@
           }
         }
         updateUI();
+      }
+
+      progressTrack.addEventListener('click', (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        seekTo((e.clientX - rect.left) / rect.width);
       });
 
-      // Auto-start playback on load
-      play();
+      progressTrack.addEventListener('keydown', (e) => {
+        const step = totalDuration * 0.05;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          seekTo((elapsedTime - step) / totalDuration);
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          seekTo((elapsedTime + step) / totalDuration);
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          seekTo(0);
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          seekTo(1);
+        }
+      });
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        updateUI();
+      } else {
+        play();
+      }
     })();
   </script>
 </body>

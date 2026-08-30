@@ -8,7 +8,7 @@ sandbox, container boundary, malware scanner, or policy engine.
 
 - The repository's default branch, config, prompts, hooks, and test command.
 - The installed harness executable and its provider/plugin ecosystem.
-- Repository owners, members, and collaborators who can approve.
+- Repository actors with write or admin access who can approve.
 - The local user account that launches AgentMachinist.
 
 Issue bodies and PR branches are untrusted task input. `pull_request_target`
@@ -19,12 +19,13 @@ approval automation never checks out or executes PR-head code.
 - Exact SHA-bound approval plus configured label.
 - Exact `/machinist-execute <full-spec-commit-sha>` command and trusted author
   association; label approvals bind the SHA from the authorization event.
-- Actor authorization on both approval paths. A `/machinist-execute` comment is
-  honored only from OWNER, MEMBER, or COLLABORATOR. Applying the approval label
-  is honored only from an actor with write or admin access, because GitHub
-  grants label permission at triage level and triage cannot push code. The
-  check fails closed: an unreadable permission mints no approval evidence. The
-  approver's login is recorded on the approval comment.
+- Actor authorization on both approval paths. Both comment and label approval
+  paths independently require write or admin access. The comment path also
+  requires OWNER, MEMBER, or COLLABORATOR association. GitHub association and
+  label permissions can be weaker than push authority, so neither is
+  sufficient by itself. The check fails closed: an unreadable permission mints
+  no approval evidence. The approver's login is recorded on the approval
+  comment.
 - Codex read-only sandbox, Pi read-tool allowlist, and Claude plan/read-tool
   arguments during spec generation.
 - Rejection of any dirty repository after spec generation.
