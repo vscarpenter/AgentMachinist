@@ -16,6 +16,8 @@ path that matches what you are trying to do:
 
 - [Getting Started](getting-started.md) — complete installation, configuration,
   first Task, and troubleshooting reference.
+- [TL;DR](tldr.md) — two cheat sheets for the local and GitHub flows:
+  create an issue, label it, watch, approve, run, merge.
 - [Machinist Job Card](https://agentmachinist.vinny.dev/job-card.html) — compact
   local-versus-Actions checklist.
 - [Operator runbook](operator-runbook.md) — readiness, dispatch, recovery,
