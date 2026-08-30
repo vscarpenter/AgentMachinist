@@ -1179,9 +1179,49 @@ def test_advisory_forbidden_mutation_is_checkpointed_and_never_committed(tmp_pat
     assert report["required_failures"] == []
     assert report["advisory_failures"] == ["advisory audit"]
     assert report["gates"][0]["blocking"] is True
+    assert claim.evidence["resume_forbidden_reason"] == (
+        "mutation-forbidden gate 'advisory audit' changed it"
+    )
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
     assert not any(call[0] == "mark_ready" for call in github.calls)
     assert ("cleanup", False) in workspace.calls
+
+
+def test_resume_refuses_workspace_changed_by_mutation_forbidden_gate(tmp_path):
+    retained = tmp_path / "retained-mutated"
+    workspace = FakeWorkspace(tmp_path)
+    workspace._prepare_path(retained)
+    (retained / "impl.py").write_text("harness code plus gate mutation\n")
+    workspace._dirty = True
+    claim = FakeClaim(
+        tmp_path,
+        attempt=2,
+        previous_evidence={
+            "approved_sha": "a" * 40,
+            "workspace_path": str(retained),
+            "workspace_head": "a" * 40,
+            "harness_completed": True,
+            "resume_forbidden_reason": (
+                "mutation-forbidden gate 'formatter' changed it"
+            ),
+        },
+    )
+
+    with pytest.raises(ExecutePhaseError, match="not eligible for --resume"):
+        run_execute_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=FakeHarness(error=AssertionError("harness must not rerun")),
+            workspace=workspace,
+            test_runner=passing_tests,
+            claim=claim,
+            recovery="resume",
+        )
+
+    assert not any(
+        call[0] in {"resume", "commit_all", "push"} for call in workspace.calls
+    )
 
 
 def test_verification_cancellation_is_checkpointed_and_typed(tmp_path):
@@ -1377,6 +1417,37 @@ def test_null_test_command_skips_the_gate(tmp_path):
 
     assert pr.number == 57
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
+
+
+def test_cleanup_failure_after_ready_pr_is_a_success_warning(tmp_path):
+    class CleanupFailingWorkspace(FakeWorkspace):
+        def cleanup(self, path, *, success):
+            self.calls.append(("cleanup", success))
+            raise OSError("Workshop is busy")
+
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    workspace = CleanupFailingWorkspace(tmp_path)
+
+    pr = lifecycle.run(
+        42,
+        Phase.EXECUTE,
+        lambda claim: run_execute_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=FakeHarness(on_implement=touch_file(workspace)),
+            workspace=workspace,
+            test_runner=passing_tests,
+            claim=claim,
+        ),
+    )
+
+    record = lifecycle.record(42, Phase.EXECUTE)
+    assert pr.number == 57
+    assert record.status is RunStatus.SUCCEEDED
+    assert record.evidence["ready_observed_sha"] == "c" * 40
+    assert record.evidence["cleanup_succeeded"] is False
+    assert "Workshop is busy" in record.evidence["cleanup_warning"]
 
 
 def test_mutation_allowed_gate_cannot_erase_the_entire_implementation(tmp_path):

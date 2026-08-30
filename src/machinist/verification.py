@@ -37,6 +37,7 @@ from machinist.runtime_paths import (
 Runner = Callable[..., subprocess.CompletedProcess]
 Snapshotter = Callable[[Path], str]
 CancelCheck = Callable[[], bool]
+ProgressCallback = Callable[[int, int, str, str], None]
 
 DEFAULT_EVIDENCE_CHARACTERS = 4_000
 
@@ -196,6 +197,7 @@ def run_verification_gates(
     snapshotter: Snapshotter | None = None,
     runner: Runner = run_supervised,
     cancel_check: CancelCheck | None = None,
+    on_progress: ProgressCallback | None = None,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
     evidence_characters: int = DEFAULT_EVIDENCE_CHARACTERS,
 ) -> VerificationReport:
@@ -245,13 +247,21 @@ def run_verification_gates(
                 f"could not prepare verification logs in {resolved_log_dir}: {exc}"
             ) from exc
         if cancelled:
-            results.append(
-                _skipped_result(
-                    gate, stdout_log, stderr_log, "not run after cancellation"
-                )
+            result = _skipped_result(
+                gate, stdout_log, stderr_log, "not run after cancellation"
             )
+            results.append(result)
+            if on_progress is not None:
+                on_progress(
+                    index,
+                    len(ordered_gates),
+                    gate.name,
+                    result.status.value,
+                )
             continue
 
+        if on_progress is not None:
+            on_progress(index, len(ordered_gates), gate.name, "running")
         result = _run_gate(
             resolved_cwd,
             gate,
@@ -264,6 +274,8 @@ def run_verification_gates(
             evidence_characters=evidence_characters,
         )
         results.append(result)
+        if on_progress is not None:
+            on_progress(index, len(ordered_gates), gate.name, result.status.value)
         cancelled = result.status is GateStatus.CANCELLED
 
     report = VerificationReport(

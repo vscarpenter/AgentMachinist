@@ -2,24 +2,34 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
+import shlex
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from machinist.config import MachinistConfig
 from machinist.github import github_command_environment
 from machinist.harness import get_harness
 from machinist.lifecycle import RunStatus, TaskLifecycle
 from machinist.observability import build_run_report
+from machinist.process import run_supervised
 from machinist.updates import UpdateCheck, UpdateStatus, check_for_update
-from machinist.workflows import WorkflowDriftError, sync_workflows
-from machinist.workspace import github_repository_target
+from machinist.verification import (
+    VerificationError,
+    VerificationFailed,
+    run_verification_gates,
+)
+from machinist.workflows import WorkflowDriftError, expected_workflows, sync_workflows
+from machinist.workspace import Workspace, github_repository_target
 
 _COMMAND_TIMEOUT_SECONDS = 10
 
@@ -44,6 +54,28 @@ class DoctorReport:
     @property
     def ok(self) -> bool:
         return all(check.level is not CheckLevel.FAIL for check in self.checks)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ok": self.ok,
+            "checks": [
+                {
+                    "level": check.level.value,
+                    "name": check.name,
+                    "detail": check.detail,
+                }
+                for check in self.checks
+            ],
+        }
+
+
+@dataclass(frozen=True)
+class _GitHubReadiness:
+    host: str | None = None
+    repository: str | None = None
+    repo_target: str | None = None
+    default_branch: str | None = None
+    viewer_permission: str | None = None
 
 
 def _run_read_only(
@@ -341,9 +373,14 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
                     "cannot check without gh",
                 ),
                 DoctorCheck(CheckLevel.FAIL, "labels", "cannot check without gh"),
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "GitHub authorization",
+                    "cannot check without gh",
+                ),
             )
         )
-        return
+        return _GitHubReadiness()
     if derived_target is None:
         detail = "cannot bind GitHub probes to a recognized controller origin"
         checks.extend(
@@ -352,9 +389,10 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
                 DoctorCheck(CheckLevel.FAIL, "GitHub repository", detail),
                 DoctorCheck(CheckLevel.FAIL, "default branch", detail),
                 DoctorCheck(CheckLevel.FAIL, "labels", detail),
+                DoctorCheck(CheckLevel.FAIL, "GitHub authorization", detail),
             )
         )
-        return
+        return _GitHubReadiness()
 
     host, expected_repo = derived_target
     repo_target = expected_repo if host == "github.com" else f"{host}/{expected_repo}"
@@ -387,7 +425,7 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
         "view",
         repo_target,
         "--json",
-        "nameWithOwner,defaultBranchRef",
+        "nameWithOwner,defaultBranchRef,viewerPermission",
     ]
     result, error = _run_read_only(
         runner,
@@ -395,17 +433,27 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
         cwd=root,
         env=environment,
     )
+    default_branch = None
+    viewer_permission = None
     if error or result.returncode != 0:
         detail = error or _command_failure(result)
         checks.append(DoctorCheck(CheckLevel.FAIL, "GitHub repository", detail))
         checks.append(
             DoctorCheck(CheckLevel.FAIL, "default branch", "repository lookup failed")
         )
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL, "GitHub authorization", "repository lookup failed"
+            )
+        )
     else:
         try:
             data = json.loads(result.stdout or "")
             github_repo = data["nameWithOwner"]
             default_branch = data["defaultBranchRef"]["name"]
+            viewer_permission = data["viewerPermission"]
+            if not isinstance(viewer_permission, str):
+                raise TypeError("viewerPermission must be a string")
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             checks.append(
                 DoctorCheck(
@@ -417,6 +465,13 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
             checks.append(
                 DoctorCheck(
                     CheckLevel.FAIL, "default branch", "repository lookup failed"
+                )
+            )
+            checks.append(
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "GitHub authorization",
+                    "repository lookup failed",
                 )
             )
         else:
@@ -433,6 +488,18 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
             checks.append(DoctorCheck(level, "GitHub repository", detail))
             checks.append(
                 DoctorCheck(CheckLevel.PASS, "default branch", default_branch)
+            )
+            authorized = viewer_permission.upper() in {"WRITE", "MAINTAIN", "ADMIN"}
+            checks.append(
+                DoctorCheck(
+                    CheckLevel.PASS if authorized else CheckLevel.FAIL,
+                    "GitHub authorization",
+                    (
+                        f"{viewer_permission.lower()} access can push branches and manage PRs"
+                        if authorized
+                        else f"{viewer_permission.lower()} access is insufficient; write access is required"
+                    ),
+                )
             )
 
     label_args = [
@@ -456,14 +523,18 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
         checks.append(
             DoctorCheck(CheckLevel.FAIL, "labels", error or _command_failure(result))
         )
-        return
+        return _GitHubReadiness(
+            host, expected_repo, repo_target, default_branch, viewer_permission
+        )
     try:
         names = {item["name"] for item in json.loads(result.stdout or "")}
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         checks.append(
             DoctorCheck(CheckLevel.FAIL, "labels", f"invalid gh response: {exc}")
         )
-        return
+        return _GitHubReadiness(
+            host, expected_repo, repo_target, default_branch, viewer_permission
+        )
     label_config = getattr(config.github, "labels", None)
     required = {
         getattr(label_config, "trigger", "agent-task"),
@@ -482,6 +553,369 @@ def _add_github_checks(checks, root, config, locations, runner, derived_target):
             "labels",
             "required labels are present and readable",
         )
+    )
+    return _GitHubReadiness(
+        host, expected_repo, repo_target, default_branch, viewer_permission
+    )
+
+
+def _add_harness_checks(checks, root, config, which, runner) -> None:
+    try:
+        profiles = {
+            "Spec": get_harness(_harness_for(config, "spec")),
+            "Execute": get_harness(_harness_for(config, "execute")),
+        }
+    except Exception as exc:  # noqa: BLE001 - report adapter/config failures
+        checks.append(
+            DoctorCheck(CheckLevel.FAIL, "harness", f"cannot resolve harness: {exc}")
+        )
+        return
+
+    located: dict[tuple[str, str], str | None] = {}
+    for profile, harness in profiles.items():
+        identity = (harness.name, harness.command)
+        if identity not in located:
+            try:
+                location = (
+                    harness.command
+                    if Path(harness.command).is_absolute()
+                    and Path(harness.command).exists()
+                    else which(harness.command)
+                )
+            except Exception as exc:  # noqa: BLE001
+                checks.append(
+                    DoctorCheck(
+                        CheckLevel.FAIL,
+                        "harness",
+                        f"cannot locate '{harness.command}': {exc}",
+                    )
+                )
+                location = None
+            else:
+                checks.append(
+                    DoctorCheck(CheckLevel.PASS, "harness", str(location))
+                    if location
+                    else DoctorCheck(
+                        CheckLevel.FAIL,
+                        "harness",
+                        f"'{harness.command}' is not on PATH; install it or set harness.command",
+                    )
+                )
+            located[identity] = location
+
+            if location:
+                result, error = _run_read_only(runner, harness.version_argv(), cwd=root)
+                if error or result.returncode != 0:
+                    checks.append(
+                        DoctorCheck(
+                            CheckLevel.FAIL,
+                            f"{harness.name} version",
+                            error or _command_failure(result),
+                        )
+                    )
+                else:
+                    output = (result.stdout or result.stderr or "").strip().splitlines()
+                    detail = output[0][:200] if output else "version probe succeeded"
+                    checks.append(
+                        DoctorCheck(CheckLevel.PASS, f"{harness.name} version", detail)
+                    )
+
+                auth_argv = harness.authentication_argv()
+                if auth_argv is None:
+                    checks.append(
+                        DoctorCheck(
+                            CheckLevel.WARN,
+                            f"{harness.name} authentication",
+                            "this Harness has no non-interactive auth probe; verify it manually",
+                        )
+                    )
+                else:
+                    auth_result, auth_error = _run_read_only(
+                        runner, auth_argv, cwd=root
+                    )
+                    ready = (
+                        auth_error is None
+                        and auth_result is not None
+                        and harness.authentication_ready(auth_result)
+                    )
+                    checks.append(
+                        DoctorCheck(
+                            CheckLevel.PASS if ready else CheckLevel.FAIL,
+                            f"{harness.name} authentication",
+                            (
+                                "authenticated for headless use"
+                                if ready
+                                else auth_error
+                                or "authentication probe did not confirm a usable login"
+                            ),
+                        )
+                    )
+
+        if located[identity]:
+            result, error = _run_read_only(
+                runner,
+                harness.compatibility_argv(profile.casefold()),
+                cwd=root,
+            )
+            checks.append(
+                DoctorCheck(
+                    CheckLevel.PASS
+                    if error is None and result.returncode == 0
+                    else CheckLevel.FAIL,
+                    f"{profile} Harness compatibility",
+                    (
+                        f"{harness.name} accepts the configured {profile} invocation"
+                        if error is None and result.returncode == 0
+                        else error or _command_failure(result)
+                    ),
+                )
+            )
+
+
+def _add_actions_secret_check(
+    checks, root, config, readiness: _GitHubReadiness, runner
+) -> None:
+    if _enum_value(
+        getattr(config.github, "spec_source", "local")
+    ) != "github-actions" or not getattr(config.github, "manage_workflows", True):
+        return
+    if not readiness.repo_target or not readiness.repository or not readiness.host:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "Actions Spec credential",
+                "cannot verify without a bound GitHub repository",
+            )
+        )
+        return
+    environment = github_command_environment(readiness.host)
+    args = [
+        "gh",
+        "secret",
+        "list",
+        "--repo",
+        readiness.repo_target,
+        "--json",
+        "name",
+    ]
+    result, error = _run_read_only(runner, args, cwd=root, env=environment)
+    if error or result.returncode != 0:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "Actions Spec credential",
+                error or _command_failure(result),
+            )
+        )
+        return
+    try:
+        names = {item["name"] for item in json.loads(result.stdout or "")}
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "Actions Spec credential",
+                f"invalid gh response: {exc}",
+            )
+        )
+        return
+    if "ANTHROPIC_API_KEY" in names:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.PASS,
+                "Actions Spec credential",
+                "ANTHROPIC_API_KEY repository secret is configured",
+            )
+        )
+        return
+
+    owner_args = [
+        "gh",
+        "api",
+        f"repos/{readiness.repository}",
+        "--jq",
+        ".owner.type",
+    ]
+    if readiness.host != "github.com":
+        owner_args.extend(["--hostname", readiness.host])
+    owner_result, owner_error = _run_read_only(
+        runner, owner_args, cwd=root, env=environment
+    )
+    owner_type = (
+        (owner_result.stdout or "").strip()
+        if owner_error is None and owner_result.returncode == 0
+        else ""
+    )
+    if owner_type == "Organization":
+        checks.append(
+            DoctorCheck(
+                CheckLevel.WARN,
+                "Actions Spec credential",
+                "ANTHROPIC_API_KEY is not a repository secret; confirm an inherited organization secret can access this repository",
+            )
+        )
+    else:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "Actions Spec credential",
+                "ANTHROPIC_API_KEY is missing; run 'gh secret set ANTHROPIC_API_KEY' before labeling a Task",
+            )
+        )
+
+
+def _remote_workflows_check(
+    root: Path,
+    config: MachinistConfig,
+    *,
+    readiness: _GitHubReadiness,
+    installed_version: str,
+    runner,
+) -> DoctorCheck:
+    if not readiness.repository or not readiness.default_branch or not readiness.host:
+        return DoctorCheck(
+            CheckLevel.FAIL,
+            "remote workflows",
+            "cannot verify deployment without a readable GitHub default branch",
+        )
+    wanted = expected_workflows(config, installed_version=installed_version)
+    environment = github_command_environment(readiness.host)
+    missing: list[str] = []
+    drifted: list[str] = []
+    for name, expected in wanted.items():
+        endpoint = (
+            f"repos/{readiness.repository}/contents/.github/workflows/{name}"
+            f"?ref={quote(readiness.default_branch, safe='')}"
+        )
+        args = ["gh", "api", endpoint, "--jq", ".content"]
+        if readiness.host != "github.com":
+            args.extend(["--hostname", readiness.host])
+        result, error = _run_read_only(runner, args, cwd=root, env=environment)
+        if error or result.returncode != 0:
+            missing.append(name)
+            continue
+        try:
+            encoded = "".join((result.stdout or "").split())
+            actual = base64.b64decode(encoded, validate=True).decode("utf-8")
+        except (binascii.Error, UnicodeError):
+            drifted.append(name)
+            continue
+        if actual != expected:
+            drifted.append(name)
+
+    if missing or drifted:
+        details: list[str] = []
+        if missing:
+            details.append("missing: " + ", ".join(missing))
+        if drifted:
+            details.append("different: " + ", ".join(drifted))
+        return DoctorCheck(
+            CheckLevel.FAIL,
+            "remote workflows",
+            "; ".join(details)
+            + "; run 'machinist sync-workflows', then commit and push",
+        )
+    return DoctorCheck(
+        CheckLevel.PASS,
+        "remote workflows",
+        f"managed workflows are deployed on {readiness.default_branch}",
+    )
+
+
+def _verification_command_check(gates, root: Path, which) -> DoctorCheck:
+    missing: list[str] = []
+    invalid: list[str] = []
+    shell_builtins = {".", ":", "cd", "eval", "exec", "export", "set", "source"}
+    for gate in gates:
+        try:
+            words = shlex.split(gate.command, posix=True)
+        except ValueError:
+            invalid.append(gate.name)
+            continue
+        executable = next(
+            (word for word in words if "=" not in word or word.startswith(("/", "./"))),
+            None,
+        )
+        if executable is None:
+            invalid.append(gate.name)
+            continue
+        if executable in shell_builtins:
+            continue
+        if "/" in executable:
+            candidate = Path(executable)
+            if not candidate.is_absolute():
+                candidate = root / candidate
+            available = candidate.is_file() and os.access(candidate, os.X_OK)
+        else:
+            try:
+                available = which(executable) is not None
+            except Exception:  # noqa: BLE001 - diagnostics aggregate PATH failures
+                available = False
+        if not available:
+            missing.append(f"{gate.name} ({executable})")
+    if invalid or missing:
+        details: list[str] = []
+        if invalid:
+            details.append("invalid command: " + ", ".join(invalid))
+        if missing:
+            details.append("missing executable: " + ", ".join(missing))
+        return DoctorCheck(CheckLevel.FAIL, "verification commands", "; ".join(details))
+    return DoctorCheck(
+        CheckLevel.PASS,
+        "verification commands",
+        f"{len(gates)} configured gate command(s) have launchable entry points",
+    )
+
+
+def _run_gate_readiness(
+    root: Path,
+    config: MachinistConfig,
+    gates,
+    *,
+    gate_runner,
+) -> DoctorCheck:
+    if not gates:
+        return DoctorCheck(
+            CheckLevel.WARN,
+            "verification execution",
+            "no configured gates to execute",
+        )
+    try:
+        workspace = Workspace(repo_root=root, config=config.workspace)
+        with tempfile.TemporaryDirectory(prefix="machinist-doctor-gates-") as logs:
+            report = run_verification_gates(
+                root,
+                gates,
+                log_dir=logs,
+                snapshotter=workspace.change_snapshot,
+                runner=gate_runner,
+            )
+    except VerificationFailed as exc:
+        failures = ", ".join(
+            f"{gate.name} ({gate.status.value})" for gate in exc.failures
+        )
+        return DoctorCheck(
+            CheckLevel.FAIL,
+            "verification execution",
+            f"configured gates blocked: {failures}",
+        )
+    except (VerificationError, OSError, ValueError) as exc:
+        return DoctorCheck(
+            CheckLevel.FAIL,
+            "verification execution",
+            f"could not execute configured gates safely: {exc}",
+        )
+    if report.advisory_failures:
+        failures = ", ".join(gate.name for gate in report.advisory_failures)
+        return DoctorCheck(
+            CheckLevel.WARN,
+            "verification execution",
+            f"required gates passed; advisory failures: {failures}",
+        )
+    return DoctorCheck(
+        CheckLevel.PASS,
+        "verification execution",
+        f"all {len(report.gates)} configured gate(s) passed",
     )
 
 
@@ -509,6 +943,8 @@ def run_doctor(
     which: Callable[[str], str | None] = shutil.which,
     runner=subprocess.run,
     update_probe: Callable[[str], UpdateCheck] = check_for_update,
+    run_gates: bool = False,
+    gate_runner=run_supervised,
 ) -> DoctorReport:
     """Accumulate diagnostics without creating or changing repository files."""
     root = Path(repo_root).expanduser().resolve()
@@ -535,7 +971,9 @@ def run_doctor(
     repository_ok, derived_target = _add_repository_checks(
         checks, root, config, locations, runner
     )
-    _add_github_checks(checks, root, config, locations, runner, derived_target)
+    github_readiness = _add_github_checks(
+        checks, root, config, locations, runner, derived_target
+    )
 
     try:
         workspace_root = config.workspace.resolved_root()
@@ -572,48 +1010,10 @@ def run_doctor(
         )
 
     try:
-        execute_config = _harness_for(config, "execute")
         spec_config = _harness_for(config, "spec")
-        execute_harness = get_harness(execute_config)
-        spec_harness = get_harness(spec_config)
-    except Exception as exc:  # noqa: BLE001 - report adapter/config failures
-        checks.append(
-            DoctorCheck(CheckLevel.FAIL, "harness", f"cannot resolve harness: {exc}")
-        )
+    except Exception:  # resolved and reported by the detailed harness checks
         spec_config = config.harness
-    else:
-        harnesses = [("harness", execute_harness)]
-        if (spec_harness.command, spec_harness.name) != (
-            execute_harness.command,
-            execute_harness.name,
-        ):
-            harnesses.append(("Spec harness", spec_harness))
-        for check_name, harness in harnesses:
-            try:
-                harness_location = (
-                    harness.command
-                    if Path(harness.command).is_absolute()
-                    and Path(harness.command).exists()
-                    else which(harness.command)
-                )
-            except Exception as exc:  # noqa: BLE001 - report PATH probe failures
-                checks.append(
-                    DoctorCheck(
-                        CheckLevel.FAIL,
-                        check_name,
-                        f"cannot locate '{harness.command}': {exc}",
-                    )
-                )
-                continue
-            checks.append(
-                DoctorCheck(CheckLevel.PASS, check_name, str(harness_location))
-                if harness_location
-                else DoctorCheck(
-                    CheckLevel.FAIL,
-                    check_name,
-                    f"'{harness.command}' is not on PATH; install it or set harness.command",
-                )
-            )
+    _add_harness_checks(checks, root, config, which, runner)
 
     spec_source = _enum_value(getattr(config.github, "spec_source", "local"))
     harness_name = _enum_value(getattr(spec_config, "name", "claude-code"))
@@ -648,6 +1048,8 @@ def run_doctor(
             )
         )
 
+    _add_actions_secret_check(checks, root, config, github_readiness, runner)
+
     gate_resolver = getattr(config, "resolved_verification_gates", None)
     try:
         gates = tuple(gate_resolver()) if callable(gate_resolver) else ()
@@ -668,6 +1070,16 @@ def run_doctor(
                     + ", ".join(getattr(gate, "name", "unnamed") for gate in gates),
                 )
             )
+            checks.append(_verification_command_check(gates, root, which))
+            if run_gates:
+                checks.append(
+                    _run_gate_readiness(
+                        root,
+                        config,
+                        gates,
+                        gate_runner=gate_runner,
+                    )
+                )
         elif legacy_command:
             checks.append(DoctorCheck(CheckLevel.PASS, "test gate", legacy_command))
         else:
@@ -688,6 +1100,7 @@ def run_doctor(
             )
         )
     else:
+        local_workflows_match = False
         try:
             sync_workflows(
                 root, config, installed_version=installed_version, check=True
@@ -699,9 +1112,20 @@ def run_doctor(
                 DoctorCheck(CheckLevel.FAIL, "workflows", f"drift check failed: {exc}")
             )
         else:
+            local_workflows_match = True
             checks.append(
                 DoctorCheck(
                     CheckLevel.PASS, "workflows", "managed workflows match config"
+                )
+            )
+        if local_workflows_match:
+            checks.append(
+                _remote_workflows_check(
+                    root,
+                    config,
+                    readiness=github_readiness,
+                    installed_version=installed_version,
+                    runner=runner,
                 )
             )
 

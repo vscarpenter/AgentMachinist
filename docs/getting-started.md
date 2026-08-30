@@ -29,6 +29,9 @@ Install and verify:
 | One harness | for example, `claude --version` |
 
 You need push and pull-request access to the target GitHub repository.
+The core CLI is tested on macOS and Linux with Python 3.12–3.14. The managed
+LaunchAgent integration is macOS-only; Linux users can schedule
+`machinist watch --once` with their existing service manager.
 
 ## Install
 
@@ -98,7 +101,8 @@ run, each with a one-line explanation and a safe default:
 Flags pre-answer their questions and skip them: `--spec-source`, `--harness`,
 `--test-cmd`, `--workflows/--no-workflows`, and `--notifications`. Passing
 `--no-input`, or running without a terminal (CI, pipes), skips every question
-and uses the defaults plus test-command auto-detection.
+and uses safe defaults. Manifest detection may print a test-command suggestion,
+but non-interactive setup does not enable it unless `--test-cmd` is explicit.
 
 `--no-workflows` is the explicit externally-managed mode. It writes
 `github.manage_workflows: false`, skips workflow generation, and makes
@@ -106,8 +110,8 @@ and uses the defaults plus test-command auto-detection.
 AgentMachinist, set that field to `true`, run `machinist sync-workflows`, review
 the generated files, and commit them.
 
-If you skipped the test-gate question or ran non-interactively without a
-detectable manifest, set a real test gate before committing:
+If you skipped the test-gate question or ran non-interactively, set a real test
+gate before committing (or rerun `init --force --test-cmd "<command>"`):
 
 ```yaml
 tests:
@@ -117,7 +121,8 @@ tests:
 Then verify the installation without changing it:
 
 ```sh
-machinist doctor
+machinist doctor --run-gates
+machinist sync-labels --check
 machinist sync-workflows --check
 ```
 
@@ -184,13 +189,17 @@ Or post the exact PR comment:
 ```
 
 Copy the full SHA-bound command from the Spec PR body. The managed workflow
-honors it only from owners, members, or collaborators and refuses the approval
-if the PR head changed before the job ran. Applying the configured
+first requires write or admin access and refuses the approval if the PR head
+changed before the job ran. Applying the configured
 `machinist:approved` label manually binds the approval to the head SHA carried
 by that label event, so a queued force-push cannot silently authorize new code.
-The label path requires write or admin access, because GitHub grants label
-permission at triage level and triage cannot push code. Either way the
-approver's login is recorded on the approval comment.
+Both paths require write or admin access, because association and label
+permission can be weaker than push authority. Either way the approver's login
+is recorded on the approval comment. `machinist approve` requests this workflow
+transition; `machinist status` remains `awaiting approval` until the workflow
+has verified and recorded it. `approval pending` means a label is already
+visible without trusted SHA Evidence, as can happen briefly on the manual-label
+path.
 
 If anyone changes the spec branch afterward, `machinist status` reports
 `approval stale` and execution refuses. Approve the new head again.
@@ -615,8 +624,11 @@ machinist service uninstall
 ```
 
 `stop` preserves the installed plist and logs. `uninstall` removes the plist
-but deliberately preserves logs. Service management currently supports macOS
-launchd only.
+but deliberately preserves logs. `status` reports launchd registration, the
+last completed watcher poll, health, and active Task Runs. Install, restart,
+stop, and uninstall refuse to interrupt an active Claim; wait for it to finish
+or pass `--force` only when termination is intentional. Service management
+currently supports macOS launchd only.
 
 ## Local evidence and repository portfolio
 
@@ -650,7 +662,7 @@ healthy ones instead of failing the entire view.
 Start with:
 
 ```sh
-machinist doctor
+machinist doctor --run-gates
 machinist status
 machinist inspect 7
 ```
@@ -661,10 +673,16 @@ Common states and responses:
 | --- | --- |
 | `awaiting spec` | Run local `watch`/`spec`, or verify the CI dispatcher. |
 | `awaiting approval` | Review the draft spec. |
-| `approval pending` | The label exists but SHA evidence has not been recorded; approve again. |
+| `approval pending` | The label exists but SHA evidence has not been recorded; inspect the approval workflow, then approve again only if it failed. |
 | `approval stale` | The branch changed after approval; approve the current head. |
 | `approved` | Run `machinist run <issue>` or leave `watch` running. |
 | `in review` | Implementation finished; review the PR. |
+| `spec running` / `execute running` | Machinist holds the Claim; `status`/`runs` show its current named stage and elapsed time. |
+| `spec interrupted` / `execute interrupted` | No process holds the recorded Claim; run the exact `Next:` retry command. |
+| `spec failed` / `execute failed` | Inspect the retained Evidence, fix the cause, then use the displayed retry command. |
+| `spec cancelled` / `execute cancelled` | Clear or replace the cancellation request before retrying. |
+| `spec abandoned` / `execute abandoned` | The operator ended this lifecycle; retry only after deciding it should resume. |
+| `spec closed` | The Spec PR is closed; revise the Task intent before starting another Spec. |
 | Failed Execute run retained useful edits | Inspect the path, then run `machinist retry <issue> --phase execute --run --resume` from the repository root. |
 | Failed Execute run should start clean | Run `machinist retry <issue> --phase execute --run --fresh`. Omitting both recovery flags also selects a fresh attempt. |
 | Task should not start again | Run `machinist cancel <issue> --reason "..."`; clear it directly or explicitly retry only when dispatch is safe. |

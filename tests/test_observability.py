@@ -179,6 +179,32 @@ def test_human_summary_surfaces_run_and_partial_failure_counts(tmp_path):
     assert "github unavailable: RuntimeError: offline" in lines
 
 
+def test_human_summary_distinguishes_interrupted_projection_from_live_claim(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    now = "2026-08-30T12:00:00+00:00"
+    lifecycle.runs_dir.mkdir()
+    (lifecycle.runs_dir / "issue-61-execute.json").write_text(
+        '{"attempt":1,"error":null,"evidence":{"current_stage":"verification 1/2"},'
+        f'"issue":61,"phase":"execute","started_at":"{now}",'
+        f'"status":"running","updated_at":"{now}"}}\n'
+    )
+
+    lines = summarize_run_report(build_run_report(lifecycle), lifecycle=lifecycle)
+
+    assert any("#61 execute interrupted" in line for line in lines)
+    assert any("stage: verification 1/2" in line for line in lines)
+    assert "    Next: machinist retry 61 --phase execute" in lines
+
+
+def test_successful_spec_summary_points_to_the_human_approval_gate(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(62, Phase.SPEC, lambda claim: None)
+
+    lines = summarize_run_report(build_run_report(lifecycle), lifecycle=lifecycle)
+
+    assert "    Next: machinist approve --issue 62" in lines
+
+
 @pytest.mark.parametrize("issue", [0, -1, True])
 def test_issue_scope_must_be_a_positive_integer(tmp_path, issue):
     lifecycle = TaskLifecycle(tmp_path / "runs")

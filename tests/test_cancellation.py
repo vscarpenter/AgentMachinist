@@ -27,6 +27,45 @@ def test_corrupt_marker_fails_closed(tmp_path: Path):
         store.requested(42)
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("reason", 7),
+        ("issue", True),
+        ("requested_at", []),
+        ("requester_pid", "123"),
+    ],
+)
+def test_valid_json_with_wrong_schema_types_fails_closed(tmp_path, field, value):
+    import json
+
+    store = CancellationStore(tmp_path / "runs")
+    request = store.request(42, "stop")
+    marker = store.root / "issue-42.json"
+    payload = {
+        "issue": request.issue,
+        "reason": request.reason,
+        "requested_at": request.requested_at,
+        "requester_pid": request.requester_pid,
+    }
+    payload[field] = value
+    marker.write_text(json.dumps(payload))
+
+    with pytest.raises(CancellationError, match="corrupt"):
+        store.requested(42)
+
+
+def test_compare_and_clear_preserves_a_newer_cancellation_generation(tmp_path):
+    store = CancellationStore(tmp_path / "runs")
+    observed = store.request(42, "stop attempt one")
+    replacement = store.request(42, "stop the retry too")
+
+    assert not store.clear_if_matches(42, observed)
+    assert store.get(42) == replacement
+    assert store.clear_if_matches(42, replacement)
+    assert store.get(42) is None
+
+
 def test_oversized_marker_fails_closed_without_reading_its_payload(tmp_path: Path):
     store = CancellationStore(tmp_path / "runs")
     store.root.mkdir(parents=True)

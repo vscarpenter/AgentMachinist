@@ -274,15 +274,24 @@ class GitHubClient:
         return None
 
     def approve_pr(self, number: int, *, label: str, head_sha: str) -> None:
-        """Record immutable approval evidence before exposing the approval label."""
+        """Request server-side Approval for exactly one observed PR head.
+
+        The managed workflow re-reads the current PR head before it records
+        Evidence or adds the approval label. Keeping both mutations in that
+        server-side transaction prevents a branch update between a local
+        comment and a local label write from authorizing the wrong commit.
+
+        ``label`` remains in the interface for compatibility with callers and
+        third-party adapters; the managed workflow owns the label mutation.
+        """
+        del label
         self._gh(
             "pr",
             "comment",
             str(number),
             "--body",
-            f"<!-- agentmachinist:approval sha={head_sha.lower()} -->",
+            f"/machinist-execute {head_sha.lower()}",
         )
-        self._gh("pr", "edit", str(number), "--add-label", label)
 
     def ensure_label(self, name: str, *, color: str, description: str) -> None:
         # --force updates an existing label instead of failing, making this idempotent.
@@ -296,6 +305,20 @@ class GitHubClient:
             "--description",
             description,
         )
+
+    def label_names(self) -> set[str]:
+        data = self._gh_json(
+            "label",
+            "list",
+            "--limit",
+            str(_LIST_LIMIT),
+            "--json",
+            "name",
+        )
+        try:
+            return {item["name"] for item in data}
+        except (KeyError, TypeError) as exc:
+            raise GitHubError(f"gh label list returned invalid data: {exc}") from exc
 
     def _gh(self, *args: str) -> str:
         argv = ["gh", *args]

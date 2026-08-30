@@ -1,5 +1,11 @@
 # AgentMachinist v0.1 Design
 
+> [!IMPORTANT]
+> **Historical design record.** This specification preserves the original v0.1
+> contract and is not current operating documentation. See
+> [Getting Started](../../getting-started.md) and
+> [Architecture and lifecycle](../../architecture.md) for current behavior.
+
 **Date:** 2026-08-16
 **Status:** Approved (stack: Python + Click; spec-gen: local + CI from day one)
 

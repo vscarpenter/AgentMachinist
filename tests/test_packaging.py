@@ -43,12 +43,17 @@ def test_smoke_wheel_script_selects_versioned_wheel_and_templates():
     assert "set -euo pipefail" in text
     assert "tomllib" in text
     assert "agentmachinist-${VERSION}-py3-none-any.whl" in text
+    assert "agentmachinist-${VERSION}.tar.gz" in text
     assert "machinist --version" in text
+    assert "machinist init --no-input --no-workflows" in text
+    assert "machinist config validate" in text
+    assert "machinist status --local --json" in text
     assert "spec-prompt.md" in text
     assert "machinist-approve.yml" in text
     assert "uv pip check" in text
     assert "uv run python" not in text
     assert "find dist" not in text
+    assert 'uv pip install --python "$SDIST_ENV/bin/python" "$SDIST"' in text
 
 
 def test_verify_script_is_the_canonical_frozen_build_gate():
@@ -135,6 +140,20 @@ def test_static_type_gate_is_zero_error_core_with_explicit_expansion_debt():
     )
     assert "ignore_errors" not in mypy
     assert "disable_error_code" not in mypy
+
+
+def test_package_metadata_states_the_tested_python_and_platform_contract():
+    project = tomllib.loads((_ROOT / "pyproject.toml").read_text())["project"]
+    classifiers = set(project["classifiers"])
+
+    assert project["requires-python"] == ">=3.12"
+    assert {
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
+        "Operating System :: MacOS",
+        "Operating System :: POSIX :: Linux",
+    } <= classifiers
 
 
 @pytest.mark.skipif(

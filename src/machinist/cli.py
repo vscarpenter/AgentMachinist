@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import time
+import tomllib
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
 from pathlib import Path
@@ -59,7 +60,7 @@ from machinist.notify import (
     notification_dedupe_key,
     notify_event,
 )
-from machinist.observability import build_run_report, summarize_run_report
+from machinist.observability import RunReport, build_run_report, summarize_run_report
 from machinist.phases.execute import (
     MAX_FEEDBACK_FILE_BYTES,
     ExecutePhaseError,
@@ -67,7 +68,7 @@ from machinist.phases.execute import (
     run_execute_phase,
 )
 from machinist.phases.spec import SpecPhaseError, preview_spec_phase, run_spec_phase
-from machinist.phases.status import pipeline_status
+from machinist.phases.status import StatusRow, next_action_for_status, pipeline_status
 from machinist.phases.watch import WatchState, plan_watch_tasks, watch_once
 from machinist.portfolio import (
     DEFAULT_REGISTRY_PATH,
@@ -77,7 +78,13 @@ from machinist.portfolio import (
 )
 from machinist.process import run_supervised
 from machinist.queue_control import QueueControl, QueueControlError
-from machinist.service import LaunchdService, ServiceError, read_log_tail
+from machinist.service import (
+    LaunchdService,
+    ServiceError,
+    read_log_tail,
+    read_watcher_heartbeat,
+    write_watcher_heartbeat,
+)
 from machinist.updates import (
     DEFAULT_TIMEOUT_SECONDS,
     UpdateStatus,
@@ -123,15 +130,115 @@ def _stdin_is_interactive() -> bool:
 
 
 def _detect_test_command(root: Path) -> str | None:
-    if (root / "pyproject.toml").exists() or (root / "uv.lock").exists():
-        return "uv run pytest"
-    if (root / "package.json").exists():
-        return "npm test"
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            data = tomllib.loads(pyproject.read_text())
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+            data = {}
+        dependency_text = json.dumps(
+            {
+                "project": data.get("project", {}),
+                "dependency-groups": data.get("dependency-groups", {}),
+                "tool": {"uv": data.get("tool", {}).get("uv", {})},
+            }
+        ).casefold()
+        pytest_configured = bool(data.get("tool", {}).get("pytest"))
+        if pytest_configured or re.search(r"\bpytest(?:\W|$)", dependency_text):
+            return (
+                "uv run pytest" if (root / "uv.lock").is_file() else "python -m pytest"
+            )
+    package_json = root / "package.json"
+    if package_json.is_file():
+        try:
+            package = json.loads(package_json.read_text())
+            script = package.get("scripts", {}).get("test")
+        except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+            script = None
+        if (
+            isinstance(script, str)
+            and script.strip()
+            and "no test specified" not in script.casefold()
+        ):
+            if (root / "bun.lock").exists() or (root / "bun.lockb").exists():
+                return "bun run test"
+            if (root / "pnpm-lock.yaml").exists():
+                return "pnpm test"
+            if (root / "yarn.lock").exists():
+                return "yarn test"
+            return "npm test"
     if (root / "Cargo.toml").exists():
         return "cargo test"
     if (root / "go.mod").exists():
         return "go test ./..."
     return None
+
+
+def _print_init_receipt(
+    config: MachinistConfig,
+    *,
+    labels_ready: bool,
+    suggested_test_command: str | None,
+) -> None:
+    gates = config.resolved_verification_gates()
+    trigger = config.github.labels.trigger
+    source = config.github.spec_source.value
+    click.echo("\nSetup receipt:")
+    click.echo(f"  Spec dispatch: {source}")
+    click.echo("  Execute dispatch: local watcher")
+    if gates:
+        click.echo(
+            "  Verification: "
+            + ", ".join(
+                f"{gate.name} ({'required' if gate.required else 'advisory'})"
+                for gate in gates
+            )
+        )
+    else:
+        suggestion = (
+            f" Suggested command: {suggested_test_command!r}."
+            if suggested_test_command
+            else ""
+        )
+        click.echo(
+            "  Verification: NOT CONFIGURED — a PR can be marked ready without tests."
+            + suggestion
+        )
+    click.echo(f"  Labels: {'ready' if labels_ready else 'setup incomplete'}")
+    click.echo(
+        "  Approval workflow: "
+        + ("managed" if config.github.manage_workflows else "external setup required")
+    )
+
+    click.echo("\nNext steps:")
+    step = 1
+    if not gates:
+        command = suggested_test_command or "<your test command>"
+        click.echo(
+            f"  {step}. Configure a required gate: machinist init --force --test-cmd {json.dumps(command)}"
+        )
+        step += 1
+    if not labels_ready:
+        click.echo(f"  {step}. Create/update labels: machinist sync-labels --apply")
+        step += 1
+    if source == "github-actions" and config.github.manage_workflows:
+        click.echo(
+            f"  {step}. Configure CI authentication: gh secret set ANTHROPIC_API_KEY"
+        )
+        step += 1
+    click.echo(
+        f"  {step}. Review machinist.yaml, then commit and push the generated files."
+    )
+    step += 1
+    click.echo(f"  {step}. Prove readiness: machinist doctor --run-gates")
+    step += 1
+    click.echo(
+        f"  {step}. Start dispatch: machinist watch  (or, on macOS, machinist service install)"
+    )
+    step += 1
+    click.echo(
+        f"  {step}. Label an issue {trigger!r}; follow it with 'machinist status' and 'machinist runs'."
+    )
 
 
 def _repository_root(cwd: Path) -> Path:
@@ -348,7 +455,7 @@ def main() -> None:
 @click.option(
     "--no-input",
     is_flag=True,
-    help="Skip interactive questions; use flags and auto-detection only.",
+    help="Skip interactive questions; use explicit flags and safe suggestions.",
 )
 def init(
     force: bool,
@@ -399,7 +506,9 @@ def init(
         answers = InitAnswers(
             spec_source=spec_source,
             harness_name=harness_name,
-            test_command=test_cmd or detected_test_cmd,
+            # Detection is a suggestion, not proof. Non-interactive setup must
+            # not silently convert a manifest into a passing-test guarantee.
+            test_command=test_cmd,
             install_workflows=True if install_workflows is None else install_workflows,
             notification_backend=notifications,
             notification_events=None,
@@ -425,9 +534,13 @@ def init(
     except (ManagedPathError, WorkflowDriftError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo("wrote machinist.yaml")
-    if not interactive and answers.test_command and not test_cmd:
-        click.echo(f"auto-detected test runner: '{answers.test_command}'")
+    if not interactive and detected_test_cmd and not test_cmd:
+        click.echo(
+            f"suggested test runner (not enabled): '{detected_test_cmd}'; "
+            "confirm it with --test-cmd"
+        )
 
+    labels_ready = False
     try:
         gitkeep = Path(".machinist/specs/.gitkeep")
         if not managed_file_exists(repo_root, gitkeep):
@@ -466,15 +579,14 @@ def init(
             f"ensured GitHub labels '{config.github.labels.trigger}' "
             f"and '{config.github.labels.approved}'"
         )
+        labels_ready = True
     except (GitHubError, WorkspaceError) as exc:
         click.echo(f"note: could not create GitHub labels yet ({exc})")
 
-    click.echo(
-        "\nNext steps:\n"
-        "  1. Review machinist.yaml (harness, labels, test command).\n"
-        "  2. Commit the new files and push.\n"
-        "  3. Run 'machinist doctor' and resolve any FAIL checks.\n"
-        "  4. Label an issue 'agent-task' to start the pipeline."
+    _print_init_receipt(
+        config,
+        labels_ready=labels_ready,
+        suggested_test_command=detected_test_cmd,
     )
 
 
@@ -500,18 +612,69 @@ def sync_workflows_command(check: bool) -> None:
         click.echo("Managed workflows already match machinist.yaml.")
 
 
-@main.command()
-def doctor() -> None:
-    """Run read-only installation and repository diagnostics."""
+@main.command("sync-labels")
+@click.option("--check", is_flag=True, help="Check label readiness without writing.")
+@click.option("--apply", is_flag=True, help="Create or update required labels.")
+@click.pass_context
+def sync_labels_command(ctx: click.Context, check: bool, apply: bool) -> None:
+    """Check or provision the GitHub labels required by the pipeline."""
+    if check and apply:
+        raise click.UsageError("--check and --apply are mutually exclusive")
     try:
         config = load_config()
-        report = run_doctor(Path.cwd(), config, installed_version=_installed_version())
+        github = _bound_github_client(config)
+        required = {
+            config.github.labels.trigger: (
+                _LABEL_COLORS["trigger"],
+                "Machinist: run the pipeline on this issue",
+            ),
+            config.github.labels.approved: (
+                _LABEL_COLORS["approved"],
+                "Machinist: spec approved for implementation",
+            ),
+        }
+        if apply:
+            for name, (color, description) in required.items():
+                github.ensure_label(name, color=color, description=description)
+            click.echo("Required GitHub labels are present and up to date.")
+            return
+        missing = sorted(set(required) - github.label_names())
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    for check in report.checks:
-        click.echo(f"{check.level.value:<4} {check.name:<24} {check.detail}")
+    if missing:
+        click.echo("Missing required GitHub labels: " + ", ".join(missing))
+        click.echo("Run 'machinist sync-labels --apply' to create them.")
+        ctx.exit(1)
+    click.echo("Required GitHub labels are present.")
+
+
+@main.command()
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
+@click.option(
+    "--run-gates",
+    is_flag=True,
+    help="Execute configured verification gates in the controller checkout.",
+)
+@click.pass_context
+def doctor(ctx: click.Context, as_json: bool, run_gates: bool) -> None:
+    """Diagnose installation readiness; gate execution is opt-in."""
+    try:
+        config = load_config()
+        report = run_doctor(
+            Path.cwd(),
+            config,
+            installed_version=_installed_version(),
+            run_gates=run_gates,
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        for check in report.checks:
+            click.echo(f"{check.level.value:<4} {check.name:<28} {check.detail}")
     if not report.ok:
-        raise click.ClickException("doctor found blocking problems")
+        ctx.exit(1)
 
 
 @main.command("update-check")
@@ -682,11 +845,14 @@ def approve(
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"Approved PR #{pr.number} at {pr.head_sha[:12]}.")
+    click.echo(
+        f"Requested approval for PR #{pr.number} at {pr.head_sha[:12]}. "
+        "The approval workflow will verify the current head and record Evidence."
+    )
 
 
 @main.command()
-@click.argument("issue_number", type=int)
+@click.argument("issue_number", type=click.IntRange(min=1))
 @click.option("--phase", type=click.Choice([phase.value for phase in Phase]))
 @click.option(
     "--run",
@@ -718,6 +884,8 @@ def retry(
         raise click.UsageError("--resume/--fresh require --run")
     try:
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        cancellation = CancellationStore(Path(".machinist/runs"))
+        observed_cancellation = cancellation.get(issue_number)
         selected = (
             lifecycle.record(issue_number, Phase(phase))
             if phase is not None
@@ -726,8 +894,7 @@ def retry(
         if resume and selected is not None and selected.phase is not Phase.EXECUTE:
             raise LifecycleError("--resume is available only for the Execute phase")
         record = lifecycle.retry(issue_number, Phase(phase) if phase else None)
-        cancellation = CancellationStore(Path(".machinist/runs"))
-        cancellation.clear(issue_number)
+        cancellation.clear_if_matches(issue_number, observed_cancellation)
         if run_now:
             click.echo(
                 f"Retrying issue #{issue_number} {record.phase.value} "
@@ -889,6 +1056,8 @@ def spec(
                     github.close_pr(pr.number)
             click.echo(f"Abandoned Spec for issue #{issue_number}.")
             return
+        action = "Revising" if revise else "Starting"
+        click.echo(f"{action} Spec Task Run for issue #{issue_number}...")
         pr = lifecycle.run(
             issue_number,
             Phase.SPEC,
@@ -1027,6 +1196,7 @@ def watch(
         return
 
     def dispatch_spec(issue_number: int):
+        click.echo(f"Dispatching Spec Task Run for issue #{issue_number}...")
         pr = lifecycle.run(
             issue_number,
             Phase.SPEC,
@@ -1057,6 +1227,7 @@ def watch(
         return pr
 
     def dispatch_execute(issue_number: int):
+        click.echo(f"Dispatching Execute Task Run for issue #{issue_number}...")
         pr = lifecycle.run(
             issue_number,
             Phase.EXECUTE,
@@ -1096,6 +1267,7 @@ def watch(
                 click.echo(
                     f"[{time.strftime('%X')}] polling GitHub (interval {poll_interval}s)..."
                 )
+            poll_failure: str | None = None
             try:
                 deferred_reasons: dict[tuple[str, int], str] = {}
 
@@ -1155,26 +1327,46 @@ def watch(
                 if once:
                     raise click.ClickException(str(exc)) from exc
                 click.echo(f"poll error: {exc}", err=True)
+                poll_failure = str(exc)
                 result = []
             for event in result:
                 click.echo(event)
-            if verbose:
-                for task in getattr(result, "deferred", ()):
-                    reason = deferred_reasons.get(
-                        (task.phase, task.issue_number),
-                        f"per-pass limit {admission_limit} reached",
-                    )
-                    click.echo(
-                        f"deferred: {task.phase} for issue #{task.issue_number}: {reason}"
-                    )
-            if once:
-                if not result:
-                    click.echo("Nothing to do.")
-                failures = getattr(
-                    result,
-                    "failures",
-                    tuple(event for event in result if event.startswith("error:")),
+            deferred_tasks = tuple(getattr(result, "deferred", ()))
+            for task in deferred_tasks:
+                reason = deferred_reasons.get(
+                    (task.phase, task.issue_number),
+                    f"per-pass limit {admission_limit} reached",
                 )
+                click.echo(
+                    f"deferred: {task.phase} for issue #{task.issue_number}: {reason}"
+                )
+            if deferred_tasks:
+                attempted = len(getattr(result, "attempted", ()))
+                click.echo(
+                    f"Pass summary: {attempted} dispatched, "
+                    f"{len(deferred_tasks)} deferred."
+                )
+            failures = getattr(
+                result,
+                "failures",
+                tuple(event for event in result if event.startswith("error:")),
+            )
+            failure_count = len(failures) + int(poll_failure is not None)
+            try:
+                write_watcher_heartbeat(
+                    repo_root,
+                    attempted=len(getattr(result, "attempted", ())),
+                    deferred=len(deferred_tasks),
+                    failures=failure_count,
+                    interval_seconds=poll_interval,
+                )
+            except ServiceError as exc:
+                if once:
+                    raise click.ClickException(str(exc)) from exc
+                click.echo(f"watcher health error: {exc}", err=True)
+            if once:
+                if not result and not deferred_tasks:
+                    click.echo("Nothing to do.")
                 if failures:
                     raise click.ClickException(
                         f"{len(failures)} Task dispatch(es) failed"
@@ -1223,6 +1415,7 @@ def run(
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
         cancellations = CancellationStore(Path(".machinist/runs"))
         if retry_failed:
+            observed_cancellation = cancellations.get(issue_number)
             prior = lifecycle.record(issue_number, Phase.EXECUTE)
             if prior and prior.status in {
                 RunStatus.FAILED,
@@ -1230,12 +1423,13 @@ def run(
                 RunStatus.ABANDONED,
             }:
                 lifecycle.retry(issue_number, Phase.EXECUTE)
-                cancellations.clear(issue_number)
+                cancellations.clear_if_matches(issue_number, observed_cancellation)
         if cancellations.requested(issue_number):
             raise LifecycleError(
                 f"issue #{issue_number} has a cancellation request; "
                 f"run 'machinist cancel {issue_number} --clear' before starting"
             )
+        click.echo(f"Starting Execute Task Run for issue #{issue_number}...")
         pr = lifecycle.run(
             issue_number,
             Phase.EXECUTE,
@@ -1340,6 +1534,7 @@ def amend(
             raise LifecycleError(
                 f"issue #{issue_number} has a cancellation request; clear it first"
             )
+        click.echo(f"Starting amendment Task Run for issue #{issue_number}...")
         pr = lifecycle.run(
             issue_number,
             Phase.EXECUTE,
@@ -1611,7 +1806,7 @@ def _issue_from_workspace_path(repo_root: Path, path: Path) -> int | None:
 
 
 @main.command()
-@click.argument("issue_number", type=int)
+@click.argument("issue_number", type=click.IntRange(min=1))
 @click.option("--offline", is_flag=True, help="Read only local runs and Workshops.")
 @click.option(
     "--json", "as_json", is_flag=True, help="Emit the complete JSON read model."
@@ -1619,19 +1814,27 @@ def _issue_from_workspace_path(repo_root: Path, path: Path) -> int | None:
 def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> None:
     """Show diagnostic and runtime history for ISSUE_NUMBER."""
     try:
-        config = load_config()
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
-        ws = Workspace(repo_root=Path.cwd(), config=config.workspace)
-        github = None if offline else _bound_github_client(config, repo_root=Path.cwd())
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
 
-    branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
-    remote_sources = {
-        "workspaces": lambda: _workspace_source(ws, issue_number),
-    }
+    config = None
+    config_error = None
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        if not offline:
+            raise click.ClickException(str(exc)) from exc
+        config_error = str(exc)
+
+    remote_sources = {}
+    if config is not None:
+        ws = Workspace(repo_root=Path.cwd(), config=config.workspace)
+        remote_sources["workspaces"] = lambda: _workspace_source(ws, issue_number)
     if not offline:
-        assert github is not None
+        assert config is not None
+        github = _bound_github_client(config, repo_root=Path.cwd())
+        branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
         remote_sources.update(
             {
                 "github_issue": lambda: _github_issue_source(github, issue_number),
@@ -1651,6 +1854,8 @@ def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> 
         return
 
     click.echo(f"Task Inspection: Issue #{issue_number}")
+    if config_error is not None:
+        click.echo(f"  Configuration: unavailable ({config_error})")
     source_map = {source.source: source for source in report.sources}
     issue_source = source_map.get("github_issue")
     if issue_source is not None and issue_source.ok and issue_source.data is not None:
@@ -1679,16 +1884,17 @@ def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> 
         detail = pr_source.error.message if pr_source and pr_source.error else "no PR"
         click.echo(f"  PR:    ({detail})")
 
-    workspaces = source_map["workspaces"]
-    if workspaces.ok:
-        paths = workspaces.data
-        if paths:
-            for item in paths:
-                click.echo(f"  Workspace: {item['path']} ({item['state']})")
+    workspaces = source_map.get("workspaces")
+    if workspaces is not None:
+        if workspaces.ok:
+            paths = workspaces.data
+            if paths:
+                for item in paths:
+                    click.echo(f"  Workspace: {item['path']} ({item['state']})")
+            else:
+                click.echo("  Workspace: (absent)")
         else:
-            click.echo("  Workspace: (absent)")
-    else:
-        click.echo(f"  Workspace: (unavailable: {workspaces.error.message})")
+            click.echo(f"  Workspace: (unavailable: {workspaces.error.message})")
 
     records = {(record.phase, record.attempt): record for record in report.history}
     for phase in (Phase.SPEC, Phase.EXECUTE):
@@ -1772,8 +1978,23 @@ def status(
                 click.echo(f"  {line}")
         return
     try:
-        config = load_config()
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    if local_only:
+        try:
+            report = build_run_report(lifecycle)
+        except _MACHINIST_ERRORS as exc:
+            raise click.ClickException(str(exc)) from exc
+        if as_json:
+            click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+            return
+        for line in summarize_run_report(report, lifecycle=lifecycle):
+            click.echo(line)
+        return
+
+    try:
+        config = load_config()
         ws = (
             Workspace(repo_root=Path.cwd(), config=config.workspace)
             if verbose
@@ -1798,11 +2019,6 @@ def status(
     if as_json:
         click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return
-    if local_only:
-        for line in summarize_run_report(report):
-            click.echo(line)
-        return
-
     pipeline_source = next(
         (source for source in report.sources if source.source == "pipeline"), None
     )
@@ -1813,20 +2029,40 @@ def status(
             else "unknown GitHub error"
         )
         click.echo(f"GitHub pipeline unavailable: {detail}", err=True)
-        for line in summarize_run_report(report):
+        for line in summarize_run_report(report, lifecycle=lifecycle):
             click.echo(line)
         return
     rows = pipeline_source.data
     if not rows:
-        click.echo(
-            f"No machinist activity: no open '{config.github.labels.trigger}' issues "
-            f"and no open '{config.workspace.branch_prefix}*' PRs."
-        )
+        if report.current or report.history or report.corrupt:
+            click.echo("No open GitHub pipeline items. Local Task Run activity:")
+            for line in summarize_run_report(report, lifecycle=lifecycle):
+                click.echo(line)
+        else:
+            click.echo(
+                f"No machinist activity: no open '{config.github.labels.trigger}' issues "
+                f"and no open '{config.workspace.branch_prefix}*' PRs."
+            )
         return
     for row in rows:
         kind = "issue" if row["kind"] == "issue" else "PR"
-        click.echo(f"{kind:<5} #{row['number']:<4} {row['state']:<18} {row['title']}")
+        identity = f"#{row['number']}"
+        if kind == "PR" and row["issue_number"] is not None:
+            identity += f" · issue #{row['issue_number']}"
+        click.echo(f"{kind:<5} {identity:<20} {row['state']:<20} {row['title']}")
         click.echo(f"      {row['url']}")
+        next_action = next_action_for_status(
+            StatusRow(
+                kind=row["kind"],
+                number=row["number"],
+                title=row["title"],
+                state=row["state"],
+                url=row["url"],
+                issue_number=row["issue_number"],
+            )
+        )
+        if next_action is not None:
+            click.echo(f"      Next: {next_action}")
         if verbose and row["issue_number"] is not None:
             rec = lifecycle.latest(row["issue_number"])
             if rec and rec.error:
@@ -1835,6 +2071,29 @@ def status(
                 targets = ws.list_task_workspaces(f"issue-{row['issue_number']}")
                 for target_ws in targets:
                     click.echo(f"      Workspace: {target_ws}")
+
+    visible_issues = {
+        row["issue_number"] for row in rows if row["issue_number"] is not None
+    }
+    hidden_recovery = tuple(
+        record
+        for record in report.current
+        if record.issue not in visible_issues
+        and record.status is not RunStatus.SUCCEEDED
+    )
+    if hidden_recovery:
+        click.echo("Local recovery not represented by an open GitHub item:")
+        recovery_report = RunReport(
+            issue=None,
+            current=hidden_recovery,
+            history=tuple(
+                record
+                for record in report.history
+                if record.issue in {item.issue for item in hidden_recovery}
+            ),
+        )
+        for line in summarize_run_report(recovery_report, lifecycle=lifecycle):
+            click.echo(line)
 
 
 @main.command("runs")
@@ -1857,7 +2116,7 @@ def runs_command(issue_number: int | None, as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return
-    for line in summarize_run_report(report):
+    for line in summarize_run_report(report, lifecycle=lifecycle):
         click.echo(line)
 
 
@@ -2000,9 +2259,49 @@ def _launchd_service(*, for_install: bool = False) -> LaunchdService:
         raise click.ClickException(str(exc)) from exc
 
 
+def _active_task_runs() -> list[dict[str, object]]:
+    try:
+        lifecycle = TaskLifecycle(Path(".machinist/runs"), repo_root=Path.cwd())
+        records = lifecycle.inventory().records
+        return [
+            {
+                "issue": record.issue,
+                "phase": record.phase.value,
+                "attempt": record.attempt,
+                "stage": record.evidence.get("current_stage"),
+            }
+            for record in records
+            if record.status is RunStatus.RUNNING and lifecycle.claim_held(record.issue)
+        ]
+    except LifecycleError as exc:
+        raise click.ClickException(
+            f"cannot determine whether Task Runs are active: {exc}"
+        ) from exc
+
+
+def _require_idle_service(action: str, *, force: bool) -> None:
+    active = _active_task_runs()
+    if force or not active:
+        return
+    tasks = ", ".join(
+        f"issue #{item['issue']} {item['phase']} attempt {item['attempt']}"
+        for item in active
+    )
+    raise click.ClickException(
+        f"refusing to {action} the watcher while Task Runs are active: {tasks}. "
+        f"Wait for them to finish or rerun with --force."
+    )
+
+
 @service_command.command("install")
-def service_install() -> None:
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Replace the service even if a Task Run currently holds a Claim.",
+)
+def service_install(force: bool) -> None:
     """Install, register, and immediately start the repository watcher."""
+    _require_idle_service("replace", force=force)
     service = _launchd_service(for_install=True)
     try:
         service.stop()
@@ -2036,8 +2335,14 @@ def service_start() -> None:
 
 
 @service_command.command("restart")
-def service_restart() -> None:
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Restart even if a Task Run currently holds a Claim.",
+)
+def service_restart(force: bool) -> None:
     """Restart the watcher process immediately."""
+    _require_idle_service("restart", force=force)
     service = _launchd_service()
     try:
         status = service.status()
@@ -2057,8 +2362,14 @@ def service_restart() -> None:
 
 
 @service_command.command("stop")
-def service_stop() -> None:
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Stop even if a Task Run currently holds a Claim.",
+)
+def service_stop(force: bool) -> None:
     """Stop the watcher while preserving its plist and logs."""
+    _require_idle_service("stop", force=force)
     service = _launchd_service()
     try:
         service.stop()
@@ -2070,12 +2381,26 @@ def service_stop() -> None:
 @service_command.command("status")
 @click.option("--json", "as_json", is_flag=True)
 def service_status(as_json: bool) -> None:
-    """Show whether the watcher is installed and loaded."""
+    """Show launchd registration, watcher health, and active Task Runs."""
     service = _launchd_service()
     try:
         status = service.status()
+        heartbeat = read_watcher_heartbeat(Path.cwd())
     except ServiceError as exc:
         raise click.ClickException(str(exc)) from exc
+    active = _active_task_runs()
+    heartbeat_payload = heartbeat.as_dict() if heartbeat is not None else None
+    age_seconds = round(heartbeat.age_seconds, 1) if heartbeat is not None else None
+    if not status.loaded:
+        health = "stopped"
+    elif heartbeat is None:
+        health = "waiting_for_first_poll"
+    elif heartbeat.age_seconds > max(30, heartbeat.interval_seconds * 3):
+        health = "stale"
+    elif heartbeat.failures:
+        health = "degraded"
+    else:
+        health = "healthy"
     payload = {
         "label": status.label,
         "installed": status.installed,
@@ -2085,6 +2410,10 @@ def service_status(as_json: bool) -> None:
         "error": status.error,
         "plist": str(service.plist_path),
         "logs": [str(path) for path in service.log_paths],
+        "health": health,
+        "heartbeat": heartbeat_payload,
+        "heartbeat_age_seconds": age_seconds,
+        "active_task_runs": active,
     }
     if as_json:
         click.echo(json.dumps(payload))
@@ -2092,6 +2421,21 @@ def service_status(as_json: bool) -> None:
     state = "loaded/scheduled" if status.loaded else "not loaded"
     installed = "installed" if status.installed else "not installed"
     click.echo(f"{status.label}: {state}, {installed}")
+    click.echo(f"  health: {health}")
+    if heartbeat is not None:
+        click.echo(
+            f"  last poll: {heartbeat.polled_at} ({age_seconds:.1f}s ago; "
+            f"{heartbeat.attempted} dispatched, {heartbeat.deferred} deferred, "
+            f"{heartbeat.failures} failed)"
+        )
+    if active:
+        click.echo("  active Task Runs:")
+        for item in active:
+            stage = f" · {item['stage']}" if item["stage"] else ""
+            click.echo(
+                f"    issue #{item['issue']} {item['phase']} "
+                f"attempt {item['attempt']}{stage}"
+            )
     if status.error:
         click.echo(f"  launchd: {status.error}")
     click.echo(f"  plist: {service.plist_path}")
@@ -2125,8 +2469,14 @@ def service_logs(lines: int) -> None:
 
 
 @service_command.command("uninstall")
-def service_uninstall() -> None:
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Uninstall even if a Task Run currently holds a Claim.",
+)
+def service_uninstall(force: bool) -> None:
     """Stop and remove the watcher plist while preserving logs."""
+    _require_idle_service("uninstall", force=force)
     service = _launchd_service()
     try:
         removed = service.uninstall()

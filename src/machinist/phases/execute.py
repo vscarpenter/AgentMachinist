@@ -29,6 +29,8 @@ from machinist.config import (
 )
 from machinist.github import PullRequest, normalize_repository_identity
 from machinist.managed_paths import ManagedPathError, read_managed_text
+from machinist.phases.progress import bind_harness_progress, report_progress
+from machinist.phases.workshop_cleanup import finish_workshop_cleanup
 from machinist.runtime_paths import RuntimePathError, write_text_file
 
 _IMPLEMENT_PROMPT = files("machinist") / "templates" / "implement-prompt.md"
@@ -156,7 +158,10 @@ def run_execute_phase(
     cancel_check=None,
 ) -> PullRequest:
     """Implement an approved Task with durable retry and reconciliation state."""
+    if hasattr(workspace, "cancel_check"):
+        workspace.cancel_check = cancel_check
     started_at = time.monotonic()
+    report_progress(claim, "read approved Task", f"issue #{issue_number}")
     # Validate before performing any GitHub or filesystem operation.
     feedback = normalize_operator_feedback(feedback)
     if recovery not in _RECOVERY_MODES:
@@ -208,6 +213,7 @@ def run_execute_phase(
         force=force or bool(feedback),
     )
     if reconciled_sha is not None:
+        report_progress(claim, "reconcile PR delivery", reconciled_sha[:12])
         _checkpoint(claim, push_observed_sha=reconciled_sha)
         _complete_delivery(
             issue_number,
@@ -262,6 +268,7 @@ def run_execute_phase(
         )
 
     if recovery == "resume":
+        report_progress(claim, "resume Workshop", branch)
         path, resume_stage, git_custody = _resume_workspace(
             workspace,
             claim,
@@ -270,6 +277,7 @@ def run_execute_phase(
             approval_sha=approval_sha,
         )
     else:
+        report_progress(claim, "provision Workshop", branch)
         path, git_custody = _provision_fresh_workspace(
             workspace,
             claim,
@@ -284,6 +292,7 @@ def run_execute_phase(
     comment_id = _positive_int(previous.get("completion_comment_id"))
     try:
         if resume_stage == "push":
+            report_progress(claim, "resume push", branch)
             implementation_sha = str(previous["push_intended_sha"])
             _retry_intended_push(
                 workspace,
@@ -374,6 +383,8 @@ def run_execute_phase(
                     else ()
                 )
                 harness.allowed_commands = tuple(gate.command for gate in gates)
+                report_progress(claim, "implement", harness.name)
+                bind_harness_progress(harness, claim, stage="implement")
                 harness_report = harness.implement(
                     render_implement_prompt(
                         issue_number,
@@ -420,6 +431,7 @@ def run_execute_phase(
             )
 
             try:
+                report_progress(claim, "verification", "starting configured gates")
                 verification_report = _run_verification(
                     path,
                     config=config,
@@ -462,6 +474,7 @@ def run_execute_phase(
             _checkpoint(claim, change_summary=change_summary.as_dict())
 
             _raise_if_cancelled(cancel_check, "before commit")
+            report_progress(claim, "commit implementation", branch)
             workspace.commit_all(
                 path,
                 f"feat(agent): implement issue #{issue_number} per approved spec",
@@ -487,6 +500,7 @@ def run_execute_phase(
                 workspace_head=implementation_sha,
             )
             _raise_if_cancelled(cancel_check, "before push")
+            report_progress(claim, "push implementation", branch)
             workspace.push(path, branch, expected_sha=approval_sha)
             observed_sha = workspace.remote_sha(path, branch)
             if observed_sha != implementation_sha:
@@ -513,11 +527,15 @@ def run_execute_phase(
                 expected_base=base,
                 cancel_check=cancel_check,
             )
-    except Exception:
-        workspace.cleanup(path, success=False)
+    except BaseException as exc:
+        cleanup_warning = finish_workshop_cleanup(
+            workspace, path, success=False, claim=claim
+        )
+        if cleanup_warning is not None:
+            exc.add_note(cleanup_warning)
         raise
 
-    workspace.cleanup(path, success=True)
+    finish_workshop_cleanup(workspace, path, success=True, claim=claim)
     return pr
 
 
@@ -588,6 +606,7 @@ def _reset_fresh_execution_evidence(claim) -> None:
         completion_comment_observed_sha=None,
         ready_intended_sha=None,
         ready_observed_sha=None,
+        resume_forbidden_reason=None,
     )
 
 
@@ -601,6 +620,12 @@ def _resume_workspace(
 ) -> tuple[Path, str, dict[str, object] | None]:
     if claim is None:
         raise ExecutePhaseError("--resume requires a claimed Task Run")
+    resume_blocker = previous.get("resume_forbidden_reason")
+    if isinstance(resume_blocker, str) and resume_blocker:
+        raise ExecutePhaseError(
+            "retained workspace is not eligible for --resume because "
+            f"{resume_blocker}; start a fresh retry"
+        )
     if previous.get("approved_sha") != approval_sha:
         raise ExecutePhaseError(
             "retained workspace was created for a different approved SHA; "
@@ -1034,10 +1059,19 @@ def _invoke_verification_engine(
             snapshotter=workspace.change_snapshot,
             runner=test_runner,
             cancel_check=cancel_check,
+            on_progress=lambda index, total, name, status: report_progress(
+                claim,
+                f"verification {index}/{total}: {name}",
+                status,
+            ),
         )
     except VerificationFailed as exc:
         evidence = exc.report.as_dict()
-        _checkpoint(claim, verification_report=evidence)
+        checkpoint: dict[str, Any] = {"verification_report": evidence}
+        resume_blocker = _verification_resume_blocker(evidence)
+        if resume_blocker is not None:
+            checkpoint["resume_forbidden_reason"] = resume_blocker
+        _checkpoint(claim, **checkpoint)
         message = _verification_failure_message(evidence)
         if any(
             isinstance(gate, dict) and gate.get("status") == "cancelled"
@@ -1050,6 +1084,19 @@ def _invoke_verification_engine(
     evidence = report.as_dict()
     _checkpoint(claim, verification_report=evidence)
     return evidence
+
+
+def _verification_resume_blocker(evidence: Mapping[str, Any]) -> str | None:
+    """Explain why retained post-harness changes cannot be trusted on retry."""
+    for gate in evidence.get("gates", []):
+        if not isinstance(gate, Mapping):
+            continue
+        if gate.get("status") != "mutation_detected":
+            continue
+        name = gate.get("name")
+        gate_name = name if isinstance(name, str) and name else "a verification gate"
+        return f"mutation-forbidden gate {gate_name!r} changed it"
+    return None
 
 
 def _fallback_verification(
@@ -1190,6 +1237,7 @@ def _complete_delivery(
     expected_base: str,
     cancel_check,
 ) -> None:
+    report_progress(claim, "deliver ready PR", f"PR #{pr.number}")
     current_pr = _delivery_pr_at_sha(
         github,
         original=pr,
@@ -1243,6 +1291,7 @@ def _complete_delivery(
     _raise_if_cancelled(cancel_check, "before marking PR ready")
     if current_pr.is_draft:
         github.mark_ready(current_pr.number)
+    report_progress(claim, "verify ready PR", f"PR #{current_pr.number}")
     observed_pr = _delivery_pr_at_sha(
         github,
         original=current_pr,

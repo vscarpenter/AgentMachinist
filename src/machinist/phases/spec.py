@@ -17,6 +17,8 @@ from uuid import uuid4
 from machinist.config import MachinistConfig
 from machinist.github import DraftPR, Issue, PullRequest, normalize_repository_identity
 from machinist.managed_paths import ManagedPathError, write_managed_text
+from machinist.phases.progress import bind_harness_progress, report_progress
+from machinist.phases.workshop_cleanup import finish_workshop_cleanup
 
 _APPROVED_LABEL_COLOR = "0e8a16"
 _SPEC_PROMPT = files("machinist") / "templates" / "spec-prompt.md"
@@ -62,6 +64,9 @@ def run_spec_phase(
     attempt: int | None = None,
     cancel_check: Callable[[], bool] | None = None,
 ) -> DraftPR:
+    if hasattr(workspace, "cancel_check"):
+        workspace.cancel_check = cancel_check
+    report_progress(claim, "read Task", f"fetching GitHub issue #{issue_number}")
     repository_identity = _assert_repository_custody(config, github, workspace)
     issue = github.get_issue(issue_number)
     _validate_issue(issue, config)
@@ -87,6 +92,7 @@ def run_spec_phase(
         )
 
     provision_args = (f"issue-{issue.number}", branch, f"origin/{base}")
+    report_progress(claim, "provision Workshop", branch)
     path = (
         workspace.provision(*provision_args)
         if attempt is None
@@ -111,6 +117,7 @@ def run_spec_phase(
         )
         if delivery_only:
             assert recovery_sha is not None  # established by delivery_only
+            report_progress(claim, "reconcile Spec delivery", recovery_sha[:12])
             # The prior attempt already published the exact checkpointed Spec.
             # Regenerating deterministic text would leave no changes to commit,
             # so reconcile only the missing/incomplete GitHub delivery.
@@ -148,6 +155,8 @@ def run_spec_phase(
                     instruction_source="task-workspace",
                 )
             _raise_if_cancelled(cancel_check, issue.number)
+            report_progress(claim, "generate Spec", harness.name)
+            bind_harness_progress(harness, claim, stage="generate Spec")
             spec_text = _generate_spec(issue, config, harness, path, instructions)
             # The harness may finish just as an operator requests cancellation.
             # This boundary is deliberately before any controller-owned write,
@@ -168,6 +177,7 @@ def run_spec_phase(
 
             action = "revise" if revise else "add"
             _raise_if_cancelled(cancel_check, issue.number)
+            report_progress(claim, "commit Spec", str(spec_relative))
             workspace.commit_all(
                 path,
                 f"docs(spec): {action} implementation spec for issue #{issue.number}",
@@ -176,6 +186,7 @@ def run_spec_phase(
             if claim is not None:
                 claim.checkpoint(spec_sha=spec_sha, push_intended_sha=spec_sha)
             _raise_if_cancelled(cancel_check, issue.number)
+            report_progress(claim, "push Spec", branch)
             workspace.push(
                 path,
                 branch,
@@ -191,6 +202,7 @@ def run_spec_phase(
                 claim.checkpoint(push_observed_sha=observed_sha)
 
         _raise_if_cancelled(cancel_check, issue.number)
+        report_progress(claim, "deliver draft PR", branch)
         github.ensure_label(
             config.github.labels.approved,
             color=_APPROVED_LABEL_COLOR,
@@ -227,6 +239,7 @@ def run_spec_phase(
             claim.checkpoint(pr_number=pr.number, pr_url=pr.url)
 
         observed_pr = github.pr_for_branch(branch)
+        report_progress(claim, "verify draft PR", f"PR #{pr.number}")
         _assert_delivered_pr(
             observed_pr,
             pr,
@@ -241,10 +254,14 @@ def run_spec_phase(
                 pr_observed_base=observed_pr.base or base,
                 pr_observed_sha=observed_pr.head_sha,
             )
-    except Exception:
-        workspace.cleanup(path, success=False)
+    except BaseException as exc:
+        cleanup_warning = finish_workshop_cleanup(
+            workspace, path, success=False, claim=claim
+        )
+        if cleanup_warning is not None:
+            exc.add_note(cleanup_warning)
         raise
-    workspace.cleanup(path, success=True)
+    finish_workshop_cleanup(workspace, path, success=True, claim=claim)
     return pr
 
 

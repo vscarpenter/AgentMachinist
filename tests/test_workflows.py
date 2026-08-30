@@ -49,8 +49,8 @@ def test_render_binds_authorization_event_to_exact_sha_and_pinned_version():
     assert "pull_request_target:" in approval
 
 
-def test_label_approval_requires_write_access_and_records_the_approver():
-    """Labelling is a triage-level power; approving execution is not."""
+def test_every_approval_path_requires_write_access_and_records_the_approver():
+    """Neither comments nor labels are sufficient authority to execute code."""
     approval = expected_workflows(config(), installed_version="0.2.0")[
         "machinist-approve.yml"
     ]
@@ -58,6 +58,11 @@ def test_label_approval_requires_write_access_and_records_the_approver():
     assert "collaborators/$ACTOR/permission" in approval
     assert "ACTOR: ${{ github.event.sender.login }}" in approval
     assert "admin | write)" in approval
+    assert "Require write access for either approval path" in approval
+    assert (
+        "Require write access for either approval path\n"
+        "        if: github.event_name == 'pull_request_target'"
+    ) not in approval
     # An unreadable or unrecognized permission must not approve anything.
     assert "requires write access" in approval
     # The approver is recorded alongside the machine-readable marker.

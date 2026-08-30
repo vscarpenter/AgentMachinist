@@ -1,5 +1,11 @@
 # AgentMachinist reliability and usability hardening
 
+> [!IMPORTANT]
+> **Historical design record.** This specification preserves the v0.2
+> hardening contract and is not current operating documentation. See
+> [Getting Started](../../getting-started.md) and
+> [Architecture and lifecycle](../../architecture.md) for current behavior.
+
 **Date:** 2026-08-17
 **Status:** Complete
 

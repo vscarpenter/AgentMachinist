@@ -63,6 +63,7 @@ def test_help_lists_all_commands():
         "doctor",
         "update-check",
         "sync-workflows",
+        "sync-labels",
         "clean",
         "inspect",
         "config",
@@ -89,6 +90,32 @@ def test_config_commands_validate_show_schema_and_set():
         assert json.loads(schema.output)["properties"]["version"]["const"] == 1
         assert updated.exit_code == 0, updated.output
         assert load_config().github.poll_interval_seconds == 120
+
+
+def test_doctor_json_is_machine_readable_even_when_readiness_fails(monkeypatch):
+    from machinist.doctor import CheckLevel, DoctorCheck, DoctorReport
+
+    monkeypatch.setattr(
+        "machinist.cli.run_doctor",
+        lambda *args, **kwargs: DoctorReport(
+            (
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "Actions Spec credential",
+                    "ANTHROPIC_API_KEY is missing",
+                ),
+            )
+        ),
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["doctor", "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["checks"][0]["name"] == "Actions Spec credential"
 
 
 def test_config_set_renders_atomic_write_failure_without_traceback(monkeypatch):
@@ -186,6 +213,9 @@ def test_init_creates_config_dirs_and_workflows():
         assert Path("machinist.yaml").is_file()
         assert Path(".machinist/specs/.gitkeep").is_file()
         assert Path(".github/workflows/machinist-approve.yml").is_file()
+        assert "Spec dispatch: local" in result.output
+        assert "Execute dispatch: local watcher" in result.output
+        assert "Start dispatch: machinist watch" in result.output
 
 
 def test_init_no_workflows_prunes_prior_managed_workflows():
@@ -303,6 +333,37 @@ def test_sync_workflows_check_fails_on_drift():
 
         assert result.exit_code != 0
         assert "drift" in result.output.lower()
+
+
+def test_sync_labels_checks_then_applies_missing_labels(monkeypatch):
+    calls = []
+
+    class FakeGitHub:
+        def __init__(self, repo=None):
+            self.repo = repo
+
+        def bind_repository(self, identity, *, hostname):
+            self.repo = identity
+
+        def label_names(self):
+            return {"agent-task"}
+
+        def ensure_label(self, name, *, color, description):
+            calls.append((name, color, description))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
+
+        checked = runner.invoke(main, ["sync-labels", "--check"])
+        applied = runner.invoke(main, ["sync-labels", "--apply"])
+
+    assert checked.exit_code == 1
+    assert "machinist:approved" in checked.output
+    assert "--apply" in checked.output
+    assert applied.exit_code == 0, applied.output
+    assert [call[0] for call in calls] == ["agent-task", "machinist:approved"]
 
 
 def test_init_template_round_trips_through_schema():
@@ -612,6 +673,50 @@ def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
 
         assert result.exit_code == 0
         assert "nothing to do" in result.output.lower()
+
+
+def test_watch_once_always_explains_fully_deferred_work(monkeypatch):
+    from machinist.phases.status import StatusRow
+    from machinist.phases.watch import WatchResult, WatchTask
+
+    task = WatchTask(
+        "execute",
+        42,
+        StatusRow(
+            kind="pr",
+            number=57,
+            title="Spec",
+            state="approved",
+            url="https://github.com/x/y/pull/57",
+            issue_number=42,
+        ),
+    )
+
+    def fake_watch_once(*args, **kwargs):
+        # Populate the same reason map the real admission callback owns.
+        assert kwargs["admit"](task) is False
+        return WatchResult(deferred=(task,))
+
+    monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
+    monkeypatch.setattr(
+        "machinist.cli.QueueControl.admission",
+        lambda self, task: type(
+            "Decision",
+            (),
+            {"__bool__": lambda self: False, "reason": "queue paused for maintenance"},
+        )(),
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["watch", "--once"])
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "deferred: execute for issue #42: queue paused for maintenance" in result.output
+    )
+    assert "Pass summary: 0 dispatched, 1 deferred" in result.output
+    assert "Nothing to do" not in result.output
 
 
 def test_watch_spec_dispatch_wires_durable_cancellation_check(monkeypatch):
@@ -1057,6 +1162,7 @@ def test_status_renders_rows(monkeypatch):
             title="Spec: Add dark mode (#42)",
             state="awaiting approval",
             url="https://github.com/x/y/pull/57",
+            issue_number=42,
         ),
     ]
     monkeypatch.setattr(
@@ -1071,6 +1177,8 @@ def test_status_renders_rows(monkeypatch):
         assert result.exit_code == 0, result.output
         assert "#3" in result.output and "awaiting spec" in result.output
         assert "#57" in result.output and "awaiting approval" in result.output
+        assert "issue #42" in result.output
+        assert "machinist approve --issue 42" in result.output
         assert "Spec: Add dark mode (#42)" in result.output
 
 
@@ -1086,6 +1194,51 @@ def test_status_with_no_activity_says_so(monkeypatch):
 
         assert result.exit_code == 0
         assert "no machinist activity" in result.output.lower()
+
+
+def test_status_with_no_remote_rows_still_surfaces_local_failure(monkeypatch):
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    monkeypatch.setattr(
+        "machinist.cli.pipeline_status", lambda config, github, **kwargs: []
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        with pytest.raises(RuntimeError):
+            lifecycle.run(
+                42,
+                Phase.EXECUTE,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("gate failed")),
+            )
+
+        result = runner.invoke(main, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "No open GitHub pipeline items" in result.output
+    assert "#42 execute failed" in result.output
+    assert "machinist retry 42 --phase execute" in result.output
+
+
+def test_status_local_recovers_without_a_config_file():
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        with pytest.raises(RuntimeError):
+            lifecycle.run(
+                7,
+                Phase.SPEC,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("spec failed")),
+            )
+
+        result = runner.invoke(main, ["status", "--local"])
+
+    assert result.exit_code == 0, result.output
+    assert "#7 spec failed" in result.output
+    assert "machinist retry 7 --phase spec" in result.output
 
 
 def test_portfolio_repo_commands_and_status_all_json():
@@ -1269,6 +1422,39 @@ def test_service_start_reloads_an_installed_but_stopped_agent(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert calls == ["status", "bootstrap", "start"]
+
+
+def test_service_stop_refuses_active_claim_without_explicit_force(monkeypatch):
+    calls = []
+
+    class ActiveService:
+        label = "io.github.test.machinist"
+
+        def stop(self):
+            calls.append("stop")
+
+    monkeypatch.setattr("machinist.cli._launchd_service", lambda: ActiveService())
+    monkeypatch.setattr(
+        "machinist.cli._active_task_runs",
+        lambda: [
+            {
+                "issue": 42,
+                "phase": "execute",
+                "attempt": 2,
+                "stage": "verification 1/3",
+            }
+        ],
+    )
+    runner = CliRunner()
+
+    refused = runner.invoke(main, ["service", "stop"])
+    forced = runner.invoke(main, ["service", "stop", "--force"])
+
+    assert refused.exit_code != 0
+    assert "issue #42 execute attempt 2" in refused.output
+    assert "--force" in refused.output
+    assert forced.exit_code == 0, forced.output
+    assert calls == ["stop"]
 
 
 def test_service_recovery_commands_need_neither_config_nor_current_path(monkeypatch):
@@ -1595,15 +1781,31 @@ def test_init_with_harness_and_test_cmd_flags():
         assert config.tests.command == "pytest -k fast"
 
 
-def test_init_auto_detects_test_runner():
+def test_init_does_not_infer_pytest_from_a_python_manifest_alone():
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("pyproject.toml").write_text("[project]\nname='demo'\n")
         result = runner.invoke(main, ["init", "--no-workflows"])
         assert result.exit_code == 0
-        assert "auto-detected test runner: 'uv run pytest'" in result.output
         config = load_config("machinist.yaml")
-        assert config.tests.command == "uv run pytest"
+        assert config.tests.command is None
+        assert "Verification: NOT CONFIGURED" in result.output
+
+
+def test_noninteractive_init_reports_detected_test_runner_as_unconfirmed():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text(
+            "[project]\nname='demo'\ndependencies=['pytest>=8']\n"
+        )
+        Path("uv.lock").write_text("version = 1\n")
+
+        result = runner.invoke(main, ["init", "--no-workflows"])
+
+        assert result.exit_code == 0, result.output
+        assert "suggested test runner (not enabled): 'uv run pytest'" in result.output
+        assert load_config("machinist.yaml").tests.command is None
+        assert "--test-cmd" in result.output
 
 
 def _force_interactive(monkeypatch):
@@ -1649,13 +1851,18 @@ def test_init_interactive_github_actions_locks_harness_to_claude_code(monkeypatc
         assert config.harness.name.value == "claude-code"
         assert config.tests.command is None
         assert Path(".github/workflows/machinist-spec.yml").is_file()
+        assert "gh secret set ANTHROPIC_API_KEY" in result.output
+        assert "Execute dispatch: local watcher" in result.output
 
 
 def test_init_interactive_confirms_detected_test_command(monkeypatch):
     _force_interactive(monkeypatch)
     runner = CliRunner()
     with runner.isolated_filesystem():
-        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        Path("pyproject.toml").write_text(
+            "[project]\nname='demo'\ndependencies=['pytest>=8']\n"
+        )
+        Path("uv.lock").write_text("version = 1\n")
         result = runner.invoke(
             main,
             ["init"],
@@ -1677,7 +1884,10 @@ def test_init_interactive_rejects_detected_then_suggests_by_language(monkeypatch
     _force_interactive(monkeypatch)
     runner = CliRunner()
     with runner.isolated_filesystem():
-        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        Path("pyproject.toml").write_text(
+            "[project]\nname='demo'\ndependencies=['pytest>=8']\n"
+        )
+        Path("uv.lock").write_text("version = 1\n")
         result = runner.invoke(
             main,
             ["init"],
@@ -1710,7 +1920,7 @@ def test_init_interactive_flags_pre_answer_and_skip_questions(monkeypatch):
         )
 
         assert result.exit_code == 0, result.output
-        assert "Spec dispatch" not in result.output
+        assert "Spec dispatch [local]" not in result.output
         assert "Notify on" not in result.output
         config = load_config("machinist.yaml")
         assert config.harness.name.value == "opencode"
@@ -1725,7 +1935,7 @@ def test_init_no_input_skips_wizard(monkeypatch):
         result = runner.invoke(main, ["init", "--no-workflows", "--no-input"])
 
         assert result.exit_code == 0, result.output
-        assert "Spec dispatch" not in result.output
+        assert "Configuring machinist.yaml" not in result.output
         config = load_config("machinist.yaml")
         assert config.github.spec_source.value == "local"
         assert config.notifications.backend.value == "desktop"
@@ -1814,7 +2024,8 @@ def test_approve_resolves_issue_number(monkeypatch):
         # Approve using the issue number 42 rather than PR number 18
         result = runner.invoke(main, ["approve", "42"])
         assert result.exit_code == 0, result.output
-        assert "Approved PR #18" in result.output
+        assert "Requested approval for PR #18" in result.output
+        assert "workflow will verify the current head" in result.output
         assert approved_prs == [
             (18, "machinist:approved", "0123456789abcdef0123456789abcdef01234567")
         ]
@@ -2268,6 +2479,28 @@ def test_inspect_json_offline_preserves_local_history_without_github(monkeypatch
         payload = json.loads(result.output)
         assert payload["history"][0]["issue"] == 42
         assert "github_issue" not in payload["sources"]
+
+
+def test_inspect_offline_recovers_without_config_or_workspace_settings():
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        TaskLifecycle(Path(".machinist/runs")).run(42, Phase.SPEC, lambda claim: None)
+
+        result = runner.invoke(main, ["inspect", "42", "--offline"])
+
+    assert result.exit_code == 0, result.output
+    assert "Configuration: unavailable" in result.output
+    assert "Phase [spec]: succeeded" in result.output
+
+
+def test_inspect_rejects_non_positive_issue_without_traceback():
+    result = CliRunner().invoke(main, ["inspect", "0", "--offline"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for 'ISSUE_NUMBER'" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_inspect_keeps_local_output_when_pr_lookup_fails(monkeypatch):

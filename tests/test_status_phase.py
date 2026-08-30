@@ -242,6 +242,38 @@ def test_durable_failed_run_is_visible_in_status(tmp_path):
     assert row.state == "execute failed"
 
 
+def test_unclaimed_running_projection_is_reported_as_interrupted(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    now = "2026-08-30T12:00:00+00:00"
+    lifecycle.runs_dir.mkdir()
+    (lifecycle.runs_dir / "issue-42-execute.json").write_text(
+        '{"attempt":1,"error":null,"evidence":{"current_stage":"harness"},'
+        f'"issue":42,"phase":"execute","started_at":"{now}",'
+        f'"status":"running","updated_at":"{now}"}}\n'
+    )
+    github = FakeGitHub(prs=[pr(57, "agent/issue-42")])
+
+    row = pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0]
+
+    assert row.state == "execute interrupted"
+
+
+def test_live_claim_keeps_running_state_active(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    github = FakeGitHub(prs=[pr(57, "agent/issue-42")])
+    observed = []
+
+    lifecycle.run(
+        42,
+        Phase.EXECUTE,
+        lambda claim: observed.append(
+            pipeline_status(MachinistConfig(), github, lifecycle=lifecycle)[0].state
+        ),
+    )
+
+    assert observed == ["execute running"]
+
+
 def test_closed_successful_spec_is_not_requeued_as_awaiting_spec(tmp_path):
     lifecycle = TaskLifecycle(tmp_path / "runs")
     lifecycle.run(42, Phase.SPEC, lambda claim: None)

@@ -335,7 +335,7 @@
 <body>
 <div class="shell">
   <header>
-    <p class="kicker">AgentMachinist · Job card · Rev 0.8.3</p>
+    <p class="kicker">AgentMachinist · Job card · Rev 0.9.0</p>
     <h1>Machinist Job Card</h1>
     <p class="lede">One GitHub issue in, one reviewed pull request out. The
     machine writes the spec and the code; you approve the exact spec commit
@@ -385,9 +385,12 @@ claude --version                     <span class="comment"># or opencode / pi / 
     <div class="cell local">
       <span class="chip local">Local</span>
       <pre><code>machinist init        <span class="comment"># dispatch mode: local</span>
-machinist doctor
+machinist doctor --run-gates
+machinist sync-labels --check
+machinist sync-workflows --check
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add -p .github/workflows
+git diff --cached
 git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
       <p class="note">The wizard asks dispatch mode, harness, test gate, and
       notifications — each with a safe default.</p>
@@ -397,7 +400,13 @@ git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
       <pre><code>machinist init --spec-source github-actions
 gh secret set ANTHROPIC_API_KEY      <span class="comment"># CI spec harness needs it</span>
 machinist sync-workflows
-git add -p .github/workflows &amp;&amp; git commit &amp;&amp; git push</code></pre>
+machinist doctor --run-gates
+machinist sync-labels --check
+machinist sync-workflows --check
+git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add -p .github/workflows
+git diff --cached
+git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
       <p class="note">Workflows must be pushed before GitHub can record a
       SHA-bound approval. The CI spec workflow is claude-code only.</p>
     </div>
@@ -440,19 +449,17 @@ machinist spec 7 --dry-run           <span class="comment"># read-only preview</
       <h3>Approve the spec</h3>
       <span class="gate-tag">Human gate</span>
     </div>
-    <div class="cell local">
-      <span class="chip local">Local</span>
-      <pre><code>machinist approve --issue 7          <span class="comment"># or --pr 8</span></code></pre>
-      <p class="note">Read the spec in the draft PR first. Approval binds the
-      label plus the exact 40-character head SHA.</p>
-    </div>
-    <div class="cell ci">
-      <span class="chip ci">GitHub Actions</span>
-      <p>On the draft PR, post the comment from the PR body:</p>
-      <pre><code>/machinist-execute &lt;full-spec-commit-sha&gt;</code></pre>
-      <p class="note">Or apply the <code>machinist:approved</code> label.
-      <code>machinist-approve.yml</code> records the SHA-bound marker — and
-      only from owners, members, or collaborators.</p>
+    <div class="cell span">
+      <span class="chip both">Same on both tracks</span>
+      <pre><code>machinist approve --issue 7          <span class="comment"># or --pr 8</span>
+<span class="comment"># The exact command from the PR body is also accepted:</span>
+/machinist-execute &lt;full-spec-commit-sha&gt;</code></pre>
+      <p class="note">Read the Spec first. The CLI requests approval; it does
+      not mint Evidence itself. The managed workflow checks write or admin
+      access and the current head before recording the SHA-bound marker.
+      <code>machinist status</code> stays <code>awaiting approval</code> while
+      that verification runs. A label without trusted Evidence is
+      <code>approval pending</code>.</p>
     </div>
 
     <div class="stage-bar">
@@ -491,8 +498,8 @@ machinist spec 7 --dry-run           <span class="comment"># read-only preview</
         <span>Approval authorizes one exact spec commit. Any new head on the
         branch makes it stale.</span></div>
       <div class="rail"><strong>Controller owns git</strong>
-        <span>The harness never commits or pushes; postconditions abort the
-        run if it tries.</span></div>
+        <span>The harness is instructed not to commit or push; postconditions
+        abort the run if it tries.</span></div>
       <div class="rail"><strong>Draft = machine's</strong>
         <span>Never mark the draft ready yourself — that transition is the
         signal that tests passed.</span></div>
@@ -502,7 +509,7 @@ machinist spec 7 --dry-run           <span class="comment"># read-only preview</
     </div>
   </section>
 
-  <footer>machinist status · machinist inspect 7 · machinist doctor — when
+  <footer>machinist status · machinist inspect 7 · machinist doctor --run-gates — when
   anything looks off · full walkthrough: <a href="first-run-guide.html">first-run
   field guide</a></footer>
 </div>

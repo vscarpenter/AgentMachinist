@@ -1,3 +1,6 @@
+import json
+import subprocess
+
 from machinist.harness.base import Harness, HarnessCapabilities
 
 
@@ -5,6 +8,18 @@ class ClaudeCode(Harness):
     name = "claude-code"
     default_command = "claude"
     capabilities = HarnessCapabilities("cli-enforced")
+
+    def authentication_argv(self) -> list[str]:
+        return [self.command, "auth", "status", "--json"]
+
+    def authentication_ready(self, result: subprocess.CompletedProcess) -> bool:
+        if result.returncode != 0:
+            return False
+        try:
+            payload = json.loads(result.stdout or "")
+        except (json.JSONDecodeError, TypeError):
+            return False
+        return payload.get("loggedIn") is True
 
     def spec_argv(self, prompt: str) -> list[str]:
         argv = [
@@ -28,7 +43,14 @@ class ClaudeCode(Harness):
     def implement_argv(self, prompt: str) -> list[str]:
         # acceptEdits lets the headless run modify files without stalling
         # on interactive permission prompts.
-        argv = [self.command, "-p", prompt, "--permission-mode", "acceptEdits"]
+        argv = [
+            self.command,
+            "-p",
+            prompt,
+            "--permission-mode",
+            "acceptEdits",
+            "--no-session-persistence",
+        ]
         if self.allowed_commands:
             # acceptEdits still denies headless Bash, so verification-gate
             # commands need explicit allow rules: exact plus prefix, letting

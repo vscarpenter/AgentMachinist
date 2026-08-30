@@ -315,6 +315,34 @@ def test_cancellation_is_blocking_and_skips_later_commands(tmp_path):
     assert caught.value.report.gates[0].blocking is True
 
 
+def test_progress_reports_each_gate_start_and_outcome(tmp_path):
+    progress = []
+
+    def runner(command, **_kwargs):
+        if command == "cancel":
+            raise ProcessCancelledError(command)
+        raise AssertionError(f"unexpected command: {command}")
+
+    with pytest.raises(VerificationFailed):
+        run_verification_gates(
+            tmp_path,
+            (
+                _gate("first", "cancel", required=False),
+                _gate("second", "must-not-run", mutation="allow"),
+            ),
+            log_dir=tmp_path / "logs",
+            snapshotter=lambda _path: "same",
+            runner=runner,
+            on_progress=lambda *event: progress.append(event),
+        )
+
+    assert progress == [
+        (1, 2, "first", "running"),
+        (1, 2, "first", "cancelled"),
+        (2, 2, "second", "skipped"),
+    ]
+
+
 def test_advisory_straggler_is_blocking_and_retains_typed_evidence(tmp_path):
     calls = []
 

@@ -12,9 +12,10 @@ import math
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
-from machinist.lifecycle import Phase, RunRecord, TaskLifecycle
+from machinist.lifecycle import Phase, RunRecord, RunStatus, TaskLifecycle
 
 _READ_MODEL_SCHEMA_VERSION = 1
 _PROJECTION_NAME = re.compile(r"^issue-(\d+)-(spec|execute)\.json$")
@@ -118,6 +119,79 @@ class RunReport:
         }
 
 
+@dataclass(frozen=True)
+class RunDisposition:
+    """Canonical operator-facing meaning of a Task Run projection."""
+
+    display: str
+    owner: str
+    severity: str
+    dispatchable: bool
+    active: bool | None
+    next_action: str | None
+
+
+def describe_run(
+    record: RunRecord,
+    *,
+    claim_held: bool | None = None,
+) -> RunDisposition:
+    """Map persistence vocabulary to one stable operator-facing state."""
+    phase = record.phase.value
+    issue = record.issue
+    if record.status is RunStatus.RUNNING:
+        if claim_held is False:
+            return RunDisposition(
+                f"{phase} interrupted",
+                "operator",
+                "error",
+                False,
+                False,
+                f"machinist retry {issue} --phase {phase}",
+            )
+        return RunDisposition(
+            f"{phase} running",
+            "machinist",
+            "info",
+            False,
+            claim_held,
+            f"machinist cancel {issue}",
+        )
+    if record.status is RunStatus.RETRYABLE:
+        return RunDisposition(
+            f"{phase} retryable",
+            "watcher",
+            "info",
+            True,
+            False,
+            "machinist watch --once -v",
+        )
+    if record.status in {
+        RunStatus.FAILED,
+        RunStatus.CANCELLED,
+        RunStatus.ABANDONED,
+    }:
+        return RunDisposition(
+            f"{phase} {record.status.value}",
+            "operator",
+            "error" if record.status is RunStatus.FAILED else "warning",
+            False,
+            False,
+            f"machinist retry {issue} --phase {phase}",
+        )
+    next_action = (
+        f"machinist approve --issue {issue}" if record.phase is Phase.SPEC else None
+    )
+    return RunDisposition(
+        f"{phase} succeeded",
+        "operator",
+        "success",
+        False,
+        False,
+        next_action,
+    )
+
+
 def capture_source(source: str, loader: RemoteLoader) -> SourceEnvelope:
     """Collect one JSON source without leaking its failure into other reads."""
     if not isinstance(source, str) or not source.strip():
@@ -214,7 +288,11 @@ def build_run_report(
     )
 
 
-def summarize_run_report(report: RunReport) -> tuple[str, ...]:
+def summarize_run_report(
+    report: RunReport,
+    *,
+    lifecycle: TaskLifecycle | None = None,
+) -> tuple[str, ...]:
     """Render a compact text summary suitable for ``inspect`` or ``status``."""
     scope = f"Issue #{report.issue}" if report.issue is not None else "All issues"
     lines = [
@@ -225,16 +303,42 @@ def summarize_run_report(report: RunReport) -> tuple[str, ...]:
     ]
 
     for record in report.current:
+        held = lifecycle.claim_held(record.issue) if lifecycle is not None else None
+        disposition = describe_run(record, claim_held=held)
+        duration_seconds = _display_duration(record)
         duration = (
-            "" if record.duration_seconds is None else f", {record.duration_seconds:g}s"
+            ""
+            if duration_seconds is None
+            else f", {_format_duration(duration_seconds)}"
         )
         detail = (
-            f"  #{record.issue} {record.phase.value} {record.status.value} "
+            f"  #{record.issue} {disposition.display} "
             f"(attempt {record.attempt}{duration})"
         )
+        stage = record.evidence.get("current_stage")
+        if isinstance(stage, str) and stage:
+            detail += f" — stage: {stage}"
         if record.error:
             detail += f": {record.error}"
         lines.append(detail)
+        if disposition.next_action is not None:
+            lines.append(f"    Next: {disposition.next_action}")
+
+    if report.history:
+        lines.append("Attempts:")
+        current_keys = {
+            (record.issue, record.phase, record.attempt) for record in report.current
+        }
+        for record in report.history:
+            marker = (
+                "current"
+                if (record.issue, record.phase, record.attempt) in current_keys
+                else "history"
+            )
+            lines.append(
+                f"  #{record.issue} {record.phase.value} attempt {record.attempt}: "
+                f"{record.status.value} ({marker}, updated {record.updated_at})"
+            )
 
     if report.orphans:
         lines.append(_count(len(report.orphans), "orphaned history attempt"))
@@ -243,6 +347,31 @@ def summarize_run_report(report: RunReport) -> tuple[str, ...]:
     for error in report.source_errors:
         lines.append(f"{error.source} unavailable: {error.error_type}: {error.message}")
     return tuple(lines)
+
+
+def _display_duration(record: RunRecord) -> float | None:
+    if record.duration_seconds is not None:
+        return record.duration_seconds
+    if record.status is not RunStatus.RUNNING:
+        return None
+    try:
+        started = datetime.fromisoformat(record.started_at)
+    except ValueError:
+        return None
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=UTC)
+    return max(0.0, (datetime.now(UTC) - started).total_seconds())
+
+
+def _format_duration(seconds: float) -> str:
+    total = max(0, int(seconds))
+    minutes, remainder = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m {remainder:02d}s"
+    return f"{remainder}s"
 
 
 def _run_record_dict(record: RunRecord) -> dict[str, JsonValue]:

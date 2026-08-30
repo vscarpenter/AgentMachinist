@@ -421,7 +421,8 @@
             <p class="tline">&nbsp;</p>
             <p class="tline c"># in your repository — answer init's short setup questions</p>
             <p class="tline p"><b>$ </b>machinist init</p>
-            <p class="tline p"><b>$ </b>machinist doctor</p>
+            <p class="tline p"><b>$ </b>machinist doctor --run-gates</p>
+            <p class="tline p"><b>$ </b>machinist sync-labels --check</p>
             <p class="tline">&nbsp;</p>
             <p class="tline c"># review the generated files, then make setup durable</p>
             <p class="tline p"><b>$ </b>git add machinist.yaml .machinist/specs/.gitkeep .gitignore</p>
@@ -430,7 +431,7 @@
             <p class="tline">&nbsp;</p>
             <p class="tline c"># label issue 42 'agent-task', then run the loop</p>
             <p class="tline p"><b>$ </b>machinist watch --once   <span class="c" style="color:var(--terminal-muted)"># spec → draft PR</span></p>
-            <p class="tline p"><b>$ </b>machinist approve --issue 42</p>
+            <p class="tline p"><b>$ </b>machinist approve --issue 42 <span style="color:var(--terminal-muted)"># workflow verifies write access + SHA</span></p>
             <p class="tline p"><b>$ </b>machinist run 42         <span style="color:var(--terminal-muted)"># build + test gate → ready PR</span></p>
           </div>
         </div>
@@ -442,6 +443,7 @@
       <span>AgentMachinist · issue → exact spec approval → tested PR → your merge</span>
       <nav aria-label="Documentation">
         <a href="first-run-guide.html">Field guide</a>
+        <a href="explainer.html">One-minute explainer</a>
         <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md">Architecture</a>
         <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md">Trust model</a>
         <a href="https://github.com/vscarpenter/AgentMachinist">GitHub</a>

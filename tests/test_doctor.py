@@ -1,5 +1,6 @@
 """Read-only installation diagnostics."""
 
+import base64
 import json
 import subprocess
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ import pytest
 from machinist.config import MachinistConfig
 from machinist.doctor import CheckLevel, run_doctor
 from machinist.lifecycle import Phase, TaskLifecycle
+from machinist.workflows import sync_workflows
 
 
 def _runner_for(root, *, auth_returncode=0, ignored=True, calls=None):
@@ -37,6 +39,7 @@ def _runner_for(root, *, auth_returncode=0, ignored=True, calls=None):
                     {
                         "nameWithOwner": "owner/project",
                         "defaultBranchRef": {"name": "main"},
+                        "viewerPermission": "ADMIN",
                     }
                 ),
                 "",
@@ -48,6 +51,14 @@ def _runner_for(root, *, auth_returncode=0, ignored=True, calls=None):
                 json.dumps([{"name": "agent-task"}, {"name": "machinist:approved"}]),
                 "",
             )
+        if args[:2] == ["claude", "--version"]:
+            return subprocess.CompletedProcess(args, 0, "2.1.251\n", "")
+        if args[:3] == ["claude", "auth", "status"]:
+            return subprocess.CompletedProcess(
+                args, 0, json.dumps({"loggedIn": True}), ""
+            )
+        if args and args[0] == "claude" and "--help" in args:
+            return subprocess.CompletedProcess(args, 0, "usage\n", "")
         raise AssertionError(f"unexpected doctor probe: {args}")
 
     return runner
@@ -270,6 +281,7 @@ def test_doctor_detects_origin_config_mismatch_and_missing_labels(tmp_path):
                     {
                         "nameWithOwner": "other/project",
                         "defaultBranchRef": {"name": "trunk"},
+                        "viewerPermission": "READ",
                     }
                 ),
                 "",
@@ -516,3 +528,120 @@ def test_doctor_reports_a_disabled_update_check_as_a_pass(tmp_path):
     check = next(item for item in report.checks if item.name == "updates")
     assert check.level is CheckLevel.PASS
     assert "disabled" in check.detail
+
+
+def test_doctor_fails_when_configured_harness_invocation_no_longer_parses(tmp_path):
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig.model_validate(
+        {"harness": {"name": "codex"}, "github": {"manage_workflows": False}}
+    )
+    regular = _runner_for(tmp_path)
+
+    def runner(args, **kwargs):
+        if args[:2] == ["codex", "--version"]:
+            return subprocess.CompletedProcess(args, 0, "codex-cli 0.151.0\n", "")
+        if args[:3] == ["codex", "login", "status"]:
+            return subprocess.CompletedProcess(args, 0, "Logged in using ChatGPT\n", "")
+        if args and args[0] == "codex" and "--help" in args:
+            return subprocess.CompletedProcess(args, 2, "", "unexpected flag")
+        return regular(args, **kwargs)
+
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=runner,
+    )
+    by_name = {check.name: check for check in report.checks}
+
+    assert by_name["Spec Harness compatibility"].level is CheckLevel.FAIL
+    assert by_name["Execute Harness compatibility"].level is CheckLevel.FAIL
+    assert not report.ok
+
+
+def test_doctor_fails_when_managed_actions_spec_secret_is_missing(tmp_path):
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig.model_validate(
+        {"github": {"spec_source": "github-actions"}}
+    )
+    regular = _runner_for(tmp_path)
+
+    def runner(args, **kwargs):
+        if args[:3] == ["gh", "secret", "list"]:
+            return subprocess.CompletedProcess(args, 0, "[]", "")
+        if args[:3] == ["gh", "api", "repos/owner/project"]:
+            return subprocess.CompletedProcess(args, 0, "User\n", "")
+        return regular(args, **kwargs)
+
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=runner,
+    )
+    credential = next(
+        check for check in report.checks if check.name == "Actions Spec credential"
+    )
+
+    assert credential.level is CheckLevel.FAIL
+    assert "gh secret set ANTHROPIC_API_KEY" in credential.detail
+
+
+def test_doctor_verifies_managed_workflows_on_remote_default_branch(tmp_path):
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig()
+    sync_workflows(tmp_path, config, installed_version="0.2.0", check=False)
+    regular = _runner_for(tmp_path)
+
+    def runner(args, **kwargs):
+        if args[:2] == ["gh", "api"] and "/contents/.github/workflows/" in args[2]:
+            name = args[2].split("/workflows/", 1)[1].split("?", 1)[0]
+            content = (tmp_path / ".github" / "workflows" / name).read_bytes()
+            return subprocess.CompletedProcess(
+                args, 0, base64.b64encode(content).decode() + "\n", ""
+            )
+        return regular(args, **kwargs)
+
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=runner,
+    )
+    remote = next(check for check in report.checks if check.name == "remote workflows")
+
+    assert remote.level is CheckLevel.PASS
+    assert "deployed on main" in remote.detail
+    assert report.to_dict()["checks"]
+
+
+def test_doctor_can_opt_in_to_executing_configured_gates(tmp_path):
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig.model_validate(
+        {
+            "github": {"manage_workflows": False},
+            "tests": {"command": "pytest -q"},
+        }
+    )
+
+    def passing_gate(command, **kwargs):
+        return subprocess.CompletedProcess(command, 0, "tests passed", "")
+
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path),
+        run_gates=True,
+        gate_runner=passing_gate,
+    )
+    execution = next(
+        check for check in report.checks if check.name == "verification execution"
+    )
+
+    assert execution.level is CheckLevel.PASS
+    assert "all 1" in execution.detail
