@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from machinist.cli import _workflow_drift_notice, main
-from machinist.config import load_config
+from machinist.config import HarnessName, load_config
 from machinist.workflows import WorkflowDriftError
 
 _BaseCliRunner = CliRunner
@@ -1837,24 +1837,23 @@ def test_init_interactive_wizard_applies_answers(monkeypatch):
         assert not Path(".github").exists()
 
 
-def test_init_interactive_github_actions_locks_harness_to_claude_code(monkeypatch):
+def test_init_interactive_github_actions_supports_selected_harness(monkeypatch):
     _force_interactive(monkeypatch)
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(
             main,
             ["init"],
-            input="github-actions\ny\nskip\n\n",
+            input="github-actions\ny\ncodex\nskip\n\n",
         )
 
         assert result.exit_code == 0, result.output
-        assert "supports only" in result.output
         config = load_config("machinist.yaml")
         assert config.github.spec_source.value == "github-actions"
-        assert config.harness.name.value == "claude-code"
+        assert config.harness.name.value == "codex"
         assert config.tests.command is None
         assert Path(".github/workflows/machinist-spec.yml").is_file()
-        assert "gh secret set ANTHROPIC_API_KEY" in result.output
+        assert "gh secret set OPENAI_API_KEY" in result.output
         assert "Execute dispatch: local watcher" in result.output
 
 
@@ -1967,16 +1966,16 @@ def test_init_notifications_flag_disables_backend():
         assert config.notifications.backend.value == "disabled"
 
 
-def test_init_conflicting_flags_fail_before_writing():
+def test_init_provider_neutral_ci_flags_write_selected_harness():
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(
             main, ["init", "--spec-source", "github-actions", "--harness", "codex"]
         )
 
-        assert result.exit_code != 0
-        assert "claude-code" in result.output
-        assert not Path("machinist.yaml").exists()
+        assert result.exit_code == 0, result.output
+        assert load_config("machinist.yaml").harness.name is HarnessName.CODEX
+        assert "gh secret set OPENAI_API_KEY" in result.output
 
 
 def test_init_test_cmd_replaces_template_comment_tail():

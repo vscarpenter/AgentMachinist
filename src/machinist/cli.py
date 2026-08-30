@@ -45,7 +45,7 @@ from machinist.config_cli import (
 )
 from machinist.doctor import run_doctor
 from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
-from machinist.harness import HarnessError, get_harness
+from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
 from machinist.managed_paths import (
@@ -223,8 +223,16 @@ def _print_init_receipt(
         click.echo(f"  {step}. Create/update labels: machinist sync-labels --apply")
         step += 1
     if source == "github-actions" and config.github.manage_workflows:
+        descriptor = get_harness_descriptor(config.harness_for("spec").name)
+        secret_name = config.github.spec_secret_env or (
+            descriptor.ci_spec.secret_env if descriptor.ci_spec is not None else None
+        )
+        if secret_name is None:
+            raise click.ClickException(
+                "selected Harness has no hosted Spec CI credential metadata"
+            )
         click.echo(
-            f"  {step}. Configure CI authentication: gh secret set ANTHROPIC_API_KEY"
+            f"  {step}. Configure CI authentication: gh secret set {secret_name}"
         )
         step += 1
     click.echo(

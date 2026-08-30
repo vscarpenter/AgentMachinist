@@ -1,7 +1,7 @@
 # AgentMachinist — Phase 1 in CI: generate a spec and open a draft PR
 # when an issue receives the configured trigger label.
 #
-# Requires an ANTHROPIC_API_KEY repository secret (Settings → Secrets).
+# Requires the configured Harness API-key repository secret (Settings → Secrets).
 # Prefer running Phase 1 locally instead? Delete this file and let
 # `machinist watch` handle labeled issues on your machine.
 
@@ -36,11 +36,11 @@ jobs:
       - name: Install AgentMachinist
         run: __INSTALL_AGENTMACHINIST__
 
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@2.1.235
+      - name: Install coding Harness
+        run: __INSTALL_HARNESS__
 
       - name: Generate spec and open draft PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          __HARNESS_SECRET_ENV__: ${{ secrets.__HARNESS_SECRET_ENV__ }}
         run: __SPEC_INVOKE__ ${{ github.event.issue.number }}

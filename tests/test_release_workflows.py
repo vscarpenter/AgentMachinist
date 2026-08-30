@@ -144,7 +144,7 @@ def test_all_third_party_actions_use_immutable_shas_with_version_comments():
 
 def test_generated_claude_workflow_pins_tool_versions():
     text = (_WORKFLOWS / "machinist-spec.yml").read_text()
-    assert "@anthropic-ai/claude-code@2.1.235" in text
+    assert "@anthropic-ai/claude-code@2.1.251" in text
     assert 'version: "0.12.5"' in text
     assert 'python-version: "3.12"' in text
     assert "persist-credentials: false" in text

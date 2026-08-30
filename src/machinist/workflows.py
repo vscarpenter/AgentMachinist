@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import shlex
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
 from machinist.config import MachinistConfig, SpecInstall, SpecSource
+from machinist.harness import HarnessError, get_harness_descriptor
 from machinist.managed_paths import (
     read_managed_text,
     remove_managed_file,
@@ -57,6 +59,19 @@ def _render_workflow_payloads(
     if config.github.spec_source is SpecSource.GITHUB_ACTIONS:
         spec = (_TEMPLATES / "machinist-spec.yml").read_text()
         spec = spec.replace("__TRIGGER_LABEL__", config.github.labels.trigger)
+        try:
+            descriptor = get_harness_descriptor(config.harness_for("spec").name)
+        except HarnessError as exc:
+            raise WorkflowDriftError(str(exc)) from exc
+        ci_profile = descriptor.ci_spec
+        if ci_profile is None:
+            raise WorkflowDriftError(
+                f"harness '{descriptor.display_name}' does not provide hosted Spec CI; "
+                "use github.spec_source local or install an adapter with ci_spec metadata"
+            )
+        secret_env = config.github.spec_secret_env or ci_profile.secret_env
+        spec = spec.replace("__INSTALL_HARNESS__", shlex.join(ci_profile.install_argv))
+        spec = spec.replace("__HARNESS_SECRET_ENV__", secret_env)
         if config.github.spec_install is SpecInstall.CHECKOUT:
             spec = spec.replace("__INSTALL_AGENTMACHINIST__", "uv sync --frozen")
             spec = spec.replace("__SPEC_INVOKE__", "uv run machinist spec")
@@ -197,9 +212,13 @@ def _legacy_pristine_payloads(
                 }
             )
             variant = managed.model_copy(update={"github": variant_github})
-            for name, payload in _render_workflow_payloads(
-                variant, installed_version=installed_version
-            ).items():
+            try:
+                payloads = _render_workflow_payloads(
+                    variant, installed_version=installed_version
+                )
+            except WorkflowDriftError:
+                continue
+            for name, payload in payloads.items():
                 candidates[name].add(payload)
     return candidates
 

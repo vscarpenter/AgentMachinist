@@ -102,9 +102,9 @@ def test_unknown_key_is_rejected(tmp_path):
         load_config(path)
 
 
-def test_invalid_harness_name_lists_valid_ones(tmp_path):
-    path = write_config(tmp_path, "harness:\n  name: cursor\n")
-    with pytest.raises(ConfigError, match="claude-code"):
+def test_invalid_harness_name_explains_identifier_shape(tmp_path):
+    path = write_config(tmp_path, "harness:\n  name: Cursor Agent\n")
+    with pytest.raises(ConfigError, match="harness name"):
         load_config(path)
 
 
@@ -308,6 +308,24 @@ def test_review_defaults_off_for_existing_configuration():
     assert config.review.enabled is False
     assert config.instructions.review.paths == []
     assert config.harness_for("review").name is HarnessName.CLAUDE_CODE
+
+
+def test_third_party_harness_identifier_is_accepted_without_losing_builtins():
+    plugin = MachinistConfig.model_validate(
+        {"harness": {"name": "acme-reviewer", "extra_args": ["--careful"]}}
+    )
+    builtin = MachinistConfig.model_validate({"harness": {"name": "codex"}})
+
+    assert plugin.harness.name == "acme-reviewer"
+    assert builtin.harness.name is HarnessName.CODEX
+
+
+@pytest.mark.parametrize(
+    "name", ["", "Acme", "acme reviewer", "../acme", "acme/reviewer", "a" * 65]
+)
+def test_third_party_harness_identifier_must_be_package_safe(name):
+    with pytest.raises(ValueError, match="harness name"):
+        MachinistConfig.model_validate({"harness": {"name": name}})
 
 
 def test_null_phase_timeout_inherits_legacy_budget():
@@ -551,13 +569,14 @@ def test_reserved_argument_map_is_exposed_for_adapter_contract_tests():
     )
 
 
-def test_github_actions_rejects_non_claude_spec_provider(tmp_path):
+def test_github_actions_accepts_provider_neutral_spec_harness(tmp_path):
     path = write_config(
         tmp_path,
         "harness:\n  name: codex\ngithub:\n  spec_source: github-actions\n",
     )
-    with pytest.raises(ConfigError, match="only.*claude-code"):
-        load_config(path)
+    config = load_config(path)
+
+    assert config.harness_for("spec").name is HarnessName.CODEX
 
 
 def test_github_actions_accepts_claude_spec_profile_over_non_claude_default():

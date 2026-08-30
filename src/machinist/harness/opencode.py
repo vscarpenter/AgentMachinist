@@ -1,13 +1,28 @@
 import re
 import subprocess
 
-from machinist.harness.base import Harness, HarnessCapabilities
+from machinist.harness.base import (
+    Harness,
+    HarnessCapabilities,
+    HarnessCIProfile,
+    HarnessDescriptor,
+)
 
 
 class OpenCode(Harness):
     name = "opencode"
     default_command = "opencode"
     capabilities = HarnessCapabilities("advisory")
+    descriptor = HarnessDescriptor(
+        contract_version=1,
+        display_name="OpenCode",
+        documentation_url="https://opencode.ai/docs/",
+        phases=frozenset({"spec", "execute", "review"}),
+        ci_spec=HarnessCIProfile(
+            install_argv=("npm", "install", "-g", "opencode-ai@1.18.25"),
+            secret_env="ANTHROPIC_API_KEY",
+        ),
+    )
 
     def authentication_argv(self) -> list[str]:
         return [self.command, "auth", "list", "--pure"]

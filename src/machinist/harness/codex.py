@@ -1,12 +1,27 @@
 import subprocess
 
-from machinist.harness.base import Harness, HarnessCapabilities
+from machinist.harness.base import (
+    Harness,
+    HarnessCapabilities,
+    HarnessCIProfile,
+    HarnessDescriptor,
+)
 
 
 class Codex(Harness):
     name = "codex"
     default_command = "codex"
     capabilities = HarnessCapabilities("cli-enforced")
+    descriptor = HarnessDescriptor(
+        contract_version=1,
+        display_name="Codex",
+        documentation_url="https://developers.openai.com/codex/",
+        phases=frozenset({"spec", "execute", "review"}),
+        ci_spec=HarnessCIProfile(
+            install_argv=("npm", "install", "-g", "@openai/codex@0.151.0"),
+            secret_env="OPENAI_API_KEY",
+        ),
+    )
 
     def authentication_argv(self) -> list[str]:
         return [self.command, "login", "status"]

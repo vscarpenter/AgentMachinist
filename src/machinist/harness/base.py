@@ -50,10 +50,31 @@ class HarnessCapabilities:
     implementation_git_control: str = "prompt-and-postcondition"
 
 
+@dataclass(frozen=True)
+class HarnessCIProfile:
+    """Argv-safe installation and secret metadata for hosted Spec CI."""
+
+    install_argv: tuple[str, ...]
+    secret_env: str
+
+
+@dataclass(frozen=True)
+class HarnessDescriptor:
+    """Versioned metadata shared by built-in and entry-point adapters."""
+
+    contract_version: int
+    display_name: str
+    documentation_url: str
+    phases: frozenset[str]
+    structured_usage: bool = False
+    ci_spec: HarnessCIProfile | None = None
+
+
 class Harness(ABC):
     name: ClassVar[str]
     default_command: ClassVar[str]
     capabilities: ClassVar[HarnessCapabilities] = HarnessCapabilities("advisory")
+    descriptor: ClassVar[HarnessDescriptor]
 
     # Harness runs are silent and can last many minutes; a periodic progress
     # callback keeps callers (and humans) sure the process is alive.

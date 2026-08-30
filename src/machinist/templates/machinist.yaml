@@ -39,6 +39,7 @@ github:
   # pypi = pin released package in CI | checkout = run this checkout (dogfood)
   spec_install: pypi
   manage_workflows: true       # false = workflows are intentionally managed outside AgentMachinist
+  spec_secret_env: null        # optional CI secret-name override for the selected Harness
   labels:
     trigger: agent-task        # issues with this label enter the pipeline
     approved: "machinist:approved"   # PRs with this label get implemented

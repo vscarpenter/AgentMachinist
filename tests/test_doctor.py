@@ -406,7 +406,7 @@ def test_doctor_allows_custom_ci_harness_and_skips_unmanaged_drift(tmp_path):
     assert "skipped" in by_name["workflows"].detail
 
 
-def test_doctor_rejects_non_claude_managed_github_actions(tmp_path):
+def test_doctor_accepts_provider_neutral_managed_github_actions(tmp_path):
     (tmp_path / ".git").mkdir()
     base = MachinistConfig()
     codex = MachinistConfig.model_validate({"harness": {"name": "codex"}}).harness
@@ -432,8 +432,8 @@ def test_doctor_rejects_non_claude_managed_github_actions(tmp_path):
     )
     spec_source = next(check for check in report.checks if check.name == "Spec source")
 
-    assert spec_source.level is CheckLevel.FAIL
-    assert "installs only claude-code" in spec_source.detail
+    assert spec_source.level is CheckLevel.PASS
+    assert "compatible with codex" in spec_source.detail
 
 
 def _doctor_update_check(status, **overrides):

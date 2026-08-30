@@ -1,8 +1,8 @@
-# agentmachinist-managed-sha256: d53323daf642e257713a8fc3ae18c82e450c3cd011fac9580d56e0f9089d2317
+# agentmachinist-managed-sha256: 1d0d37a0348c9c2b3d2da1146831d3308cd1490ad6cfad3c66b866e590d30dee
 # AgentMachinist — Phase 1 in CI: generate a spec and open a draft PR
 # when an issue receives the configured trigger label.
 #
-# Requires an ANTHROPIC_API_KEY repository secret (Settings → Secrets).
+# Requires the configured Harness API-key repository secret (Settings → Secrets).
 # Prefer running Phase 1 locally instead? Delete this file and let
 # `machinist watch` handle labeled issues on your machine.
 
@@ -37,8 +37,8 @@ jobs:
       - name: Install AgentMachinist
         run: uv sync --frozen
 
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@2.1.235
+      - name: Install coding Harness
+        run: npm install -g @anthropic-ai/claude-code@2.1.251
 
       - name: Generate spec and open draft PR
         env:

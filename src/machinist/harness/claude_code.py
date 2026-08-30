@@ -1,13 +1,33 @@
 import json
 import subprocess
 
-from machinist.harness.base import Harness, HarnessCapabilities
+from machinist.harness.base import (
+    Harness,
+    HarnessCapabilities,
+    HarnessCIProfile,
+    HarnessDescriptor,
+)
 
 
 class ClaudeCode(Harness):
     name = "claude-code"
     default_command = "claude"
     capabilities = HarnessCapabilities("cli-enforced")
+    descriptor = HarnessDescriptor(
+        contract_version=1,
+        display_name="Claude Code",
+        documentation_url="https://docs.anthropic.com/en/docs/claude-code",
+        phases=frozenset({"spec", "execute", "review"}),
+        ci_spec=HarnessCIProfile(
+            install_argv=(
+                "npm",
+                "install",
+                "-g",
+                "@anthropic-ai/claude-code@2.1.251",
+            ),
+            secret_env="ANTHROPIC_API_KEY",
+        ),
+    )
 
     def authentication_argv(self) -> list[str]:
         return [self.command, "auth", "status", "--json"]

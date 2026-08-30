@@ -93,6 +93,29 @@ class HarnessName(str, Enum):
     CODEX = "codex"
 
 
+type HarnessIdentifier = HarnessName | str
+
+
+def harness_identifier(value: HarnessIdentifier) -> str:
+    """Return one built-in or plugin identifier as a stable string."""
+    return value.value if isinstance(value, HarnessName) else value
+
+
+def _validated_harness_identifier(value: Any) -> HarnessIdentifier:
+    if isinstance(value, HarnessName):
+        return value
+    if not isinstance(value, str):
+        raise ValueError("harness name must be a string")
+    try:
+        return HarnessName(value)
+    except ValueError:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", value):
+            raise ValueError(
+                "harness name must be 1-64 lowercase letters, digits, or hyphens"
+            ) from None
+        return value
+
+
 class HarnessPhase(str, Enum):
     SPEC = "spec"
     EXECUTE = "execute"
@@ -239,16 +262,18 @@ RESERVED_HARNESS_EXTRA_ARGS: dict[HarnessName, dict[HarnessPhase, frozenset[str]
 
 
 def reserved_harness_extra_args(
-    name: HarnessName, phase: HarnessPhase | str
+    name: HarnessIdentifier, phase: HarnessPhase | str
 ) -> frozenset[str]:
     """Return argv tokens controlled by the named adapter and Phase."""
+    if not isinstance(name, HarnessName):
+        return frozenset()
     resolved = HarnessPhase(phase)
     custody_phase = HarnessPhase.SPEC if resolved is HarnessPhase.REVIEW else resolved
     return RESERVED_HARNESS_EXTRA_ARGS[name][custody_phase]
 
 
 def validate_harness_extra_args(
-    name: HarnessName,
+    name: HarnessIdentifier,
     phase: HarnessPhase | str,
     extra_args: list[str],
 ) -> None:
@@ -274,14 +299,14 @@ def validate_harness_extra_args(
         if key in reserved:
             raise ValueError(
                 f"extra_args cannot set adapter-owned argument '{key}' "
-                f"for {name.value} {resolved_phase.value}"
+                f"for {harness_identifier(name)} {resolved_phase.value}"
             )
 
 
 class HarnessPhaseConfig(StrictModel):
     """Optional per-Phase overrides inherited from the legacy harness block."""
 
-    name: HarnessName | None = None
+    name: HarnessIdentifier | None = None
     command: str | None = None
     model: str | None = None
     extra_args: list[str] | None = None
@@ -292,10 +317,15 @@ class HarnessPhaseConfig(StrictModel):
     def _optional_text_is_argv_safe(cls, value: str | None) -> str | None:
         return _validate_optional_harness_text(value)
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _valid_name(cls, value: Any) -> HarnessIdentifier | None:
+        return None if value is None else _validated_harness_identifier(value)
+
 
 class HarnessConfig(StrictModel):
     # These fields remain the compatibility surface consumed by 0.3.x callers.
-    name: HarnessName = HarnessName.CLAUDE_CODE
+    name: HarnessIdentifier = HarnessName.CLAUDE_CODE
     command: str | None = None
     model: str | None = None
     extra_args: list[str] = Field(default_factory=list)
@@ -309,6 +339,11 @@ class HarnessConfig(StrictModel):
     @classmethod
     def _optional_text_is_argv_safe(cls, value: str | None) -> str | None:
         return _validate_optional_harness_text(value)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _valid_name(cls, value: Any) -> HarnessIdentifier:
+        return _validated_harness_identifier(value)
 
     @model_validator(mode="after")
     def _extra_args_preserve_adapter_controls(self) -> "HarnessConfig":
@@ -338,7 +373,7 @@ class HarnessConfig(StrictModel):
 
     def _resolved_name_and_args(
         self, phase: HarnessPhase
-    ) -> tuple[HarnessName, list[str]]:
+    ) -> tuple[HarnessIdentifier, list[str]]:
         profile = self._profile(phase)
         if profile is None:
             return self.name, list(self.extra_args)
@@ -620,6 +655,7 @@ class GitHubConfig(StrictModel):
     spec_source: SpecSource = SpecSource.LOCAL
     spec_install: SpecInstall = SpecInstall.PYPI
     manage_workflows: bool = True
+    spec_secret_env: str | None = None
     labels: LabelsConfig = Field(default_factory=LabelsConfig)
     poll_interval_seconds: int = Field(default=60, ge=10)
 
@@ -629,6 +665,15 @@ class GitHubConfig(StrictModel):
         normalized = normalize_repository_identity(value)
         if value is not None and (normalized is None or normalized != value.casefold()):
             raise ValueError("must look like 'owner/repo'")
+        return value
+
+    @field_validator("spec_secret_env")
+    @classmethod
+    def _secret_environment_name(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[A-Z][A-Z0-9_]{1,63}", value):
+            raise ValueError(
+                "spec_secret_env must be an uppercase environment variable name"
+            )
         return value
 
 
@@ -973,17 +1018,6 @@ class MachinistConfig(StrictModel):
         if self.tests.command is not None and self.verification.gates:
             raise ValueError(
                 "configure either legacy tests.command or verification.gates, not both"
-            )
-        spec_harness = self.harness_for(HarnessPhase.SPEC)
-        if (
-            self.github.spec_source is SpecSource.GITHUB_ACTIONS
-            and self.github.manage_workflows
-            and spec_harness.name is not HarnessName.CLAUDE_CODE
-        ):
-            raise ValueError(
-                "github.spec_source 'github-actions' currently supports only "
-                "a claude-code Spec harness; use local, set harness.spec.name, "
-                "or set github.manage_workflows false for a custom workflow"
             )
         return self
 
