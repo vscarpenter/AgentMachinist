@@ -424,3 +424,25 @@ Assumptions worth revisiting:
   collisions and import failures fail closed and remain diagnosable.
 - OTLP export contains aggregate allowlisted attributes only and is disabled by
   default.
+
+## Pydantic 2.7 compatibility and 0.10.0 release preparation
+
+- [x] Reproduce the merged-main minimum-dependencies failure under Pydantic 2.7
+- [x] Replace the PEP 695 Harness identifier alias with a Pydantic 2.7-compatible alias
+- [x] Run the complete suite under minimum and current dependency sets
+- [x] Align version, changelog, release copy, and visual documentation to 0.10.0
+- [x] Run the canonical release gate and review the final diff
+- [x] Commit the compatibility and release-preparation change
+
+### Resuming From Here
+
+Done: failure reproduced and fixed; all 933 tests pass under Pydantic 2.7; the
+current dependency gate passes 933 tests at 84.86% coverage; workflow, format,
+lint, type, wheel, and sdist checks are green; and every 0.10.0 release surface
+is aligned.
+
+Next: push this branch and open its pull request. After merge, publish the
+GitHub Release tagged `v0.10.0`; Trusted Publishing will rerun the gate and
+publish the prepared package to PyPI.
+
+Blockers: none.
