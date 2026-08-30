@@ -766,17 +766,22 @@ class Workspace:
             for setting in _SAFE_GIT_CONFIG:
                 command.extend(("-c", setting))
             command.extend(args)
+            git_environment = self._controller_git_environment(env)
             kwargs = {
                 "cwd": cwd,
                 "capture_output": True,
                 "text": True,
                 "timeout": _GIT_TIMEOUT_SECONDS,
-                "env": self._controller_git_environment(env),
+                "env": git_environment,
             }
             if self._runner is subprocess.run and self.cancel_check is not None:
                 return run_supervised(
                     command,
-                    **kwargs,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=_GIT_TIMEOUT_SECONDS,
+                    env=git_environment,
                     cancel_check=self.cancel_check,
                 )
             return self._runner(command, **kwargs)
