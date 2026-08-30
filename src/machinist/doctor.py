@@ -604,9 +604,7 @@ def _add_harness_checks(checks, root, config, which, runner) -> None:
             located[identity] = location
 
             if location:
-                result, error = _run_read_only(
-                    runner, harness.version_argv(), cwd=root
-                )
+                result, error = _run_read_only(runner, harness.version_argv(), cwd=root)
                 if error or result.returncode != 0:
                     checks.append(
                         DoctorCheck(
@@ -619,9 +617,7 @@ def _add_harness_checks(checks, root, config, which, runner) -> None:
                     output = (result.stdout or result.stderr or "").strip().splitlines()
                     detail = output[0][:200] if output else "version probe succeeded"
                     checks.append(
-                        DoctorCheck(
-                            CheckLevel.PASS, f"{harness.name} version", detail
-                        )
+                        DoctorCheck(CheckLevel.PASS, f"{harness.name} version", detail)
                     )
 
                 auth_argv = harness.authentication_argv()
@@ -679,11 +675,9 @@ def _add_harness_checks(checks, root, config, which, runner) -> None:
 def _add_actions_secret_check(
     checks, root, config, readiness: _GitHubReadiness, runner
 ) -> None:
-    if (
-        _enum_value(getattr(config.github, "spec_source", "local"))
-        != "github-actions"
-        or not getattr(config.github, "manage_workflows", True)
-    ):
+    if _enum_value(
+        getattr(config.github, "spec_source", "local")
+    ) != "github-actions" or not getattr(config.github, "manage_workflows", True):
         return
     if not readiness.repo_target or not readiness.repository or not readiness.host:
         checks.append(
@@ -796,9 +790,7 @@ def _remote_workflows_check(
         args = ["gh", "api", endpoint, "--jq", ".content"]
         if readiness.host != "github.com":
             args.extend(["--hostname", readiness.host])
-        result, error = _run_read_only(
-            runner, args, cwd=root, env=environment
-        )
+        result, error = _run_read_only(runner, args, cwd=root, env=environment)
         if error or result.returncode != 0:
             missing.append(name)
             continue

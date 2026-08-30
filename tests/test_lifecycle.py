@@ -64,11 +64,7 @@ def test_success_projection_failure_never_appends_a_conflicting_failed_terminal(
     events = [
         json.loads(line)
         for line in (
-            tmp_path
-            / "runs"
-            / "history"
-            / "issue-42-execute"
-            / "attempt-000001.jsonl"
+            tmp_path / "runs" / "history" / "issue-42-execute" / "attempt-000001.jsonl"
         )
         .read_text()
         .splitlines()
@@ -492,10 +488,7 @@ def test_projection_payload_identity_must_match_its_filename(tmp_path):
 def test_journal_payload_identity_must_match_directory_and_attempt(tmp_path):
     lifecycle = TaskLifecycle(tmp_path / "runs")
     journal = (
-        lifecycle.runs_dir
-        / "history"
-        / "issue-999-execute"
-        / "attempt-000002.jsonl"
+        lifecycle.runs_dir / "history" / "issue-999-execute" / "attempt-000002.jsonl"
     )
     journal.parent.mkdir(parents=True)
     record = {
@@ -508,7 +501,9 @@ def test_journal_payload_identity_must_match_directory_and_attempt(tmp_path):
         "status": "failed",
         "updated_at": "2026-08-17T00:00:01+00:00",
     }
-    journal.write_text(json.dumps({"schema_version": 1, "event": "failed", "record": record}) + "\n")
+    journal.write_text(
+        json.dumps({"schema_version": 1, "event": "failed", "record": record}) + "\n"
+    )
 
     assert lifecycle.history(999, Phase.EXECUTE) == []
     assert lifecycle.inventory().corrupt == (journal,)

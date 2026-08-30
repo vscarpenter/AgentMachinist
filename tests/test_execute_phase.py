@@ -1219,7 +1219,9 @@ def test_resume_refuses_workspace_changed_by_mutation_forbidden_gate(tmp_path):
             recovery="resume",
         )
 
-    assert not any(call[0] in {"resume", "commit_all", "push"} for call in workspace.calls)
+    assert not any(
+        call[0] in {"resume", "commit_all", "push"} for call in workspace.calls
+    )
 
 
 def test_verification_cancellation_is_checkpointed_and_typed(tmp_path):

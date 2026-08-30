@@ -712,7 +712,9 @@ def test_watch_once_always_explains_fully_deferred_work(monkeypatch):
         result = runner.invoke(main, ["watch", "--once"])
 
     assert result.exit_code == 0, result.output
-    assert "deferred: execute for issue #42: queue paused for maintenance" in result.output
+    assert (
+        "deferred: execute for issue #42: queue paused for maintenance" in result.output
+    )
     assert "Pass summary: 0 dispatched, 1 deferred" in result.output
     assert "Nothing to do" not in result.output
 
@@ -1431,9 +1433,7 @@ def test_service_stop_refuses_active_claim_without_explicit_force(monkeypatch):
         def stop(self):
             calls.append("stop")
 
-    monkeypatch.setattr(
-        "machinist.cli._launchd_service", lambda: ActiveService()
-    )
+    monkeypatch.setattr("machinist.cli._launchd_service", lambda: ActiveService())
     monkeypatch.setattr(
         "machinist.cli._active_task_runs",
         lambda: [
@@ -2486,9 +2486,7 @@ def test_inspect_offline_recovers_without_config_or_workspace_settings():
 
     runner = CliRunner()
     with runner.isolated_filesystem():
-        TaskLifecycle(Path(".machinist/runs")).run(
-            42, Phase.SPEC, lambda claim: None
-        )
+        TaskLifecycle(Path(".machinist/runs")).run(42, Phase.SPEC, lambda claim: None)
 
         result = runner.invoke(main, ["inspect", "42", "--offline"])
 

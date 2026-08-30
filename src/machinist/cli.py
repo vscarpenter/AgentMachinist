@@ -146,9 +146,7 @@ def _detect_test_command(root: Path) -> str | None:
         pytest_configured = bool(data.get("tool", {}).get("pytest"))
         if pytest_configured or re.search(r"\bpytest(?:\W|$)", dependency_text):
             return (
-                "uv run pytest"
-                if (root / "uv.lock").is_file()
-                else "python -m pytest"
+                "uv run pytest" if (root / "uv.lock").is_file() else "python -m pytest"
             )
     package_json = root / "package.json"
     if package_json.is_file():
@@ -2080,7 +2078,8 @@ def status(
     hidden_recovery = tuple(
         record
         for record in report.current
-        if record.issue not in visible_issues and record.status is not RunStatus.SUCCEEDED
+        if record.issue not in visible_issues
+        and record.status is not RunStatus.SUCCEEDED
     )
     if hidden_recovery:
         click.echo("Local recovery not represented by an open GitHub item:")
@@ -2272,8 +2271,7 @@ def _active_task_runs() -> list[dict[str, object]]:
                 "stage": record.evidence.get("current_stage"),
             }
             for record in records
-            if record.status is RunStatus.RUNNING
-            and lifecycle.claim_held(record.issue)
+            if record.status is RunStatus.RUNNING and lifecycle.claim_held(record.issue)
         ]
     except LifecycleError as exc:
         raise click.ClickException(

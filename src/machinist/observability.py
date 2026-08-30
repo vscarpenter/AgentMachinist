@@ -180,9 +180,7 @@ def describe_run(
             f"machinist retry {issue} --phase {phase}",
         )
     next_action = (
-        f"machinist approve --issue {issue}"
-        if record.phase is Phase.SPEC
-        else None
+        f"machinist approve --issue {issue}" if record.phase is Phase.SPEC else None
     )
     return RunDisposition(
         f"{phase} succeeded",
@@ -308,7 +306,11 @@ def summarize_run_report(
         held = lifecycle.claim_held(record.issue) if lifecycle is not None else None
         disposition = describe_run(record, claim_held=held)
         duration_seconds = _display_duration(record)
-        duration = "" if duration_seconds is None else f", {_format_duration(duration_seconds)}"
+        duration = (
+            ""
+            if duration_seconds is None
+            else f", {_format_duration(duration_seconds)}"
+        )
         detail = (
             f"  #{record.issue} {disposition.display} "
             f"(attempt {record.attempt}{duration})"

@@ -142,7 +142,9 @@ class Harness(ABC):
                 "they were terminated"
             ) from exc
         if result.returncode != 0:
-            diagnostic = (result.stderr or result.stdout or "no diagnostic output").strip()
+            diagnostic = (
+                result.stderr or result.stdout or "no diagnostic output"
+            ).strip()
             raise HarnessError(
                 f"{self.name} exited with {result.returncode}: "
                 f"{diagnostic[-_MAX_ERROR_CHARACTERS:]}"

@@ -90,9 +90,7 @@ class CancellationStore:
             with self._issue_lock(issue):
                 if not regular_file_exists(path):
                     return None
-                payload = json.loads(
-                    read_text_file(path, max_bytes=_MAX_MARKER_BYTES)
-                )
+                payload = json.loads(read_text_file(path, max_bytes=_MAX_MARKER_BYTES))
                 request = _request_from_payload(payload, expected_issue=issue)
         except (
             OSError,
@@ -120,9 +118,7 @@ class CancellationStore:
             try:
                 return unlink_regular_file(self._path(issue), missing_ok=True)
             except (OSError, RuntimePathError) as exc:
-                raise CancellationError(
-                    f"could not clear cancellation: {exc}"
-                ) from exc
+                raise CancellationError(f"could not clear cancellation: {exc}") from exc
 
     def clear_if_matches(
         self,
@@ -147,9 +143,7 @@ class CancellationStore:
             try:
                 return unlink_regular_file(path, missing_ok=True)
             except (OSError, RuntimePathError) as exc:
-                raise CancellationError(
-                    f"could not clear cancellation: {exc}"
-                ) from exc
+                raise CancellationError(f"could not clear cancellation: {exc}") from exc
 
     def check(self, issue: int):
         """Return a zero-argument callback accepted by supervised processes."""

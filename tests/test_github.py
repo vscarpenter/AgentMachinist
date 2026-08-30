@@ -633,9 +633,7 @@ def test_approve_pr_requests_one_server_side_sha_bound_transaction():
 def test_label_names_returns_the_complete_label_set():
     runner = FakeRunner(
         (
-            json.dumps(
-                [{"name": "agent-task"}, {"name": "machinist:approved"}]
-            ),
+            json.dumps([{"name": "agent-task"}, {"name": "machinist:approved"}]),
             0,
             "",
         )

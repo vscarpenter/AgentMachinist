@@ -159,9 +159,7 @@ def write_watcher_heartbeat(
         interval_seconds=interval_seconds,
     )
     try:
-        runtime = RuntimeDirectory.bind(
-            root / ".machinist" / "runs", repo_root=root
-        )
+        runtime = RuntimeDirectory.bind(root / ".machinist" / "runs", repo_root=root)
         service_dir = runtime.subdirectory("service", create=True)
         atomic_write_text_file(
             service_dir / "heartbeat.json",

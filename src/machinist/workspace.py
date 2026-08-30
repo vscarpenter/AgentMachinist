@@ -783,9 +783,15 @@ class Workspace:
         except ProcessCancelledError as exc:
             operation = args[0] if args else "command"
             raise WorkspaceCancelledError(f"git {operation} was cancelled") from exc
-        except (ProcessOutputLimitError, ProcessStartError, ProcessStragglerError) as exc:
+        except (
+            ProcessOutputLimitError,
+            ProcessStartError,
+            ProcessStragglerError,
+        ) as exc:
             operation = args[0] if args else "command"
-            raise WorkspaceError(f"git {operation} could not run safely: {exc}") from exc
+            raise WorkspaceError(
+                f"git {operation} could not run safely: {exc}"
+            ) from exc
         except FileNotFoundError as exc:
             raise WorkspaceError("git not found on PATH") from exc
         except subprocess.TimeoutExpired as exc:

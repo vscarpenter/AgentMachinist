@@ -16,11 +16,14 @@ class OpenCode(Harness):
         if result.returncode != 0:
             return False
         output = f"{result.stdout or ''}\n{result.stderr or ''}"
-        return re.search(
-            r"\b[1-9][0-9]*\s+(?:credentials|environment variables)\b",
-            output,
-            re.IGNORECASE,
-        ) is not None
+        return (
+            re.search(
+                r"\b[1-9][0-9]*\s+(?:credentials|environment variables)\b",
+                output,
+                re.IGNORECASE,
+            )
+            is not None
+        )
 
     def spec_argv(self, prompt: str) -> list[str]:
         # The built-in "plan" agent cannot edit files.
