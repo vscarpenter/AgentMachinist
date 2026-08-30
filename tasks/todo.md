@@ -401,7 +401,7 @@ Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
 - [x] User/operator/adapter documentation and changelog
 - [x] Full verification suite, packaging smoke, and dogfood checks: 933 passed,
       84.88% coverage, clean workflow/format/lint/type gates, wheel + sdist smoke
-- [ ] Comprehension report delivered; user quiz answers pending before merge
+- [x] Comprehension report delivered and user confirmed the safety boundaries
 
 ### Resuming From Here
 
@@ -410,11 +410,10 @@ rehearsal, Harness plugins, provider-aware CI, explain/live status, managed
 Task intake with readiness linting, reporting/telemetry, and the complete user,
 operator, adapter, architecture, trust, and visual documentation pass.
 
-Next: review the comprehension report and answer its five questions before any
-merge. No push, pull request, or merge has been performed.
+Next: the branch is ready for the user's normal push, pull-request review, and
+merge process. No push, pull request, or merge has been performed.
 
-Blockers: implementation has none; the standards-defined comprehension gate is
-intentionally waiting on the user's answers.
+Blockers: none.
 
 Assumptions worth revisiting:
 - Review is opt-in for existing version-1 configurations and enabled by the new
