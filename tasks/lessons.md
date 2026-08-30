@@ -10,4 +10,7 @@
   to arbitrary identifiers.
 - Telemetry privacy is easier to preserve with an allowlisted aggregate payload
   than by redacting an open-ended evidence object after serialization.
-
+- A generated setup branch is not adoption proof until the same managed-file,
+  doctor, and configured verification checks run before its first commit.
+- Managed Task structure and managed workflow ownership are separate controls;
+  repositories should retain the issue form even when they own Actions files.

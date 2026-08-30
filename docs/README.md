@@ -30,10 +30,14 @@ path that matches what you are trying to do:
 - [Harness support matrix](harnesses.md) — adapter behavior, authentication,
   and compatibility checks.
 
-Run `machinist doctor --run-gates`, `machinist sync-labels --check`, and
-`machinist sync-workflows --check` before the first unattended Task. Those
-commands distinguish configuration, local verification, GitHub labels, and
-workflow deployment instead of treating setup as one opaque pass.
+Start with `machinist onboard`, then run `machinist rehearse`,
+`machinist doctor --run-gates`, `machinist sync-labels --check`,
+`machinist sync-workflows --check`, and `machinist task template --check`
+before the first unattended Task. Those commands distinguish controller
+rehearsal, local verification, GitHub labels, workflow deployment, and Task
+intake instead of treating setup as one opaque pass. During operation,
+`machinist explain <issue>`, `machinist status --watch`, and
+`machinist report` expose effective policy, live state, and local reliability.
 
 ## Historical design records
 

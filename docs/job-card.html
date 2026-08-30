@@ -384,11 +384,13 @@ claude --version                     <span class="comment"># or opencode / pi / 
     </div>
     <div class="cell local">
       <span class="chip local">Local</span>
-      <pre><code>machinist init        <span class="comment"># dispatch mode: local</span>
+      <pre><code>machinist onboard     <span class="comment"># dispatch mode: local</span>
 machinist doctor --run-gates
 machinist sync-labels --check
 machinist sync-workflows --check
+machinist task template --check
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
 git add -p .github/workflows
 git diff --cached
 git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
@@ -397,18 +399,21 @@ git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
     </div>
     <div class="cell ci">
       <span class="chip ci">GitHub Actions</span>
-      <pre><code>machinist init --spec-source github-actions
-gh secret set ANTHROPIC_API_KEY      <span class="comment"># CI spec harness needs it</span>
+      <pre><code>machinist onboard --spec-source github-actions
+gh secret set OPENAI_API_KEY          <span class="comment"># use the selected Spec adapter's secret</span>
 machinist sync-workflows
 machinist doctor --run-gates
 machinist sync-labels --check
 machinist sync-workflows --check
+machinist task template --check
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
 git add -p .github/workflows
 git diff --cached
 git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
       <p class="note">Workflows must be pushed before GitHub can record a
-      SHA-bound approval. The CI spec workflow is claude-code only.</p>
+      SHA-bound approval. Managed CI installs the selected Spec adapter and
+      reads its declared repository secret.</p>
     </div>
 
     <div class="stage-bar">
@@ -417,9 +422,11 @@ git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
     </div>
     <div class="cell span">
       <span class="chip both">Same on both tracks</span>
-      <pre><code>gh issue create --title "Add CSV export" --label agent-task</code></pre>
-      <p class="note">Write a focused issue with acceptance criteria. The
-      <code>agent-task</code> label is the trigger — no label, no dispatch.</p>
+      <pre><code>machinist task new --title "Add CSV export" --dispatch
+machinist task lint 7</code></pre>
+      <p class="note">The managed form captures the objective, acceptance
+      criteria, constraints, and verification. The <code>agent-task</code>
+      trigger is applied only after local readiness lint passes.</p>
     </div>
 
     <div class="stage-bar">
@@ -471,14 +478,27 @@ machinist spec 7 --dry-run           <span class="comment"># read-only preview</
       <span class="chip both">Always on your machine — CI only ever owns the spec phase</span>
       <pre><code>machinist run 7       <span class="comment"># or leave `machinist watch` running to dispatch it</span></code></pre>
       <p class="note">Harness implements against the approved spec, the test
-      gate runs (e.g. <code>uv run pytest</code>), the controller commits,
-      pushes with <code>--force-with-lease</code>, and flips the PR from draft
-      to ready. Edited the spec after approving? The approval goes stale and
-      execution refuses until you approve the new head.</p>
+      gate runs (e.g. <code>uv run pytest</code>), and the controller commits
+      and pushes with <code>--force-with-lease</code>. The PR remains draft for
+      an independent Review. Edited the spec after approving? The approval goes
+      stale and execution refuses until you approve the new head.</p>
     </div>
 
     <div class="stage-bar">
       <span class="op-index">OP 06</span>
+      <h3>Independent Review</h3>
+      <span class="auto-tag">machine</span>
+    </div>
+    <div class="cell span">
+      <span class="chip both">Same on both tracks</span>
+      <pre><code>machinist review 7    <span class="comment"># or leave `machinist watch` running</span></code></pre>
+      <p class="note">A separate read-only Harness compares the approved Spec,
+      delivered diff, and verification Evidence at the exact PR head. It posts
+      advisory findings and alone marks that unchanged head ready.</p>
+    </div>
+
+    <div class="stage-bar">
+      <span class="op-index">OP 07</span>
       <h3>Review &amp; merge</h3>
       <span class="gate-tag">Human gate</span>
     </div>
@@ -502,15 +522,16 @@ machinist spec 7 --dry-run           <span class="comment"># read-only preview</
         abort the run if it tries.</span></div>
       <div class="rail"><strong>Draft = machine's</strong>
         <span>Never mark the draft ready yourself — that transition is the
-        signal that tests passed.</span></div>
+        signal that independent Review accepted the exact delivered head.</span></div>
       <div class="rail"><strong>Explicit retry</strong>
         <span>A failed run blocks re-dispatch until
         <code>machinist retry 7</code>. Nothing silently reruns.</span></div>
     </div>
   </section>
 
-  <footer>machinist status · machinist inspect 7 · machinist doctor --run-gates — when
-  anything looks off · full walkthrough: <a href="first-run-guide.html">first-run
+  <footer>machinist explain 7 · machinist status --watch · machinist report ·
+  machinist doctor --run-gates — when anything looks off · full walkthrough:
+  <a href="first-run-guide.html">first-run
   field guide</a></footer>
 </div>
 </body>

@@ -1029,14 +1029,14 @@ machinist, version 0.9.0
         <div class="mode-board">
           <div class="mode-map">
             <div class="mode-panel" id="local-route" data-mode-panel="local">
-              <div class="mode-title"><span>LOCAL ROUTE</span><h3>Your Mac owns both machine phases</h3></div>
-              <svg viewBox="0 0 560 330" role="img" aria-label="Local mode: GitHub sends a labeled issue to the local watcher, which runs the harness for spec and execute, then pushes the pull request back to GitHub.">
+              <div class="mode-title"><span>LOCAL ROUTE</span><h3>Your Mac owns Spec, Execute, and Review</h3></div>
+              <svg viewBox="0 0 560 330" role="img" aria-label="Local mode: GitHub sends a ready Task to the local watcher, which runs the harness for Spec, Execute, and independent Review before returning the pull request to GitHub.">
                 <defs><marker id="local-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
                 <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#local-arrow)"><path d="M140 75H240"/><path d="M320 120v65"/><path d="M240 230H140"/></g>
                 <g font-family="Avenir Next, system-ui, sans-serif">
                   <rect x="25" y="35" width="115" height="80" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="82" y="68" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">GitHub</text><text x="82" y="89" text-anchor="middle" fill="var(--ink-2)" font-size="11">issue + PR</text>
                   <rect x="240" y="35" width="160" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="320" y="69" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">machinist watch</text><text x="320" y="90" text-anchor="middle" fill="var(--ink-1)" font-size="11">your Mac</text>
-                  <rect x="240" y="185" width="160" height="90" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="320" y="220" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">coding harness</text><text x="320" y="242" text-anchor="middle" fill="var(--ink-1)" font-size="11">spec + implement</text>
+                  <rect x="240" y="185" width="160" height="90" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="320" y="220" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">coding harness</text><text x="320" y="242" text-anchor="middle" fill="var(--ink-1)" font-size="11">spec + implement + review</text>
                   <rect x="25" y="190" width="115" height="80" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="82" y="223" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Ready PR</text><text x="82" y="244" text-anchor="middle" fill="var(--ink-1)" font-size="11">you review</text>
                 </g>
                 <text x="280" y="313" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">github.spec_source: local</text>
@@ -1050,7 +1050,7 @@ machinist, version 0.9.0
                 <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#ci-arrow)"><path d="M140 70H215"/><path d="M345 70H420"/><path d="M480 115v70"/><path d="M420 230H345"/></g>
                 <g font-family="Avenir Next, system-ui, sans-serif">
                   <rect x="20" y="35" width="120" height="75" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="80" y="67" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">Labeled issue</text><text x="80" y="87" text-anchor="middle" fill="var(--ink-2)" font-size="11">GitHub</text>
-                  <rect x="215" y="30" width="130" height="85" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="280" y="63" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">Actions</text><text x="280" y="84" text-anchor="middle" fill="var(--ink-1)" font-size="11">Claude writes spec</text>
+                  <rect x="215" y="30" width="130" height="85" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="280" y="63" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">Actions</text><text x="280" y="84" text-anchor="middle" fill="var(--ink-1)" font-size="11">adapter writes spec</text>
                   <rect x="420" y="35" width="120" height="80" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="67" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Approval</text><text x="480" y="88" text-anchor="middle" fill="var(--ink-1)" font-size="11">exact SHA</text>
                   <rect x="420" y="185" width="120" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="218" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Local watch</text><text x="480" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">implements</text>
                   <rect x="215" y="185" width="130" height="85" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="280" y="218" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Ready PR</text><text x="280" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">you review</text>
@@ -1073,10 +1073,10 @@ machinist, version 0.9.0
             <div class="mode-panel" id="ci-steps" data-mode-panel="ci" hidden>
               <h3>GitHub Actions setup</h3>
               <ol>
-                <li>Answer <code>github-actions</code> at init's dispatch question (or set <code>github.spec_source: github-actions</code>). With managed workflows this selects the <code>claude-code</code> harness, the only one the bundled CI spec workflow supports.</li>
+                <li>Answer <code>github-actions</code> at init's dispatch question (or set <code>github.spec_source: github-actions</code>). Managed workflows install the selected Spec adapter from its descriptor.</li>
                 <li>Leave <code>github.spec_install: pypi</code> so the workflow pins the released controller. Use <code>checkout</code> only when developing or dogfooding AgentMachinist itself; it runs the controller from that repository with uv.</li>
                 <li>Run <code>machinist sync-workflows</code> and commit the generated spec workflow.</li>
-                <li>Add <code>ANTHROPIC_API_KEY</code> as a repository secret. The bundled CI path is Claude-specific.</li>
+                <li>Add the selected adapter's declared repository secret: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, or <code>GEMINI_API_KEY</code>. A plugin without hosted-Spec metadata stays local.</li>
                 <li>Keep a local watcher for approved execution; CI owns only the spec phase.</li>
               </ol>
             </div>
@@ -1132,23 +1132,23 @@ tests:
           <article class="annotation"><h3>Make tests real</h3><p>When no named <code>verification.gates</code> exist, a null command skips verification. Configure either the command you trust before merging a human PR or named gates with the same standard.</p></article>
         </div>
       </div>
-      <p class="micro-note">This is an abridged first-run configuration. Before dispatch, use <code>machinist config validate</code> and <code>machinist config show</code>. Advanced configuration supports separate Spec/Execute harness profiles, bounded instruction overlays, ordered named verification gates, notifications, admission budgets, and change limits; the full reference is linked below.</p>
+      <p class="micro-note">This is an abridged first-run configuration. Before dispatch, use <code>machinist config validate</code> and <code>machinist config show</code>. Advanced configuration supports separate Spec/Execute/Review harness profiles, bounded instruction overlays, ordered named verification gates, notifications, local aggregate reporting, opt-in OTLP export, admission budgets, and change limits; the full reference is linked below.</p>
 
       <div class="terminal" style="margin-top: var(--space-6)" aria-label="Initialization and diagnostic commands">
-        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist init&#10;# Review machinist.yaml, verification status, and generated files, then:&#10;machinist doctor --run-gates&#10;machinist sync-labels --check&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
-        <pre><span class="prompt">$</span> machinist init
+        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist onboard&#10;# Review machinist.yaml, verification status, and generated files, then:&#10;machinist doctor --run-gates&#10;machinist sync-labels --check&#10;machinist sync-workflows --check&#10;machinist task template --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
+        <pre><span class="prompt">$</span> machinist onboard
 Configuring machinist.yaml — press Enter to accept a [default],
 or rerun with --no-input to skip these questions.
 
 Dispatch mode — who runs the Spec phase when you label an issue:
   local           this machine runs it via 'machinist watch'
-  github-actions  GitHub CI runs it (requires an ANTHROPIC_API_KEY repository secret)
+  github-actions  GitHub CI runs it (requires the selected Harness repository secret)
 Spec dispatch [local]:
 
 <span class="comment"># … managed workflows, harness, and notifications questions follow …</span>
 
 Test gate — command that must pass before an implementation PR is
-marked ready for review.
+eligible for independent Review.
 Use detected test command 'uv run pytest'? [Y/n]:
 
 <span class="comment"># Review the generated files, then:</span>
@@ -1162,10 +1162,13 @@ PASS Task Runs                no failed or abandoned runs
 
 <span class="prompt">$</span> machinist sync-workflows --check
 Managed workflows match machinist.yaml.
+<span class="prompt">$</span> machinist task template --check
+Managed task template matches AgentMachinist.
 
 <span class="comment"># Review every generated file before making setup durable:</span>
 <span class="prompt">$</span> git status --short
 <span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+<span class="prompt">$</span> git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
 <span class="prompt">$</span> git add -p .github/workflows
 <span class="prompt">$</span> git diff --cached
 <span class="prompt">$</span> git commit -m "chore: configure AgentMachinist"
@@ -1186,8 +1189,8 @@ Managed workflows match machinist.yaml.
           <div class="walk-copy">
             <span class="walk-index">05 / WRITE THE INPUT</span>
             <h3>File one outcome, not a project.</h3>
-            <p>Give the issue a clear title, acceptance criteria, and the <code>agent-task</code> label. “Add CSV export for filtered rows” is a first run. “Improve reporting” is not.</p>
-            <span class="walk-command">GitHub · add label agent-task</span>
+            <p>Use the managed form for a concrete objective, acceptance checkboxes, constraints, and verification. <code>task new --dispatch</code> applies <code>agent-task</code> only after readiness lint passes. “Add CSV export for filtered rows” is a first run. “Improve reporting” is not.</p>
+            <span class="walk-command">machinist task new --title "Add CSV export" --dispatch</span>
 
             <div class="template-card">
               <div class="template-card-head">
@@ -1294,7 +1297,7 @@ machinist spec 42 --abandon --reason "requirements changed"</pre>
           <div class="walk-copy">
             <span class="walk-index">08 / BUILD, TEST, REVIEW</span>
             <h3>Let the machine work. Keep the merge.</h3>
-            <p>The watcher or <code>machinist run 42</code> provisions the approved branch, asks the harness to implement — iterating against your configured test gate until it passes — then runs the gate itself as the authoritative check, pushes with a lease, and marks the PR ready. You review and merge.</p>
+            <p>The watcher or <code>machinist run 42</code> provisions the approved branch, asks the harness to implement, runs the authoritative gates, and pushes with a lease while the PR stays draft. A separate read-only Review Task Run checks the exact delivered head, posts advisory findings, and alone marks it ready. You review and merge.</p>
             <span class="walk-command">machinist run 42</span>
 
             <div class="tip-box">
@@ -1359,7 +1362,8 @@ machinist retry 42 --phase execute --run --fresh</pre>
           <article class="status-item machine"><div class="status-dot"></div><code>approved</code><p>The exact head can execute. Run the watcher or the issue directly.</p></article>
           <article class="status-item machine"><div class="status-dot"></div><code>execute running</code><p>A live Claim owns the Task. Runs show the current named stage, gate number, and elapsed time.</p></article>
           <article class="status-item alert"><div class="status-dot"></div><code>execute interrupted</code><p>The projection says running but no Claim is held. Use the exact <code>Next:</code> recovery command.</p></article>
-          <article class="status-item done"><div class="status-dot"></div><code>in review</code><p>Implementation reached the ready PR. You own review and merge.</p></article>
+          <article class="status-item machine"><div class="status-dot"></div><code>awaiting review</code><p>Execute delivered a draft. The independent Review Task Run owns the next transition.</p></article>
+          <article class="status-item done"><div class="status-dot"></div><code>in review</code><p>Independent Review reached the ready PR. You own review and merge.</p></article>
         </div>
       </div>
     </section>

@@ -41,6 +41,8 @@ approval automation never checks out or executes PR-head code.
 - Required verification gates before push when `tests.command` or named
   `verification.gates` are configured.
 - Atomic local Task Run records and explicit retry.
+- A separate read-only Review Task Run must validate and comment on the exact
+  delivered implementation head before AgentMachinist marks it ready.
 
 “Enforced” here means AgentMachinist or the selected CLI checks it. It does not
 mean a hostile process with the same OS identity cannot work around it.
@@ -57,6 +59,16 @@ mean a hostile process with the same OS identity cannot work around it.
   cloud credentials, or tokens loaded by plugins—may still be reachable.
 
 Therefore, documentation must not claim that a harness “has no Git access.”
+
+Independent Review reduces producer self-evaluation risk, but it is not a
+security scanner or merge authorization. Findings are advisory, the reviewer
+is still local software running as the same OS user, and a configured Review
+profile may use the same provider as Execute. Human code review remains the
+final gate.
+
+Harness plugins are trusted installed Python code. Entry-point validation
+prevents name collisions and isolates broken imports; it cannot constrain what
+a successfully imported plugin does.
 
 ## Git metadata custody
 
@@ -107,6 +119,21 @@ afterwards, and that controller run remains the authoritative gate. Set
 `verification.harness_may_run_gates: false` to withhold both the commands and
 (for `claude-code`) the corresponding `--allowedTools` grants.
 
+## Telemetry
+
+Local reporting reads Task Run history but emits aggregates rather than raw
+Evidence. OTLP export is disabled by default and constructs its payload from an
+allowlist: repository identity, phase, status, Harness, model, counts, rates,
+and duration statistics. Issue bodies, prompts, source/diffs, commands, error
+messages, arbitrary Evidence, environment values, and credential values are
+not export inputs. Authorization is read only from
+`MACHINIST_OTLP_AUTHORIZATION` and is rejected on malformed or credentialed
+endpoint URLs.
+
+An operator who configures an endpoint is trusting that collector with the
+allowlisted repository identity and usage aggregates. Use HTTPS and the same
+network isolation expected for other observability traffic.
+
 ## Recommended deployment boundary
 
 For higher-risk repositories, run AgentMachinist in a dedicated OS account or
@@ -121,6 +148,9 @@ merge protection and required CI reviews on the repository.
 - Cross-host duplicate execution is not prevented by the local claim.
 - A harness-side remote effect can be detected without being reversible.
 - Model output can be wrong while tests pass.
+- Independent Review can miss a defect or produce a false-positive advisory.
+- An explicitly configured telemetry collector learns repository identity and
+  aggregate operational behavior.
 - Under `workspace.strategy: worktree`, Git metadata custody covers a
   directory you also edit, so the guard reports your own changes as well as
   a harness's.

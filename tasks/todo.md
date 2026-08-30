@@ -398,18 +398,19 @@ Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
 - [x] `machinist explain` and `status --watch`
 - [x] Managed issue form, `task new`, and `task lint`
 - [x] Local aggregate reports and optional redacted OTLP/HTTP export
-- [ ] User/operator/adapter documentation and changelog
-- [ ] Full verification suite, packaging smoke, and dogfood checks
+- [x] User/operator/adapter documentation and changelog
+- [ ] Full verification suite, packaging smoke, and dogfood checks (in progress)
 - [ ] Comprehension report and quiz
 
 ### Resuming From Here
 
 Done: discovery, specification, Review Phase, guided onboarding, disposable
-rehearsal, Harness plugins, provider-aware CI, explain/live status, and managed
-Task intake with readiness linting.
+rehearsal, Harness plugins, provider-aware CI, explain/live status, managed
+Task intake with readiness linting, reporting/telemetry, and the complete user,
+operator, adapter, architecture, trust, and visual documentation pass.
 
-Next: reconcile user, operator, and adapter documentation; update the changelog;
-then run the full release gate and prepare the comprehension report.
+Next: run the full repository verification gate, fix any diagnosed failures,
+distill the implementation ledger, and prepare the comprehension report.
 
 Blockers: none.
 

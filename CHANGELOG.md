@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Add a first-class independent Review Phase. Successful Execute runs stay
+  draft until a read-only Review of the exact delivered head posts its
+  structured advisory report; malformed output or head drift fails closed.
+- Add guided `onboard` setup with an optional draft setup PR and a disposable
+  `rehearse` command whose default simulation uses no model or API.
+- Add a versioned `agentmachinist.harnesses.v1` plugin contract and render
+  managed Spec CI from each adapter's pinned install and credential metadata
+  for Claude Code, Codex, OpenCode, and Pi.
+- Add side-effect-free `explain`, changed-only `status --watch`, a sealed task
+  issue form with `task new`/`task lint`, and actionable next-step output.
+- Add local aggregate reliability reports plus explicit, redacted OTLP/HTTP
+  JSON export. Prompts, issue bodies, diffs, commands, errors, and credentials
+  never enter the exported payload.
+
 ## 0.9.0 — 2026-08-30
 
 - Close approval and lifecycle correctness gaps: both managed approval paths

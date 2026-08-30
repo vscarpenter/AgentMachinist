@@ -9,8 +9,8 @@ it. The resulting PR is still yours to review and merge.
 It is an issue-to-reviewed-PR build pipeline with two human gates:
 
 ```text
-issue → SPEC → draft PR → APPROVE exact SHA → EXECUTE → tests → ready PR
-          machine                 human             machine       human
+issue → SPEC → draft PR → APPROVE exact SHA → EXECUTE → tests → REVIEW → ready PR
+          machine                 human             machine          machine   human
 ```
 
 AgentMachinist owns Git operations and GitHub transitions. Each task runs in a
@@ -70,16 +70,31 @@ pipeline contacts PyPI.
 
 ## Set up your repository
 
-From the repository root:
+From the repository root, use the guided entry point:
 
 ```sh
-machinist init
+machinist onboard
 ```
 
-This creates `machinist.yaml`, `.machinist/specs/`, the managed approval
-workflow, and the configured labels. It also idempotently adds
+This creates `machinist.yaml`, `.machinist/specs/`, the sealed GitHub issue
+form, the managed approval workflow, and the configured labels. It also idempotently adds
 `/.machinist/runs/` to `.gitignore` so runtime records are not committed. It
 does not overwrite an existing config unless you pass `--force`.
+
+`onboard` uses the same renderer as `init`. Add `--setup-pr` when setup should
+land through review: AgentMachinist requires a clean default branch, creates
+`chore/agentmachinist-setup`, commits only its managed allowlist, pushes it,
+and opens a draft PR. It never changes the default branch directly. Before a
+real Task, prove the controller flow without GitHub or model cost:
+
+```sh
+machinist rehearse
+```
+
+The default rehearsal is deterministic and uses no model or API; it invokes no
+Harness process.
+`machinist rehearse --harness` is the explicit opt-in to run configured
+profiles in the disposable repository.
 
 In a terminal, `init` walks you through the choices that matter on the first
 run, each with a one-line explanation and a safe default:
@@ -89,10 +104,9 @@ run, each with a one-line explanation and a safe default:
   `ANTHROPIC_API_KEY` repository secret).
 - **Managed workflows** — install the Machinist-owned
   `.github/workflows/machinist-*.yml` files.
-- **Harness** — `claude-code`, `codex`, `opencode`, or `pi`. With
-  `github-actions` dispatch and managed workflows, the harness is
-  `claude-code` because the managed CI spec workflow currently supports only
-  a claude-code Spec harness.
+- **Harness** — `claude-code`, `codex`, `opencode`, `pi`, or an installed v1
+  adapter plugin. Managed GitHub Actions dispatch renders the selected
+  adapter's pinned install and secret metadata.
 - **Test gate** — confirm the auto-detected command, or pick your language
   for a suggested one (`pytest`, `npm test`, `cargo test`, `go test ./...`,
   `mvn test`), type your own, or skip the gate.
@@ -124,6 +138,7 @@ Then verify the installation without changing it:
 machinist doctor --run-gates
 machinist sync-labels --check
 machinist sync-workflows --check
+machinist task template --check
 ```
 
 Resolve every `FAIL`. Treat a warning that no verification gates are configured
@@ -135,6 +150,7 @@ exist on GitHub before a comment or label can record SHA-bound approval:
 ```sh
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
 git add -p .github/workflows
 git diff --cached
 git commit -m "chore: configure AgentMachinist"
@@ -148,8 +164,18 @@ to run.
 
 ## Your first agent task
 
-Create a focused issue with acceptance criteria and apply the `agent-task`
-label. With the default local dispatcher, start one pass:
+Create and lint a focused Task before paying for agent work:
+
+```sh
+machinist task new --title "Make authentication recovery actionable"
+machinist task lint 7
+machinist task new --title "Add export recovery" --dispatch
+```
+
+The managed form captures objective, acceptance checkboxes, constraints,
+verification, and context. `task new` creates an unlabeled issue by default;
+`--dispatch` applies `agent-task` only after the same local lint passes. With
+the default local dispatcher, start one pass:
 
 ```sh
 machinist watch --once
@@ -226,7 +252,19 @@ trigger label and the PR's approval label, and closes the open draft PR. It
 does not merge or delete the branch.
 
 Do not mark the draft ready yourself. AgentMachinist uses that transition to
-signal that implementation and the configured test gate completed.
+signal that implementation, verification, and independent Review completed.
+
+When `review.enabled` is true, Execute leaves the implementation draft. Review
+checks the exact delivered head in read-only mode against the approved Spec,
+diff, and verification evidence; it posts versioned structured findings and
+then marks the PR ready. Findings are advisory in this release: they do not
+trigger an autonomous fix or merge. If Review fails or the head changes, the
+PR stays draft:
+
+```sh
+machinist review 42
+machinist retry 42 --phase review
+```
 
 `machinist run <issue> --force` is an intentional rework path for a ready PR.
 It does not bypass immutable approval: approve that PR's current head again
@@ -263,9 +301,11 @@ github:
 `github.spec_install` chooses how CI obtains the controller: `pypi` (default)
 pins `agentmachinist==<installed version>`; `checkout` runs `uv sync --frozen`
 and `uv run machinist spec` from the repository (for dogfooding AgentMachinist
-itself). The generated workflow is still Claude-Code-specific and requires
-`ANTHROPIC_API_KEY`. For other harnesses, use local mode unless you maintain
-an appropriate installation step.
+itself). The generated workflow reads the selected Spec adapter's CI metadata.
+Built-ins install pinned Claude Code, Codex, OpenCode, or Pi packages and bind
+only their declared repository secret (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+or `GEMINI_API_KEY`). `github.spec_secret_env` overrides the secret name, not
+its value. A plugin without a CI Spec profile must use local dispatch.
 
 ## Configuration reference
 
@@ -281,6 +321,7 @@ harness:
   spec_timeout_minutes: 10
   spec: null
   execute: null
+  review: null
 
 instructions:
   spec:
@@ -289,12 +330,19 @@ instructions:
   execute:
     paths: []
     append: null
+  review:
+    paths: []
+    append: null
+
+review:
+  enabled: true
 
 github:
   repo: null
   spec_source: local
   spec_install: pypi
   manage_workflows: true
+  spec_secret_env: null
   labels:
     trigger: agent-task
     approved: "machinist:approved"
@@ -312,6 +360,10 @@ tests:
 verification:
   gates: []
   harness_may_run_gates: true
+
+telemetry:
+  otlp_endpoint: null
+  timeout_seconds: 5
 
 queue:
   max_tasks_per_pass: 1
@@ -360,7 +412,7 @@ machinist config schema --output machinist.schema.json
 machinist config set queue.max_tasks_per_pass 2
 ```
 
-`config show` resolves the effective Spec and Execute harness profiles.
+`config show` resolves the effective Spec, Execute, and Review harness profiles.
 `config set` parses its value as YAML, validates the complete document, writes
 atomically, and rewrites the file as canonical YAML; comments are normalized.
 `validate`, `show`, and `set` accept `--path` for a non-default config file.
@@ -375,8 +427,8 @@ git diff -- .github/workflows
 
 ## Phase harnesses and instruction overlays
 
-The top-level harness remains the default for both phases. Override only the
-fields that differ for Spec or Execute:
+The top-level harness remains the default for all phases. Override only the
+fields that differ for Spec, Execute, or Review:
 
 ```yaml
 harness:
@@ -392,6 +444,10 @@ harness:
     name: codex
     model: gpt-5.3-codex
     timeout_minutes: 45
+  review:
+    name: claude-code
+    model: claude-sonnet-4-5
+    timeout_minutes: 12
 ```
 
 Omitted fields inherit from the top level. When a phase changes harness
@@ -409,6 +465,9 @@ instructions:
   execute:
     paths: [AGENTS.md, docs/testing.md]
     append: null
+  review:
+    paths: [AGENTS.md, docs/review-policy.md]
+    append: "Report findings; never edit files."
 ```
 
 Paths are ordered, UTF-8, repository-relative files. AgentMachinist rejects
@@ -490,8 +549,14 @@ checked afterward for harness-created commits, remote branch changes, and
 `.machinist/` changes. See the [harness matrix](harnesses.md) and
 [trust model](trust-model.md) before unattended operation.
 
+Installed Python distributions may add a trusted adapter through the
+`agentmachinist.harnesses.v1` entry-point group. The entry-point name must
+match its lowercase adapter identifier; built-in names are reserved. Discovery
+isolates broken plugins and `doctor` reports their failures. See
+[Harness support](harnesses.md) for the version-1 descriptor and CI contract.
+
 `harness.model` selects an adapter-specific model. `harness.extra_args` appends
-arguments to both Spec and Execute invocations after AgentMachinist's own
+arguments to Spec, Execute, and Review invocations after AgentMachinist's own
 arguments. AgentMachinist rejects adapter-owned sandbox, permission, model,
 session, and tool flags, including duplicate forms that could override its
 controls. Other additional arguments remain advanced and may change behavior
@@ -636,13 +701,28 @@ Use the local read model when GitHub is unavailable or when scripts need JSON:
 
 ```sh
 machinist status --local --json
+machinist status --watch --interval 2
 machinist runs --issue 42 --json
 machinist inspect 42 --offline --json
+machinist explain 42 --json
+machinist report --since 30d --json
 ```
 
 These reports include current and historical attempts plus orphaned, partial,
 or corrupt runtime artifacts; remote-source errors do not erase readable local
 evidence.
+
+`explain` is side-effect free and resolves the Task's current state, next
+command, phase profiles, gates, workspace policy, limits, queue state, attempts,
+and allowed credential names—never credential values. `status --watch` emits
+only changed snapshots; `--json` produces one compact JSON object per line.
+
+`report` aggregates outcomes, retries, cancellations, duration percentiles,
+verification failures, and safe Harness/model metadata from local JSONL
+history. Export is disabled unless `telemetry.otlp_endpoint` or an explicit
+`--otlp-endpoint` is supplied. OTLP/HTTP JSON contains aggregate repository,
+phase, status, Harness, and model attributes only. Set authorization in
+`MACHINIST_OTLP_AUTHORIZATION`, never in `machinist.yaml`.
 
 For several repositories on one Mac, maintain the optional registry and view
 their local status together:
@@ -676,12 +756,13 @@ Common states and responses:
 | `approval pending` | The label exists but SHA evidence has not been recorded; inspect the approval workflow, then approve again only if it failed. |
 | `approval stale` | The branch changed after approval; approve the current head. |
 | `approved` | Run `machinist run <issue>` or leave `watch` running. |
+| `awaiting review` | Leave `watch` running or run `machinist review <issue>`. |
 | `in review` | Implementation finished; review the PR. |
-| `spec running` / `execute running` | Machinist holds the Claim; `status`/`runs` show its current named stage and elapsed time. |
-| `spec interrupted` / `execute interrupted` | No process holds the recorded Claim; run the exact `Next:` retry command. |
-| `spec failed` / `execute failed` | Inspect the retained Evidence, fix the cause, then use the displayed retry command. |
-| `spec cancelled` / `execute cancelled` | Clear or replace the cancellation request before retrying. |
-| `spec abandoned` / `execute abandoned` | The operator ended this lifecycle; retry only after deciding it should resume. |
+| `spec running` / `execute running` / `review running` | AgentMachinist holds the Claim; `status`/`runs` show its current named stage and elapsed time. |
+| `spec interrupted` / `execute interrupted` / `review interrupted` | No process holds the recorded Claim; run the exact `Next:` retry command. |
+| `spec failed` / `execute failed` / `review failed` | Inspect the retained Evidence, fix the cause, then use the displayed retry command. |
+| `spec cancelled` / `execute cancelled` / `review cancelled` | Clear or replace the cancellation request before retrying. |
+| `spec abandoned` / `execute abandoned` / `review abandoned` | The operator ended this lifecycle; retry only after deciding it should resume. |
 | `spec closed` | The Spec PR is closed; revise the Task intent before starting another Spec. |
 | Failed Execute run retained useful edits | Inspect the path, then run `machinist retry <issue> --phase execute --run --resume` from the repository root. |
 | Failed Execute run should start clean | Run `machinist retry <issue> --phase execute --run --fresh`. Omitting both recovery flags also selects a fresh attempt. |

@@ -233,11 +233,11 @@
     </section>
     <section class="strip" aria-label="The pipeline at a glance">
       <div class="strip-grid shell">
-        <div class="strip-cell you"><span class="idx">01 · YOU</span><strong>File the issue</strong><small>one outcome, labeled</small></div>
+        <div class="strip-cell you"><span class="idx">01 · YOU</span><strong>Shape the Task</strong><small>structured, linted, dispatched</small></div>
         <div class="strip-cell"><span class="idx">02 · MACHINE</span><strong>Write the spec</strong><small>a plan in a draft PR</small></div>
         <div class="strip-cell you"><span class="idx">03 · YOU</span><strong>Approve the SHA</strong><small>consent to one commit</small></div>
-        <div class="strip-cell"><span class="idx">04 · MACHINE</span><strong>Build it</strong><small>isolated worktree</small></div>
-        <div class="strip-cell"><span class="idx">05 · MACHINE</span><strong>Pass the test gate</strong><small>failures never push</small></div>
+        <div class="strip-cell"><span class="idx">04 · MACHINE</span><strong>Build &amp; verify</strong><small>isolated worktree</small></div>
+        <div class="strip-cell"><span class="idx">05 · MACHINE</span><strong>Review the head</strong><small>independent, read-only</small></div>
         <div class="strip-cell you"><span class="idx">06 · YOU</span><strong>Review &amp; merge</strong><small>machinist never merges</small></div>
       </div>
     </section>
@@ -251,9 +251,9 @@
         <div class="steps">
           <article class="step you" data-step="0">
             <span class="who">STATION 01 · YOU</span>
-            <h3>File one outcome, not a project.</h3>
-            <p>A clear title, acceptance criteria, and the <code>agent-task</code> label. “Add CSV export for filtered rows” is a first run. “Improve reporting” is not. The label is the only trigger — nothing touches unlabeled issues.</p>
-            <span class="cmd">GitHub · add label agent-task</span>
+            <h3>Shape one outcome, not a project.</h3>
+            <p>The managed Task form captures an objective, acceptance checks, constraints, and verification. Readiness lint runs before <code>task new --dispatch</code> applies the <code>agent-task</code> trigger; nothing touches an unlabeled issue.</p>
+            <span class="cmd">machinist task new --title "Add CSV export" --dispatch</span>
           </article>
           <article class="step" data-step="1">
             <span class="who">STATION 02 · MACHINE</span>
@@ -269,20 +269,20 @@
           </article>
           <article class="step" data-step="3">
             <span class="who">STATION 04 · MACHINE</span>
-            <h3>Built in a worktree, not your checkout.</h3>
-            <p>Implementation starts fresh from the approved head in an isolated workspace. The harness edits files; the controller keeps Git custody, strips GitHub credentials from the harness environment, and afterwards checks for harness commits, remote pushes, and <code>.machinist/</code> edits.</p>
+            <h3>Built and verified away from your checkout.</h3>
+            <p>Implementation starts fresh from the approved head in an isolated workspace. The harness edits files; the controller keeps Git custody, strips GitHub credentials from the harness environment, and runs the authoritative test gates before pushing the unchanged draft.</p>
             <span class="cmd">machinist run 42</span>
           </article>
           <article class="step" data-step="4">
             <span class="who">STATION 05 · MACHINE</span>
-            <h3>The test gate is authoritative.</h3>
-            <p>The controller runs your configured tests itself — the harness may pre-run them to iterate, but its word is never trusted. A required failure blocks readiness, keeps the workspace as evidence, and pushes nothing. Deleting a test file is refused outright.</p>
-            <span class="cmd">uv run pytest</span>
+            <h3>Independent Review checks the delivered head.</h3>
+            <p>A separate read-only Harness compares the approved Spec, delivered diff, and verification Evidence. Findings are advisory, but malformed output or a moved head fails closed and keeps the PR draft.</p>
+            <span class="cmd">machinist review 42</span>
           </article>
           <article class="step you" data-step="5">
             <span class="who">STATION 06 · YOU — GATE 2</span>
             <h3>Ready means reviewable — never merged.</h3>
-            <p>The controller pushes with a lease against the approved SHA and flips the PR from draft to ready. You review the diff against the spec and click merge yourself. AgentMachinist has no merge authority — the last word is structurally yours.</p>
+            <p>Independent Review alone marks the unchanged PR head ready. You review the diff against the spec and click merge yourself. AgentMachinist has no merge authority — the last word is structurally yours.</p>
             <span class="cmd">GitHub · Merge pull request</span>
           </article>
         </div>
@@ -290,11 +290,11 @@
           <p class="board-label">SHOP-FLOOR BOARD</p>
           <div class="board-rows">
             <div class="rail"><i id="rail-fill"></i></div>
-            <div class="board-row you active" data-row="0"><div class="row-line"><div class="row-name"><span class="num">01</span><strong>You file one outcome</strong></div><span class="chip you">YOU</span></div></div>
+            <div class="board-row you active" data-row="0"><div class="row-line"><div class="row-name"><span class="num">01</span><strong>You shape one ready Task</strong></div><span class="chip you">YOU</span></div></div>
             <div class="board-row" data-row="1"><div class="row-line"><div class="row-name"><span class="num">02</span><strong>The machine writes a plan</strong></div><span class="chip mach">MACHINE</span></div></div>
             <div class="board-row you" data-row="2"><div class="row-line"><div class="row-name"><span class="num">03</span><strong>You approve one commit</strong></div><span class="chip you">YOU</span></div></div>
-            <div class="board-row" data-row="3"><div class="row-line"><div class="row-name"><span class="num">04</span><strong>The machine builds in isolation</strong></div><span class="chip mach">MACHINE</span></div></div>
-            <div class="board-row" data-row="4"><div class="row-line"><div class="row-name"><span class="num">05</span><strong>The test gate decides</strong></div><span class="chip mach">MACHINE</span></div></div>
+            <div class="board-row" data-row="3"><div class="row-line"><div class="row-name"><span class="num">04</span><strong>The machine builds and verifies</strong></div><span class="chip mach">MACHINE</span></div></div>
+            <div class="board-row" data-row="4"><div class="row-line"><div class="row-name"><span class="num">05</span><strong>Independent Review checks the head</strong></div><span class="chip mach">MACHINE</span></div></div>
             <div class="board-row you" data-row="5"><div class="row-line"><div class="row-name"><span class="num">06</span><strong>You review. You merge.</strong></div><span class="chip you">YOU</span></div></div>
           </div>
           <p class="board-note">Orange stations wait for you; blue ones run themselves. The loop halts at every orange station until you act.</p>
@@ -314,8 +314,8 @@
             <div class="sim-meta">
               <span class="chip you" id="sim-who"><i></i>YOU ACT</span>
               <div>
-                <strong id="sim-title">File issue #42 and label it</strong>
-                <small id="sim-note">One outcome with acceptance criteria. The agent-task label puts it on the machine's pickup shelf.</small>
+                <strong id="sim-title">Create and dispatch Task #42</strong>
+                <small id="sim-note">The structured body passes readiness lint before agent-task puts it on the machine's pickup shelf.</small>
               </div>
             </div>
             <div class="sim-ctrl">
@@ -343,8 +343,11 @@
               <p class="tline" data-at="6">uv run pytest -q</p>
               <p class="tline ok" data-at="6">84 passed in 12.3s</p>
               <p class="tline" data-at="7">pushed agent/issue-42 (lease held)</p>
-              <p class="tline ok" data-at="7">PR #18 marked ready for review</p>
-              <p class="tline c" data-at="8"># your move — machinist never merges</p>
+              <p class="tline" data-at="7">PR #18 remains draft</p>
+              <p class="tline p" data-at="8"><b>$ </b>machinist review 42</p>
+              <p class="tline" data-at="8">reviewed approved Spec + delivered diff + test Evidence</p>
+              <p class="tline ok" data-at="8">PR #18 marked ready for review</p>
+              <p class="tline c" data-at="9"># your move — machinist never merges</p>
               <p class="tline"><b style="color:#f0a07e">$ </b><span class="cursor"></span></p>
             </div>
           </div>
@@ -368,7 +371,7 @@
                 <p class="gh-callout" data-at="3" data-until="3">You are here — reading the plan. No code exists yet.</p>
                 <div class="gh-tags" data-at="4"><span class="tag ok">machinist:approved</span><span class="tag line">sha a17c98d42e6f</span></div>
                 <p class="gh-check" data-at="6">✓ test gate — uv run pytest · 84 passed</p>
-                <div class="gh-merge" data-at="8"><span class="merge-btn">Merge pull request</span><small>only you can press this</small></div>
+                <div class="gh-merge" data-at="9"><span class="merge-btn">Merge pull request</span><small>only you can press this</small></div>
               </div>
             </div>
           </div>
@@ -403,7 +406,7 @@
       <div class="start-grid shell">
         <div>
           <p class="kicker">Get started for real</p>
-          <h2>One install. One init. One labeled issue.</h2>
+          <h2>One install. One onboarding pass. One ready Task.</h2>
           <p style="font-size:1.05rem;margin-bottom:1.5rem">Four tools first — each proves itself with one command. Then the sequence on the right is your entire first run.</p>
           <div class="prereqs">
             <div class="prereq"><strong>Git</strong><code>git --version</code></div>
@@ -419,20 +422,24 @@
             <p class="tline c"># install the controller</p>
             <p class="tline p"><b>$ </b>uv tool install agentmachinist</p>
             <p class="tline">&nbsp;</p>
-            <p class="tline c"># in your repository — answer init's short setup questions</p>
-            <p class="tline p"><b>$ </b>machinist init</p>
+            <p class="tline c"># in your repository — answer the onboarding questions</p>
+            <p class="tline p"><b>$ </b>machinist onboard</p>
             <p class="tline p"><b>$ </b>machinist doctor --run-gates</p>
             <p class="tline p"><b>$ </b>machinist sync-labels --check</p>
+            <p class="tline p"><b>$ </b>machinist task template --check</p>
             <p class="tline">&nbsp;</p>
             <p class="tline c"># review the generated files, then make setup durable</p>
             <p class="tline p"><b>$ </b>git add machinist.yaml .machinist/specs/.gitkeep .gitignore</p>
+            <p class="tline p"><b>$ </b>git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml</p>
             <p class="tline p"><b>$ </b>git add -p .github/workflows</p>
             <p class="tline p"><b>$ </b>git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</p>
             <p class="tline">&nbsp;</p>
-            <p class="tline c"># label issue 42 'agent-task', then run the loop</p>
+            <p class="tline c"># create a linted Task, then run the loop</p>
+            <p class="tline p"><b>$ </b>machinist task new --title "Add CSV export" --dispatch</p>
             <p class="tline p"><b>$ </b>machinist watch --once   <span class="c" style="color:var(--terminal-muted)"># spec → draft PR</span></p>
             <p class="tline p"><b>$ </b>machinist approve --issue 42 <span style="color:var(--terminal-muted)"># workflow verifies write access + SHA</span></p>
-            <p class="tline p"><b>$ </b>machinist run 42         <span style="color:var(--terminal-muted)"># build + test gate → ready PR</span></p>
+            <p class="tline p"><b>$ </b>machinist run 42         <span style="color:var(--terminal-muted)"># build + test gate → draft PR</span></p>
+            <p class="tline p"><b>$ </b>machinist review 42      <span style="color:var(--terminal-muted)"># independent Review → ready PR</span></p>
           </div>
         </div>
       </div>
@@ -440,7 +447,7 @@
   </main>
   <footer class="site-footer shell">
     <div class="footer-row">
-      <span>AgentMachinist · issue → exact spec approval → tested PR → your merge</span>
+      <span>AgentMachinist · ready Task → exact spec approval → independent Review → your merge</span>
       <nav aria-label="Documentation">
         <a href="first-run-guide.html">Field guide</a>
         <a href="explainer.html">One-minute explainer</a>
@@ -464,14 +471,15 @@
       document.querySelectorAll('[data-step]').forEach((n) => io.observe(n));
 
       const STEPS = [
-        { who: 'YOU', title: 'File issue #42 and label it', note: "One outcome with acceptance criteria. The agent-task label puts it on the machine's pickup shelf." },
+        { who: 'YOU', title: 'Create and dispatch Task #42', note: 'The structured body passes readiness lint before agent-task puts it on the machine\'s pickup shelf.' },
         { who: 'MACHINE', title: 'The watcher admits the task', note: 'One poll: the labeled issue is eligible, a local claim is taken, and the SPEC phase dispatches.' },
         { who: 'MACHINE', title: 'Spec becomes a draft PR', note: 'The harness plans in read-only mode; the controller commits the spec and opens draft PR #18.' },
         { who: 'YOU', title: 'Read the plan', note: 'The draft PR contains only the spec: summary, approach, testing plan, out-of-scope. No code exists yet.' },
         { who: 'YOU', title: 'Approve the exact SHA', note: 'Your approval names commit a17c98d. Any later edit to the branch makes it stale — execution would refuse.' },
         { who: 'MACHINE', title: 'Implement the approved plan', note: 'A fresh workspace from the approved head. The harness edits; the controller holds Git and the credentials.' },
         { who: 'MACHINE', title: 'The test gate runs', note: "The controller runs your gate itself — the harness's own runs only improve first-pass quality." },
-        { who: 'MACHINE', title: 'Push with a lease, flip to ready', note: 'The push is force-with-lease against the approved SHA: if the branch moved, it fails instead of overwriting.' },
+        { who: 'MACHINE', title: 'Push with a lease, remain draft', note: 'The push is force-with-lease against the approved SHA: if the branch moved, it fails instead of overwriting.' },
+        { who: 'MACHINE', title: 'Independent Review checks the head', note: 'A separate read-only Harness compares the approved Spec, delivered diff, and test Evidence before readying that exact head.' },
         { who: 'YOU', title: 'Review the diff. Click merge.', note: 'Tests passed and the spec was followed — but the merge button only answers to you. Merging closes #42.' },
       ];
       let k = 0;
@@ -506,10 +514,10 @@
           el.hidden = !(k >= at && k <= until);
         });
         const badge = $('pr-badge');
-        if (k >= 7) { badge.textContent = 'READY FOR REVIEW'; badge.className = 'tag ok'; }
+        if (k >= 8) { badge.textContent = 'READY FOR REVIEW'; badge.className = 'tag ok'; }
         else if (k >= 4) { badge.textContent = 'DRAFT · APPROVED'; badge.className = 'tag ok'; }
         else { badge.textContent = 'DRAFT'; badge.className = 'tag warn'; }
-        $('gh-pr').classList.toggle('hot', k === 3 || k === 8);
+        $('gh-pr').classList.toggle('hot', k === 3 || k === 9);
       };
       $('sim-back').addEventListener('click', () => { k = Math.max(0, k - 1); render(); });
       $('sim-next').addEventListener('click', () => { k = Math.min(STEPS.length - 1, k + 1); render(); });

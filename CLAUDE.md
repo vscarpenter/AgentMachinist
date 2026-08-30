@@ -11,7 +11,8 @@ and implementation:
 
 ```text
 issue + trigger label → spec commit → draft PR → SHA-bound approval
-                    → implementation → test gate → ready PR → human merge
+                    → implementation → test gate → independent review
+                    → ready PR → human merge
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
@@ -123,7 +124,7 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
 ## Domain language (see CONTEXT.md for the full glossary)
 
 Use these terms exactly in docs and messages: **Task** (issue in the
-pipeline), **Phase** (Spec or Execute — Approve is a human Gate, not a
+pipeline), **Phase** (Spec, Execute, or Review — Approve is a human Gate, not a
 Phase), **Spec** (identified by its exact commit), **Approval** (authorizes
 one exact Spec commit; stale when the branch head changes), **Task Run**
 (durable record of one Phase attempt), **Claim** (exclusive local ownership),
@@ -211,7 +212,11 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-08-30)
 
-- v0.9.0 is the current release. It makes first-run readiness explicit, adds
+- v0.9.0 is the current published release. Unreleased toolkit expansion adds
+  independent Review, guided onboarding and rehearsal, Harness plugins with
+  provider-aware CI, explain/live status, structured Task intake, and local
+  aggregate reports with opt-in OTLP export. The published release makes
+  first-run readiness explicit and adds
   durable progress and attempt history, gives recovery paths exact commands,
   safeguards active Claims during service lifecycle operations, and hardens
   harness authentication and session isolation. `machinist doctor --run-gates`
@@ -246,5 +251,5 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 - Known limits: macOS is the proven OS for the daemon; Linux notifications
   exist via `notify-send` but are unexercised in practice. claude-code is the
   proven harness (other adapters' flags verified against docs, less
-  exercised). The CI spec workflow requires an `ANTHROPIC_API_KEY` repository
-  secret and installs Claude Code regardless of the configured local harness.
+  exercised). The CI spec workflow now installs the selected Spec adapter from
+  its descriptor and requires that adapter's declared repository secret.

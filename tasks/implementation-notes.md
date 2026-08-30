@@ -22,3 +22,9 @@
 - Extended the existing observability filename parser to include Review; the
   first-class Phase was already durable, but the read model's regex still
   recognized only Spec and Execute history.
+- Made setup-PR delivery run managed workflow, Task-template, doctor, and real
+  verification-gate checks before its first commit or push. Failed preflight
+  leaves the allowlisted setup changes visible on the setup branch.
+- Reconciled the visual documentation surfaces as operational contracts, not
+  release decoration: Execute now visibly leaves a draft and a distinct Review
+  step owns readiness everywhere.
