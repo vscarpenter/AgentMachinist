@@ -100,6 +100,7 @@ def test_claude_code_implement_argv_can_edit_files():
     argv = harness.implement_argv("build it")
     assert argv[:3] == ["claude", "-p", "build it"]
     assert "--permission-mode" in argv
+    assert "--no-session-persistence" in argv
     # Without allowed commands there must be no Bash allowlist at all.
     assert "--allowedTools" not in argv
 
@@ -151,6 +152,46 @@ def test_codex_implement_argv_uses_current_headless_workspace_write_contract():
     assert "--full-auto" not in argv
 
 
+def test_authentication_probes_fail_closed_on_empty_or_unstructured_output():
+    claude = get_harness(HarnessConfig(name=HarnessName.CLAUDE_CODE))
+    assert claude.authentication_argv() == ["claude", "auth", "status", "--json"]
+    assert not claude.authentication_ready(
+        subprocess.CompletedProcess([], 0, "logged in", "")
+    )
+
+    opencode = get_harness(HarnessConfig(name=HarnessName.OPENCODE))
+    assert opencode.authentication_argv() == ["opencode", "auth", "list", "--pure"]
+    assert not opencode.authentication_ready(
+        subprocess.CompletedProcess([], 0, "0 credentials", "")
+    )
+    assert opencode.authentication_ready(
+        subprocess.CompletedProcess([], 0, "2 credentials", "")
+    )
+
+
+def test_pi_authentication_probe_uses_configured_model_and_structured_status():
+    harness = get_harness(
+        HarnessConfig(name=HarnessName.PI, model="anthropic/claude-sonnet")
+    )
+
+    assert harness.authentication_argv() == [
+        "pi",
+        "auth",
+        "check",
+        "--model",
+        "anthropic/claude-sonnet",
+        "--json",
+        "--no-refresh",
+    ]
+    assert harness.authentication_ready(
+        subprocess.CompletedProcess([], 0, '{"status":"ready"}', "")
+    )
+    assert not harness.authentication_ready(
+        subprocess.CompletedProcess([], 1, '{"status":"not_ready"}', "")
+    )
+    assert "--no-session" in harness.implement_argv("build")
+
+
 def test_generate_spec_runs_in_cwd_with_spec_timeout(tmp_path):
     runner = FakeRunner(("the spec text", 0, ""))
     config = HarnessConfig(spec_timeout_minutes=5, timeout_minutes=45)
@@ -181,6 +222,19 @@ def test_nonzero_exit_raises_harness_error_with_stderr(tmp_path):
 
     with pytest.raises(HarnessError, match="rate limited"):
         harness.generate_spec("write a spec", cwd=tmp_path)
+
+
+def test_nonzero_exit_bounds_harness_diagnostic_to_a_useful_tail(tmp_path):
+    runner = FakeRunner(("", 2, "prefix" + "x" * 10_000 + "useful-tail"))
+    harness = get_harness(HarnessConfig(), runner=runner)
+
+    with pytest.raises(HarnessError) as caught:
+        harness.generate_spec("write a spec", cwd=tmp_path)
+
+    message = str(caught.value)
+    assert "useful-tail" in message
+    assert "prefix" not in message
+    assert len(message) < 5_000
 
 
 def test_progress_callback_fires_during_long_runs(tmp_path):

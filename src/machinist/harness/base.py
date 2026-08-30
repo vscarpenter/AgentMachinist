@@ -29,6 +29,7 @@ from machinist.process import (
 )
 
 Runner = Callable[..., subprocess.CompletedProcess]
+_MAX_ERROR_CHARACTERS = 4_000
 
 
 class HarnessError(Exception):
@@ -141,8 +142,10 @@ class Harness(ABC):
                 "they were terminated"
             ) from exc
         if result.returncode != 0:
+            diagnostic = (result.stderr or result.stdout or "no diagnostic output").strip()
             raise HarnessError(
-                f"{self.name} exited with {result.returncode}: {result.stderr.strip()}"
+                f"{self.name} exited with {result.returncode}: "
+                f"{diagnostic[-_MAX_ERROR_CHARACTERS:]}"
             )
         return result.stdout
 
