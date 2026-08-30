@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import time
+import tomllib
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
 from pathlib import Path
@@ -123,15 +124,117 @@ def _stdin_is_interactive() -> bool:
 
 
 def _detect_test_command(root: Path) -> str | None:
-    if (root / "pyproject.toml").exists() or (root / "uv.lock").exists():
-        return "uv run pytest"
-    if (root / "package.json").exists():
-        return "npm test"
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            data = tomllib.loads(pyproject.read_text())
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+            data = {}
+        dependency_text = json.dumps(
+            {
+                "project": data.get("project", {}),
+                "dependency-groups": data.get("dependency-groups", {}),
+                "tool": {"uv": data.get("tool", {}).get("uv", {})},
+            }
+        ).casefold()
+        pytest_configured = bool(data.get("tool", {}).get("pytest"))
+        if pytest_configured or re.search(r"\bpytest(?:\W|$)", dependency_text):
+            return (
+                "uv run pytest"
+                if (root / "uv.lock").is_file()
+                else "python -m pytest"
+            )
+    package_json = root / "package.json"
+    if package_json.is_file():
+        try:
+            package = json.loads(package_json.read_text())
+            script = package.get("scripts", {}).get("test")
+        except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+            script = None
+        if (
+            isinstance(script, str)
+            and script.strip()
+            and "no test specified" not in script.casefold()
+        ):
+            if (root / "bun.lock").exists() or (root / "bun.lockb").exists():
+                return "bun run test"
+            if (root / "pnpm-lock.yaml").exists():
+                return "pnpm test"
+            if (root / "yarn.lock").exists():
+                return "yarn test"
+            return "npm test"
     if (root / "Cargo.toml").exists():
         return "cargo test"
     if (root / "go.mod").exists():
         return "go test ./..."
     return None
+
+
+def _print_init_receipt(
+    config: MachinistConfig,
+    *,
+    labels_ready: bool,
+    suggested_test_command: str | None,
+) -> None:
+    gates = config.resolved_verification_gates()
+    trigger = config.github.labels.trigger
+    source = config.github.spec_source.value
+    click.echo("\nSetup receipt:")
+    click.echo(f"  Spec dispatch: {source}")
+    click.echo("  Execute dispatch: local watcher")
+    if gates:
+        click.echo(
+            "  Verification: "
+            + ", ".join(
+                f"{gate.name} ({'required' if gate.required else 'advisory'})"
+                for gate in gates
+            )
+        )
+    else:
+        suggestion = (
+            f" Suggested command: {suggested_test_command!r}."
+            if suggested_test_command
+            else ""
+        )
+        click.echo(
+            "  Verification: NOT CONFIGURED — a PR can be marked ready without tests."
+            + suggestion
+        )
+    click.echo(f"  Labels: {'ready' if labels_ready else 'setup incomplete'}")
+    click.echo(
+        "  Approval workflow: "
+        + ("managed" if config.github.manage_workflows else "external setup required")
+    )
+
+    click.echo("\nNext steps:")
+    step = 1
+    if not gates:
+        command = suggested_test_command or "<your test command>"
+        click.echo(
+            f"  {step}. Configure a required gate: machinist init --force --test-cmd {json.dumps(command)}"
+        )
+        step += 1
+    if not labels_ready:
+        click.echo(f"  {step}. Create/update labels: machinist sync-labels --apply")
+        step += 1
+    if source == "github-actions" and config.github.manage_workflows:
+        click.echo(
+            f"  {step}. Configure CI authentication: gh secret set ANTHROPIC_API_KEY"
+        )
+        step += 1
+    click.echo(
+        f"  {step}. Review machinist.yaml, then commit and push the generated files."
+    )
+    step += 1
+    click.echo(f"  {step}. Prove readiness: machinist doctor --run-gates")
+    step += 1
+    click.echo(
+        f"  {step}. Start dispatch: machinist watch  (or, on macOS, machinist service install)"
+    )
+    step += 1
+    click.echo(
+        f"  {step}. Label an issue {trigger!r}; follow it with 'machinist status' and 'machinist runs'."
+    )
 
 
 def _repository_root(cwd: Path) -> Path:
@@ -348,7 +451,7 @@ def main() -> None:
 @click.option(
     "--no-input",
     is_flag=True,
-    help="Skip interactive questions; use flags and auto-detection only.",
+    help="Skip interactive questions; use explicit flags and safe suggestions.",
 )
 def init(
     force: bool,
@@ -399,7 +502,9 @@ def init(
         answers = InitAnswers(
             spec_source=spec_source,
             harness_name=harness_name,
-            test_command=test_cmd or detected_test_cmd,
+            # Detection is a suggestion, not proof. Non-interactive setup must
+            # not silently convert a manifest into a passing-test guarantee.
+            test_command=test_cmd,
             install_workflows=True if install_workflows is None else install_workflows,
             notification_backend=notifications,
             notification_events=None,
@@ -425,9 +530,13 @@ def init(
     except (ManagedPathError, WorkflowDriftError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo("wrote machinist.yaml")
-    if not interactive and answers.test_command and not test_cmd:
-        click.echo(f"auto-detected test runner: '{answers.test_command}'")
+    if not interactive and detected_test_cmd and not test_cmd:
+        click.echo(
+            f"suggested test runner (not enabled): '{detected_test_cmd}'; "
+            "confirm it with --test-cmd"
+        )
 
+    labels_ready = False
     try:
         gitkeep = Path(".machinist/specs/.gitkeep")
         if not managed_file_exists(repo_root, gitkeep):
@@ -466,15 +575,14 @@ def init(
             f"ensured GitHub labels '{config.github.labels.trigger}' "
             f"and '{config.github.labels.approved}'"
         )
+        labels_ready = True
     except (GitHubError, WorkspaceError) as exc:
         click.echo(f"note: could not create GitHub labels yet ({exc})")
 
-    click.echo(
-        "\nNext steps:\n"
-        "  1. Review machinist.yaml (harness, labels, test command).\n"
-        "  2. Commit the new files and push.\n"
-        "  3. Run 'machinist doctor' and resolve any FAIL checks.\n"
-        "  4. Label an issue 'agent-task' to start the pipeline."
+    _print_init_receipt(
+        config,
+        labels_ready=labels_ready,
+        suggested_test_command=detected_test_cmd,
     )
 
 
@@ -498,6 +606,42 @@ def sync_workflows_command(check: bool) -> None:
         click.echo(f"removed .github/workflows/{name}")
     if not report.written and not report.removed:
         click.echo("Managed workflows already match machinist.yaml.")
+
+
+@main.command("sync-labels")
+@click.option("--check", is_flag=True, help="Check label readiness without writing.")
+@click.option("--apply", is_flag=True, help="Create or update required labels.")
+@click.pass_context
+def sync_labels_command(ctx: click.Context, check: bool, apply: bool) -> None:
+    """Check or provision the GitHub labels required by the pipeline."""
+    if check and apply:
+        raise click.UsageError("--check and --apply are mutually exclusive")
+    try:
+        config = load_config()
+        github = _bound_github_client(config)
+        required = {
+            config.github.labels.trigger: (
+                _LABEL_COLORS["trigger"],
+                "Machinist: run the pipeline on this issue",
+            ),
+            config.github.labels.approved: (
+                _LABEL_COLORS["approved"],
+                "Machinist: spec approved for implementation",
+            ),
+        }
+        if apply:
+            for name, (color, description) in required.items():
+                github.ensure_label(name, color=color, description=description)
+            click.echo("Required GitHub labels are present and up to date.")
+            return
+        missing = sorted(set(required) - github.label_names())
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    if missing:
+        click.echo("Missing required GitHub labels: " + ", ".join(missing))
+        click.echo("Run 'machinist sync-labels --apply' to create them.")
+        ctx.exit(1)
+    click.echo("Required GitHub labels are present.")
 
 
 @main.command()

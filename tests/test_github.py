@@ -630,6 +630,22 @@ def test_approve_pr_requests_one_server_side_sha_bound_transaction():
     assert len(runner.calls) == 1
 
 
+def test_label_names_returns_the_complete_label_set():
+    runner = FakeRunner(
+        (
+            json.dumps(
+                [{"name": "agent-task"}, {"name": "machinist:approved"}]
+            ),
+            0,
+            "",
+        )
+    )
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    assert client.label_names() == {"agent-task", "machinist:approved"}
+    assert "1000" in runner.calls[0]
+
+
 def test_invalid_gh_json_is_a_github_error():
     client = GitHubClient(runner=FakeRunner(("not json", 0, "")))
 

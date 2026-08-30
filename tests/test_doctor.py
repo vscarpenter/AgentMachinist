@@ -616,3 +616,32 @@ def test_doctor_verifies_managed_workflows_on_remote_default_branch(tmp_path):
     assert remote.level is CheckLevel.PASS
     assert "deployed on main" in remote.detail
     assert report.to_dict()["checks"]
+
+
+def test_doctor_can_opt_in_to_executing_configured_gates(tmp_path):
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig.model_validate(
+        {
+            "github": {"manage_workflows": False},
+            "tests": {"command": "pytest -q"},
+        }
+    )
+
+    def passing_gate(command, **kwargs):
+        return subprocess.CompletedProcess(command, 0, "tests passed", "")
+
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path),
+        run_gates=True,
+        gate_runner=passing_gate,
+    )
+    execution = next(
+        check for check in report.checks if check.name == "verification execution"
+    )
+
+    assert execution.level is CheckLevel.PASS
+    assert "all 1" in execution.detail

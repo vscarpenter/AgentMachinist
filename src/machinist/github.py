@@ -306,6 +306,20 @@ class GitHubClient:
             description,
         )
 
+    def label_names(self) -> set[str]:
+        data = self._gh_json(
+            "label",
+            "list",
+            "--limit",
+            str(_LIST_LIMIT),
+            "--json",
+            "name",
+        )
+        try:
+            return {item["name"] for item in data}
+        except (KeyError, TypeError) as exc:
+            raise GitHubError(f"gh label list returned invalid data: {exc}") from exc
+
     def _gh(self, *args: str) -> str:
         argv = ["gh", *args]
         if self.repo is not None:

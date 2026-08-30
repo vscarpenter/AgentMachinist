@@ -63,6 +63,7 @@ def test_help_lists_all_commands():
         "doctor",
         "update-check",
         "sync-workflows",
+        "sync-labels",
         "clean",
         "inspect",
         "config",
@@ -89,6 +90,32 @@ def test_config_commands_validate_show_schema_and_set():
         assert json.loads(schema.output)["properties"]["version"]["const"] == 1
         assert updated.exit_code == 0, updated.output
         assert load_config().github.poll_interval_seconds == 120
+
+
+def test_doctor_json_is_machine_readable_even_when_readiness_fails(monkeypatch):
+    from machinist.doctor import CheckLevel, DoctorCheck, DoctorReport
+
+    monkeypatch.setattr(
+        "machinist.cli.run_doctor",
+        lambda *args, **kwargs: DoctorReport(
+            (
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "Actions Spec credential",
+                    "ANTHROPIC_API_KEY is missing",
+                ),
+            )
+        ),
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["doctor", "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["checks"][0]["name"] == "Actions Spec credential"
 
 
 def test_config_set_renders_atomic_write_failure_without_traceback(monkeypatch):
@@ -186,6 +213,9 @@ def test_init_creates_config_dirs_and_workflows():
         assert Path("machinist.yaml").is_file()
         assert Path(".machinist/specs/.gitkeep").is_file()
         assert Path(".github/workflows/machinist-approve.yml").is_file()
+        assert "Spec dispatch: local" in result.output
+        assert "Execute dispatch: local watcher" in result.output
+        assert "Start dispatch: machinist watch" in result.output
 
 
 def test_init_no_workflows_prunes_prior_managed_workflows():
@@ -303,6 +333,37 @@ def test_sync_workflows_check_fails_on_drift():
 
         assert result.exit_code != 0
         assert "drift" in result.output.lower()
+
+
+def test_sync_labels_checks_then_applies_missing_labels(monkeypatch):
+    calls = []
+
+    class FakeGitHub:
+        def __init__(self, repo=None):
+            self.repo = repo
+
+        def bind_repository(self, identity, *, hostname):
+            self.repo = identity
+
+        def label_names(self):
+            return {"agent-task"}
+
+        def ensure_label(self, name, *, color, description):
+            calls.append((name, color, description))
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
+
+        checked = runner.invoke(main, ["sync-labels", "--check"])
+        applied = runner.invoke(main, ["sync-labels", "--apply"])
+
+    assert checked.exit_code == 1
+    assert "machinist:approved" in checked.output
+    assert "--apply" in checked.output
+    assert applied.exit_code == 0, applied.output
+    assert [call[0] for call in calls] == ["agent-task", "machinist:approved"]
 
 
 def test_init_template_round_trips_through_schema():
@@ -1595,15 +1656,31 @@ def test_init_with_harness_and_test_cmd_flags():
         assert config.tests.command == "pytest -k fast"
 
 
-def test_init_auto_detects_test_runner():
+def test_init_does_not_infer_pytest_from_a_python_manifest_alone():
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("pyproject.toml").write_text("[project]\nname='demo'\n")
         result = runner.invoke(main, ["init", "--no-workflows"])
         assert result.exit_code == 0
-        assert "auto-detected test runner: 'uv run pytest'" in result.output
         config = load_config("machinist.yaml")
-        assert config.tests.command == "uv run pytest"
+        assert config.tests.command is None
+        assert "Verification: NOT CONFIGURED" in result.output
+
+
+def test_noninteractive_init_reports_detected_test_runner_as_unconfirmed():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text(
+            "[project]\nname='demo'\ndependencies=['pytest>=8']\n"
+        )
+        Path("uv.lock").write_text("version = 1\n")
+
+        result = runner.invoke(main, ["init", "--no-workflows"])
+
+        assert result.exit_code == 0, result.output
+        assert "suggested test runner (not enabled): 'uv run pytest'" in result.output
+        assert load_config("machinist.yaml").tests.command is None
+        assert "--test-cmd" in result.output
 
 
 def _force_interactive(monkeypatch):
@@ -1649,13 +1726,18 @@ def test_init_interactive_github_actions_locks_harness_to_claude_code(monkeypatc
         assert config.harness.name.value == "claude-code"
         assert config.tests.command is None
         assert Path(".github/workflows/machinist-spec.yml").is_file()
+        assert "gh secret set ANTHROPIC_API_KEY" in result.output
+        assert "Execute dispatch: local watcher" in result.output
 
 
 def test_init_interactive_confirms_detected_test_command(monkeypatch):
     _force_interactive(monkeypatch)
     runner = CliRunner()
     with runner.isolated_filesystem():
-        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        Path("pyproject.toml").write_text(
+            "[project]\nname='demo'\ndependencies=['pytest>=8']\n"
+        )
+        Path("uv.lock").write_text("version = 1\n")
         result = runner.invoke(
             main,
             ["init"],
@@ -1677,7 +1759,10 @@ def test_init_interactive_rejects_detected_then_suggests_by_language(monkeypatch
     _force_interactive(monkeypatch)
     runner = CliRunner()
     with runner.isolated_filesystem():
-        Path("pyproject.toml").write_text("[project]\nname='demo'\n")
+        Path("pyproject.toml").write_text(
+            "[project]\nname='demo'\ndependencies=['pytest>=8']\n"
+        )
+        Path("uv.lock").write_text("version = 1\n")
         result = runner.invoke(
             main,
             ["init"],
@@ -1710,7 +1795,7 @@ def test_init_interactive_flags_pre_answer_and_skip_questions(monkeypatch):
         )
 
         assert result.exit_code == 0, result.output
-        assert "Spec dispatch" not in result.output
+        assert "Spec dispatch [local]" not in result.output
         assert "Notify on" not in result.output
         config = load_config("machinist.yaml")
         assert config.harness.name.value == "opencode"
@@ -1725,7 +1810,7 @@ def test_init_no_input_skips_wizard(monkeypatch):
         result = runner.invoke(main, ["init", "--no-workflows", "--no-input"])
 
         assert result.exit_code == 0, result.output
-        assert "Spec dispatch" not in result.output
+        assert "Configuring machinist.yaml" not in result.output
         config = load_config("machinist.yaml")
         assert config.github.spec_source.value == "local"
         assert config.notifications.backend.value == "desktop"
