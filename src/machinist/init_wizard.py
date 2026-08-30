@@ -85,8 +85,8 @@ def _ask_spec_source() -> str:
     click.echo(
         "\nDispatch mode — who runs the Spec phase when you label an issue:\n"
         "  local           this machine runs it via 'machinist watch'\n"
-        "  github-actions  GitHub CI runs it (requires an ANTHROPIC_API_KEY"
-        " repository secret)"
+        "  github-actions  GitHub CI runs it (requires the selected Harness'"
+        " API-key repository secret)"
     )
     return click.prompt(
         "Spec dispatch",
@@ -110,12 +110,6 @@ def _ask_harness(*, spec_source: str, manage_workflows: bool) -> str:
     click.echo(
         "\nHarness — the coding agent CLI that writes your specs and implementation."
     )
-    if spec_source == "github-actions" and manage_workflows:
-        click.echo(
-            "Using claude-code: the managed CI spec workflow currently supports"
-            " only a claude-code Spec harness."
-        )
-        return HarnessName.CLAUDE_CODE.value
     return click.prompt(
         "Harness",
         type=click.Choice([harness.value for harness in HarnessName]),

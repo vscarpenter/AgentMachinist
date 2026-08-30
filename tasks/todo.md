@@ -385,3 +385,42 @@ Open issues and why they are waiting:
 Note for future sessions: the PyPI JSON index at /pypi/<name>/json can lag a
 release by several minutes. Trust the release workflow's verify-published job
 and the /pypi/<name>/<version>/json endpoint over the cached index.
+## Toolkit expansion: review, adoption, plugins, explain, intake, and reporting
+
+Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
+`coding-standards.md` in one continuous spec-to-plan-to-implementation pass.
+
+- [x] Current architecture and product-boundary discovery
+- [x] Full specification and architecture decision record
+- [x] Review Phase: lifecycle, prompt/report, delivery, status, retry, watch
+- [x] Guided onboarding and disposable local rehearsal
+- [x] Versioned Harness plugin contract and provider-aware managed Spec CI
+- [x] `machinist explain` and `status --watch`
+- [x] Managed issue form, `task new`, and `task lint`
+- [x] Local aggregate reports and optional redacted OTLP/HTTP export
+- [x] User/operator/adapter documentation and changelog
+- [x] Full verification suite, packaging smoke, and dogfood checks: 933 passed,
+      84.88% coverage, clean workflow/format/lint/type gates, wheel + sdist smoke
+- [x] Comprehension report delivered and user confirmed the safety boundaries
+
+### Resuming From Here
+
+Done: discovery, specification, Review Phase, guided onboarding, disposable
+rehearsal, Harness plugins, provider-aware CI, explain/live status, managed
+Task intake with readiness linting, reporting/telemetry, and the complete user,
+operator, adapter, architecture, trust, and visual documentation pass.
+
+Next: the branch is ready for the user's normal push, pull-request review, and
+merge process. No push, pull request, or merge has been performed.
+
+Blockers: none.
+
+Assumptions worth revisiting:
+- Review is opt-in for existing version-1 configurations and enabled by the new
+  starter template.
+- Review findings are advisory in the first schema version; malformed output or
+  a changed PR head fails the Phase and leaves the PR draft.
+- Third-party Harness entry points are trusted local code, while discovery
+  collisions and import failures fail closed and remain diagnosable.
+- OTLP export contains aggregate allowlisted attributes only and is disabled by
+  default.

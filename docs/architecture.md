@@ -10,7 +10,7 @@ ready-for-review pull request—not merge or deployment.
 | --- | --- |
 | GitHub | Issues, PRs, branch heads, approval marker comments, labels. |
 | AgentMachinist | Eligibility, local claims, Task Runs, workspaces, commits, leased pushes, PR readiness. |
-| Harness | Read repository context and return a spec or working-tree edits; may pre-run the configured verification gates to iterate. |
+| Harness | Read repository context, return a spec or working-tree edits, and independently review the delivered diff; may pre-run configured verification gates to iterate. |
 | Human | Issue intent, spec approval, code review, merge. |
 
 The controller keeps Git authority. Prompts tell the harness not to use Git;
@@ -34,11 +34,21 @@ awaiting spec ── SPEC succeeds ──► awaiting approval
                                          ▼
                                    approval stale
 
-approved ── EXECUTE + test gate succeeds ──► in review
+approved ── EXECUTE + test gate succeeds ──► awaiting review
+                                                    │ read-only Review succeeds
+                                                    ▼
+                                                in review
 ```
 
 Non-draft PR state outranks a leftover approval label, so a completed PR cannot
 be reclassified as executable.
+
+Review is a first-class `Phase.REVIEW`, not a callback inside Execute. Execute
+records the exact delivered SHA and leaves the PR draft. Review provisions a
+clean read-only view of that head, evaluates the approved Spec, diff, and gate
+evidence, posts a bounded structured report, rechecks the head, and alone marks
+it ready. Findings are advisory; parse failure, mutation, cancellation, or head
+drift fails the Phase without an autonomous repair loop.
 
 ## Immutable approval
 
@@ -128,6 +138,29 @@ not turn a local harness into a sandbox.
 Phase-specific harness profiles and repository-local instruction overlays are
 resolved before invocation. Instruction files must remain within the canonical
 repository root and pass file-count, encoding, and byte limits.
+
+## Adapter boundary
+
+Built-ins and third-party Harnesses share the versioned
+`agentmachinist.harnesses.v1` entry-point contract. Discovery validates adapter
+identity, reserves built-in names, and isolates import failures. Descriptors
+declare supported phases, structured-usage support, and optional hosted-Spec
+CI metadata. Managed workflow projection consumes that metadata instead of
+embedding a provider assumption in the controller.
+
+Plugins are trusted local code. The contract improves discoverability and
+diagnostics; it is not a sandbox or permission boundary.
+
+## Reporting boundary
+
+Local JSONL history is reduced to aggregate outcomes, phase/status series,
+duration percentiles, gate-failure statuses, safe Harness/model identity, and
+declared structured token counts. Network export lives in a separate module
+that accepts only the aggregate report. Its OTLP/HTTP JSON projector constructs
+an allowlist of repository, phase, status, Harness, and model attributes; it
+cannot serialize issue bodies, prompts, diffs, commands, errors, environment
+values, or arbitrary Evidence. Export is disabled without explicit config or a
+command flag.
 
 ## Dispatcher ownership
 

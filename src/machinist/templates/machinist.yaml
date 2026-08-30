@@ -14,6 +14,7 @@ harness:
   # Optional Phase 1 overrides: name, model, command, extra_args, timeout_minutes.
   spec: null
   execute: null                # optional Phase 3 overrides; omitted values inherit from above
+  review: null                 # optional read-only independent Review overrides
 
 # Optional repository-specific prompt additions. Paths are ordered, UTF-8,
 # repository-relative files; inline append text follows file contents.
@@ -24,6 +25,20 @@ instructions:
   execute:
     paths: []                  # e.g. [AGENTS.md, docs/implementation-guidance.md]
     append: null
+  review:
+    paths: []                  # e.g. [AGENTS.md, docs/review-guidance.md]
+    append: null
+
+# Keep implementations draft until a separate read-only Harness review passes.
+review:
+  enabled: true
+
+# Aggregate local reliability metrics stay local unless this endpoint is set or
+# `machinist report --otlp-endpoint` is passed. Authorization comes from
+# MACHINIST_OTLP_AUTHORIZATION and is never stored here.
+telemetry:
+  otlp_endpoint: null
+  timeout_seconds: 5
 
 github:
   repo: null                   # "owner/repo"; null = controller binds the exact Git origin
@@ -31,6 +46,7 @@ github:
   # pypi = pin released package in CI | checkout = run this checkout (dogfood)
   spec_install: pypi
   manage_workflows: true       # false = workflows are intentionally managed outside AgentMachinist
+  spec_secret_env: null        # optional CI secret-name override for the selected Harness
   labels:
     trigger: agent-task        # issues with this label enter the pipeline
     approved: "machinist:approved"   # PRs with this label get implemented

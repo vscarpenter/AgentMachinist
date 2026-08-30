@@ -205,6 +205,17 @@ def test_successful_spec_summary_points_to_the_human_approval_gate(tmp_path):
     assert "    Next: machinist approve --issue 62" in lines
 
 
+def test_report_discovers_review_history(tmp_path) -> None:
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(63, Phase.REVIEW, lambda claim: None)
+
+    payload = build_run_report(lifecycle).to_dict()
+
+    assert [(item["phase"], item["status"]) for item in payload["history"]] == [
+        ("review", "succeeded")
+    ]
+
+
 @pytest.mark.parametrize("issue", [0, -1, True])
 def test_issue_scope_must_be_a_positive_integer(tmp_path, issue):
     lifecycle = TaskLifecycle(tmp_path / "runs")

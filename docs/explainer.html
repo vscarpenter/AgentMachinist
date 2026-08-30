@@ -271,7 +271,7 @@
       font-weight: bold;
     }
 
-    /* Scene 3: The 3-Phase Assembly Line */
+    /* Scene 3: The Guarded Assembly Line */
     .pipeline-container {
       display: flex;
       flex-direction: column;
@@ -747,13 +747,13 @@
               <li>Generates a draft Spec PR before implementation</li>
               <li>Requires human approval bound to exact commit SHA</li>
               <li>Executes inside isolated Git worktrees</li>
-              <li>Runs every configured verification gate before readying the PR</li>
+              <li>Runs every configured verification gate before independent review</li>
             </ul>
           </div>
         </div>
       </section>
 
-      <!-- Scene 3: The 3-Phase Assembly Line -->
+      <!-- Scene 3: The Guarded Assembly Line -->
       <section class="scene" id="scene-3">
         <div class="pipeline-container">
           <div class="pipeline-steps">
@@ -774,8 +774,8 @@
             </div>
             <div class="pipeline-step" id="p-step-4">
               <span class="step-num">04</span>
-              <div class="step-title">Test & Ready</div>
-              <div class="step-desc">Harness implements; test gate passes; PR ready</div>
+              <div class="step-title">Build & Review</div>
+              <div class="step-desc">Harness implements; tests pass; independent Review readies the exact head</div>
             </div>
           </div>
           <div class="pipeline-callout">
@@ -808,7 +808,12 @@
 <span class="c-dim">... claude-code implemented requirements</span>
 <span class="c-dim">... running test gate: uv run pytest</span>
 <span class="c-ok">✓</span> 185 passed in 4.2s (quality gate passed!)
-<span class="c-ok">✓</span> Pushed with lease; converted PR #18 to READY FOR REVIEW</div>
+<span class="c-ok">✓</span> Pushed with lease; PR #18 remains DRAFT
+
+<span class="c-prompt">$</span> <span class="c-cmd">machinist review 42</span>
+<span class="c-dim">... independent Review comparing Spec, diff, and verification Evidence</span>
+<span class="c-ok">✓</span> Advisory report posted for the unchanged head
+<span class="c-ok">✓</span> Converted PR #18 to READY FOR REVIEW</div>
         </div>
       </section>
 
@@ -905,15 +910,15 @@
         },
         {
           id: 3,
-          name: "Scene 3 · The 3-Phase Assembly Line",
+          name: "Scene 3 · The Guarded Assembly Line",
           duration: 8000,
-          caption: "Every Task follows four explicit steps: issue trigger, draft Spec, human commit-SHA Approval, and verified execution."
+          caption: "Every Task moves through a visible trigger, draft Spec, exact human Approval, verified execution, and independent Review."
         },
         {
           id: 4,
           name: "Scene 4 · Live CLI Walkthrough",
           duration: 8500,
-          caption: "From `machinist spec` to `machinist approve` and `machinist run`: the harness implements in an isolated worktree and runs your test gate."
+          caption: "From `machinist spec` through `machinist review`: implementation stays isolated, verification is authoritative, and the exact delivered head is reviewed independently."
         },
         {
           id: 5,

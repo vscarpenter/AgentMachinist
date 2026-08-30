@@ -7,6 +7,7 @@ from datetime import datetime, time, timedelta
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
@@ -93,9 +94,33 @@ class HarnessName(str, Enum):
     CODEX = "codex"
 
 
+type HarnessIdentifier = HarnessName | str
+
+
+def harness_identifier(value: HarnessIdentifier) -> str:
+    """Return one built-in or plugin identifier as a stable string."""
+    return value.value if isinstance(value, HarnessName) else value
+
+
+def _validated_harness_identifier(value: Any) -> HarnessIdentifier:
+    if isinstance(value, HarnessName):
+        return value
+    if not isinstance(value, str):
+        raise ValueError("harness name must be a string")
+    try:
+        return HarnessName(value)
+    except ValueError:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", value):
+            raise ValueError(
+                "harness name must be 1-64 lowercase letters, digits, or hyphens"
+            ) from None
+        return value
+
+
 class HarnessPhase(str, Enum):
     SPEC = "spec"
     EXECUTE = "execute"
+    REVIEW = "review"
 
 
 # Adapter-owned flags cannot be repeated in extra_args because many CLIs let the
@@ -238,14 +263,18 @@ RESERVED_HARNESS_EXTRA_ARGS: dict[HarnessName, dict[HarnessPhase, frozenset[str]
 
 
 def reserved_harness_extra_args(
-    name: HarnessName, phase: HarnessPhase | str
+    name: HarnessIdentifier, phase: HarnessPhase | str
 ) -> frozenset[str]:
     """Return argv tokens controlled by the named adapter and Phase."""
-    return RESERVED_HARNESS_EXTRA_ARGS[name][HarnessPhase(phase)]
+    if not isinstance(name, HarnessName):
+        return frozenset()
+    resolved = HarnessPhase(phase)
+    custody_phase = HarnessPhase.SPEC if resolved is HarnessPhase.REVIEW else resolved
+    return RESERVED_HARNESS_EXTRA_ARGS[name][custody_phase]
 
 
 def validate_harness_extra_args(
-    name: HarnessName,
+    name: HarnessIdentifier,
     phase: HarnessPhase | str,
     extra_args: list[str],
 ) -> None:
@@ -271,14 +300,14 @@ def validate_harness_extra_args(
         if key in reserved:
             raise ValueError(
                 f"extra_args cannot set adapter-owned argument '{key}' "
-                f"for {name.value} {resolved_phase.value}"
+                f"for {harness_identifier(name)} {resolved_phase.value}"
             )
 
 
 class HarnessPhaseConfig(StrictModel):
     """Optional per-Phase overrides inherited from the legacy harness block."""
 
-    name: HarnessName | None = None
+    name: HarnessIdentifier | None = None
     command: str | None = None
     model: str | None = None
     extra_args: list[str] | None = None
@@ -289,10 +318,15 @@ class HarnessPhaseConfig(StrictModel):
     def _optional_text_is_argv_safe(cls, value: str | None) -> str | None:
         return _validate_optional_harness_text(value)
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _valid_name(cls, value: Any) -> HarnessIdentifier | None:
+        return None if value is None else _validated_harness_identifier(value)
+
 
 class HarnessConfig(StrictModel):
     # These fields remain the compatibility surface consumed by 0.3.x callers.
-    name: HarnessName = HarnessName.CLAUDE_CODE
+    name: HarnessIdentifier = HarnessName.CLAUDE_CODE
     command: str | None = None
     model: str | None = None
     extra_args: list[str] = Field(default_factory=list)
@@ -300,20 +334,29 @@ class HarnessConfig(StrictModel):
     spec_timeout_minutes: int = Field(default=10, ge=1, le=60)
     spec: HarnessPhaseConfig | None = None
     execute: HarnessPhaseConfig | None = None
+    review: HarnessPhaseConfig | None = None
 
     @field_validator("command", "model")
     @classmethod
     def _optional_text_is_argv_safe(cls, value: str | None) -> str | None:
         return _validate_optional_harness_text(value)
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _valid_name(cls, value: Any) -> HarnessIdentifier:
+        return _validated_harness_identifier(value)
+
     @model_validator(mode="after")
     def _extra_args_preserve_adapter_controls(self) -> "HarnessConfig":
-        if (
-            self.spec is not None
-            and self.spec.timeout_minutes is not None
-            and self.spec.timeout_minutes > 60
-        ):
-            raise ValueError("harness.spec.timeout_minutes cannot exceed 60")
+        for phase_name, profile in (("spec", self.spec), ("review", self.review)):
+            if (
+                profile is not None
+                and profile.timeout_minutes is not None
+                and profile.timeout_minutes > 60
+            ):
+                raise ValueError(
+                    f"harness.{phase_name}.timeout_minutes cannot exceed 60"
+                )
         # The base remains directly consumable by older callers, so validate it
         # for both Phases even when a profile overrides it.
         for phase in HarnessPhase:
@@ -323,11 +366,15 @@ class HarnessConfig(StrictModel):
         return self
 
     def _profile(self, phase: HarnessPhase) -> HarnessPhaseConfig | None:
-        return self.spec if phase is HarnessPhase.SPEC else self.execute
+        if phase is HarnessPhase.SPEC:
+            return self.spec
+        if phase is HarnessPhase.REVIEW:
+            return self.review
+        return self.execute
 
     def _resolved_name_and_args(
         self, phase: HarnessPhase
-    ) -> tuple[HarnessName, list[str]]:
+    ) -> tuple[HarnessIdentifier, list[str]]:
         profile = self._profile(phase)
         if profile is None:
             return self.name, list(self.extra_args)
@@ -359,10 +406,9 @@ class HarnessConfig(StrictModel):
 
         name = inherited("name", self.name) or self.name
         extra_args = inherited("extra_args", self.extra_args)
+        read_only_phase = resolved_phase in {HarnessPhase.SPEC, HarnessPhase.REVIEW}
         base_timeout = (
-            self.spec_timeout_minutes
-            if resolved_phase is HarnessPhase.SPEC
-            else self.timeout_minutes
+            self.spec_timeout_minutes if read_only_phase else self.timeout_minutes
         )
         phase_timeout = inherited("timeout_minutes", base_timeout)
         if phase_timeout is None:
@@ -375,17 +421,14 @@ class HarnessConfig(StrictModel):
             model=inherited("model", self.model),
             extra_args=list(extra_args or []),
             timeout_minutes=(
-                self.timeout_minutes
-                if resolved_phase is HarnessPhase.SPEC
-                else int(phase_timeout)
+                self.timeout_minutes if read_only_phase else int(phase_timeout)
             ),
             spec_timeout_minutes=(
-                int(phase_timeout)
-                if resolved_phase is HarnessPhase.SPEC
-                else self.spec_timeout_minutes
+                int(phase_timeout) if read_only_phase else self.spec_timeout_minutes
             ),
             spec=None,
             execute=None,
+            review=None,
         )
 
 
@@ -468,10 +511,15 @@ class InstructionsConfig(StrictModel):
 
     spec: PhaseInstructionsConfig = Field(default_factory=PhaseInstructionsConfig)
     execute: PhaseInstructionsConfig = Field(default_factory=PhaseInstructionsConfig)
+    review: PhaseInstructionsConfig = Field(default_factory=PhaseInstructionsConfig)
 
     def for_phase(self, phase: HarnessPhase | str) -> PhaseInstructionsConfig:
         resolved_phase = HarnessPhase(phase)
-        return self.spec if resolved_phase is HarnessPhase.SPEC else self.execute
+        if resolved_phase is HarnessPhase.SPEC:
+            return self.spec
+        if resolved_phase is HarnessPhase.REVIEW:
+            return self.review
+        return self.execute
 
     def resolve(self, phase: HarnessPhase | str, repo_root: str | Path) -> str:
         """Read and combine one Phase's safe repository-local instructions."""
@@ -608,6 +656,7 @@ class GitHubConfig(StrictModel):
     spec_source: SpecSource = SpecSource.LOCAL
     spec_install: SpecInstall = SpecInstall.PYPI
     manage_workflows: bool = True
+    spec_secret_env: str | None = None
     labels: LabelsConfig = Field(default_factory=LabelsConfig)
     poll_interval_seconds: int = Field(default=60, ge=10)
 
@@ -617,6 +666,15 @@ class GitHubConfig(StrictModel):
         normalized = normalize_repository_identity(value)
         if value is not None and (normalized is None or normalized != value.casefold()):
             raise ValueError("must look like 'owner/repo'")
+        return value
+
+    @field_validator("spec_secret_env")
+    @classmethod
+    def _secret_environment_name(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[A-Z][A-Z0-9_]{1,63}", value):
+            raise ValueError(
+                "spec_secret_env must be an uppercase environment variable name"
+            )
         return value
 
 
@@ -706,6 +764,37 @@ class TestsConfig(StrictModel):
     def _legacy_command_is_usable(cls, value: str | None) -> str | None:
         if value is not None and (not value.strip() or "\x00" in value):
             raise ValueError("tests.command must be non-empty or null")
+        return value
+
+
+class ReviewConfig(StrictModel):
+    """Independent read-only review before a pull request becomes ready."""
+
+    enabled: bool = False
+
+
+class TelemetryConfig(StrictModel):
+    """Optional aggregate OTLP/HTTP export; disabled without an endpoint."""
+
+    otlp_endpoint: str | None = None
+    timeout_seconds: int = Field(default=5, ge=1, le=30)
+
+    @field_validator("otlp_endpoint")
+    @classmethod
+    def _http_endpoint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "OTLP endpoint must be an HTTP(S) URL without credentials or fragments"
+            )
         return value
 
 
@@ -936,6 +1025,8 @@ class MachinistConfig(StrictModel):
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
     tests: TestsConfig = Field(default_factory=TestsConfig)
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     queue: QueueConfig = Field(default_factory=QueueConfig)
     notifications: NotificationConfig = Field(default_factory=NotificationConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
@@ -954,17 +1045,6 @@ class MachinistConfig(StrictModel):
         if self.tests.command is not None and self.verification.gates:
             raise ValueError(
                 "configure either legacy tests.command or verification.gates, not both"
-            )
-        spec_harness = self.harness_for(HarnessPhase.SPEC)
-        if (
-            self.github.spec_source is SpecSource.GITHUB_ACTIONS
-            and self.github.manage_workflows
-            and spec_harness.name is not HarnessName.CLAUDE_CODE
-        ):
-            raise ValueError(
-                "github.spec_source 'github-actions' currently supports only "
-                "a claude-code Spec harness; use local, set harness.spec.name, "
-                "or set github.manage_workflows false for a custom workflow"
             )
         return self
 

@@ -25,6 +25,7 @@ from machinist.config import (
     HarnessPhase,
     MachinistConfig,
     config_json_schema,
+    harness_identifier,
     load_config,
     read_config_text,
     strict_yaml_load,
@@ -277,11 +278,11 @@ def _effective_harness(
     harness = config.harness_for(phase)
     timeout = (
         harness.spec_timeout_minutes
-        if phase is HarnessPhase.SPEC
+        if phase in {HarnessPhase.SPEC, HarnessPhase.REVIEW}
         else harness.timeout_minutes
     )
     return {
-        "name": harness.name.value,
+        "name": harness_identifier(harness.name),
         "command": harness.command,
         "model": harness.model,
         "extra_args": list(harness.extra_args),

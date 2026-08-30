@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from machinist.config import MachinistConfig
 from machinist.github import DraftPR, Issue, PullRequest, normalize_repository_identity
+from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, write_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
@@ -75,7 +76,10 @@ def run_spec_phase(
     base = _checkpointed_pr_base(previous) or github.default_branch()
     _validate_pr_base(base, source="GitHub default branch")
     if claim is not None:
-        claim.checkpoint(pr_base=base)
+        claim.checkpoint(
+            pr_base=base,
+            harness=harness_evidence(harness, profile="spec"),
+        )
     branch = f"{config.workspace.branch_prefix}issue-{issue.number}"
     # Always inspect the exact branch. GitHub permits only one open PR for a
     # head branch, and blindly calling create again makes a post-delivery crash

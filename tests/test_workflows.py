@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from machinist.config import MachinistConfig, load_config
+from machinist.harness.base import HarnessCIProfile, HarnessDescriptor
 from machinist.managed_paths import ManagedPathError, write_managed_text
 from machinist.workflows import WorkflowDriftError, expected_workflows, sync_workflows
 
@@ -84,6 +85,76 @@ def test_checkout_spec_install_uses_uv_run_from_the_repository():
     assert "uv run machinist spec" in spec
     assert "uv tool install agentmachinist==" not in spec
     assert "git+https://" not in spec
+
+
+@pytest.mark.parametrize(
+    ("harness", "package", "secret"),
+    [
+        ("claude-code", "@anthropic-ai/claude-code@2.1.251", "ANTHROPIC_API_KEY"),
+        ("codex", "@openai/codex@0.151.0", "OPENAI_API_KEY"),
+        ("opencode", "opencode-ai@1.18.25", "ANTHROPIC_API_KEY"),
+        ("pi", "@mariozechner/pi-coding-agent@0.73.1", "GEMINI_API_KEY"),
+    ],
+)
+def test_spec_workflow_is_rendered_from_selected_builtin_harness(
+    harness, package, secret
+):
+    cfg = MachinistConfig.model_validate(
+        {
+            "harness": {"name": harness},
+            "github": {"spec_source": "github-actions"},
+        }
+    )
+
+    spec = expected_workflows(cfg, installed_version="0.9.0")["machinist-spec.yml"]
+
+    assert package in spec
+    assert f"{secret}: ${{{{ secrets.{secret} }}}}" in spec
+    assert "Install coding Harness" in spec
+
+
+def test_spec_workflow_allows_valid_secret_name_override():
+    cfg = MachinistConfig.model_validate(
+        {
+            "harness": {"name": "opencode"},
+            "github": {
+                "spec_source": "github-actions",
+                "spec_secret_env": "OPENCODE_API_KEY",
+            },
+        }
+    )
+
+    spec = expected_workflows(cfg, installed_version="0.9.0")["machinist-spec.yml"]
+
+    assert "OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}" in spec
+    assert "ANTHROPIC_API_KEY:" not in spec
+
+
+def test_plugin_ci_descriptor_drives_managed_workflow(monkeypatch):
+    descriptor = HarnessDescriptor(
+        contract_version=1,
+        display_name="Acme",
+        documentation_url="https://example.com/acme",
+        phases=frozenset({"spec"}),
+        ci_spec=HarnessCIProfile(
+            install_argv=("uv", "tool", "install", "acme==1.2.3"),
+            secret_env="ACME_API_KEY",
+        ),
+    )
+    monkeypatch.setattr(
+        "machinist.workflows.get_harness_descriptor", lambda _name: descriptor
+    )
+    cfg = MachinistConfig.model_validate(
+        {
+            "harness": {"name": "acme"},
+            "github": {"spec_source": "github-actions"},
+        }
+    )
+
+    spec = expected_workflows(cfg, installed_version="0.9.0")["machinist-spec.yml"]
+
+    assert "uv tool install acme==1.2.3" in spec
+    assert "ACME_API_KEY: ${{ secrets.ACME_API_KEY }}" in spec
 
 
 def test_local_spec_source_omits_ci_dispatcher():

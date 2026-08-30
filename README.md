@@ -6,7 +6,8 @@ with a human-approved specification between planning and implementation.
 
 ```text
 issue + trigger label → spec commit → draft PR → SHA-bound approval
-                    → implementation → test gate → ready PR → human merge
+                    → implementation → test gate → read-only review
+                    → ready PR → human merge
 ```
 
 The controller—not the harness—owns commits, pushes, PR transitions, and task
@@ -43,19 +44,28 @@ never appears in `update-check --json`.
 
 ```sh
 cd your-repository
-machinist init
+machinist onboard
 # Answer the setup questions, review the generated files, then:
 machinist doctor --run-gates
 machinist sync-labels --check
 machinist sync-workflows --check
+machinist task template --check
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
 git add -p .github/workflows
 git diff --cached
 git commit -m "chore: configure AgentMachinist"
 git push
 machinist watch
 ```
+
+Use `machinist onboard --setup-pr` when you want AgentMachinist to put only its
+managed setup files on a pushed `chore/agentmachinist-setup` branch and open a
+draft PR. It requires a clean default branch and leaves failures visible with a
+recovery command. Before creating a real issue, run `machinist rehearse` for a
+no-model, no-API controller simulation; `--harness` is the explicit opt-in to
+invoke the configured providers inside the disposable repository.
 
 In a terminal, `machinist init` asks a short set of setup questions — dispatch
 mode, managed workflows, harness, test gate, and notifications — each with a
@@ -65,8 +75,9 @@ questions; `--no-input` (or a non-interactive shell) skips the questions and
 uses safe defaults. A detected test command is reported as a suggestion but is
 not enabled non-interactively unless you pass `--test-cmd`.
 
-Review the staged diff before committing. Managed workflows must be pushed
-before GitHub comment or label approval can record SHA-bound evidence.
+Review the staged diff before committing. The managed Task form is installed
+even when Actions workflows are externally managed. Managed workflows must be
+pushed before GitHub comment or label approval can record SHA-bound evidence.
 `machinist init` also adds `/.machinist/runs/` to `.gitignore`. If you manage
 workflows yourself, `machinist init --no-workflows` records
 `github.manage_workflows: false`; `doctor` then reports that its drift check was
@@ -75,6 +86,8 @@ intentionally skipped.
 The default `github.spec_source: local` makes `watch` own spec generation.
 Choose `github-actions` and run `machinist sync-workflows` if CI should own that
 phase instead. Exactly one source is active, preventing duplicate spec runs.
+Managed CI installs the selected Spec adapter and reads its declared secret
+name; built-ins support Claude Code, Codex, OpenCode, and Pi.
 
 Approval is bound to the exact PR head commit. Use either:
 
@@ -90,6 +103,13 @@ Task; use `--issue` or `--pr` when GitHub numbers overlap.
 
 Editing the spec after approval makes that approval stale and blocks execution
 until the new head is approved.
+
+With the starter configuration, a successful Execute run leaves the PR draft
+for an independent read-only Review Task Run. Review compares the approved
+Spec, diff, and verification evidence, posts a structured advisory report, and
+alone marks the exact implementation head ready. Findings never trigger an
+automatic repair or merge. Use `machinist review <issue>` manually or
+`machinist retry <issue> --phase review` after a failed Review.
 
 The CLI approval command submits the SHA-bound comment; the managed GitHub
 workflow independently verifies the current head and approver's write access,
@@ -115,25 +135,34 @@ PR.
 
 | Command | Purpose |
 | --- | --- |
-| `machinist init` | Create config, spec storage, labels, and managed workflows; asks setup questions in a terminal (`--no-input` skips them). |
+| `machinist init` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--no-input` skips them). |
+| `machinist onboard [--setup-pr]` | Run guided setup in place or deliver only managed setup files on a draft PR. |
+| `machinist rehearse [--harness]` | Simulate the lifecycle in a disposable local repository; model/API use is opt-in. |
 | `machinist doctor` | Run read-only setup and workflow-drift diagnostics. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |
 | `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration. |
+| `machinist task template --write\|--check` | Project or verify the sealed GitHub issue form. |
+| `machinist task new --title <title> [--dispatch]` | Create a structured issue; apply the trigger label only after local lint passes. |
+| `machinist task lint <issue> [--json]` | Check objective, acceptance criteria, constraints, and verification readiness. |
 | `machinist spec <issue> [--dry-run]` | Preview a Spec, or generate it and open its draft PR. |
 | `machinist spec <issue> --revise` | Regenerate a successful Spec on its existing branch and PR. |
 | `machinist spec <issue> --abandon [--reason <text>]` | Record rejection and close the open draft PR. |
 | `machinist approve [--issue <issue>\|--pr <pr>]` | Bind approval to the current PR head without number ambiguity. |
 | `machinist run <issue>` | Implement an approved spec and run the test gate. |
+| `machinist review <issue>` | Independently review the exact implemented draft and mark it ready. |
 | `machinist amend <issue> --feedback <text>` | Rework a ready PR from explicit feedback after fresh approval. |
 | `machinist cancel <issue> [--reason <text>\|--clear]` | Cooperatively stop or block an issue's dispatch. |
 | `machinist watch [--once] [--dry-run] [--max-tasks <n>]` | Preview or dispatch eligible tasks continuously or once. |
 | `machinist queue pause\|resume\|defer\|allow\|show` | Persist operator controls over new watcher dispatches. |
 | `machinist service install\|start\|restart\|stop\|status\|logs\|uninstall` | Manage the repository's macOS launchd watcher; destructive lifecycle actions refuse active Claims unless forced. |
+| `machinist explain <issue> [--json]` | Show effective policy, resolved profiles, attempts, and the exact next action without secrets. |
 | `machinist status [--local\|--all] [--json]` | Show GitHub state, local Task Runs, or a registered portfolio. |
+| `machinist status --watch [--interval <seconds>] [--json]` | Emit changed-only live pipeline snapshots until Ctrl-C. |
 | `machinist runs [--issue <issue>] [--json]` | Read current, historical, orphaned, and corrupt local run records. |
-| `machinist retry <issue> [--phase spec\|execute]` | Re-enable one failed Task Run. |
+| `machinist report [--since 30d] [--json] [--otlp-endpoint <url>]` | Aggregate local reliability metrics and optionally export allowlisted OTLP/HTTP JSON. |
+| `machinist retry <issue> [--phase spec\|execute\|review]` | Re-enable one failed Task Run. |
 | `machinist retry <issue> --phase execute --run [--resume\|--fresh]` | Reuse a retained workspace or start a fresh Execute attempt; fresh is the default. |
 | `machinist inspect <issue> [--offline] [--json]` | Show GitHub, workspace, and complete Task Run diagnostics. |
 | `machinist repo add\|remove\|list` | Maintain the optional local repository registry. |

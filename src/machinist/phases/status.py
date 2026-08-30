@@ -14,6 +14,7 @@ PIPELINE_STATES = (
     "approval pending",
     "approval stale",
     "approved",
+    "awaiting review",
     "in review",
     "spec running",
     "spec interrupted",
@@ -26,6 +27,11 @@ PIPELINE_STATES = (
     "execute failed",
     "execute cancelled",
     "execute abandoned",
+    "review running",
+    "review interrupted",
+    "review failed",
+    "review cancelled",
+    "review abandoned",
 )
 
 
@@ -112,6 +118,15 @@ def pipeline_status(
             state = "awaiting approval"
         issue_number = _issue_number_from_branch(pr.branch, prefix)
         if lifecycle is not None and issue_number is not None:
+            execute = lifecycle.record(issue_number, Phase.EXECUTE)
+            if (
+                config.review.enabled
+                and pr.is_draft
+                and execute is not None
+                and execute.status is RunStatus.SUCCEEDED
+                and execute.evidence.get("push_observed_sha") == pr.head_sha
+            ):
+                state = "awaiting review"
             record = lifecycle.latest(issue_number)
             if record is not None and record.status in {
                 RunStatus.RUNNING,
@@ -147,11 +162,13 @@ def _issue_number_from_branch(branch: str, prefix: str) -> int | None:
 
 
 def _dispatch_priority(row: StatusRow) -> int:
-    if row.state == "approved":
+    if row.state == "awaiting review":
         return 0
-    if row.state == "awaiting spec":
+    if row.state == "approved":
         return 1
-    return 2
+    if row.state == "awaiting spec":
+        return 2
+    return 3
 
 
 def _local_run_state(lifecycle, record) -> str:
@@ -170,6 +187,8 @@ def next_action_for_status(row: StatusRow) -> str | None:
         return f"machinist approve --issue {issue}"
     if row.state == "approved":
         return "machinist watch --once -v"
+    if row.state == "awaiting review" and issue is not None:
+        return f"machinist review {issue}"
     if row.state.endswith(" interrupted") or row.state.endswith(
         (" failed", " cancelled", " abandoned")
     ):

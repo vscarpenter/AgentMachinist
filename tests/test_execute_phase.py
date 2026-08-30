@@ -425,6 +425,28 @@ def test_happy_path_implements_tests_pushes_and_marks_ready(tmp_path):
     assert ("cleanup", True) in workspace.calls
 
 
+def test_review_enabled_execute_delivers_implementation_but_leaves_pr_draft(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+    config = MachinistConfig.model_validate(
+        {"review": {"enabled": True}, "tests": {"command": "pytest -q"}}
+    )
+
+    run_execute_phase(
+        42,
+        config,
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+    )
+
+    assert not any(call[0] == "mark_ready" for call in github.calls)
+    comment = next(call for call in github.calls if call[0] == "upsert_pr_comment")
+    assert "Independent review pending" in comment[2]
+
+
 @pytest.mark.parametrize(
     "deleted_test",
     [
@@ -633,6 +655,7 @@ def test_claimed_run_uses_fresh_attempt_path_and_captures_harness_report(tmp_pat
         "name": "fake",
         "model": None,
         "profile": "execute",
+        "structured_usage": False,
     }
 
 

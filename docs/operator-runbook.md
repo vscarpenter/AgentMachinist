@@ -8,6 +8,8 @@ Run from the configured repository root:
 machinist doctor --run-gates
 machinist sync-labels --check
 machinist sync-workflows --check
+machinist task template --check
+machinist rehearse
 machinist status
 ```
 
@@ -33,7 +35,8 @@ and explicitly retried.
 - Interactive: `machinist watch`
 - One scheduler-friendly pass: `machinist watch --once`
 - Read-only admission preview: `machinist watch --dry-run`
-- Manual phases: `machinist spec <issue>` and `machinist run <issue>`
+- Manual phases: `machinist spec <issue>`, `machinist run <issue>`, and
+  `machinist review <issue>`
 
 Run one local watcher per repository. The claim is local, not cross-host. If
 `github.spec_source` is `github-actions`, the local watcher handles approved
@@ -104,11 +107,13 @@ reported by `queue show`/the watcher.
 ## Observe
 
 `machinist status` shows `awaiting spec`, `awaiting approval`,
-`approval pending`, `approval stale`, `approved`, and `in review`. Local
+`approval pending`, `approval stale`, `approved`, `awaiting review`, and
+`in review`. Local
 outcomes add `spec running`, `spec interrupted`, `spec failed`,
 `spec cancelled`, `spec abandoned`, `spec closed`, `execute running`,
-`execute interrupted`, `execute failed`, `execute cancelled`, and
-`execute abandoned`. A persisted `running` projection without a held Claim is
+`execute interrupted`, `execute failed`, `execute cancelled`,
+`execute abandoned`, `review running`, `review interrupted`, `review failed`,
+`review cancelled`, and `review abandoned`. A persisted `running` projection without a held Claim is
 reported as interrupted. `status`, `runs`, and `inspect` show named stages,
 attempt history, elapsed time, and an exact `Next:` command where recovery is
 available. A `retryable` persistence state projects back to remote eligibility
@@ -124,14 +129,29 @@ policy; the error prints their path.
 For complete or scriptable local evidence, use:
 
 ```sh
+machinist explain 42 --json
+machinist status --watch --interval 2
 machinist status --local --json
 machinist runs --issue 42 --json
 machinist inspect 42 --offline --json
+machinist report --since 30d --json
 ```
 
 The local read model includes current/history records plus orphaned, partial,
 and corrupt artifacts. Without `--offline`, inspection adds GitHub sources but
 still preserves readable local evidence when a remote source fails.
+
+`explain` is the side-effect-free policy view: it resolves effective phase
+profiles, gates, limits, queue state, attempts, cancellation, workspace paths,
+and the exact next action while showing credential names only. Live status
+prints the initial pipeline snapshot and later changes; JSON watch mode is
+newline-delimited and Ctrl-C exits successfully.
+
+`report` aggregates local outcomes, retries, cancellations, durations,
+gate-failure statuses, and safe Harness/model metadata. Export is opt-in through
+`telemetry.otlp_endpoint` or `--otlp-endpoint`; authorization comes from
+`MACHINIST_OTLP_AUTHORIZATION`. An export failure returns non-zero after the
+local report and never modifies history or prints the response body.
 
 For a solo portfolio, register canonical repository roots and read them without
 changing directories:
@@ -151,13 +171,20 @@ Portfolio status is deliberately local-only and isolates per-repository errors.
 2. Inspect the Task Run error with `machinist inspect <issue>` or `machinist status -v`.
 3. Inspect any retained workspace before choosing whether to preserve its edits.
 4. Fix authentication, configuration, tests, or the issue/spec as appropriate.
-5. To continue the retained Execute workspace, run from the repository root:
+5. A failed Review remains draft; after fixing the adapter or output problem:
+
+   ```sh
+   machinist retry 42 --phase review
+   machinist review 42
+   ```
+
+6. To continue the retained Execute workspace, run from the repository root:
 
    ```sh
    machinist retry 42 --phase execute --run --resume
    ```
 
-6. To leave the failed workspace behind and provision a clean Execute attempt,
+7. To leave the failed workspace behind and provision a clean Execute attempt,
    use `--fresh`:
 
    ```sh
@@ -165,7 +192,7 @@ Portfolio status is deliberately local-only and isolates per-repository errors.
    ```
 
    Fresh is the default when neither `--resume` nor `--fresh` is supplied.
-7. Restart a long-running watcher (`machinist watch`) only after the explicit
+8. Restart a long-running watcher (`machinist watch`) only after the explicit
    retry completes or the Task Run is marked retryable.
 
 Do not edit Task Run JSON by hand. `--resume` validates the managed workspace
@@ -234,8 +261,8 @@ machinist config schema --output machinist.schema.json
 `machinist config set <dotted-key> <yaml-value>` atomically rewrites the
 validated config as canonical YAML and normalizes comments. Phase-specific
 harness profiles, instruction overlays, named verification gates, the harness
-verification feedback loop, the test-deletion guard, notifications, admission
-budgets, and change limits are documented in the
+verification feedback loop, independent Review, telemetry, the test-deletion
+guard, notifications, admission budgets, and change limits are documented in the
 [getting-started reference](getting-started.md).
 
 ## Approval incidents
@@ -282,12 +309,14 @@ After editing dispatcher ownership or labels:
 
 ```sh
 machinist sync-workflows
+machinist task template --write
 git diff -- .github/workflows
+git diff -- .github/ISSUE_TEMPLATE/agentmachinist-task.yml
 uv run pytest
 ```
 
-Commit and push the reviewed projection. Do not hand-maintain managed workflow
-labels; the next sync intentionally replaces drift.
+Commit and push the reviewed projections. Do not hand-maintain managed workflow
+or task-template content; ownership markers make modified files fail closed.
 
 ## Release checklist
 

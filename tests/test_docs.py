@@ -407,6 +407,14 @@ def test_solo_operator_surfaces_and_advanced_config_are_documented():
         "machinist repo add",
         "machinist watch --dry-run",
         "machinist update-check",
+        "machinist onboard",
+        "machinist rehearse",
+        "machinist task new",
+        "machinist task lint",
+        "machinist review 42",
+        "machinist explain 42",
+        "machinist status --watch",
+        "machinist report --since 30d",
     ):
         assert command in combined
 
@@ -419,10 +427,50 @@ def test_solo_operator_surfaces_and_advanced_config_are_documented():
         "allowed_hours",
         "task_budget",
         "max_changed_files",
+        "review:",
+        "telemetry:",
+        "agentmachinist.harnesses.v1",
     ):
         assert setting in combined
     assert "runs `machinist watch --once`" in combined
     assert "uninstall" in operator and "preserves logs" in operator
+
+
+def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> None:
+    readme = _README_PATH.read_text().lower()
+    guide = _GUIDE_PATH.read_text().lower()
+    harnesses = _HARNESS_PATH.read_text().lower()
+    trust = " ".join(_TRUST_MODEL_PATH.read_text().lower().split())
+    architecture = (_REPO_ROOT / "docs/architecture.md").read_text().lower()
+    landing = (_REPO_ROOT / "docs/index.html").read_text().lower()
+    first_run = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    job_card = _JOB_CARD_PATH.read_text().lower()
+    explainer = _EXPLAINER_PATH.read_text().lower()
+
+    assert "chore/agentmachinist-setup" in readme + guide
+    assert "no model or api" in readme + guide
+    assert ".github/issue_template/agentmachinist-task.yml" in readme + guide
+    for name in ("claude code", "codex", "opencode", "pi"):
+        assert name in harnesses
+    assert "agentmachinist.harnesses.v1" in harnesses + architecture
+    assert "findings are advisory" in guide
+    assert "selected spec adapter" in first_run
+    assert "machinist task new" in job_card
+    assert "machinist review 7" in job_card
+    assert "independent review" in explainer
+    assert "machinist review 42" in explainer
+    assert "machinist task new" in landing
+    assert "machinist review 42" in landing
+    assert "independent review" in landing
+    for forbidden_export in (
+        "issue bodies",
+        "prompts",
+        "diffs",
+        "commands",
+        "error messages",
+        "credential values",
+    ):
+        assert forbidden_export in trust
 
 
 def test_first_run_guide_describes_verification_and_cleanup_precisely():

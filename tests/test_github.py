@@ -150,6 +150,39 @@ def test_create_draft_pr_returns_number_and_url():
     assert pr == DraftPR(number=57, url=url)
 
 
+def test_create_issue_and_apply_dispatch_label_use_bounded_argv():
+    url = "https://github.com/vscarpenter/demo/issues/42"
+    runner = FakeRunner((url + "\n", 0, ""), ("", 0, ""))
+    client = GitHubClient(repo="vscarpenter/demo", runner=runner)
+
+    issue = client.create_issue(title="Improve recovery", body="## Objective\nClear")
+    client.add_issue_label(issue.number, "agent-task")
+
+    assert issue == Issue(
+        number=42,
+        title="Improve recovery",
+        body="## Objective\nClear",
+        url=url,
+    )
+    assert runner.calls[0][:7] == [
+        "gh",
+        "issue",
+        "create",
+        "--title",
+        "Improve recovery",
+        "--body",
+        "## Objective\nClear",
+    ]
+    assert runner.calls[1][:6] == [
+        "gh",
+        "issue",
+        "edit",
+        "42",
+        "--add-label",
+        "agent-task",
+    ]
+
+
 def test_ensure_label_is_idempotent_via_force():
     runner = FakeRunner(("", 0, ""))
     client = GitHubClient(repo="vscarpenter/demo", runner=runner)

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import tomllib
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
 from pathlib import Path
@@ -44,10 +45,12 @@ from machinist.config_cli import (
     write_schema as write_config_schema,
 )
 from machinist.doctor import run_doctor
+from machinist.explain import TaskExplanation, explain_task
 from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
-from machinist.harness import HarnessError, get_harness
+from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
+from machinist.live_status import StatusSnapshot, iter_status_snapshots
 from machinist.managed_paths import (
     ManagedPathError,
     managed_file_exists,
@@ -61,12 +64,14 @@ from machinist.notify import (
     notify_event,
 )
 from machinist.observability import RunReport, build_run_report, summarize_run_report
+from machinist.onboarding import OnboardingError, deliver_setup_pr
 from machinist.phases.execute import (
     MAX_FEEDBACK_FILE_BYTES,
     ExecutePhaseError,
     normalize_operator_feedback,
     run_execute_phase,
 )
+from machinist.phases.review import ReviewPhaseError, run_review_phase
 from machinist.phases.spec import SpecPhaseError, preview_spec_phase, run_spec_phase
 from machinist.phases.status import StatusRow, next_action_for_status, pipeline_status
 from machinist.phases.watch import WatchState, plan_watch_tasks, watch_once
@@ -78,6 +83,17 @@ from machinist.portfolio import (
 )
 from machinist.process import run_supervised
 from machinist.queue_control import QueueControl, QueueControlError
+from machinist.rehearsal import (
+    RehearsalError,
+    run_harness_rehearsal,
+    simulate_rehearsal,
+)
+from machinist.reporting import (
+    MetricsReport,
+    ReportingError,
+    build_metrics_report,
+    parse_since_duration,
+)
 from machinist.service import (
     LaunchdService,
     ServiceError,
@@ -85,6 +101,16 @@ from machinist.service import (
     read_watcher_heartbeat,
     write_watcher_heartbeat,
 )
+from machinist.task_intake import (
+    TASK_TEMPLATE_PATH,
+    TaskLintReport,
+    TaskTemplateDriftError,
+    lint_task_body,
+    preflight_task_template,
+    render_task_body,
+    sync_task_template,
+)
+from machinist.telemetry import build_otlp_payload, export_otlp, validate_otlp_endpoint
 from machinist.updates import (
     DEFAULT_TIMEOUT_SECONDS,
     UpdateStatus,
@@ -222,8 +248,16 @@ def _print_init_receipt(
         click.echo(f"  {step}. Create/update labels: machinist sync-labels --apply")
         step += 1
     if source == "github-actions" and config.github.manage_workflows:
+        descriptor = get_harness_descriptor(config.harness_for("spec").name)
+        secret_name = config.github.spec_secret_env or (
+            descriptor.ci_spec.secret_env if descriptor.ci_spec is not None else None
+        )
+        if secret_name is None:
+            raise click.ClickException(
+                "selected Harness has no hosted Spec CI credential metadata"
+            )
         click.echo(
-            f"  {step}. Configure CI authentication: gh secret set ANTHROPIC_API_KEY"
+            f"  {step}. Configure CI authentication: gh secret set {secret_name}"
         )
         step += 1
     click.echo(
@@ -237,7 +271,11 @@ def _print_init_receipt(
     )
     step += 1
     click.echo(
-        f"  {step}. Label an issue {trigger!r}; follow it with 'machinist status' and 'machinist runs'."
+        f"  {step}. Create a ready Task: machinist task new --title <title> --dispatch"
+    )
+    click.echo(
+        f"     Or lint an existing issue before applying {trigger!r}: "
+        "machinist task lint <issue>"
     )
 
 
@@ -407,6 +445,7 @@ _MACHINIST_ERRORS = (
     HarnessError,
     SpecPhaseError,
     ExecutePhaseError,
+    ReviewPhaseError,
     WorkspaceError,
     LifecycleError,
     WorkflowDriftError,
@@ -415,6 +454,10 @@ _MACHINIST_ERRORS = (
     PortfolioError,
     ServiceError,
     ManagedPathError,
+    OnboardingError,
+    RehearsalError,
+    TaskTemplateDriftError,
+    ReportingError,
 )
 
 
@@ -484,7 +527,8 @@ def init(
         # Both modes own these two managed paths. `--no-workflows` means
         # remove prior projections, not merely stop writing new ones.
         preflight_workflow_paths(repo_root)
-    except ManagedPathError as exc:
+        preflight_task_template(repo_root)
+    except (ManagedPathError, TaskTemplateDriftError) as exc:
         raise click.ClickException(str(exc)) from exc
     if config_exists and not force:
         raise click.ClickException(
@@ -560,7 +604,15 @@ def init(
             click.echo(f"wrote .github/workflows/{name}")
         for name in report.removed:
             click.echo(f"removed .github/workflows/{name}")
-    except (ConfigError, WorkflowDriftError, ManagedPathError) as exc:
+        task_template = sync_task_template(repo_root, check=False)
+        if task_template.written:
+            click.echo(f"wrote {TASK_TEMPLATE_PATH}")
+    except (
+        ConfigError,
+        WorkflowDriftError,
+        TaskTemplateDriftError,
+        ManagedPathError,
+    ) as exc:
         raise click.ClickException(str(exc)) from exc
 
     try:
@@ -588,6 +640,352 @@ def init(
         labels_ready=labels_ready,
         suggested_test_command=detected_test_cmd,
     )
+
+
+@main.command()
+@click.argument("issue_number", type=click.IntRange(min=1))
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable policy.")
+def explain(issue_number: int, as_json: bool) -> None:
+    """Explain one Task's effective policy, state, and exact next action."""
+    repo_root = Path.cwd()
+    runs_dir = repo_root / ".machinist/runs"
+    try:
+        config = load_config()
+        lifecycle = TaskLifecycle(runs_dir, repo_root=repo_root)
+        result = explain_task(
+            issue_number,
+            config,
+            _bound_github_client(config, repo_root=repo_root),
+            lifecycle=lifecycle,
+            cancellation=CancellationStore(runs_dir, repo_root=repo_root),
+            workspace=Workspace(repo_root=repo_root, config=config.workspace),
+        )
+    except (ValueError, *_MACHINIST_ERRORS) as exc:
+        raise click.ClickException(str(exc)) from exc
+    payload = result.to_dict()
+    if as_json:
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    _print_task_explanation(result)
+
+
+def _print_task_explanation(result: TaskExplanation) -> None:
+    click.echo(f"Issue #{result.issue}: {result.state}")
+    click.echo(f"  {result.url}")
+    click.echo(f"  Next: {result.next_action or 'Human review or no action required'}")
+    dispatch = result.dispatch
+    managed = "managed" if dispatch["managed_workflows"] else "external"
+    click.echo(
+        f"Dispatch: Spec via {dispatch['spec_source']} ({dispatch['spec_install']}, "
+        f"{managed} workflows); ready transition: {dispatch['ready_transition_owner']}"
+    )
+    click.echo("Effective Harness profiles:")
+    for phase, profile in result.profiles.items():
+        enabled = "enabled" if profile["enabled"] else "disabled"
+        model = profile["model"] or "provider default"
+        click.echo(
+            f"  {phase}: {profile['harness']} · {model} · "
+            f"{profile['timeout_minutes']}m · {enabled}"
+        )
+    gates = result.verification
+    click.echo("Verification:")
+    if gates:
+        for gate in gates:
+            click.echo(f"  {gate['name']}: {gate['command']}")
+    else:
+        click.echo("  No gates configured.")
+    click.echo("Instruction overlays:")
+    for phase, policy in result.instructions.items():
+        paths = ", ".join(policy["paths"]) or "none"
+        append = " + inline append" if policy["inline_append"] else ""
+        click.echo(f"  {phase}: {paths}{append}")
+    click.echo(
+        f"Workspace: {result.workspace['strategy']} · {result.workspace['branch']} · "
+        f"cleanup {result.workspace['cleanup']} · retained "
+        f"{len(result.workspace['retained'])}"
+    )
+    click.echo("Limits: " + json.dumps(result.limits, sort_keys=True))
+    click.echo("Queue: " + json.dumps(result.queue, sort_keys=True))
+    click.echo("Attempts:")
+    for phase, attempt in result.attempts.items():
+        summary = (
+            "none"
+            if attempt is None
+            else (f"#{attempt['attempt']} {attempt['status']}")
+        )
+        click.echo(f"  {phase}: {summary}")
+    if result.cancellation is not None:
+        click.echo(f"Cancellation: requested ({result.cancellation['reason']})")
+    click.echo(
+        "Credentials: values hidden; allowed Harness names: "
+        + ", ".join(result.credentials["allowed_names"])
+    )
+
+
+@main.command()
+@click.option(
+    "--setup-pr",
+    is_flag=True,
+    help="Deliver generated setup files on a pushed draft pull request.",
+)
+@click.option("--workflows/--no-workflows", "install_workflows", default=None)
+@click.option(
+    "--harness", "harness_name", type=click.Choice([h.value for h in HarnessName])
+)
+@click.option("--test-cmd")
+@click.option("--spec-source", type=click.Choice(["local", "github-actions"]))
+@click.option("--notifications", type=click.Choice(["desktop", "disabled"]))
+@click.option("--no-input", is_flag=True)
+@click.pass_context
+def onboard(
+    ctx: click.Context,
+    setup_pr: bool,
+    install_workflows: bool | None,
+    harness_name: str | None,
+    test_cmd: str | None,
+    spec_source: str | None,
+    notifications: str | None,
+    no_input: bool,
+) -> None:
+    """Guide first-run setup, optionally through a reviewable draft PR."""
+    arguments = {
+        "force": False,
+        "install_workflows": install_workflows,
+        "harness_name": harness_name,
+        "test_cmd": test_cmd,
+        "spec_source": spec_source,
+        "notifications": notifications,
+        "no_input": no_input,
+    }
+    if not setup_pr:
+        ctx.invoke(init, **arguments)
+        return
+    repo_root = _repository_root(Path.cwd())
+
+    def initialize() -> None:
+        ctx.invoke(init, **arguments)
+
+    def validate() -> None:
+        config = _load_setup_config(repo_root)
+        project_workflows(
+            repo_root,
+            config,
+            installed_version=_installed_version(),
+            check=True,
+        )
+        sync_task_template(repo_root, check=True)
+        readiness = run_doctor(
+            repo_root,
+            config,
+            installed_version=_installed_version(),
+            run_gates=True,
+        )
+        failures = [
+            f"{check.name}: {check.detail}"
+            for check in readiness.checks
+            if check.level.value == "FAIL"
+        ]
+        if failures:
+            raise OnboardingError("setup preflight failed: " + "; ".join(failures))
+
+    try:
+        result = deliver_setup_pr(
+            repo_root,
+            github=GitHubClient(),
+            initialize=initialize,
+            validate=validate,
+        )
+    except (OnboardingError, GitHubError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Draft setup PR #{result.pr.number}: {result.pr.url}")
+    click.echo("Next: review the generated files and run machinist doctor --run-gates.")
+
+
+@main.command()
+@click.option(
+    "--harness",
+    "use_harness",
+    is_flag=True,
+    help="Invoke configured Harnesses in the disposable rehearsal repository.",
+)
+def rehearse(use_harness: bool) -> None:
+    """Rehearse the lifecycle locally without creating GitHub artifacts."""
+    try:
+        config = load_config()
+        if use_harness:
+            result = run_harness_rehearsal(
+                config,
+                harness_factory=lambda phase: _make_harness(config, Phase(phase)),
+            )
+            mode = "configured Harnesses; API usage may have occurred"
+        else:
+            result = simulate_rehearsal(review_enabled=config.review.enabled)
+            mode = "controller simulation; no model or API usage"
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Rehearsal passed ({mode}).")
+    for transition in result.transitions:
+        click.echo(f"  ✓ {transition}")
+    click.echo("Next: create or lint a real Task before applying the trigger label.")
+
+
+@main.group()
+def task() -> None:
+    """Create, check, and lint AgentMachinist Tasks."""
+
+
+@task.command("template")
+@click.option("--write", is_flag=True, help="Write the managed issue form.")
+@click.option("--check", is_flag=True, help="Check the managed issue form for drift.")
+def task_template(write: bool, check: bool) -> None:
+    """Project or check the managed GitHub issue form."""
+    if write == check:
+        raise click.UsageError("choose exactly one of --write or --check")
+    try:
+        report = sync_task_template(Path.cwd(), check=check)
+    except (TaskTemplateDriftError, ManagedPathError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    if check:
+        click.echo("Managed task template matches AgentMachinist.")
+    elif report.written:
+        click.echo(f"wrote {TASK_TEMPLATE_PATH}")
+    else:
+        click.echo("Managed task template already matches AgentMachinist.")
+
+
+@task.command("lint")
+@click.argument("issue_number", type=click.IntRange(min=1))
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
+def task_lint(issue_number: int, as_json: bool) -> None:
+    """Check whether a live GitHub issue is ready for dispatch."""
+    try:
+        config = load_config()
+        issue = _bound_github_client(config).get_issue(issue_number)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    report = lint_task_body(issue.body)
+    _print_task_lint(report, as_json=as_json)
+    if not report.ready:
+        raise click.exceptions.Exit(1)
+
+
+@task.command("new")
+@click.option("--title", required=True, help="GitHub issue title.")
+@click.option(
+    "--dispatch",
+    is_flag=True,
+    help="Apply the configured trigger label after readiness lint passes.",
+)
+def task_new(title: str, dispatch: bool) -> None:
+    """Prompt for a structured Task and create a GitHub issue."""
+    body = render_task_body(
+        objective=click.prompt("Objective"),
+        acceptance=click.prompt("Acceptance criteria"),
+        constraints=click.prompt("Constraints"),
+        verification=click.prompt("Verification"),
+        context=click.prompt("Context", default="Not provided", show_default=False),
+    )
+    report = lint_task_body(body)
+    if not report.ready:
+        _print_task_lint(report, as_json=False)
+        raise click.exceptions.Exit(1)
+    try:
+        config = load_config()
+        github = _bound_github_client(config)
+        issue = github.create_issue(title=title, body=body)
+        if dispatch:
+            github.add_issue_label(issue.number, config.github.labels.trigger)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Created Task #{issue.number}: {issue.url}")
+    if dispatch:
+        click.echo(f"Dispatched with label {config.github.labels.trigger!r}.")
+    else:
+        click.echo(f"Next: machinist task lint {issue.number}")
+
+
+def _print_task_lint(report: TaskLintReport, *, as_json: bool) -> None:
+    if as_json:
+        click.echo(json.dumps(report.to_dict(), sort_keys=True))
+        return
+    if report.ready:
+        click.echo("Task is ready for dispatch.")
+        return
+    click.echo("Task is not ready for dispatch:")
+    for finding in report.errors:
+        click.echo(f"  {finding.field}: {finding.message}")
+
+
+@main.command()
+@click.option(
+    "--since",
+    "since_text",
+    default="30d",
+    show_default=True,
+    help="Positive integer reporting window with h, d, or w suffix.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
+@click.option(
+    "--otlp-endpoint",
+    help="Export redacted aggregate metrics to this OTLP/HTTP JSON endpoint.",
+)
+def report(since_text: str, as_json: bool, otlp_endpoint: str | None) -> None:
+    """Summarize local Task Run reliability and optionally export metrics."""
+    try:
+        window = parse_since_duration(since_text)
+        config = load_config()
+        endpoint = otlp_endpoint or config.telemetry.otlp_endpoint
+        if endpoint is not None:
+            validate_otlp_endpoint(endpoint)
+        lifecycle = TaskLifecycle(Path(".machinist/runs"), repo_root=Path.cwd())
+        history = build_run_report(lifecycle).history
+        generated_at = datetime.now(UTC)
+        metrics = build_metrics_report(
+            history,
+            since=generated_at - window,
+            generated_at=generated_at,
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(json.dumps(metrics.to_dict(), indent=2, sort_keys=True))
+    else:
+        _print_metrics_report(metrics)
+    if endpoint is None:
+        return
+    try:
+        repository = Workspace(
+            repo_root=Path.cwd(), config=config.workspace
+        ).repository_identity()
+        export_otlp(
+            endpoint,
+            build_otlp_payload(metrics, repository=repository),
+            timeout_seconds=config.telemetry.timeout_seconds,
+        )
+    except (ReportingError, WorkspaceError) as exc:
+        raise click.ClickException(f"OTLP export failed: {exc}") from exc
+    click.echo(f"Exported aggregate metrics to {endpoint}.", err=as_json)
+
+
+def _print_metrics_report(report: MetricsReport) -> None:
+    click.echo(f"Local Task Run report since {report.since}:")
+    if not report.attempts:
+        click.echo("  No Task Run attempts in this window.")
+        return
+    success = "n/a" if report.success_rate is None else f"{report.success_rate:.1%}"
+    click.echo(
+        f"  Attempts: {report.attempts} · success: {success} · "
+        f"retries: {report.retry_count} · cancellations: {report.cancellation_count}"
+    )
+    durations = report.duration_seconds
+    if durations["median"] is not None:
+        click.echo(
+            f"  Duration: median {durations['median']:.1f}s · "
+            f"p95 {durations['p95']:.1f}s"
+        )
+    for phase, statuses in report.by_phase.items():
+        summary = ", ".join(f"{status} {count}" for status, count in statuses.items())
+        click.echo(f"  {phase}: {summary}")
 
 
 @main.command("sync-workflows")
@@ -934,7 +1332,7 @@ def retry(
                     issue=issue_number,
                     pr=pr.number,
                 )
-            else:
+            elif record.phase is Phase.EXECUTE:
                 pr = lifecycle.run(
                     issue_number,
                     Phase.EXECUTE,
@@ -967,6 +1365,17 @@ def retry(
                     f"Issue #{issue_number} implementation is ready in PR #{pr.number}",
                     issue=issue_number,
                     pr=pr.number,
+                )
+            else:
+                pr = _run_review_task(
+                    issue_number,
+                    config,
+                    lifecycle,
+                    repo_root=repo_root,
+                    cancellation=cancellation,
+                )
+                click.echo(
+                    f"PR #{pr.number} passed independent review and is ready: {pr.url}"
                 )
         else:
             click.echo(
@@ -1250,14 +1659,21 @@ def watch(
                 ),
             ),
         )
-        _deliver_notification(
+        if not config.review.enabled:
+            _notify_pr_ready(config, issue_number, pr.number)
+        return pr
+
+    def dispatch_review(issue_number: int):
+        click.echo(f"Dispatching Review Task Run for issue #{issue_number}...")
+        pr = _run_review_task(
+            issue_number,
             config,
-            NotificationEvent.PR_READY,
-            "Machinist PR ready",
-            f"Issue #{issue_number} implementation is ready in PR #{pr.number}",
-            issue=issue_number,
-            pr=pr.number,
+            lifecycle,
+            repo_root=repo_root,
+            cancellation=cancellation_store,
+            github=github,
         )
+        _notify_pr_ready(config, issue_number, pr.number)
         return pr
 
     state = WatchState()
@@ -1305,6 +1721,7 @@ def watch(
                     github,
                     run_spec=dispatch_spec,
                     run_execute=dispatch_execute,
+                    run_review=dispatch_review,
                     state=state,
                     notify=lambda message: _deliver_notification(
                         config,
@@ -1454,15 +1871,36 @@ def run(
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"PR #{pr.number} implemented and marked ready for review: {pr.url}")
-    _deliver_notification(
-        config,
-        NotificationEvent.PR_READY,
-        "Machinist PR ready",
-        f"Issue #{issue_number} implementation is ready in PR #{pr.number}",
-        issue=issue_number,
-        pr=pr.number,
-    )
+    if config.review.enabled:
+        click.echo(
+            f"PR #{pr.number} implemented; independent review is pending. "
+            f"{pr.url}\nNext: machinist review {issue_number}"
+        )
+    else:
+        click.echo(f"PR #{pr.number} implemented and ready for review: {pr.url}")
+        _notify_pr_ready(config, issue_number, pr.number)
+
+
+@main.command()
+@click.argument("issue_number", type=click.IntRange(min=1))
+def review(issue_number: int) -> None:
+    """Independently review ISSUE_NUMBER's implemented draft pull request."""
+    repo_root = Path.cwd()
+    runs_dir = repo_root / ".machinist/runs"
+    try:
+        config = load_config()
+        lifecycle = TaskLifecycle(runs_dir, repo_root=repo_root)
+        pr = _run_review_task(
+            issue_number,
+            config,
+            lifecycle,
+            repo_root=repo_root,
+            cancellation=CancellationStore(runs_dir, repo_root=repo_root),
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"PR #{pr.number} passed independent review and is ready: {pr.url}")
+    _notify_pr_ready(config, issue_number, pr.number)
 
 
 def _read_feedback_file(path: Path) -> str:
@@ -1560,21 +1998,67 @@ def amend(
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"PR #{pr.number} amended and marked ready for review: {pr.url}")
-    _deliver_notification(
-        config,
-        NotificationEvent.PR_READY,
-        "Machinist PR amended",
-        f"Issue #{issue_number} amendment is ready in PR #{pr.number}",
-        issue=issue_number,
-        pr=pr.number,
-    )
+    if config.review.enabled:
+        click.echo(
+            f"PR #{pr.number} amended; independent review is pending. "
+            f"Next: machinist review {issue_number}"
+        )
+    else:
+        click.echo(f"PR #{pr.number} amended and ready for review: {pr.url}")
+        _notify_pr_ready(config, issue_number, pr.number)
 
 
 def _fresh_attempt(claim) -> int | None:
     """Keep the first-run path stable and isolate every later attempt."""
     attempt = getattr(claim, "attempt", 1)
     return attempt if attempt > 1 else None
+
+
+def _run_review_task(
+    issue_number: int,
+    config: MachinistConfig,
+    lifecycle: TaskLifecycle,
+    *,
+    repo_root: Path,
+    cancellation: CancellationStore,
+    github=None,
+):
+    execute = lifecycle.record(issue_number, Phase.EXECUTE)
+    if execute is None or execute.status is not RunStatus.SUCCEEDED:
+        raise LifecycleError(
+            f"issue #{issue_number} has no successful Execute Task Run to review"
+        )
+    github = github or _bound_github_client(config, repo_root=repo_root)
+    return lifecycle.run(
+        issue_number,
+        Phase.REVIEW,
+        lambda claim: run_review_phase(
+            issue_number,
+            config,
+            github=github,
+            harness=_task_harness(
+                config,
+                Phase.REVIEW,
+                issue_number,
+                repo_root / ".machinist/runs",
+            ),
+            workspace=Workspace(repo_root=repo_root, config=config.workspace),
+            execute_evidence=dict(execute.evidence),
+            claim=claim,
+            cancel_check=cancellation.check(issue_number),
+        ),
+    )
+
+
+def _notify_pr_ready(config: MachinistConfig, issue: int, pr: int) -> None:
+    _deliver_notification(
+        config,
+        NotificationEvent.PR_READY,
+        "Machinist PR ready",
+        f"Issue #{issue} implementation is ready in PR #{pr}",
+        issue=issue,
+        pr=pr,
+    )
 
 
 def _deliver_notification(
@@ -1944,14 +2428,35 @@ def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> 
     default=DEFAULT_REGISTRY_PATH,
     help="Portfolio registry path used with --all.",
 )
+@click.option(
+    "--watch",
+    "watch_status",
+    is_flag=True,
+    help="Keep watching and print only changed pipeline snapshots.",
+)
+@click.option(
+    "--interval",
+    "status_interval",
+    type=click.FloatRange(min=0.1),
+    default=2.0,
+    show_default=True,
+    help="Seconds between live status reads.",
+)
 def status(
     verbose: bool = False,
     local_only: bool = False,
     as_json: bool = False,
     all_repositories: bool = False,
     registry: Path = DEFAULT_REGISTRY_PATH,
+    watch_status: bool = False,
+    status_interval: float = 2.0,
 ) -> None:
     """Show the pipeline state of machinist-managed issues and PRs."""
+    if watch_status:
+        if local_only or all_repositories:
+            raise click.UsageError("--watch cannot be combined with --local or --all")
+        _watch_status(status_interval, as_json=as_json)
+        return
     if all_repositories:
         try:
             statuses = collect_local_status(PortfolioRegistry(registry))
@@ -2094,6 +2599,51 @@ def status(
         )
         for line in summarize_run_report(recovery_report, lifecycle=lifecycle):
             click.echo(line)
+
+
+def _watch_status(interval: float, *, as_json: bool) -> None:
+    repo_root = Path.cwd()
+    try:
+        config = load_config()
+        lifecycle = TaskLifecycle(repo_root / ".machinist/runs", repo_root=repo_root)
+        github = _bound_github_client(config, repo_root=repo_root)
+
+        def load_rows() -> list[dict]:
+            return [
+                _status_row_dict(row)
+                for row in pipeline_status(config, github, lifecycle=lifecycle)
+            ]
+
+        first = True
+        for snapshot in iter_status_snapshots(
+            load_rows,
+            interval_seconds=interval,
+        ):
+            if as_json:
+                click.echo(json.dumps(snapshot.to_dict(), sort_keys=True))
+            else:
+                if not first and sys.stdout.isatty():
+                    click.clear()
+                _render_status_snapshot(snapshot)
+            first = False
+    except KeyboardInterrupt:
+        click.echo("status watch stopped.")
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _render_status_snapshot(snapshot: StatusSnapshot) -> None:
+    click.echo(f"Pipeline at {snapshot.observed_at}")
+    if not snapshot.rows:
+        click.echo("  No open pipeline items.")
+        return
+    for row in snapshot.rows:
+        kind = "issue" if row["kind"] == "issue" else "PR"
+        click.echo(f"  {kind} #{row['number']}: {row['state']} · {row['title']}")
+        status_row = StatusRow(**row)
+        action = next_action_for_status(status_row)
+        if action:
+            click.echo(f"    Next: {action}")
 
 
 @main.command("runs")

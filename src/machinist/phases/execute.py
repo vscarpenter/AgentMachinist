@@ -28,6 +28,7 @@ from machinist.config import (
     VerificationGateConfig,
 )
 from machinist.github import PullRequest, normalize_repository_identity
+from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
@@ -232,6 +233,7 @@ def run_execute_phase(
             branch=branch,
             expected_base=base,
             cancel_check=cancel_check,
+            review_enabled=config.review.enabled,
         )
         return pr
 
@@ -321,6 +323,7 @@ def run_execute_phase(
                 branch=branch,
                 expected_base=base,
                 cancel_check=cancel_check,
+                review_enabled=config.review.enabled,
             )
         else:
             _assert_approved_head(
@@ -526,6 +529,7 @@ def run_execute_phase(
                 branch=branch,
                 expected_base=base,
                 cancel_check=cancel_check,
+                review_enabled=config.review.enabled,
             )
     except BaseException as exc:
         cleanup_warning = finish_workshop_cleanup(
@@ -1236,8 +1240,12 @@ def _complete_delivery(
     branch: str,
     expected_base: str,
     cancel_check,
+    review_enabled: bool,
 ) -> None:
-    report_progress(claim, "deliver ready PR", f"PR #{pr.number}")
+    delivery = (
+        "deliver for independent review" if review_enabled else "deliver ready PR"
+    )
+    report_progress(claim, delivery, f"PR #{pr.number}")
     current_pr = _delivery_pr_at_sha(
         github,
         original=pr,
@@ -1256,6 +1264,7 @@ def _complete_delivery(
         harness_report_excerpt=harness_report_excerpt,
         attempt=attempt,
         duration_seconds=duration_seconds,
+        review_enabled=review_enabled,
     )
     _checkpoint(
         claim,
@@ -1280,6 +1289,14 @@ def _complete_delivery(
         completion_comment_id=saved_comment_id,
         completion_comment_observed_sha=implementation_sha,
     )
+    if review_enabled:
+        if not current_pr.is_draft:
+            raise ExecutePhaseError(
+                f"GitHub PR #{current_pr.number} is already ready; independent Review "
+                "requires the implementation to remain draft"
+            )
+        _checkpoint(claim, review_required_sha=implementation_sha)
+        return
     _checkpoint(claim, ready_intended_sha=implementation_sha)
     current_pr = _delivery_pr_at_sha(
         github,
@@ -1416,6 +1433,7 @@ def _completion_comment(
     harness_report_excerpt: str | None,
     attempt: int | None,
     duration_seconds: float,
+    review_enabled: bool = False,
 ) -> str:
     qualifier = " (reconciled after interruption)" if recovered else ""
     lines = [
@@ -1426,6 +1444,8 @@ def _completion_comment(
     ]
     if attempt is not None:
         lines.append(f"- Task Run attempt: {attempt}")
+    if review_enabled:
+        lines.append(f"- Independent review pending: `machinist review {issue_number}`")
     lines.append(f"- Controller duration: {duration_seconds:.3f}s")
     if change_summary:
         lines.append(
@@ -1527,14 +1547,7 @@ def _string(value: Any) -> str | None:
 
 
 def _harness_details(harness) -> dict[str, Any]:
-    harness_config = getattr(harness, "config", None)
-    model = getattr(harness_config, "model", None)
-    model = getattr(model, "value", model)
-    return {
-        "name": str(getattr(harness, "name", "unknown")),
-        "model": str(model) if model is not None else None,
-        "profile": "execute",
-    }
+    return harness_evidence(harness, profile="execute")
 
 
 def _positive_int(value: Any) -> int | None:

@@ -18,7 +18,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 from machinist.config import MachinistConfig
 from machinist.github import github_command_environment
-from machinist.harness import get_harness
+from machinist.harness import get_harness, get_harness_descriptor
 from machinist.lifecycle import RunStatus, TaskLifecycle
 from machinist.observability import build_run_report
 from machinist.process import run_supervised
@@ -565,6 +565,8 @@ def _add_harness_checks(checks, root, config, which, runner) -> None:
             "Spec": get_harness(_harness_for(config, "spec")),
             "Execute": get_harness(_harness_for(config, "execute")),
         }
+        if getattr(getattr(config, "review", None), "enabled", False):
+            profiles["Review"] = get_harness(_harness_for(config, "review"))
     except Exception as exc:  # noqa: BLE001 - report adapter/config failures
         checks.append(
             DoctorCheck(CheckLevel.FAIL, "harness", f"cannot resolve harness: {exc}")
@@ -688,6 +690,29 @@ def _add_actions_secret_check(
             )
         )
         return
+    try:
+        descriptor = get_harness_descriptor(config.harness_for("spec").name)
+        secret_name = config.github.spec_secret_env or (
+            descriptor.ci_spec.secret_env if descriptor.ci_spec is not None else None
+        )
+    except Exception as exc:  # reported as a readiness failure, never a traceback
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "Actions Spec credential",
+                f"cannot resolve Harness CI credential: {exc}",
+            )
+        )
+        return
+    if secret_name is None:
+        checks.append(
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "Actions Spec credential",
+                "selected Harness has no hosted Spec CI credential metadata",
+            )
+        )
+        return
     environment = github_command_environment(readiness.host)
     args = [
         "gh",
@@ -719,12 +744,12 @@ def _add_actions_secret_check(
             )
         )
         return
-    if "ANTHROPIC_API_KEY" in names:
+    if secret_name in names:
         checks.append(
             DoctorCheck(
                 CheckLevel.PASS,
                 "Actions Spec credential",
-                "ANTHROPIC_API_KEY repository secret is configured",
+                f"{secret_name} repository secret is configured",
             )
         )
         return
@@ -751,7 +776,8 @@ def _add_actions_secret_check(
             DoctorCheck(
                 CheckLevel.WARN,
                 "Actions Spec credential",
-                "ANTHROPIC_API_KEY is not a repository secret; confirm an inherited organization secret can access this repository",
+                f"{secret_name} is not a repository secret; confirm an inherited "
+                "organization secret can access this repository",
             )
         )
     else:
@@ -759,7 +785,8 @@ def _add_actions_secret_check(
             DoctorCheck(
                 CheckLevel.FAIL,
                 "Actions Spec credential",
-                "ANTHROPIC_API_KEY is missing; run 'gh secret set ANTHROPIC_API_KEY' before labeling a Task",
+                f"{secret_name} is missing; run 'gh secret set {secret_name}' "
+                "before labeling a Task",
             )
         )
 
@@ -1018,20 +1045,7 @@ def run_doctor(
     spec_source = _enum_value(getattr(config.github, "spec_source", "local"))
     harness_name = _enum_value(getattr(spec_config, "name", "claude-code"))
     manage_workflows = getattr(config.github, "manage_workflows", True)
-    if (
-        spec_source == "github-actions"
-        and harness_name != "claude-code"
-        and manage_workflows
-    ):
-        checks.append(
-            DoctorCheck(
-                CheckLevel.FAIL,
-                "Spec source",
-                "github-actions Spec generation currently installs only claude-code; "
-                f"configured harness is {harness_name}",
-            )
-        )
-    elif spec_source == "github-actions" and harness_name != "claude-code":
+    if spec_source == "github-actions" and not manage_workflows:
         checks.append(
             DoctorCheck(
                 CheckLevel.PASS,
@@ -1040,11 +1054,22 @@ def run_doctor(
             )
         )
     else:
+        detail = f"{spec_source} is compatible with {harness_name}"
+        level = CheckLevel.PASS
+        if spec_source == "github-actions":
+            try:
+                descriptor = get_harness_descriptor(spec_config.name)
+                if descriptor.ci_spec is None:
+                    level = CheckLevel.FAIL
+                    detail = f"{harness_name} has no hosted Spec CI profile"
+            except Exception as exc:
+                level = CheckLevel.FAIL
+                detail = f"cannot resolve {harness_name} CI profile: {exc}"
         checks.append(
             DoctorCheck(
-                CheckLevel.PASS,
+                level,
                 "Spec source",
-                f"{spec_source} is compatible with {harness_name}",
+                detail,
             )
         )
 

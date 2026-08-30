@@ -1,13 +1,33 @@
 import json
 import subprocess
 
-from machinist.harness.base import Harness, HarnessCapabilities
+from machinist.harness.base import (
+    Harness,
+    HarnessCapabilities,
+    HarnessCIProfile,
+    HarnessDescriptor,
+)
 
 
 class Pi(Harness):
     name = "pi"
     default_command = "pi"
     capabilities = HarnessCapabilities("cli-enforced")
+    descriptor = HarnessDescriptor(
+        contract_version=1,
+        display_name="Pi",
+        documentation_url="https://github.com/badlogic/pi-mono",
+        phases=frozenset({"spec", "execute", "review"}),
+        ci_spec=HarnessCIProfile(
+            install_argv=(
+                "npm",
+                "install",
+                "-g",
+                "@mariozechner/pi-coding-agent@0.73.1",
+            ),
+            secret_env="GEMINI_API_KEY",
+        ),
+    )
 
     def authentication_argv(self) -> list[str]:
         selector = (

@@ -1,7 +1,7 @@
 """Base class for coding-harness adapters.
 
 An adapter's job is small on purpose: build the argv that runs its CLI
-headlessly for the two phases. Subprocess mechanics, timeouts, and error
+    headlessly for the pipeline phases. Subprocess mechanics, timeouts, and error
 translation live here so adapters stay one screen long.
 """
 
@@ -50,10 +50,31 @@ class HarnessCapabilities:
     implementation_git_control: str = "prompt-and-postcondition"
 
 
+@dataclass(frozen=True)
+class HarnessCIProfile:
+    """Argv-safe installation and secret metadata for hosted Spec CI."""
+
+    install_argv: tuple[str, ...]
+    secret_env: str
+
+
+@dataclass(frozen=True)
+class HarnessDescriptor:
+    """Versioned metadata shared by built-in and entry-point adapters."""
+
+    contract_version: int
+    display_name: str
+    documentation_url: str
+    phases: frozenset[str]
+    structured_usage: bool = False
+    ci_spec: HarnessCIProfile | None = None
+
+
 class Harness(ABC):
     name: ClassVar[str]
     default_command: ClassVar[str]
     capabilities: ClassVar[HarnessCapabilities] = HarnessCapabilities("advisory")
+    descriptor: ClassVar[HarnessDescriptor]
 
     # Harness runs are silent and can last many minutes; a periodic progress
     # callback keeps callers (and humans) sure the process is alive.
@@ -85,6 +106,10 @@ class Harness(ABC):
     def implement_argv(self, prompt: str) -> list[str]:
         """Argv that makes the harness edit files headlessly per the prompt."""
 
+    def review_argv(self, prompt: str) -> list[str]:
+        """Argv for independent read-only review; defaults to Spec custody."""
+        return self.spec_argv(prompt)
+
     def version_argv(self) -> list[str]:
         """Read-only argv used by readiness diagnostics."""
         return [self.command, "--version"]
@@ -95,6 +120,8 @@ class Harness(ABC):
             argv = self.spec_argv("machinist compatibility probe")
         elif phase == "execute":
             argv = self.implement_argv("machinist compatibility probe")
+        elif phase == "review":
+            argv = self.review_argv("machinist compatibility probe")
         else:
             raise ValueError(f"unknown harness phase: {phase}")
         return [*argv, "--help"]
@@ -112,6 +139,11 @@ class Harness(ABC):
 
     def implement(self, prompt: str, cwd: Path) -> str:
         return self._run(self.implement_argv(prompt), cwd, self.config.timeout_minutes)
+
+    def review(self, prompt: str, cwd: Path) -> str:
+        return self._run(
+            self.review_argv(prompt), cwd, self.config.spec_timeout_minutes
+        )
 
     def _run(self, argv: list[str], cwd: Path, timeout_minutes: int) -> str:
         try:

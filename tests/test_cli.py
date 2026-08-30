@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from machinist.cli import _workflow_drift_notice, main
-from machinist.config import load_config
+from machinist.config import HarnessName, load_config
 from machinist.workflows import WorkflowDriftError
 
 _BaseCliRunner = CliRunner
@@ -58,17 +58,171 @@ def test_help_lists_all_commands():
         "queue",
         "repo",
         "service",
+        "report",
         "status",
         "runs",
         "doctor",
         "update-check",
         "sync-workflows",
         "sync-labels",
+        "task",
         "clean",
         "inspect",
         "config",
     ):
         assert command in result.output
+
+
+def test_task_template_write_then_check() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        written = runner.invoke(main, ["task", "template", "--write"])
+        checked = runner.invoke(main, ["task", "template", "--check"])
+
+        assert written.exit_code == 0, written.output
+        assert "wrote .github/ISSUE_TEMPLATE/agentmachinist-task.yml" in written.output
+        assert checked.exit_code == 0, checked.output
+        assert "matches" in checked.output
+
+
+def test_task_lint_json_reports_live_issue_readiness(monkeypatch) -> None:
+    class FakeGitHub:
+        def get_issue(self, number):
+            from machinist.github import Issue
+
+            return Issue(
+                number=number,
+                title="Vague task",
+                body="## Objective\nTBD",
+                url=f"https://example.test/issues/{number}",
+            )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        monkeypatch.setattr(
+            "machinist.cli._bound_github_client",
+            lambda *args, **kwargs: FakeGitHub(),
+        )
+        result = runner.invoke(main, ["task", "lint", "42", "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ready"] is False
+    assert {item["field"] for item in payload["errors"]} >= {
+        "objective",
+        "acceptance criteria",
+        "verification",
+    }
+
+
+def test_task_new_dispatches_only_after_local_lint(monkeypatch) -> None:
+    created = []
+    labels = []
+
+    class FakeGitHub:
+        def create_issue(self, *, title, body):
+            from machinist.github import Issue
+
+            issue = Issue(
+                number=42,
+                title=title,
+                body=body,
+                url="https://example.test/issues/42",
+            )
+            created.append(issue)
+            return issue
+
+        def add_issue_label(self, number, label):
+            labels.append((number, label))
+
+    runner = CliRunner()
+    input_text = (
+        "\n".join(
+            (
+                "Make authentication failures explain the exact recovery command.",
+                "- [ ] Error names the missing credential",
+                "Preserve the local-first trust model.",
+                "Run uv run pytest tests/test_auth.py.",
+                "Found during setup testing.",
+            )
+        )
+        + "\n"
+    )
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        monkeypatch.setattr(
+            "machinist.cli._bound_github_client",
+            lambda *args, **kwargs: FakeGitHub(),
+        )
+        result = runner.invoke(
+            main,
+            ["task", "new", "--title", "Improve recovery", "--dispatch"],
+            input=input_text,
+        )
+
+    assert result.exit_code == 0, result.output
+    assert len(created) == 1
+    assert labels == [(42, "agent-task")]
+    assert "Dispatched" in result.output
+
+
+def test_report_json_reads_local_attempt_history() -> None:
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        TaskLifecycle(Path(".machinist/runs")).run(42, Phase.SPEC, lambda claim: None)
+
+        result = runner.invoke(main, ["report", "--since", "30d", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["attempts"] == 1
+    assert payload["by_phase"] == {"spec": {"succeeded": 1}}
+    assert payload["success_rate"] == 1.0
+
+
+def test_report_prints_local_result_before_export_failure(monkeypatch) -> None:
+    from machinist.reporting import ReportingError
+
+    monkeypatch.setattr(
+        "machinist.cli.export_otlp",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ReportingError("timeout")),
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        result = runner.invoke(
+            main,
+            [
+                "report",
+                "--since",
+                "30d",
+                "--otlp-endpoint",
+                "https://telemetry.example.test/v1/metrics",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "No Task Run attempts" in result.output
+    assert "OTLP export failed: timeout" in result.output
+
+
+def test_report_rejects_invalid_window_before_reading_history() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["report", "--since", "1month"])
+        history_created = Path(".machinist").exists()
+
+    assert result.exit_code == 1
+    assert "positive integer" in result.output
+    assert history_created is False
 
 
 def test_config_commands_validate_show_schema_and_set():
@@ -528,13 +682,14 @@ def test_init_survives_label_creation_failure(monkeypatch):
         assert "could not create" in result.output
 
 
-def test_init_no_workflows_skips_github_dir():
+def test_init_no_workflows_still_installs_task_template() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(main, ["init", "--no-workflows"])
 
         assert result.exit_code == 0
-        assert not Path(".github").exists()
+        assert Path(".github/ISSUE_TEMPLATE/agentmachinist-task.yml").is_file()
+        assert not Path(".github/workflows").exists()
 
 
 def test_watch_without_config_points_at_init():
@@ -586,6 +741,7 @@ def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
         *,
         run_spec,
         run_execute,
+        run_review,
         state,
         notify,
         notify_stale,
@@ -634,6 +790,7 @@ def test_two_fresh_watch_invocations_dedupe_the_same_stale_approval(monkeypatch)
         *,
         run_spec,
         run_execute,
+        run_review,
         state,
         notify,
         notify_stale,
@@ -1010,7 +1167,8 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
             "recovery": "fresh",
         }
         assert "pull/57" in result.output
-        assert "ready for review" in result.output.lower()
+        assert "independent review is pending" in result.output.lower()
+        assert "machinist review 42" in result.output
 
 
 def test_run_renders_machinist_errors_without_traceback(monkeypatch):
@@ -1831,27 +1989,27 @@ def test_init_interactive_wizard_applies_answers(monkeypatch):
         assert config.harness.name.value == "codex"
         assert config.tests.command == "go test ./..."
         assert config.notifications.backend.value == "disabled"
-        assert not Path(".github").exists()
+        assert Path(".github/ISSUE_TEMPLATE/agentmachinist-task.yml").is_file()
+        assert not Path(".github/workflows").exists()
 
 
-def test_init_interactive_github_actions_locks_harness_to_claude_code(monkeypatch):
+def test_init_interactive_github_actions_supports_selected_harness(monkeypatch):
     _force_interactive(monkeypatch)
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(
             main,
             ["init"],
-            input="github-actions\ny\nskip\n\n",
+            input="github-actions\ny\ncodex\nskip\n\n",
         )
 
         assert result.exit_code == 0, result.output
-        assert "supports only" in result.output
         config = load_config("machinist.yaml")
         assert config.github.spec_source.value == "github-actions"
-        assert config.harness.name.value == "claude-code"
+        assert config.harness.name.value == "codex"
         assert config.tests.command is None
         assert Path(".github/workflows/machinist-spec.yml").is_file()
-        assert "gh secret set ANTHROPIC_API_KEY" in result.output
+        assert "gh secret set OPENAI_API_KEY" in result.output
         assert "Execute dispatch: local watcher" in result.output
 
 
@@ -1964,16 +2122,16 @@ def test_init_notifications_flag_disables_backend():
         assert config.notifications.backend.value == "disabled"
 
 
-def test_init_conflicting_flags_fail_before_writing():
+def test_init_provider_neutral_ci_flags_write_selected_harness():
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(
             main, ["init", "--spec-source", "github-actions", "--harness", "codex"]
         )
 
-        assert result.exit_code != 0
-        assert "claude-code" in result.output
-        assert not Path("machinist.yaml").exists()
+        assert result.exit_code == 0, result.output
+        assert load_config("machinist.yaml").harness.name is HarnessName.CODEX
+        assert "gh secret set OPENAI_API_KEY" in result.output
 
 
 def test_init_test_cmd_replaces_template_comment_tail():
@@ -1987,6 +2145,28 @@ def test_init_test_cmd_replaces_template_comment_tail():
         text = Path("machinist.yaml").read_text()
         line = next(entry for entry in text.splitlines() if "pytest -q" in entry)
         assert line == '  command: "pytest -q"'
+
+
+def test_onboard_without_setup_pr_runs_guided_initializer():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["onboard", "--no-input", "--no-workflows"])
+
+        assert result.exit_code == 0, result.output
+        assert Path("machinist.yaml").is_file()
+        assert load_config("machinist.yaml").review.enabled is True
+
+
+def test_rehearse_defaults_to_no_cost_controller_simulation():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-input", "--no-workflows"])
+        result = runner.invoke(main, ["rehearse"])
+
+        assert result.exit_code == 0, result.output
+        assert "no model or API usage" in result.output
+        assert "review complete" in result.output
+        assert "human merge pending" in result.output
 
 
 def test_approve_resolves_issue_number(monkeypatch):
