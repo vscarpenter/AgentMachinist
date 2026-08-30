@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import tomllib
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
 from pathlib import Path
@@ -87,6 +88,12 @@ from machinist.rehearsal import (
     run_harness_rehearsal,
     simulate_rehearsal,
 )
+from machinist.reporting import (
+    MetricsReport,
+    ReportingError,
+    build_metrics_report,
+    parse_since_duration,
+)
 from machinist.service import (
     LaunchdService,
     ServiceError,
@@ -103,6 +110,7 @@ from machinist.task_intake import (
     render_task_body,
     sync_task_template,
 )
+from machinist.telemetry import build_otlp_payload, export_otlp, validate_otlp_endpoint
 from machinist.updates import (
     DEFAULT_TIMEOUT_SECONDS,
     UpdateStatus,
@@ -445,6 +453,7 @@ _MACHINIST_ERRORS = (
     OnboardingError,
     RehearsalError,
     TaskTemplateDriftError,
+    ReportingError,
 )
 
 
@@ -845,6 +854,78 @@ def _print_task_lint(report: TaskLintReport, *, as_json: bool) -> None:
     click.echo("Task is not ready for dispatch:")
     for finding in report.errors:
         click.echo(f"  {finding.field}: {finding.message}")
+
+
+@main.command()
+@click.option(
+    "--since",
+    "since_text",
+    default="30d",
+    show_default=True,
+    help="Positive integer reporting window with h, d, or w suffix.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
+@click.option(
+    "--otlp-endpoint",
+    help="Export redacted aggregate metrics to this OTLP/HTTP JSON endpoint.",
+)
+def report(since_text: str, as_json: bool, otlp_endpoint: str | None) -> None:
+    """Summarize local Task Run reliability and optionally export metrics."""
+    try:
+        window = parse_since_duration(since_text)
+        config = load_config()
+        endpoint = otlp_endpoint or config.telemetry.otlp_endpoint
+        if endpoint is not None:
+            validate_otlp_endpoint(endpoint)
+        lifecycle = TaskLifecycle(Path(".machinist/runs"), repo_root=Path.cwd())
+        history = build_run_report(lifecycle).history
+        generated_at = datetime.now(UTC)
+        metrics = build_metrics_report(
+            history,
+            since=generated_at - window,
+            generated_at=generated_at,
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(json.dumps(metrics.to_dict(), indent=2, sort_keys=True))
+    else:
+        _print_metrics_report(metrics)
+    if endpoint is None:
+        return
+    try:
+        repository = Workspace(
+            repo_root=Path.cwd(), config=config.workspace
+        ).repository_identity()
+        export_otlp(
+            endpoint,
+            build_otlp_payload(metrics, repository=repository),
+            timeout_seconds=config.telemetry.timeout_seconds,
+        )
+    except (ReportingError, WorkspaceError) as exc:
+        raise click.ClickException(f"OTLP export failed: {exc}") from exc
+    click.echo(f"Exported aggregate metrics to {endpoint}.", err=as_json)
+
+
+def _print_metrics_report(report: MetricsReport) -> None:
+    click.echo(f"Local Task Run report since {report.since}:")
+    if not report.attempts:
+        click.echo("  No Task Run attempts in this window.")
+        return
+    success = "n/a" if report.success_rate is None else f"{report.success_rate:.1%}"
+    click.echo(
+        f"  Attempts: {report.attempts} · success: {success} · "
+        f"retries: {report.retry_count} · cancellations: {report.cancellation_count}"
+    )
+    durations = report.duration_seconds
+    if durations["median"] is not None:
+        click.echo(
+            f"  Duration: median {durations['median']:.1f}s · "
+            f"p95 {durations['p95']:.1f}s"
+        )
+    for phase, statuses in report.by_phase.items():
+        summary = ", ".join(f"{status} {count}" for status, count in statuses.items())
+        click.echo(f"  {phase}: {summary}")
 
 
 @main.command("sync-workflows")

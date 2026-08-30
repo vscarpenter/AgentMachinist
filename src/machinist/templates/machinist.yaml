@@ -33,6 +33,13 @@ instructions:
 review:
   enabled: true
 
+# Aggregate local reliability metrics stay local unless this endpoint is set or
+# `machinist report --otlp-endpoint` is passed. Authorization comes from
+# MACHINIST_OTLP_AUTHORIZATION and is never stored here.
+telemetry:
+  otlp_endpoint: null
+  timeout_seconds: 5
+
 github:
   repo: null                   # "owner/repo"; null = controller binds the exact Git origin
   spec_source: local           # local = watch owns Phase 1 | github-actions = CI owns it

@@ -70,7 +70,9 @@ def test_task_template_projection_is_sealed_and_refuses_user_content(tmp_path) -
 def test_task_template_check_reports_drift_without_writing(tmp_path) -> None:
     target = tmp_path / ".github/ISSUE_TEMPLATE/agentmachinist-task.yml"
 
-    with pytest.raises(TaskTemplateDriftError, match="run 'machinist task template --write'"):
+    with pytest.raises(
+        TaskTemplateDriftError, match="run 'machinist task template --write'"
+    ):
         sync_task_template(tmp_path, check=True)
 
     assert not target.exists()

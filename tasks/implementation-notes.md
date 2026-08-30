@@ -16,3 +16,9 @@
   and NDJSON all share one deterministic read model.
 - Installed the issue form even when managed Actions workflows are disabled;
   task structure and workflow ownership are independent adoption controls.
+- Split local aggregation from network export. Reporting reads the full local
+  history, while the OTLP projector can receive only aggregate fields and emits
+  an attribute allowlist by construction.
+- Extended the existing observability filename parser to include Review; the
+  first-class Phase was already durable, but the read model's regex still
+  recognized only Spec and Execute history.

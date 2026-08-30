@@ -28,6 +28,7 @@ from machinist.config import (
     VerificationGateConfig,
 )
 from machinist.github import PullRequest, normalize_repository_identity
+from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
@@ -1546,14 +1547,7 @@ def _string(value: Any) -> str | None:
 
 
 def _harness_details(harness) -> dict[str, Any]:
-    harness_config = getattr(harness, "config", None)
-    model = getattr(harness_config, "model", None)
-    model = getattr(model, "value", model)
-    return {
-        "name": str(getattr(harness, "name", "unknown")),
-        "model": str(model) if model is not None else None,
-        "profile": "execute",
-    }
+    return harness_evidence(harness, profile="execute")
 
 
 def _positive_int(value: Any) -> int | None:

@@ -108,6 +108,25 @@ def test_invalid_harness_name_explains_identifier_shape(tmp_path):
         load_config(path)
 
 
+def test_telemetry_defaults_disabled_and_validates_http_endpoint() -> None:
+    default = MachinistConfig()
+    configured = MachinistConfig.model_validate(
+        {
+            "telemetry": {
+                "otlp_endpoint": "https://telemetry.example.test/v1/metrics",
+                "timeout_seconds": 7,
+            }
+        }
+    )
+
+    assert default.telemetry.otlp_endpoint is None
+    assert configured.telemetry.timeout_seconds == 7
+    with pytest.raises(ValueError, match="HTTP"):
+        MachinistConfig.model_validate(
+            {"telemetry": {"otlp_endpoint": "file:///tmp/metrics"}}
+        )
+
+
 def test_repo_must_be_owner_slash_name(tmp_path):
     path = write_config(tmp_path, "github:\n  repo: just-a-name\n")
     with pytest.raises(ConfigError, match="owner/repo"):

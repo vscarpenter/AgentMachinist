@@ -655,6 +655,7 @@ def test_claimed_run_uses_fresh_attempt_path_and_captures_harness_report(tmp_pat
         "name": "fake",
         "model": None,
         "profile": "execute",
+        "structured_usage": False,
     }
 
 

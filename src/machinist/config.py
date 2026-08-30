@@ -7,6 +7,7 @@ from datetime import datetime, time, timedelta
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
@@ -772,6 +773,31 @@ class ReviewConfig(StrictModel):
     enabled: bool = False
 
 
+class TelemetryConfig(StrictModel):
+    """Optional aggregate OTLP/HTTP export; disabled without an endpoint."""
+
+    otlp_endpoint: str | None = None
+    timeout_seconds: int = Field(default=5, ge=1, le=30)
+
+    @field_validator("otlp_endpoint")
+    @classmethod
+    def _http_endpoint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "OTLP endpoint must be an HTTP(S) URL without credentials or fragments"
+            )
+        return value
+
+
 class Weekday(str, Enum):
     MON = "mon"
     TUE = "tue"
@@ -1000,6 +1026,7 @@ class MachinistConfig(StrictModel):
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
     tests: TestsConfig = Field(default_factory=TestsConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     queue: QueueConfig = Field(default_factory=QueueConfig)
     notifications: NotificationConfig = Field(default_factory=NotificationConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)

@@ -58,6 +58,7 @@ def test_help_lists_all_commands():
         "queue",
         "repo",
         "service",
+        "report",
         "status",
         "runs",
         "doctor",
@@ -137,15 +138,18 @@ def test_task_new_dispatches_only_after_local_lint(monkeypatch) -> None:
             labels.append((number, label))
 
     runner = CliRunner()
-    input_text = "\n".join(
-        (
-            "Make authentication failures explain the exact recovery command.",
-            "- [ ] Error names the missing credential",
-            "Preserve the local-first trust model.",
-            "Run uv run pytest tests/test_auth.py.",
-            "Found during setup testing.",
+    input_text = (
+        "\n".join(
+            (
+                "Make authentication failures explain the exact recovery command.",
+                "- [ ] Error names the missing credential",
+                "Preserve the local-first trust model.",
+                "Run uv run pytest tests/test_auth.py.",
+                "Found during setup testing.",
+            )
         )
-    ) + "\n"
+        + "\n"
+    )
     with runner.isolated_filesystem():
         initialized = runner.invoke(main, ["init", "--no-workflows"])
         assert initialized.exit_code == 0, initialized.output
@@ -163,6 +167,62 @@ def test_task_new_dispatches_only_after_local_lint(monkeypatch) -> None:
     assert len(created) == 1
     assert labels == [(42, "agent-task")]
     assert "Dispatched" in result.output
+
+
+def test_report_json_reads_local_attempt_history() -> None:
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        TaskLifecycle(Path(".machinist/runs")).run(42, Phase.SPEC, lambda claim: None)
+
+        result = runner.invoke(main, ["report", "--since", "30d", "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["attempts"] == 1
+    assert payload["by_phase"] == {"spec": {"succeeded": 1}}
+    assert payload["success_rate"] == 1.0
+
+
+def test_report_prints_local_result_before_export_failure(monkeypatch) -> None:
+    from machinist.reporting import ReportingError
+
+    monkeypatch.setattr(
+        "machinist.cli.export_otlp",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ReportingError("timeout")),
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        result = runner.invoke(
+            main,
+            [
+                "report",
+                "--since",
+                "30d",
+                "--otlp-endpoint",
+                "https://telemetry.example.test/v1/metrics",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "No Task Run attempts" in result.output
+    assert "OTLP export failed: timeout" in result.output
+
+
+def test_report_rejects_invalid_window_before_reading_history() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["report", "--since", "1month"])
+        history_created = Path(".machinist").exists()
+
+    assert result.exit_code == 1
+    assert "positive integer" in result.output
+    assert history_created is False
 
 
 def test_config_commands_validate_show_schema_and_set():

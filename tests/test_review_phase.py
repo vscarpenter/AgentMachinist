@@ -156,6 +156,12 @@ def test_review_parses_structured_findings_and_marks_exact_pr_ready(tmp_path):
     assert "Recovery copy can be more specific" in comment[2]
     assert ("mark_ready", 57) in github.calls
     assert claim.evidence["reviewed_sha"] == "c" * 40
+    assert claim.evidence["harness"] == {
+        "name": "reviewer",
+        "model": None,
+        "profile": "review",
+        "structured_usage": False,
+    }
     assert any(call[0] == "cleanup_preview" for call in workspace.calls)
 
 

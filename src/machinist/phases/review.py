@@ -9,6 +9,7 @@ from typing import Any
 
 from machinist.config import MachinistConfig
 from machinist.github import PullRequest
+from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
 
@@ -133,7 +134,7 @@ def _run_in_preview(
             f"{harness.name} modified the read-only Review workspace"
         )
     report = parse_review_report(output)
-    _checkpoint_review(claim, expected_sha, harness.name, report)
+    _checkpoint_review(claim, expected_sha, harness, report)
     _deliver_review(
         issue_number,
         pr,
@@ -355,9 +356,7 @@ def _positive_int(value: object) -> int | None:
     return value if type(value) is int and value > 0 else None
 
 
-def _checkpoint_review(
-    claim, expected_sha: str, harness_name: str, report: ReviewReport
-) -> None:
+def _checkpoint_review(claim, expected_sha: str, harness, report: ReviewReport) -> None:
     counts = {
         level: sum(item.severity == level for item in report.findings)
         for level in sorted(_LEVELS)
@@ -365,7 +364,7 @@ def _checkpoint_review(
     _checkpoint(
         claim,
         reviewed_sha=expected_sha,
-        harness={"name": harness_name, "profile": "review"},
+        harness=harness_evidence(harness, profile="review"),
         finding_counts=counts,
     )
 

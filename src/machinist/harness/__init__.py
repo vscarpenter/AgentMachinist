@@ -75,6 +75,25 @@ def get_harness_descriptor(
     return adapter.descriptor
 
 
+def harness_evidence(harness: object, *, profile: str) -> dict[str, Any]:
+    """Return the safe adapter identity recorded in lifecycle evidence."""
+    harness_config = getattr(harness, "config", None)
+    model = getattr(harness_config, "model", None)
+    model = getattr(model, "value", model)
+    descriptor = getattr(harness, "descriptor", None)
+    structured_usage = (
+        descriptor.structured_usage
+        if isinstance(descriptor, HarnessDescriptor)
+        else False
+    )
+    return {
+        "name": str(getattr(harness, "name", "unknown")),
+        "model": str(model) if model is not None else None,
+        "profile": profile,
+        "structured_usage": structured_usage,
+    }
+
+
 def _selected_entry_points(supplied: Iterable[Any] | None) -> tuple[Any, ...]:
     if supplied is not None:
         return tuple(supplied)
@@ -161,4 +180,5 @@ __all__ = [
     "discover_harnesses",
     "get_harness",
     "get_harness_descriptor",
+    "harness_evidence",
 ]

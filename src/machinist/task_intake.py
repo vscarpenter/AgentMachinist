@@ -102,9 +102,12 @@ def render_task_body(
         ("Verification", verification),
         ("Context", context),
     )
-    return "\n\n".join(
-        f"## {heading}\n{content.strip()}" for heading, content in sections
-    ).rstrip() + "\n"
+    return (
+        "\n\n".join(
+            f"## {heading}\n{content.strip()}" for heading, content in sections
+        ).rstrip()
+        + "\n"
+    )
 
 
 def lint_task_body(body: str) -> TaskLintReport:
@@ -120,7 +123,10 @@ def lint_task_body(body: str) -> TaskLintReport:
             )
         )
     acceptance = sections.get("acceptance criteria")
-    if _placeholder(acceptance) or re.search(r"(?m)^\s*-\s*\[[ xX]\]", acceptance or "") is None:
+    if (
+        _placeholder(acceptance)
+        or re.search(r"(?m)^\s*-\s*\[[ xX]\]", acceptance or "") is None
+    ):
         errors.append(
             TaskLintFinding(
                 "acceptance criteria",
@@ -133,7 +139,9 @@ def lint_task_body(body: str) -> TaskLintReport:
             errors.append(TaskLintFinding(field, f"add the {field} section"))
         elif _placeholder(value):
             errors.append(
-                TaskLintFinding(field, "replace placeholder text with actionable detail")
+                TaskLintFinding(
+                    field, "replace placeholder text with actionable detail"
+                )
             )
     return TaskLintReport(tuple(errors))
 
@@ -142,7 +150,9 @@ def _sections(body: str) -> dict[str, str]:
     matches = list(_SECTION_PATTERN.finditer(body))
     return {
         match.group(1).strip().casefold(): body[
-            match.end() : matches[index + 1].start() if index + 1 < len(matches) else None
+            match.end() : matches[index + 1].start()
+            if index + 1 < len(matches)
+            else None
         ].strip()
         for index, match in enumerate(matches)
     }

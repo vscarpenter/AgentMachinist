@@ -250,6 +250,12 @@ def test_cleanup_failure_after_observed_spec_delivery_is_a_success_warning(tmp_p
     assert pr.number == 57
     assert record.status is RunStatus.SUCCEEDED
     assert record.evidence["cleanup_succeeded"] is False
+    assert record.evidence["harness"] == {
+        "name": "fake",
+        "model": None,
+        "profile": "spec",
+        "structured_usage": False,
+    }
     assert "Workshop is busy" in record.evidence["cleanup_warning"]
     assert record.evidence["retained_workspace_path"] == str(workspace.path)
 

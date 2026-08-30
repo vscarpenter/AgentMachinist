@@ -18,8 +18,8 @@ from pathlib import Path
 from machinist.lifecycle import Phase, RunRecord, RunStatus, TaskLifecycle
 
 _READ_MODEL_SCHEMA_VERSION = 1
-_PROJECTION_NAME = re.compile(r"^issue-(\d+)-(spec|execute)\.json$")
-_HISTORY_DIRECTORY = re.compile(r"^issue-(\d+)-(spec|execute)$")
+_PROJECTION_NAME = re.compile(r"^issue-(\d+)-(spec|execute|review)\.json$")
+_HISTORY_DIRECTORY = re.compile(r"^issue-(\d+)-(spec|execute|review)$")
 _JOURNAL_NAME = re.compile(r"^attempt-(\d+)\.jsonl$")
 
 type JsonValue = (

@@ -397,7 +397,7 @@ Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
 - [x] Versioned Harness plugin contract and provider-aware managed Spec CI
 - [x] `machinist explain` and `status --watch`
 - [x] Managed issue form, `task new`, and `task lint`
-- [ ] Local aggregate reports and optional redacted OTLP/HTTP export
+- [x] Local aggregate reports and optional redacted OTLP/HTTP export
 - [ ] User/operator/adapter documentation and changelog
 - [ ] Full verification suite, packaging smoke, and dogfood checks
 - [ ] Comprehension report and quiz
@@ -408,8 +408,8 @@ Done: discovery, specification, Review Phase, guided onboarding, disposable
 rehearsal, Harness plugins, provider-aware CI, explain/live status, and managed
 Task intake with readiness linting.
 
-Next: implement aggregate local reporting and redacted OTLP/HTTP export, then
-reconcile documentation and run the full release gate.
+Next: reconcile user, operator, and adapter documentation; update the changelog;
+then run the full release gate and prepare the comprehension report.
 
 Blockers: none.
 
