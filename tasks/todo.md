@@ -392,11 +392,11 @@ Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
 
 - [x] Current architecture and product-boundary discovery
 - [x] Full specification and architecture decision record
-- [ ] Review Phase: lifecycle, prompt/report, delivery, status, retry, watch
-- [ ] Guided onboarding and disposable local rehearsal
-- [ ] Versioned Harness plugin contract and provider-aware managed Spec CI
-- [ ] `machinist explain` and `status --watch`
-- [ ] Managed issue form, `task new`, and `task lint`
+- [x] Review Phase: lifecycle, prompt/report, delivery, status, retry, watch
+- [x] Guided onboarding and disposable local rehearsal
+- [x] Versioned Harness plugin contract and provider-aware managed Spec CI
+- [x] `machinist explain` and `status --watch`
+- [x] Managed issue form, `task new`, and `task lint`
 - [ ] Local aggregate reports and optional redacted OTLP/HTTP export
 - [ ] User/operator/adapter documentation and changelog
 - [ ] Full verification suite, packaging smoke, and dogfood checks
@@ -404,11 +404,12 @@ Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
 
 ### Resuming From Here
 
-Done: repository-wide discovery, live baseline verification, approved feature
-specification, architectural boundaries, and implementation plan.
+Done: discovery, specification, Review Phase, guided onboarding, disposable
+rehearsal, Harness plugins, provider-aware CI, explain/live status, and managed
+Task intake with readiness linting.
 
-Next: implement the Review Phase test-first, then adoption/plugin surfaces,
-operator/intake commands, reporting, and the full verification gate.
+Next: implement aggregate local reporting and redacted OTLP/HTTP export, then
+reconcile documentation and run the full release gate.
 
 Blockers: none.
 

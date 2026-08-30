@@ -64,11 +64,105 @@ def test_help_lists_all_commands():
         "update-check",
         "sync-workflows",
         "sync-labels",
+        "task",
         "clean",
         "inspect",
         "config",
     ):
         assert command in result.output
+
+
+def test_task_template_write_then_check() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        written = runner.invoke(main, ["task", "template", "--write"])
+        checked = runner.invoke(main, ["task", "template", "--check"])
+
+        assert written.exit_code == 0, written.output
+        assert "wrote .github/ISSUE_TEMPLATE/agentmachinist-task.yml" in written.output
+        assert checked.exit_code == 0, checked.output
+        assert "matches" in checked.output
+
+
+def test_task_lint_json_reports_live_issue_readiness(monkeypatch) -> None:
+    class FakeGitHub:
+        def get_issue(self, number):
+            from machinist.github import Issue
+
+            return Issue(
+                number=number,
+                title="Vague task",
+                body="## Objective\nTBD",
+                url=f"https://example.test/issues/{number}",
+            )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        monkeypatch.setattr(
+            "machinist.cli._bound_github_client",
+            lambda *args, **kwargs: FakeGitHub(),
+        )
+        result = runner.invoke(main, ["task", "lint", "42", "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ready"] is False
+    assert {item["field"] for item in payload["errors"]} >= {
+        "objective",
+        "acceptance criteria",
+        "verification",
+    }
+
+
+def test_task_new_dispatches_only_after_local_lint(monkeypatch) -> None:
+    created = []
+    labels = []
+
+    class FakeGitHub:
+        def create_issue(self, *, title, body):
+            from machinist.github import Issue
+
+            issue = Issue(
+                number=42,
+                title=title,
+                body=body,
+                url="https://example.test/issues/42",
+            )
+            created.append(issue)
+            return issue
+
+        def add_issue_label(self, number, label):
+            labels.append((number, label))
+
+    runner = CliRunner()
+    input_text = "\n".join(
+        (
+            "Make authentication failures explain the exact recovery command.",
+            "- [ ] Error names the missing credential",
+            "Preserve the local-first trust model.",
+            "Run uv run pytest tests/test_auth.py.",
+            "Found during setup testing.",
+        )
+    ) + "\n"
+    with runner.isolated_filesystem():
+        initialized = runner.invoke(main, ["init", "--no-workflows"])
+        assert initialized.exit_code == 0, initialized.output
+        monkeypatch.setattr(
+            "machinist.cli._bound_github_client",
+            lambda *args, **kwargs: FakeGitHub(),
+        )
+        result = runner.invoke(
+            main,
+            ["task", "new", "--title", "Improve recovery", "--dispatch"],
+            input=input_text,
+        )
+
+    assert result.exit_code == 0, result.output
+    assert len(created) == 1
+    assert labels == [(42, "agent-task")]
+    assert "Dispatched" in result.output
 
 
 def test_config_commands_validate_show_schema_and_set():
@@ -528,13 +622,14 @@ def test_init_survives_label_creation_failure(monkeypatch):
         assert "could not create" in result.output
 
 
-def test_init_no_workflows_skips_github_dir():
+def test_init_no_workflows_still_installs_task_template() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(main, ["init", "--no-workflows"])
 
         assert result.exit_code == 0
-        assert not Path(".github").exists()
+        assert Path(".github/ISSUE_TEMPLATE/agentmachinist-task.yml").is_file()
+        assert not Path(".github/workflows").exists()
 
 
 def test_watch_without_config_points_at_init():
@@ -1834,7 +1929,8 @@ def test_init_interactive_wizard_applies_answers(monkeypatch):
         assert config.harness.name.value == "codex"
         assert config.tests.command == "go test ./..."
         assert config.notifications.backend.value == "disabled"
-        assert not Path(".github").exists()
+        assert Path(".github/ISSUE_TEMPLATE/agentmachinist-task.yml").is_file()
+        assert not Path(".github/workflows").exists()
 
 
 def test_init_interactive_github_actions_supports_selected_harness(monkeypatch):

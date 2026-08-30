@@ -12,4 +12,7 @@
   contract, managed issue-form projection, and local-first aggregate reporting.
 - Verified current Harness installation/authentication guidance against primary
   vendor documentation before specifying provider-aware CI.
-
+- Kept live status as a changed-only iterator so TTY redraw, non-TTY snapshots,
+  and NDJSON all share one deterministic read model.
+- Installed the issue form even when managed Actions workflows are disabled;
+  task structure and workflow ownership are independent adoption controls.

@@ -103,6 +103,25 @@ class GitHubClient:
             labels=[label["name"] for label in data.get("labels", [])],
         )
 
+    def create_issue(self, *, title: str, body: str) -> Issue:
+        url = self._gh(
+            "issue",
+            "create",
+            "--title",
+            title,
+            "--body",
+            body,
+        ).strip()
+        number_text = url.rstrip("/").rsplit("/", 1)[-1]
+        try:
+            number = int(number_text)
+        except ValueError as exc:
+            raise GitHubError("gh issue create returned an invalid issue URL") from exc
+        return Issue(number=number, title=title, body=body, url=url)
+
+    def add_issue_label(self, number: int, label: str) -> None:
+        self._gh("issue", "edit", str(number), "--add-label", label)
+
     def issues_with_label(self, label: str) -> list[Issue]:
         data = self._gh_json(
             "issue",

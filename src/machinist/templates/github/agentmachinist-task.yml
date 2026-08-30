@@ -1,0 +1,41 @@
+name: AgentMachinist task
+description: Define an implementation task before dispatching AgentMachinist.
+title: ""
+labels: []
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: State the concrete outcome this task should produce.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use Markdown checkboxes for observable results.
+      value: "- [ ] "
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Name safety boundaries, compatibility promises, and non-goals.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Name the commands or observations that will prove completion.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Add links, examples, or background that will reduce ambiguity.
+    validations:
+      required: false
