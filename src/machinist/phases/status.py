@@ -15,6 +15,17 @@ PIPELINE_STATES = (
     "approval stale",
     "approved",
     "in review",
+    "spec running",
+    "spec interrupted",
+    "spec failed",
+    "spec cancelled",
+    "spec abandoned",
+    "spec closed",
+    "execute running",
+    "execute interrupted",
+    "execute failed",
+    "execute cancelled",
+    "execute abandoned",
 )
 
 
@@ -71,7 +82,7 @@ def pipeline_status(
                 # Durable in-flight and terminal outcomes require an explicit
                 # operator transition. RETRYABLE deliberately projects back
                 # to the remote eligible state so a live watcher can resume it.
-                state = f"spec {spec_record.status.value}"
+                state = _local_run_state(lifecycle, spec_record)
         issue_rows.append(
             StatusRow(
                 kind="issue",
@@ -108,7 +119,7 @@ def pipeline_status(
                 RunStatus.CANCELLED,
                 RunStatus.ABANDONED,
             }:
-                state = f"{record.phase.value} {record.status.value}"
+                state = _local_run_state(lifecycle, record)
         pr_rows.append(
             StatusRow(
                 kind="pr",
@@ -141,3 +152,29 @@ def _dispatch_priority(row: StatusRow) -> int:
     if row.state == "awaiting spec":
         return 1
     return 2
+
+
+def _local_run_state(lifecycle, record) -> str:
+    if record.status is RunStatus.RUNNING and not lifecycle.claim_held(record.issue):
+        return f"{record.phase.value} interrupted"
+    return f"{record.phase.value} {record.status.value}"
+
+
+def next_action_for_status(row: StatusRow) -> str | None:
+    issue = row.issue_number
+    if row.state == "awaiting spec":
+        return "machinist watch --once -v"
+    if row.state == "awaiting approval" and issue is not None:
+        return f"machinist approve --issue {issue}"
+    if row.state in {"approval pending", "approval stale"} and issue is not None:
+        return f"machinist approve --issue {issue}"
+    if row.state == "approved":
+        return "machinist watch --once -v"
+    if row.state.endswith(" interrupted") or row.state.endswith(
+        (" failed", " cancelled", " abandoned")
+    ):
+        if issue is None:
+            return None
+        phase = row.state.split(" ", 1)[0]
+        return f"machinist retry {issue} --phase {phase}"
+    return None

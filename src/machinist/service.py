@@ -8,6 +8,7 @@ invocation uses an argv sequence through an injectable runner.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import plistlib
 import re
@@ -16,12 +17,16 @@ import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from machinist.runtime_paths import (
     RuntimeDirectory,
     RuntimePathError,
+    atomic_write_text_file,
+    read_text_file,
+    regular_file_exists,
     reserve_regular_file,
     validate_regular_file,
 )
@@ -95,6 +100,119 @@ class LogTail:
     text: str
     truncated: bool
     bytes_read: int
+
+
+@dataclass(frozen=True)
+class WatcherHeartbeat:
+    """Last completed watcher pass, independent of launchd registration."""
+
+    polled_at: str
+    pid: int
+    attempted: int
+    deferred: int
+    failures: int
+    interval_seconds: int
+
+    @property
+    def age_seconds(self) -> float:
+        observed = datetime.fromisoformat(self.polled_at)
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=UTC)
+        return max(0.0, (datetime.now(UTC) - observed).total_seconds())
+
+    def as_dict(self) -> dict[str, str | int]:
+        return {
+            "polled_at": self.polled_at,
+            "pid": self.pid,
+            "attempted": self.attempted,
+            "deferred": self.deferred,
+            "failures": self.failures,
+            "interval_seconds": self.interval_seconds,
+        }
+
+
+def write_watcher_heartbeat(
+    repo_root: str | Path,
+    *,
+    attempted: int,
+    deferred: int,
+    failures: int,
+    interval_seconds: int,
+) -> WatcherHeartbeat:
+    """Atomically record one completed watch pass for service health checks."""
+    root = _repository_root(repo_root)
+    for value in (attempted, deferred, failures):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ServiceError("watcher heartbeat counts must be non-negative integers")
+    if (
+        isinstance(interval_seconds, bool)
+        or not isinstance(interval_seconds, int)
+        or interval_seconds < 10
+    ):
+        raise ServiceError("watcher heartbeat interval must be at least 10 seconds")
+    heartbeat = WatcherHeartbeat(
+        polled_at=datetime.now(UTC).isoformat(),
+        pid=os.getpid(),
+        attempted=attempted,
+        deferred=deferred,
+        failures=failures,
+        interval_seconds=interval_seconds,
+    )
+    try:
+        runtime = RuntimeDirectory.bind(
+            root / ".machinist" / "runs", repo_root=root
+        )
+        service_dir = runtime.subdirectory("service", create=True)
+        atomic_write_text_file(
+            service_dir / "heartbeat.json",
+            json.dumps(heartbeat.as_dict(), sort_keys=True) + "\n",
+        )
+    except (OSError, RuntimePathError) as exc:
+        raise ServiceError(f"could not persist watcher heartbeat: {exc}") from exc
+    return heartbeat
+
+
+def read_watcher_heartbeat(repo_root: str | Path) -> WatcherHeartbeat | None:
+    """Read the last completed watcher pass, rejecting malformed Evidence."""
+    root = _repository_root(repo_root)
+    path = root / ".machinist" / "runs" / "service" / "heartbeat.json"
+    try:
+        if not regular_file_exists(path):
+            return None
+        raw = read_text_file(path, max_bytes=4_096)
+    except (OSError, RuntimePathError) as exc:
+        raise ServiceError(f"could not read watcher heartbeat: {exc}") from exc
+    try:
+        payload = json.loads(raw)
+        heartbeat = WatcherHeartbeat(
+            polled_at=payload["polled_at"],
+            pid=payload["pid"],
+            attempted=payload["attempted"],
+            deferred=payload["deferred"],
+            failures=payload["failures"],
+            interval_seconds=payload["interval_seconds"],
+        )
+        datetime.fromisoformat(heartbeat.polled_at)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ServiceError(f"watcher heartbeat is malformed at {path}: {exc}") from exc
+    if (
+        isinstance(heartbeat.pid, bool)
+        or not isinstance(heartbeat.pid, int)
+        or heartbeat.pid < 1
+        or any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in (
+                heartbeat.attempted,
+                heartbeat.deferred,
+                heartbeat.failures,
+            )
+        )
+        or isinstance(heartbeat.interval_seconds, bool)
+        or not isinstance(heartbeat.interval_seconds, int)
+        or heartbeat.interval_seconds < 10
+    ):
+        raise ServiceError(f"watcher heartbeat is malformed at {path}")
+    return heartbeat
 
 
 def service_identifier(repo_root: str | Path) -> str:

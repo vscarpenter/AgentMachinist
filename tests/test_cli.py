@@ -675,6 +675,48 @@ def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
         assert "nothing to do" in result.output.lower()
 
 
+def test_watch_once_always_explains_fully_deferred_work(monkeypatch):
+    from machinist.phases.status import StatusRow
+    from machinist.phases.watch import WatchResult, WatchTask
+
+    task = WatchTask(
+        "execute",
+        42,
+        StatusRow(
+            kind="pr",
+            number=57,
+            title="Spec",
+            state="approved",
+            url="https://github.com/x/y/pull/57",
+            issue_number=42,
+        ),
+    )
+
+    def fake_watch_once(*args, **kwargs):
+        # Populate the same reason map the real admission callback owns.
+        assert kwargs["admit"](task) is False
+        return WatchResult(deferred=(task,))
+
+    monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
+    monkeypatch.setattr(
+        "machinist.cli.QueueControl.admission",
+        lambda self, task: type(
+            "Decision",
+            (),
+            {"__bool__": lambda self: False, "reason": "queue paused for maintenance"},
+        )(),
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["watch", "--once"])
+
+    assert result.exit_code == 0, result.output
+    assert "deferred: execute for issue #42: queue paused for maintenance" in result.output
+    assert "Pass summary: 0 dispatched, 1 deferred" in result.output
+    assert "Nothing to do" not in result.output
+
+
 def test_watch_spec_dispatch_wires_durable_cancellation_check(monkeypatch):
     from machinist.github import DraftPR
 
@@ -1118,6 +1160,7 @@ def test_status_renders_rows(monkeypatch):
             title="Spec: Add dark mode (#42)",
             state="awaiting approval",
             url="https://github.com/x/y/pull/57",
+            issue_number=42,
         ),
     ]
     monkeypatch.setattr(
@@ -1132,6 +1175,8 @@ def test_status_renders_rows(monkeypatch):
         assert result.exit_code == 0, result.output
         assert "#3" in result.output and "awaiting spec" in result.output
         assert "#57" in result.output and "awaiting approval" in result.output
+        assert "issue #42" in result.output
+        assert "machinist approve --issue 42" in result.output
         assert "Spec: Add dark mode (#42)" in result.output
 
 
@@ -1147,6 +1192,51 @@ def test_status_with_no_activity_says_so(monkeypatch):
 
         assert result.exit_code == 0
         assert "no machinist activity" in result.output.lower()
+
+
+def test_status_with_no_remote_rows_still_surfaces_local_failure(monkeypatch):
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    monkeypatch.setattr(
+        "machinist.cli.pipeline_status", lambda config, github, **kwargs: []
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        with pytest.raises(RuntimeError):
+            lifecycle.run(
+                42,
+                Phase.EXECUTE,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("gate failed")),
+            )
+
+        result = runner.invoke(main, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "No open GitHub pipeline items" in result.output
+    assert "#42 execute failed" in result.output
+    assert "machinist retry 42 --phase execute" in result.output
+
+
+def test_status_local_recovers_without_a_config_file():
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        with pytest.raises(RuntimeError):
+            lifecycle.run(
+                7,
+                Phase.SPEC,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("spec failed")),
+            )
+
+        result = runner.invoke(main, ["status", "--local"])
+
+    assert result.exit_code == 0, result.output
+    assert "#7 spec failed" in result.output
+    assert "machinist retry 7 --phase spec" in result.output
 
 
 def test_portfolio_repo_commands_and_status_all_json():
@@ -1330,6 +1420,41 @@ def test_service_start_reloads_an_installed_but_stopped_agent(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert calls == ["status", "bootstrap", "start"]
+
+
+def test_service_stop_refuses_active_claim_without_explicit_force(monkeypatch):
+    calls = []
+
+    class ActiveService:
+        label = "io.github.test.machinist"
+
+        def stop(self):
+            calls.append("stop")
+
+    monkeypatch.setattr(
+        "machinist.cli._launchd_service", lambda: ActiveService()
+    )
+    monkeypatch.setattr(
+        "machinist.cli._active_task_runs",
+        lambda: [
+            {
+                "issue": 42,
+                "phase": "execute",
+                "attempt": 2,
+                "stage": "verification 1/3",
+            }
+        ],
+    )
+    runner = CliRunner()
+
+    refused = runner.invoke(main, ["service", "stop"])
+    forced = runner.invoke(main, ["service", "stop", "--force"])
+
+    assert refused.exit_code != 0
+    assert "issue #42 execute attempt 2" in refused.output
+    assert "--force" in refused.output
+    assert forced.exit_code == 0, forced.output
+    assert calls == ["stop"]
 
 
 def test_service_recovery_commands_need_neither_config_nor_current_path(monkeypatch):
@@ -2354,6 +2479,30 @@ def test_inspect_json_offline_preserves_local_history_without_github(monkeypatch
         payload = json.loads(result.output)
         assert payload["history"][0]["issue"] == 42
         assert "github_issue" not in payload["sources"]
+
+
+def test_inspect_offline_recovers_without_config_or_workspace_settings():
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        TaskLifecycle(Path(".machinist/runs")).run(
+            42, Phase.SPEC, lambda claim: None
+        )
+
+        result = runner.invoke(main, ["inspect", "42", "--offline"])
+
+    assert result.exit_code == 0, result.output
+    assert "Configuration: unavailable" in result.output
+    assert "Phase [spec]: succeeded" in result.output
+
+
+def test_inspect_rejects_non_positive_issue_without_traceback():
+    result = CliRunner().invoke(main, ["inspect", "0", "--offline"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for 'ISSUE_NUMBER'" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_inspect_keeps_local_output_when_pr_lookup_fails(monkeypatch):

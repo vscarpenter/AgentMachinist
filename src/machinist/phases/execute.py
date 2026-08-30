@@ -29,6 +29,7 @@ from machinist.config import (
 )
 from machinist.github import PullRequest, normalize_repository_identity
 from machinist.managed_paths import ManagedPathError, read_managed_text
+from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
 from machinist.runtime_paths import RuntimePathError, write_text_file
 
@@ -157,7 +158,10 @@ def run_execute_phase(
     cancel_check=None,
 ) -> PullRequest:
     """Implement an approved Task with durable retry and reconciliation state."""
+    if hasattr(workspace, "cancel_check"):
+        workspace.cancel_check = cancel_check
     started_at = time.monotonic()
+    report_progress(claim, "read approved Task", f"issue #{issue_number}")
     # Validate before performing any GitHub or filesystem operation.
     feedback = normalize_operator_feedback(feedback)
     if recovery not in _RECOVERY_MODES:
@@ -209,6 +213,7 @@ def run_execute_phase(
         force=force or bool(feedback),
     )
     if reconciled_sha is not None:
+        report_progress(claim, "reconcile PR delivery", reconciled_sha[:12])
         _checkpoint(claim, push_observed_sha=reconciled_sha)
         _complete_delivery(
             issue_number,
@@ -263,6 +268,7 @@ def run_execute_phase(
         )
 
     if recovery == "resume":
+        report_progress(claim, "resume Workshop", branch)
         path, resume_stage, git_custody = _resume_workspace(
             workspace,
             claim,
@@ -271,6 +277,7 @@ def run_execute_phase(
             approval_sha=approval_sha,
         )
     else:
+        report_progress(claim, "provision Workshop", branch)
         path, git_custody = _provision_fresh_workspace(
             workspace,
             claim,
@@ -285,6 +292,7 @@ def run_execute_phase(
     comment_id = _positive_int(previous.get("completion_comment_id"))
     try:
         if resume_stage == "push":
+            report_progress(claim, "resume push", branch)
             implementation_sha = str(previous["push_intended_sha"])
             _retry_intended_push(
                 workspace,
@@ -375,6 +383,8 @@ def run_execute_phase(
                     else ()
                 )
                 harness.allowed_commands = tuple(gate.command for gate in gates)
+                report_progress(claim, "implement", harness.name)
+                bind_harness_progress(harness, claim, stage="implement")
                 harness_report = harness.implement(
                     render_implement_prompt(
                         issue_number,
@@ -421,6 +431,7 @@ def run_execute_phase(
             )
 
             try:
+                report_progress(claim, "verification", "starting configured gates")
                 verification_report = _run_verification(
                     path,
                     config=config,
@@ -463,6 +474,7 @@ def run_execute_phase(
             _checkpoint(claim, change_summary=change_summary.as_dict())
 
             _raise_if_cancelled(cancel_check, "before commit")
+            report_progress(claim, "commit implementation", branch)
             workspace.commit_all(
                 path,
                 f"feat(agent): implement issue #{issue_number} per approved spec",
@@ -488,6 +500,7 @@ def run_execute_phase(
                 workspace_head=implementation_sha,
             )
             _raise_if_cancelled(cancel_check, "before push")
+            report_progress(claim, "push implementation", branch)
             workspace.push(path, branch, expected_sha=approval_sha)
             observed_sha = workspace.remote_sha(path, branch)
             if observed_sha != implementation_sha:
@@ -1046,6 +1059,11 @@ def _invoke_verification_engine(
             snapshotter=workspace.change_snapshot,
             runner=test_runner,
             cancel_check=cancel_check,
+            on_progress=lambda index, total, name, status: report_progress(
+                claim,
+                f"verification {index}/{total}: {name}",
+                status,
+            ),
         )
     except VerificationFailed as exc:
         evidence = exc.report.as_dict()
@@ -1219,6 +1237,7 @@ def _complete_delivery(
     expected_base: str,
     cancel_check,
 ) -> None:
+    report_progress(claim, "deliver ready PR", f"PR #{pr.number}")
     current_pr = _delivery_pr_at_sha(
         github,
         original=pr,
@@ -1272,6 +1291,7 @@ def _complete_delivery(
     _raise_if_cancelled(cancel_check, "before marking PR ready")
     if current_pr.is_draft:
         github.mark_ready(current_pr.number)
+    report_progress(claim, "verify ready PR", f"PR #{current_pr.number}")
     observed_pr = _delivery_pr_at_sha(
         github,
         original=current_pr,

@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from machinist.config import CleanupPolicy, WorkspaceConfig, WorkspaceStrategy
-from machinist.workspace import Workspace, WorkspaceError
+from machinist.process import ProcessCancelledError
+from machinist.workspace import Workspace, WorkspaceCancelledError, WorkspaceError
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -45,6 +46,20 @@ def repo(tmp_path):
 def make_workspace(repo, tmp_path, **overrides):
     config = WorkspaceConfig(root=tmp_path / "ws", **overrides)
     return Workspace(repo_root=repo, config=config)
+
+
+def test_default_git_runner_honors_task_cancellation(repo, tmp_path, monkeypatch):
+    workspace = make_workspace(repo, tmp_path)
+    workspace.cancel_check = lambda: True
+
+    def cancelled(command, **kwargs):
+        assert kwargs["cancel_check"]() is True
+        raise ProcessCancelledError(command)
+
+    monkeypatch.setattr("machinist.workspace.run_supervised", cancelled)
+
+    with pytest.raises(WorkspaceCancelledError, match="git status was cancelled"):
+        workspace._git(repo, "status")
 
 
 def test_provision_worktree_creates_branch_from_base(repo, tmp_path):

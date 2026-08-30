@@ -17,7 +17,9 @@ from machinist.service import (
     ServiceCommandError,
     ServiceError,
     read_log_tail,
+    read_watcher_heartbeat,
     service_identifier,
+    write_watcher_heartbeat,
 )
 
 
@@ -98,6 +100,32 @@ def test_identifier_is_stable_safe_and_unique_per_repository(tmp_path):
     assert re.fullmatch(r"[a-z0-9.-]+", first_label)
     assert "my-project" in first_label
     assert len(first_label) <= 127
+
+
+def test_watcher_heartbeat_round_trips_last_completed_pass(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    written = write_watcher_heartbeat(
+        repo, attempted=2, deferred=1, failures=0, interval_seconds=60
+    )
+
+    assert read_watcher_heartbeat(repo) == written
+    assert written.pid == os.getpid()
+    assert written.attempted == 2
+    assert written.deferred == 1
+    assert written.failures == 0
+    assert written.interval_seconds == 60
+
+
+def test_watcher_heartbeat_rejects_malformed_evidence(tmp_path):
+    repo = tmp_path / "repo"
+    heartbeat = repo / ".machinist" / "runs" / "service" / "heartbeat.json"
+    heartbeat.parent.mkdir(parents=True)
+    heartbeat.write_text('{"polled_at":"not-a-date"}\n')
+
+    with pytest.raises(ServiceError, match="heartbeat is malformed"):
+        read_watcher_heartbeat(repo)
 
 
 def test_plist_uses_structured_escaping_absolute_paths_and_repo_cwd(tmp_path):

@@ -207,6 +207,21 @@ class TaskClaim:
         self._lifecycle._persist(updated, event="checkpointed")
         self._record = updated
 
+    def progress(self, stage: str, detail: str | None = None) -> None:
+        """Persist the current named stage and its latest heartbeat."""
+        stage = stage.strip()
+        if not stage or len(stage) > 160:
+            raise LifecycleError("progress stage must be 1-160 characters")
+        if detail is not None:
+            detail = detail.strip()
+            if len(detail) > 2_000:
+                detail = detail[-2_000:]
+        self.checkpoint(
+            current_stage=stage,
+            progress_detail=detail,
+            last_progress_at=_now(),
+        )
+
 
 class TaskLifecycle:
     """Own Task Run persistence, attempt history, transitions, and local Claims."""

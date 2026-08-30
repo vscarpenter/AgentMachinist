@@ -30,7 +30,14 @@ from machinist.gitconfig import (
     sensitive_key_digests,
 )
 from machinist.github import normalize_repository_identity
-from machinist.process import credential_reduced_environment
+from machinist.process import (
+    ProcessCancelledError,
+    ProcessOutputLimitError,
+    ProcessStartError,
+    ProcessStragglerError,
+    credential_reduced_environment,
+    run_supervised,
+)
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -107,6 +114,12 @@ class WorkspaceError(Exception):
     """A git workspace operation failed."""
 
 
+class WorkspaceCancelledError(WorkspaceError):
+    """A Git operation stopped in response to a Task cancellation."""
+
+    cancelled = True
+
+
 class Workspace:
     def __init__(
         self,
@@ -123,6 +136,7 @@ class Workspace:
         self._custody: dict[Path, dict[str, object]] = {}
         self._github_tokens: dict[str, str] = {}
         self._preview_claims: dict[Path, _PreviewClaim] = {}
+        self.cancel_check: Callable[[], bool] | None = None
 
     def provision(
         self,
@@ -759,7 +773,19 @@ class Workspace:
                 "timeout": _GIT_TIMEOUT_SECONDS,
                 "env": self._controller_git_environment(env),
             }
+            if self._runner is subprocess.run and self.cancel_check is not None:
+                return run_supervised(
+                    command,
+                    **kwargs,
+                    cancel_check=self.cancel_check,
+                )
             return self._runner(command, **kwargs)
+        except ProcessCancelledError as exc:
+            operation = args[0] if args else "command"
+            raise WorkspaceCancelledError(f"git {operation} was cancelled") from exc
+        except (ProcessOutputLimitError, ProcessStartError, ProcessStragglerError) as exc:
+            operation = args[0] if args else "command"
+            raise WorkspaceError(f"git {operation} could not run safely: {exc}") from exc
         except FileNotFoundError as exc:
             raise WorkspaceError("git not found on PATH") from exc
         except subprocess.TimeoutExpired as exc:

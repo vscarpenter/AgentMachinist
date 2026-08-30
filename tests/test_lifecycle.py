@@ -168,6 +168,20 @@ def test_checkpoint_rejects_non_json_evidence_without_persisting_it(tmp_path):
     assert "opaque" not in record.evidence
 
 
+def test_claim_progress_persists_named_stage_and_heartbeat(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+
+    def action(claim):
+        claim.progress("verification 2/3", "running integration tests")
+
+    lifecycle.run(42, Phase.EXECUTE, action)
+    record = lifecycle.record(42, Phase.EXECUTE)
+
+    assert record.evidence["current_stage"] == "verification 2/3"
+    assert record.evidence["progress_detail"] == "running integration tests"
+    assert record.evidence["last_progress_at"]
+
+
 def test_nested_claim_for_same_issue_is_refused(tmp_path):
     lifecycle = TaskLifecycle(tmp_path / "runs")
 
