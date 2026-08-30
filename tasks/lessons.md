@@ -14,3 +14,9 @@
   doctor, and configured verification checks run before its first commit.
 - Managed Task structure and managed workflow ownership are separate controls;
   repositories should retain the issue form even when they own Actions files.
+
+## Dependency compatibility
+
+- A PEP 695 type alias can work with current Pydantic while failing schema
+  generation on the declared minimum. Exercise configuration model creation
+  and JSON Schema generation under minimum dependencies before release.

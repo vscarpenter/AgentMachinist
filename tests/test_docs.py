@@ -502,6 +502,8 @@ def test_release_docs_describe_current_package_version():
     explainer = _EXPLAINER_PATH.read_text().lower()
     assert f'<span class="hud-badge">v{version}</span>' in explainer
     assert f"install agentmachinist {version} from pypi" in explainer
+    assert "uv tool install agentmachinist &amp;&amp; machinist onboard" in explainer
+    assert f"job card · rev {version}" in _JOB_CARD_PATH.read_text().lower()
     release_text = _README_PATH.read_text().lower().split("## releasing", 1)[1]
     assert "sha-256" in release_text
     assert "trusted publishing" in release_text

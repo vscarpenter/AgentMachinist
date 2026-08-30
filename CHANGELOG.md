@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.10.0 — 2026-08-30
+
+- Preserve the declared Pydantic 2.7 minimum by expressing plugin-capable
+  Harness identifiers with the compatible `TypeAlias` form. The PEP 695 alias
+  used during development prevented every configuration model from loading on
+  Pydantic 2.7 even though current dependency tests passed.
 - Add a first-class independent Review Phase. Successful Execute runs stay
   draft until a read-only Review of the exact delivered head posts its
   structured advisory report; malformed output or head drift fails closed.

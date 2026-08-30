@@ -16,7 +16,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.9.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.10.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -212,11 +212,12 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-08-30)
 
-- v0.9.0 is the current published release. Unreleased toolkit expansion adds
-  independent Review, guided onboarding and rehearsal, Harness plugins with
-  provider-aware CI, explain/live status, structured Task intake, and local
-  aggregate reports with opt-in OTLP export. The published release makes
-  first-run readiness explicit and adds
+- v0.10.0 is the current published release. It adds independent Review, guided
+  onboarding and rehearsal, Harness plugins with provider-aware CI,
+  explain/live status, structured Task intake, and local aggregate reports with
+  opt-in OTLP export. Its plugin-capable Harness identifier remains compatible
+  with the declared Pydantic 2.7 minimum. v0.9.0 made first-run readiness
+  explicit and added
   durable progress and attempt history, gives recovery paths exact commands,
   safeguards active Claims during service lifecycle operations, and hardens
   harness authentication and session isolation. `machinist doctor --run-gates`

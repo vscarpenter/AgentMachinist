@@ -6,7 +6,7 @@ import re
 from datetime import datetime, time, timedelta
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -94,7 +94,7 @@ class HarnessName(str, Enum):
     CODEX = "codex"
 
 
-type HarnessIdentifier = HarnessName | str
+HarnessIdentifier: TypeAlias = HarnessName | str
 
 
 def harness_identifier(value: HarnessIdentifier) -> str:
