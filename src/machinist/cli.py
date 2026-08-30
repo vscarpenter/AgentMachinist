@@ -61,6 +61,7 @@ from machinist.notify import (
     notify_event,
 )
 from machinist.observability import RunReport, build_run_report, summarize_run_report
+from machinist.onboarding import OnboardingError, deliver_setup_pr
 from machinist.phases.execute import (
     MAX_FEEDBACK_FILE_BYTES,
     ExecutePhaseError,
@@ -79,6 +80,11 @@ from machinist.portfolio import (
 )
 from machinist.process import run_supervised
 from machinist.queue_control import QueueControl, QueueControlError
+from machinist.rehearsal import (
+    RehearsalError,
+    run_harness_rehearsal,
+    simulate_rehearsal,
+)
 from machinist.service import (
     LaunchdService,
     ServiceError,
@@ -425,6 +431,8 @@ _MACHINIST_ERRORS = (
     PortfolioError,
     ServiceError,
     ManagedPathError,
+    OnboardingError,
+    RehearsalError,
 )
 
 
@@ -598,6 +606,89 @@ def init(
         labels_ready=labels_ready,
         suggested_test_command=detected_test_cmd,
     )
+
+
+@main.command()
+@click.option(
+    "--setup-pr",
+    is_flag=True,
+    help="Deliver generated setup files on a pushed draft pull request.",
+)
+@click.option("--workflows/--no-workflows", "install_workflows", default=None)
+@click.option(
+    "--harness", "harness_name", type=click.Choice([h.value for h in HarnessName])
+)
+@click.option("--test-cmd")
+@click.option("--spec-source", type=click.Choice(["local", "github-actions"]))
+@click.option("--notifications", type=click.Choice(["desktop", "disabled"]))
+@click.option("--no-input", is_flag=True)
+@click.pass_context
+def onboard(
+    ctx: click.Context,
+    setup_pr: bool,
+    install_workflows: bool | None,
+    harness_name: str | None,
+    test_cmd: str | None,
+    spec_source: str | None,
+    notifications: str | None,
+    no_input: bool,
+) -> None:
+    """Guide first-run setup, optionally through a reviewable draft PR."""
+    arguments = {
+        "force": False,
+        "install_workflows": install_workflows,
+        "harness_name": harness_name,
+        "test_cmd": test_cmd,
+        "spec_source": spec_source,
+        "notifications": notifications,
+        "no_input": no_input,
+    }
+    if not setup_pr:
+        ctx.invoke(init, **arguments)
+        return
+    repo_root = _repository_root(Path.cwd())
+
+    def initialize() -> None:
+        ctx.invoke(init, **arguments)
+
+    try:
+        result = deliver_setup_pr(
+            repo_root,
+            github=GitHubClient(),
+            initialize=initialize,
+        )
+    except (OnboardingError, GitHubError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Draft setup PR #{result.pr.number}: {result.pr.url}")
+    click.echo("Next: review the generated files and run machinist doctor --run-gates.")
+
+
+@main.command()
+@click.option(
+    "--harness",
+    "use_harness",
+    is_flag=True,
+    help="Invoke configured Harnesses in the disposable rehearsal repository.",
+)
+def rehearse(use_harness: bool) -> None:
+    """Rehearse the lifecycle locally without creating GitHub artifacts."""
+    try:
+        config = load_config()
+        if use_harness:
+            result = run_harness_rehearsal(
+                config,
+                harness_factory=lambda phase: _make_harness(config, Phase(phase)),
+            )
+            mode = "configured Harnesses; API usage may have occurred"
+        else:
+            result = simulate_rehearsal(review_enabled=config.review.enabled)
+            mode = "controller simulation; no model or API usage"
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Rehearsal passed ({mode}).")
+    for transition in result.transitions:
+        click.echo(f"  ✓ {transition}")
+    click.echo("Next: create or lint a real Task before applying the trigger label.")
 
 
 @main.command("sync-workflows")

@@ -1991,6 +1991,28 @@ def test_init_test_cmd_replaces_template_comment_tail():
         assert line == '  command: "pytest -q"'
 
 
+def test_onboard_without_setup_pr_runs_guided_initializer():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["onboard", "--no-input", "--no-workflows"])
+
+        assert result.exit_code == 0, result.output
+        assert Path("machinist.yaml").is_file()
+        assert load_config("machinist.yaml").review.enabled is True
+
+
+def test_rehearse_defaults_to_no_cost_controller_simulation():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-input", "--no-workflows"])
+        result = runner.invoke(main, ["rehearse"])
+
+        assert result.exit_code == 0, result.output
+        assert "no model or API usage" in result.output
+        assert "review complete" in result.output
+        assert "human merge pending" in result.output
+
+
 def test_approve_resolves_issue_number(monkeypatch):
     from machinist.github import PullRequest
 
