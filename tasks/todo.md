@@ -399,8 +399,9 @@ Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
 - [x] Managed issue form, `task new`, and `task lint`
 - [x] Local aggregate reports and optional redacted OTLP/HTTP export
 - [x] User/operator/adapter documentation and changelog
-- [ ] Full verification suite, packaging smoke, and dogfood checks (in progress)
-- [ ] Comprehension report and quiz
+- [x] Full verification suite, packaging smoke, and dogfood checks: 933 passed,
+      84.88% coverage, clean workflow/format/lint/type gates, wheel + sdist smoke
+- [ ] Comprehension report delivered; user quiz answers pending before merge
 
 ### Resuming From Here
 
@@ -409,10 +410,11 @@ rehearsal, Harness plugins, provider-aware CI, explain/live status, managed
 Task intake with readiness linting, reporting/telemetry, and the complete user,
 operator, adapter, architecture, trust, and visual documentation pass.
 
-Next: run the full repository verification gate, fix any diagnosed failures,
-distill the implementation ledger, and prepare the comprehension report.
+Next: review the comprehension report and answer its five questions before any
+merge. No push, pull request, or merge has been performed.
 
-Blockers: none.
+Blockers: implementation has none; the standards-defined comprehension gate is
+intentionally waiting on the user's answers.
 
 Assumptions worth revisiting:
 - Review is opt-in for existing version-1 configurations and enabled by the new
