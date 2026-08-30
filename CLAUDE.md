@@ -15,7 +15,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.8.3).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.9.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -209,20 +209,17 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-08-26)
+## Current state (2026-08-30)
 
-- v0.8.3 is the current release; it makes managed-workflow drift visible on
-  the upgrade path. A workflow fix ships in a projected file rather than in
-  library code, so upgrading the package alone left the old workflow in place.
-  `machinist watch` now reports drift at startup and `machinist update-check`
-  reports it alongside the release comparison, both pointing at `machinist
-  sync-workflows`. The advisory never blocks a command and stays out of
-  `update-check --json`; `doctor` still fails on drift. 0.8.2 closed a
-  label-approval authorization
-  gap. The managed approve workflow minted trusted approval evidence whenever
-  the approval label appeared, without checking who applied it, and GitHub
-  grants label permission at triage level. Applying the label now requires
-  write or admin access, the check fails closed, and both paths record the
+- v0.9.0 is the current release. It makes first-run readiness explicit, adds
+  durable progress and attempt history, gives recovery paths exact commands,
+  safeguards active Claims during service lifecycle operations, and hardens
+  harness authentication and session isolation. `machinist doctor --run-gates`
+  now provides the authoritative preflight, while `sync-labels --check/--apply`
+  makes label setup inspectable. Managed-workflow drift remains visible in
+  `watch`, `update-check`, and `doctor`; upgrading the package does not update
+  checked-in workflows, so repositories must run `machinist sync-workflows`.
+  Both managed approval paths require write or admin access and record the
   approver's login on the approval comment. Existing repositories must run
   `machinist sync-workflows` to adopt it. 0.8.1 fixed a false Git-custody failure under
   `workspace.strategy: worktree` (issue #16). A worktree shares `config`,

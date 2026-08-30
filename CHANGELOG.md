@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0 — 2026-08-30
+
 - Close approval and lifecycle correctness gaps: both managed approval paths
   require write access, delivered PR cleanup can only add warning Evidence,
   cancellation markers are generation-safe, stale running projections are
@@ -18,6 +20,9 @@
   fail-closed OpenCode/Pi/Claude auth probes, ephemeral Claude/Pi sessions,
   bounded adapter diagnostics, explicit Python/platform metadata, and installed
   wheel/sdist first-run smoke coverage.
+- Reconcile the adoption documentation around one tested setup sequence, make
+  local-versus-managed execution boundaries explicit, and align the visual
+  guides, job card, troubleshooting, and lifecycle references with the CLI.
 
 ## 0.8.3 — 2026-08-26
 
