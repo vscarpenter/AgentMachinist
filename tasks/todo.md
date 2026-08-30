@@ -385,3 +385,39 @@ Open issues and why they are waiting:
 Note for future sessions: the PyPI JSON index at /pypi/<name>/json can lag a
 release by several minutes. Trust the release workflow's verify-published job
 and the /pypi/<name>/<version>/json endpoint over the cached index.
+## Toolkit expansion: review, adoption, plugins, explain, intake, and reporting
+
+Approved scope: roadmap items 1, 2, 4, 5, 7, and 8, implemented against
+`coding-standards.md` in one continuous spec-to-plan-to-implementation pass.
+
+- [x] Current architecture and product-boundary discovery
+- [x] Full specification and architecture decision record
+- [ ] Review Phase: lifecycle, prompt/report, delivery, status, retry, watch
+- [ ] Guided onboarding and disposable local rehearsal
+- [ ] Versioned Harness plugin contract and provider-aware managed Spec CI
+- [ ] `machinist explain` and `status --watch`
+- [ ] Managed issue form, `task new`, and `task lint`
+- [ ] Local aggregate reports and optional redacted OTLP/HTTP export
+- [ ] User/operator/adapter documentation and changelog
+- [ ] Full verification suite, packaging smoke, and dogfood checks
+- [ ] Comprehension report and quiz
+
+### Resuming From Here
+
+Done: repository-wide discovery, live baseline verification, approved feature
+specification, architectural boundaries, and implementation plan.
+
+Next: implement the Review Phase test-first, then adoption/plugin surfaces,
+operator/intake commands, reporting, and the full verification gate.
+
+Blockers: none.
+
+Assumptions worth revisiting:
+- Review is opt-in for existing version-1 configurations and enabled by the new
+  starter template.
+- Review findings are advisory in the first schema version; malformed output or
+  a changed PR head fails the Phase and leaves the PR draft.
+- Third-party Harness entry points are trusted local code, while discovery
+  collisions and import failures fail closed and remain diagnosable.
+- OTLP export contains aggregate allowlisted attributes only and is disabled by
+  default.
