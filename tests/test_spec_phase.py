@@ -8,6 +8,7 @@ import pytest
 
 from machinist.config import MachinistConfig
 from machinist.github import DraftPR, Issue, PullRequest
+from machinist.lifecycle import Phase, RunStatus, TaskLifecycle
 from machinist.phases.spec import (
     SpecPhaseCancelled,
     SpecPhaseError,
@@ -221,6 +222,36 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     # Dogfood UX finding 2 (both live lifecycles): users instinctively click
     # "Ready for review", which blocks the daemon (it implements drafts only).
     assert "leave this PR as a draft" in body
+
+
+def test_cleanup_failure_after_observed_spec_delivery_is_a_success_warning(tmp_path):
+    class CleanupFailingWorkspace(FakeWorkspace):
+        def cleanup(self, path, *, success):
+            self.calls.append(("cleanup", success))
+            raise OSError("Workshop is busy")
+
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    workspace = CleanupFailingWorkspace(tmp_path)
+
+    pr = lifecycle.run(
+        42,
+        Phase.SPEC,
+        lambda claim: run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(),
+            harness=FakeHarness(),
+            workspace=workspace,
+            claim=claim,
+        ),
+    )
+
+    record = lifecycle.record(42, Phase.SPEC)
+    assert pr.number == 57
+    assert record.status is RunStatus.SUCCEEDED
+    assert record.evidence["cleanup_succeeded"] is False
+    assert "Workshop is busy" in record.evidence["cleanup_warning"]
+    assert record.evidence["retained_workspace_path"] == str(workspace.path)
 
 
 @pytest.mark.parametrize("trap", ["leaf", "parent"])

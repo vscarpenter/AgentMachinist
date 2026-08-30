@@ -1,3 +1,6 @@
+import json
+import subprocess
+
 from machinist.harness.base import Harness, HarnessCapabilities
 
 
@@ -5,6 +8,18 @@ class ClaudeCode(Harness):
     name = "claude-code"
     default_command = "claude"
     capabilities = HarnessCapabilities("cli-enforced")
+
+    def authentication_argv(self) -> list[str]:
+        return [self.command, "auth", "status"]
+
+    def authentication_ready(self, result: subprocess.CompletedProcess) -> bool:
+        if result.returncode != 0:
+            return False
+        try:
+            payload = json.loads(result.stdout or "")
+        except (json.JSONDecodeError, TypeError):
+            return False
+        return payload.get("loggedIn") is True
 
     def spec_argv(self, prompt: str) -> list[str]:
         argv = [

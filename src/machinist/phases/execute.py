@@ -29,6 +29,7 @@ from machinist.config import (
 )
 from machinist.github import PullRequest, normalize_repository_identity
 from machinist.managed_paths import ManagedPathError, read_managed_text
+from machinist.phases.workshop_cleanup import finish_workshop_cleanup
 from machinist.runtime_paths import RuntimePathError, write_text_file
 
 _IMPLEMENT_PROMPT = files("machinist") / "templates" / "implement-prompt.md"
@@ -513,11 +514,15 @@ def run_execute_phase(
                 expected_base=base,
                 cancel_check=cancel_check,
             )
-    except Exception:
-        workspace.cleanup(path, success=False)
+    except BaseException as exc:
+        cleanup_warning = finish_workshop_cleanup(
+            workspace, path, success=False, claim=claim
+        )
+        if cleanup_warning is not None:
+            exc.add_note(cleanup_warning)
         raise
 
-    workspace.cleanup(path, success=True)
+    finish_workshop_cleanup(workspace, path, success=True, claim=claim)
     return pr
 
 
@@ -588,6 +593,7 @@ def _reset_fresh_execution_evidence(claim) -> None:
         completion_comment_observed_sha=None,
         ready_intended_sha=None,
         ready_observed_sha=None,
+        resume_forbidden_reason=None,
     )
 
 
@@ -601,6 +607,12 @@ def _resume_workspace(
 ) -> tuple[Path, str, dict[str, object] | None]:
     if claim is None:
         raise ExecutePhaseError("--resume requires a claimed Task Run")
+    resume_blocker = previous.get("resume_forbidden_reason")
+    if isinstance(resume_blocker, str) and resume_blocker:
+        raise ExecutePhaseError(
+            "retained workspace is not eligible for --resume because "
+            f"{resume_blocker}; start a fresh retry"
+        )
     if previous.get("approved_sha") != approval_sha:
         raise ExecutePhaseError(
             "retained workspace was created for a different approved SHA; "
@@ -1037,7 +1049,11 @@ def _invoke_verification_engine(
         )
     except VerificationFailed as exc:
         evidence = exc.report.as_dict()
-        _checkpoint(claim, verification_report=evidence)
+        checkpoint: dict[str, Any] = {"verification_report": evidence}
+        resume_blocker = _verification_resume_blocker(evidence)
+        if resume_blocker is not None:
+            checkpoint["resume_forbidden_reason"] = resume_blocker
+        _checkpoint(claim, **checkpoint)
         message = _verification_failure_message(evidence)
         if any(
             isinstance(gate, dict) and gate.get("status") == "cancelled"
@@ -1050,6 +1066,19 @@ def _invoke_verification_engine(
     evidence = report.as_dict()
     _checkpoint(claim, verification_report=evidence)
     return evidence
+
+
+def _verification_resume_blocker(evidence: Mapping[str, Any]) -> str | None:
+    """Explain why retained post-harness changes cannot be trusted on retry."""
+    for gate in evidence.get("gates", []):
+        if not isinstance(gate, Mapping):
+            continue
+        if gate.get("status") != "mutation_detected":
+            continue
+        name = gate.get("name")
+        gate_name = name if isinstance(name, str) and name else "a verification gate"
+        return f"mutation-forbidden gate {gate_name!r} changed it"
+    return None
 
 
 def _fallback_verification(

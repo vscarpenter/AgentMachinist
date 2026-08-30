@@ -6,6 +6,9 @@ class OpenCode(Harness):
     default_command = "opencode"
     capabilities = HarnessCapabilities("advisory")
 
+    def authentication_argv(self) -> list[str]:
+        return [self.command, "auth", "list"]
+
     def spec_argv(self, prompt: str) -> list[str]:
         # The built-in "plan" agent cannot edit files.
         argv = [self.command, "run", "--pure", "--agent", "plan"]

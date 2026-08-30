@@ -619,15 +619,15 @@ def test_approval_sha_ignores_markers_from_untrusted_commenters():
     assert client.approval_sha(57) == "a" * 40
 
 
-def test_approve_pr_records_sha_before_applying_label():
-    runner = FakeRunner(("", 0, ""), ("", 0, ""))
+def test_approve_pr_requests_one_server_side_sha_bound_transaction():
+    runner = FakeRunner(("", 0, ""))
     client = GitHubClient(repo="vscarpenter/demo", runner=runner)
 
     client.approve_pr(57, label="machinist:approved", head_sha="a" * 40)
 
     assert runner.calls[0][:5] == ["gh", "pr", "comment", "57", "--body"]
-    assert "a" * 40 in runner.calls[0][5]
-    assert runner.calls[1][:5] == ["gh", "pr", "edit", "57", "--add-label"]
+    assert runner.calls[0][5] == f"/machinist-execute {'a' * 40}"
+    assert len(runner.calls) == 1
 
 
 def test_invalid_gh_json_is_a_github_error():

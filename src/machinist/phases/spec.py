@@ -17,6 +17,7 @@ from uuid import uuid4
 from machinist.config import MachinistConfig
 from machinist.github import DraftPR, Issue, PullRequest, normalize_repository_identity
 from machinist.managed_paths import ManagedPathError, write_managed_text
+from machinist.phases.workshop_cleanup import finish_workshop_cleanup
 
 _APPROVED_LABEL_COLOR = "0e8a16"
 _SPEC_PROMPT = files("machinist") / "templates" / "spec-prompt.md"
@@ -241,10 +242,14 @@ def run_spec_phase(
                 pr_observed_base=observed_pr.base or base,
                 pr_observed_sha=observed_pr.head_sha,
             )
-    except Exception:
-        workspace.cleanup(path, success=False)
+    except BaseException as exc:
+        cleanup_warning = finish_workshop_cleanup(
+            workspace, path, success=False, claim=claim
+        )
+        if cleanup_warning is not None:
+            exc.add_note(cleanup_warning)
         raise
-    workspace.cleanup(path, success=True)
+    finish_workshop_cleanup(workspace, path, success=True, claim=claim)
     return pr
 
 

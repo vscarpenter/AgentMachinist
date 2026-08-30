@@ -84,6 +84,28 @@ class Harness(ABC):
     def implement_argv(self, prompt: str) -> list[str]:
         """Argv that makes the harness edit files headlessly per the prompt."""
 
+    def version_argv(self) -> list[str]:
+        """Read-only argv used by readiness diagnostics."""
+        return [self.command, "--version"]
+
+    def compatibility_argv(self, phase: str) -> list[str]:
+        """Parse the configured Phase argv without starting a Harness run."""
+        if phase == "spec":
+            argv = self.spec_argv("machinist compatibility probe")
+        elif phase == "execute":
+            argv = self.implement_argv("machinist compatibility probe")
+        else:
+            raise ValueError(f"unknown harness phase: {phase}")
+        return [*argv, "--help"]
+
+    def authentication_argv(self) -> list[str] | None:
+        """Return a read-only auth probe, or None when the CLI has no probe."""
+        return None
+
+    def authentication_ready(self, result: subprocess.CompletedProcess) -> bool:
+        """Interpret the configured CLI's auth probe without exposing details."""
+        return result.returncode == 0
+
     def generate_spec(self, prompt: str, cwd: Path) -> str:
         return self._run(self.spec_argv(prompt), cwd, self.config.spec_timeout_minutes)
 

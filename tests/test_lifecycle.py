@@ -12,7 +12,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
+from machinist.lifecycle import (
+    LifecycleError,
+    LifecycleFinalizationError,
+    Phase,
+    RunStatus,
+    TaskLifecycle,
+)
 
 
 def test_run_persists_success_and_result_evidence(tmp_path):
@@ -37,6 +43,39 @@ def test_run_persists_success_and_result_evidence(tmp_path):
     assert projection["schema_version"] == 1
     assert projection["status"] == "succeeded"
     assert projection["evidence"]["pr_number"] == 57
+
+
+def test_success_projection_failure_never_appends_a_conflicting_failed_terminal(
+    tmp_path, monkeypatch
+):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    original_write = lifecycle._write_projection
+
+    def fail_only_success(record):
+        if record.status is RunStatus.SUCCEEDED:
+            raise LifecycleError("simulated projection failure")
+        original_write(record)
+
+    monkeypatch.setattr(lifecycle, "_write_projection", fail_only_success)
+
+    with pytest.raises(LifecycleFinalizationError, match="action succeeded"):
+        lifecycle.run(42, Phase.EXECUTE, lambda claim: SimpleNamespace(number=57))
+
+    events = [
+        json.loads(line)
+        for line in (
+            tmp_path
+            / "runs"
+            / "history"
+            / "issue-42-execute"
+            / "attempt-000001.jsonl"
+        )
+        .read_text()
+        .splitlines()
+    ]
+    assert [event["event"] for event in events] == ["started", "succeeded"]
+    assert lifecycle.history(42, Phase.EXECUTE)[0].status is RunStatus.SUCCEEDED
+    assert lifecycle.record(42, Phase.EXECUTE).status is RunStatus.RUNNING
 
 
 def test_failure_is_durable_and_requires_explicit_retry(tmp_path):
@@ -417,6 +456,48 @@ def test_older_and_corrupt_projection_records_are_handled_safely(tmp_path):
     inventory = lifecycle.inventory()
     assert inventory.records == (record,)
     assert inventory.corrupt == (corrupt,)
+
+
+def test_projection_payload_identity_must_match_its_filename(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.runs_dir.mkdir()
+    path = lifecycle.runs_dir / "issue-999-spec.json"
+    path.write_text(
+        '{"attempt":1,"error":null,"evidence":{},"issue":7,'
+        '"phase":"spec","started_at":"2026-08-17T00:00:00+00:00",'
+        '"status":"failed","updated_at":"2026-08-17T00:00:01+00:00"}\n'
+    )
+
+    with pytest.raises(LifecycleError, match="does not match filename"):
+        lifecycle.record(999, Phase.SPEC)
+    with pytest.raises(LifecycleError, match="does not match filename"):
+        lifecycle.retry(999, Phase.SPEC)
+    assert lifecycle.inventory().corrupt == (path,)
+
+
+def test_journal_payload_identity_must_match_directory_and_attempt(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    journal = (
+        lifecycle.runs_dir
+        / "history"
+        / "issue-999-execute"
+        / "attempt-000002.jsonl"
+    )
+    journal.parent.mkdir(parents=True)
+    record = {
+        "attempt": 1,
+        "error": "wrong identity",
+        "evidence": {},
+        "issue": 7,
+        "phase": "execute",
+        "started_at": "2026-08-17T00:00:00+00:00",
+        "status": "failed",
+        "updated_at": "2026-08-17T00:00:01+00:00",
+    }
+    journal.write_text(json.dumps({"schema_version": 1, "event": "failed", "record": record}) + "\n")
+
+    assert lifecycle.history(999, Phase.EXECUTE) == []
+    assert lifecycle.inventory().corrupt == (journal,)
 
 
 def test_oversized_projection_is_rejected_before_payload_read(tmp_path):

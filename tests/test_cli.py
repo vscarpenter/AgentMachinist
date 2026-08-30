@@ -1814,7 +1814,8 @@ def test_approve_resolves_issue_number(monkeypatch):
         # Approve using the issue number 42 rather than PR number 18
         result = runner.invoke(main, ["approve", "42"])
         assert result.exit_code == 0, result.output
-        assert "Approved PR #18" in result.output
+        assert "Requested approval for PR #18" in result.output
+        assert "workflow will verify the current head" in result.output
         assert approved_prs == [
             (18, "machinist:approved", "0123456789abcdef0123456789abcdef01234567")
         ]

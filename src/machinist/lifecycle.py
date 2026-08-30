@@ -51,6 +51,12 @@ class LifecycleError(Exception):
     """A Task cannot enter the requested lifecycle transition."""
 
 
+class LifecycleFinalizationError(LifecycleError):
+    """A Phase action finished, but its terminal Evidence was not finalized."""
+
+    action_succeeded = True
+
+
 class LifecycleSignalInterruption(SystemExit):
     """A service termination signal received while a Task Claim was active."""
 
@@ -282,21 +288,6 @@ class TaskLifecycle:
                 try:
                     signal_scope.activate()
                     result = action(claim)
-                    evidence = dict(claim._record.evidence)
-                    for attr, key in (("number", "pr_number"), ("url", "pr_url")):
-                        value = getattr(result, attr, None)
-                        if value is not None:
-                            evidence[key] = value
-                    evidence = _validate_evidence(evidence)
-
-                    succeeded = self._finish(
-                        claim._record,
-                        status=RunStatus.SUCCEEDED,
-                        error=None,
-                        evidence=evidence,
-                    )
-                    self._persist(succeeded, event="succeeded")
-                    return result
                 except BaseException as exc:
                     signal_scope.begin_terminal_persistence()
                     status = _interrupted_status(exc)
@@ -330,6 +321,38 @@ class TaskLifecycle:
                         raise pending from exc
                     signal_scope.resume_after_terminal_persistence()
                     raise
+
+                # Once the Phase action returns, delivery may already be
+                # externally visible. Keep terminal projection failures out of
+                # the action-failure path so history can never claim that a
+                # successfully delivered PR subsequently failed.
+                signal_scope.begin_terminal_persistence()
+                try:
+                    evidence = dict(claim._record.evidence)
+                    for attr, key in (("number", "pr_number"), ("url", "pr_url")):
+                        value = getattr(result, attr, None)
+                        if value is not None:
+                            evidence[key] = value
+                    evidence = _validate_evidence(evidence)
+                    succeeded = self._finish(
+                        claim._record,
+                        status=RunStatus.SUCCEEDED,
+                        error=None,
+                        evidence=evidence,
+                    )
+                    self._persist(succeeded, event="succeeded")
+                except (LifecycleError, OSError, TypeError, ValueError) as exc:
+                    raise LifecycleFinalizationError(
+                        f"issue #{issue} {phase.value} action succeeded, but terminal "
+                        "Task Run Evidence could not be finalized; inspect the PR and "
+                        f"run 'machinist inspect {issue}' before reconciling: {exc}"
+                    ) from exc
+
+                # A service signal received during durable success persistence
+                # still exits the worker, but must not rewrite delivered work
+                # as cancelled or failed.
+                signal_scope.resume_after_terminal_persistence()
+                return result
 
     def retry(self, issue: int, phase: Phase | None = None) -> RunRecord:
         with self._hold_claim(issue, retrying=True):
@@ -765,8 +788,19 @@ class TaskLifecycle:
 
     def _read_projection(self, path: Path) -> RunRecord:
         try:
+            expected = _projection_identity(path.name)
+            if expected is None:
+                raise LifecycleError(
+                    f"Task Run record {path} is corrupt: noncanonical filename"
+                )
             payload = json.loads(read_text_file(path, max_bytes=_MAX_PROJECTION_BYTES))
-            return _record_from_payload(payload, source=path)
+            record = _record_from_payload(payload, source=path)
+            if (record.issue, record.phase) != expected:
+                raise LifecycleError(
+                    f"Task Run record {path} is corrupt: payload identity "
+                    f"#{record.issue} {record.phase.value} does not match filename"
+                )
+            return record
         except LifecycleError:
             raise
         except (
@@ -783,6 +817,10 @@ class TaskLifecycle:
     def _read_journal(self, path: Path) -> tuple[list[_JournalEvent], bool]:
         events: list[_JournalEvent] = []
         malformed = False
+        expected_identity = _history_identity(path.parent.name)
+        expected_attempt = _journal_attempt(path.name)
+        if expected_identity is None or expected_attempt is None:
+            return events, True
         try:
             lines = read_text_file(path, max_bytes=_MAX_JOURNAL_BYTES).splitlines()
         except (OSError, RuntimePathError, UnicodeError):
@@ -801,6 +839,14 @@ class TaskLifecycle:
                 record = _record_from_payload(
                     payload["record"], source=f"{path}:{line_number}"
                 )
+                if (record.issue, record.phase) != expected_identity:
+                    raise LifecycleError(
+                        "journal payload identity does not match its directory"
+                    )
+                if record.attempt != expected_attempt:
+                    raise LifecycleError(
+                        "journal payload attempt does not match its filename"
+                    )
                 events.append(_JournalEvent(event=event, record=record))
             except (LifecycleError, json.JSONDecodeError, TypeError, KeyError):
                 malformed = True
@@ -829,28 +875,48 @@ def _validate_log_name(name: str) -> None:
 
 
 def _projection_filename(name: str) -> bool:
-    return name.startswith("issue-") and any(
-        name.endswith(f"-{phase.value}.json") for phase in Phase
-    )
+    return _projection_identity(name) is not None
+
+
+def _projection_identity(name: str) -> tuple[int, Phase] | None:
+    if not name.startswith("issue-"):
+        return None
+    for phase in Phase:
+        suffix = f"-{phase.value}.json"
+        if not name.endswith(suffix):
+            continue
+        issue = name[len("issue-") : -len(suffix)]
+        if issue.isdigit() and int(issue) > 0:
+            return int(issue), phase
+    return None
 
 
 def _history_directory_name(name: str) -> bool:
+    return _history_identity(name) is not None
+
+
+def _history_identity(name: str) -> tuple[int, Phase] | None:
     if not name.startswith("issue-"):
-        return False
+        return None
     for phase in Phase:
         suffix = f"-{phase.value}"
         if not name.endswith(suffix):
             continue
         issue = name[len("issue-") : -len(suffix)]
-        return issue.isdigit() and int(issue) > 0
-    return False
+        if issue.isdigit() and int(issue) > 0:
+            return int(issue), phase
+    return None
 
 
 def _journal_filename(name: str) -> bool:
+    return _journal_attempt(name) is not None
+
+
+def _journal_attempt(name: str) -> int | None:
     if not name.startswith("attempt-") or not name.endswith(".jsonl"):
-        return False
+        return None
     attempt = name[8:-6]
-    return attempt.isdigit() and int(attempt) > 0
+    return int(attempt) if attempt.isdigit() and int(attempt) > 0 else None
 
 
 def _record_payload(record: RunRecord) -> dict[str, Any]:

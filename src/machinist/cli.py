@@ -501,17 +501,32 @@ def sync_workflows_command(check: bool) -> None:
 
 
 @main.command()
-def doctor() -> None:
-    """Run read-only installation and repository diagnostics."""
+@click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
+@click.option(
+    "--run-gates",
+    is_flag=True,
+    help="Execute configured verification gates in the controller checkout.",
+)
+@click.pass_context
+def doctor(ctx: click.Context, as_json: bool, run_gates: bool) -> None:
+    """Diagnose installation readiness; gate execution is opt-in."""
     try:
         config = load_config()
-        report = run_doctor(Path.cwd(), config, installed_version=_installed_version())
+        report = run_doctor(
+            Path.cwd(),
+            config,
+            installed_version=_installed_version(),
+            run_gates=run_gates,
+        )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    for check in report.checks:
-        click.echo(f"{check.level.value:<4} {check.name:<24} {check.detail}")
+    if as_json:
+        click.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        for check in report.checks:
+            click.echo(f"{check.level.value:<4} {check.name:<28} {check.detail}")
     if not report.ok:
-        raise click.ClickException("doctor found blocking problems")
+        ctx.exit(1)
 
 
 @main.command("update-check")
@@ -682,7 +697,10 @@ def approve(
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"Approved PR #{pr.number} at {pr.head_sha[:12]}.")
+    click.echo(
+        f"Requested approval for PR #{pr.number} at {pr.head_sha[:12]}. "
+        "The approval workflow will verify the current head and record Evidence."
+    )
 
 
 @main.command()
@@ -718,6 +736,8 @@ def retry(
         raise click.UsageError("--resume/--fresh require --run")
     try:
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        cancellation = CancellationStore(Path(".machinist/runs"))
+        observed_cancellation = cancellation.get(issue_number)
         selected = (
             lifecycle.record(issue_number, Phase(phase))
             if phase is not None
@@ -726,8 +746,7 @@ def retry(
         if resume and selected is not None and selected.phase is not Phase.EXECUTE:
             raise LifecycleError("--resume is available only for the Execute phase")
         record = lifecycle.retry(issue_number, Phase(phase) if phase else None)
-        cancellation = CancellationStore(Path(".machinist/runs"))
-        cancellation.clear(issue_number)
+        cancellation.clear_if_matches(issue_number, observed_cancellation)
         if run_now:
             click.echo(
                 f"Retrying issue #{issue_number} {record.phase.value} "
@@ -1223,6 +1242,7 @@ def run(
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
         cancellations = CancellationStore(Path(".machinist/runs"))
         if retry_failed:
+            observed_cancellation = cancellations.get(issue_number)
             prior = lifecycle.record(issue_number, Phase.EXECUTE)
             if prior and prior.status in {
                 RunStatus.FAILED,
@@ -1230,7 +1250,7 @@ def run(
                 RunStatus.ABANDONED,
             }:
                 lifecycle.retry(issue_number, Phase.EXECUTE)
-                cancellations.clear(issue_number)
+                cancellations.clear_if_matches(issue_number, observed_cancellation)
         if cancellations.requested(issue_number):
             raise LifecycleError(
                 f"issue #{issue_number} has a cancellation request; "
