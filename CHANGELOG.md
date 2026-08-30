@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Close approval and lifecycle correctness gaps: both managed approval paths
+  require write access, delivered PR cleanup can only add warning Evidence,
+  cancellation markers are generation-safe, stale running projections are
+  reported as interrupted, and Git operations honor cooperative cancellation.
+- Make first-run readiness explicit. Non-interactive init no longer silently
+  enables a guessed test command; setup prints dispatch, verification, label,
+  workflow, commit/push, and next-step status. `sync-labels --check/--apply`
+  and the expanded `doctor --run-gates` preflight expose missing setup before a
+  Task is labeled.
+- Add durable named progress stages, verification gate N/M status, attempt
+  history, elapsed time, exact recovery commands, watcher heartbeats, and
+  active-Claim safeguards for service lifecycle commands.
+- Harden Harness and distribution adoption: current Codex headless flags,
+  fail-closed OpenCode/Pi/Claude auth probes, ephemeral Claude/Pi sessions,
+  bounded adapter diagnostics, explicit Python/platform metadata, and installed
+  wheel/sdist first-run smoke coverage.
+
 ## 0.8.3 — 2026-08-26
 
 - Warn about managed-workflow drift on the paths operators already walk.

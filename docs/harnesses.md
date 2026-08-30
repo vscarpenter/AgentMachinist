@@ -5,9 +5,9 @@ adapter arguments; all adapters also face the controller's dirty-tree check.
 
 | Config value | Executable | Spec control | Implementation control | CI template |
 | --- | --- | --- | --- | --- |
-| `claude-code` | `claude` | Plan permission mode, Read/Grep/Glob tools, no session persistence | Edit mode with gate commands allowlisted; prompt plus Git postconditions | Supported |
-| `codex` | `codex` | Read-only sandbox and ephemeral session | Full-auto workspace edits; prompt plus Git postconditions | Local only |
-| `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools; prompt plus Git postconditions | Local only |
+| `claude-code` | `claude` | Plan permission mode, Read/Grep/Glob tools, no session persistence | Edit mode with gate commands allowlisted and no session persistence; prompt plus Git postconditions | Supported |
+| `codex` | `codex` | Read-only sandbox and ephemeral session | Workspace-write sandbox, approval prompts disabled, ephemeral session; prompt plus Git postconditions | Local only |
+| `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools with session persistence disabled; prompt plus Git postconditions | Local only |
 | `opencode` | `opencode` | Pure plan agent; treated as advisory | Normal run agent; prompt plus Git postconditions | Local only |
 
 ## Verification feedback loop
@@ -24,19 +24,19 @@ authoritative.
 
 ## Authentication
 
-Local runs use the harness's existing provider authentication. AgentMachinist
-does not validate subscription state or model access; `doctor` verifies only
-that the executable is discoverable. Run the harness interactively once if an
-otherwise healthy setup exits with an auth error.
+Local runs use the harness's existing provider authentication. `doctor` checks
+the installed version, parses both configured Phase invocations, and uses each
+CLI's read-only authentication probe. That confirms configured credentials,
+not subscription quotas or access to every possible model.
 
 Current authentication entry points are:
 
 | Harness | Check | Sign in or configure |
 | --- | --- | --- |
-| Claude Code | `claude auth status` | `claude auth login` |
+| Claude Code | `claude auth status --json` | `claude auth login` |
 | Codex | `codex login status` | `codex login` |
-| OpenCode | `opencode auth list` | `opencode auth login` |
-| Pi | `pi auth check --model <model>` | Configure credentials for the selected provider or model, then rerun the check. |
+| OpenCode | `opencode auth list --pure` | `opencode auth login` |
+| Pi | `pi auth check --model <model> --json --no-refresh` (or the default Google provider when no model is set) | Configure credentials for the selected provider or model, then rerun the check. |
 
 These CLIs evolve independently. Confirm the command with the installed
 harness's `--help` output when upgrading.
@@ -68,12 +68,9 @@ and updated your threat assessment.
 Harness CLIs evolve independently. Before unattended use after an upgrade:
 
 ```sh
-claude --help
-opencode run --help
-pi --help
-codex exec --help
-uv run pytest tests/test_harness.py
+machinist doctor
 ```
 
-If an argument changes, update the adapter, its exact argv test, this matrix,
-and the changelog in the same change.
+The compatibility rows execute `--help` against the exact configured Spec and
+Execute argv without starting a Harness Task. If an argument changes, update
+the adapter, its exact argv test, this matrix, and the changelog together.

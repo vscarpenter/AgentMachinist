@@ -258,17 +258,39 @@ def test_harness_auth_and_security_sensitive_config_are_documented():
         assert "extra_args" in text
         assert "sandbox" in text and "permission" in text
     for command in (
-        "claude auth status",
+        "claude auth status --json",
         "claude auth login",
         "codex login status",
         "codex login",
-        "opencode auth list",
+        "opencode auth list --pure",
         "opencode auth login",
-        "pi auth check --model <model>",
+        "pi auth check --model <model> --json --no-refresh",
     ):
         assert f"`{command}`" in harnesses
     assert "<code>claude login</code>" not in html
     assert "<code>pi auth</code>" not in html
+
+
+def test_adoption_docs_expose_readiness_progress_and_platform_boundaries():
+    readme = _README_PATH.read_text().lower()
+    guide = _guide_text().lower()
+    operator = (_REPO_ROOT / "docs/operator-runbook.md").read_text().lower()
+    harnesses = _HARNESS_PATH.read_text().lower()
+    html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    combined = "\n".join((readme, guide, operator, harnesses, html))
+
+    for phrase in (
+        "machinist doctor --run-gates",
+        "machinist sync-labels --check",
+        "current named stage",
+        "last completed watcher poll",
+        "python 3.12–3.14",
+        "macos-only",
+    ):
+        assert phrase in combined
+    assert "test-command auto-detection" not in combined
+    assert "auto-detects test runners" not in combined
+    assert "full-auto workspace edits" not in combined
 
 
 def test_readme_lists_recovery_inspection_and_cleanup_commands():

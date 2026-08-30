@@ -21,7 +21,10 @@ uv tool install agentmachinist
 ```
 
 You also need `git`, an authenticated [`gh`](https://cli.github.com), and one
-supported harness executable (`claude`, `opencode`, `pi`, or `codex`).
+supported harness executable (`claude`, `opencode`, `pi`, or `codex`). The core
+CLI is tested on macOS and Linux with Python 3.12–3.14. Managed background
+service commands are macOS-only; on Linux, schedule `machinist watch --once`
+with your existing service manager.
 
 `machinist update-check` compares the installed release against PyPI and
 prints the upgrade command for how this copy was installed (`uv tool`, `pipx`,
@@ -42,7 +45,8 @@ never appears in `update-check --json`.
 cd your-repository
 machinist init
 # Answer the setup questions, review the generated files, then:
-machinist doctor
+machinist doctor --run-gates
+machinist sync-labels --check
 machinist sync-workflows --check
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
@@ -58,7 +62,8 @@ mode, managed workflows, harness, test gate, and notifications — each with a
 one-line explanation and a safe default. Flags such as `--harness`,
 `--test-cmd`, `--spec-source`, and `--notifications` pre-answer their
 questions; `--no-input` (or a non-interactive shell) skips the questions and
-uses the defaults plus test-command auto-detection.
+uses safe defaults. A detected test command is reported as a suggestion but is
+not enabled non-interactively unless you pass `--test-cmd`.
 
 Review the staged diff before committing. Managed workflows must be pushed
 before GitHub comment or label approval can record SHA-bound evidence.
@@ -86,6 +91,13 @@ Task; use `--issue` or `--pr` when GitHub numbers overlap.
 Editing the spec after approval makes that approval stale and blocks execution
 until the new head is approved.
 
+The CLI approval command submits the SHA-bound comment; the managed GitHub
+workflow independently verifies the current head and approver's write access,
+then records the marker and label. Until that workflow completes, `status`
+remains `awaiting approval` rather than pretending execution is authorized.
+`approval pending` specifically means the label is visible but trusted SHA
+Evidence has not arrived yet.
+
 Revise or explicitly abandon a successful Spec by issue number:
 
 ```sh
@@ -107,6 +119,7 @@ PR.
 | `machinist doctor` | Run read-only setup and workflow-drift diagnostics. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
+| `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |
 | `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration. |
 | `machinist spec <issue> [--dry-run]` | Preview a Spec, or generate it and open its draft PR. |
 | `machinist spec <issue> --revise` | Regenerate a successful Spec on its existing branch and PR. |
@@ -117,7 +130,7 @@ PR.
 | `machinist cancel <issue> [--reason <text>\|--clear]` | Cooperatively stop or block an issue's dispatch. |
 | `machinist watch [--once] [--dry-run] [--max-tasks <n>]` | Preview or dispatch eligible tasks continuously or once. |
 | `machinist queue pause\|resume\|defer\|allow\|show` | Persist operator controls over new watcher dispatches. |
-| `machinist service install\|start\|restart\|stop\|status\|logs\|uninstall` | Manage the repository's macOS launchd watcher. |
+| `machinist service install\|start\|restart\|stop\|status\|logs\|uninstall` | Manage the repository's macOS launchd watcher; destructive lifecycle actions refuse active Claims unless forced. |
 | `machinist status [--local\|--all] [--json]` | Show GitHub state, local Task Runs, or a registered portfolio. |
 | `machinist runs [--issue <issue>] [--json]` | Read current, historical, orphaned, and corrupt local run records. |
 | `machinist retry <issue> [--phase spec\|execute]` | Re-enable one failed Task Run. |
@@ -147,7 +160,8 @@ of the user who launched them. Read the trust model before unattended use.
 Releases use PyPI Trusted Publishing. Bump `pyproject.toml`, update the
 changelog, and publish a GitHub Release tagged `v<version>`. The release job
 first checks tag/version equality, runs tests and workflow checks, builds both
-distributions, smoke-tests the wheel, and records SHA-256 hashes. A minimal job
+distributions, smoke-tests the installed wheel and sdist through a generated
+first-run project, and records SHA-256 hashes. A minimal job
 then publishes those verified artifacts. Only after publication do separate
 jobs attach the distributions and checksum file to the GitHub Release and
 verify that the exact version is visible and installable from PyPI.

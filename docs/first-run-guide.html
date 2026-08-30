@@ -892,12 +892,12 @@
         </div>
         <p>Already authenticated with GitHub and your coding harness? Here is the entire issue-to-tested-PR sequence at a glance.</p>
         <div class="terminal" aria-label="Quick start command block">
-          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist init&#10;# Answer the setup questions, review the generated files, then:&#10;machinist doctor&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and approve its issue explicitly:&#10;machinist approve --issue 42&#10;# Implement per approved spec & test gate:&#10;machinist run 42">Copy flow</button></div>
+          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist init&#10;# Answer the setup questions, review the generated files, then:&#10;machinist doctor --run-gates&#10;machinist sync-labels --check&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and request approval explicitly:&#10;machinist approve --issue 42&#10;machinist status&#10;# Implement per approved spec & test gate:&#10;machinist run 42">Copy flow</button></div>
           <pre><span class="comment"># 1. Install, then answer init's setup questions in your repository:</span>
 <span class="prompt">$</span> uv tool install agentmachinist &amp;&amp; machinist init
 
 <span class="comment"># 2. Review the generated files; verify:</span>
-<span class="prompt">$</span> machinist doctor &amp;&amp; machinist sync-workflows --check
+<span class="prompt">$</span> machinist doctor --run-gates &amp;&amp; machinist sync-labels --check &amp;&amp; machinist sync-workflows --check
 <span class="prompt">$</span> git status --short
 <span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 <span class="prompt">$</span> git add -p .github/workflows
@@ -1066,7 +1066,7 @@ machinist, version 0.8.3
               <ol>
                 <li>Run <code>machinist init</code>. Accept <code>local</code> at the dispatch question — it is the default.</li>
                 <li>Pick your harness and confirm the detected test command at the prompts (or edit <code>machinist.yaml</code> later).</li>
-                <li>Run <code>machinist doctor</code>, then start <code>machinist watch</code>.</li>
+                <li>Run <code>machinist doctor --run-gates</code>, then start <code>machinist watch</code>.</li>
                 <li>Keep one watcher per repository. Local claims are not distributed locks.</li>
               </ol>
             </div>
@@ -1135,7 +1135,7 @@ tests:
       <p class="micro-note">This is an abridged first-run configuration. Before dispatch, use <code>machinist config validate</code> and <code>machinist config show</code>. Advanced configuration supports separate Spec/Execute harness profiles, bounded instruction overlays, ordered named verification gates, notifications, admission budgets, and change limits; the full reference is linked below.</p>
 
       <div class="terminal" style="margin-top: var(--space-6)" aria-label="Initialization and diagnostic commands">
-        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist init&#10;# Review machinist.yaml, the detected test gate, and generated files, then:&#10;machinist doctor&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
+        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist init&#10;# Review machinist.yaml, verification status, and generated files, then:&#10;machinist doctor --run-gates&#10;machinist sync-labels --check&#10;machinist sync-workflows --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
         <pre><span class="prompt">$</span> machinist init
 Configuring machinist.yaml — press Enter to accept a [default],
 or rerun with --no-input to skip these questions.
@@ -1152,7 +1152,7 @@ marked ready for review.
 Use detected test command 'uv run pytest'? [Y/n]:
 
 <span class="comment"># Review the generated files, then:</span>
-<span class="prompt">$</span> machinist doctor
+<span class="prompt">$</span> machinist doctor --run-gates
 PASS repository               /Users/you/code/your-project
 PASS GitHub authentication    gh auth is active
 PASS harness                  /path/to/claude
@@ -1170,7 +1170,7 @@ Managed workflows match machinist.yaml.
 <span class="prompt">$</span> git diff --cached
 <span class="prompt">$</span> git commit -m "chore: configure AgentMachinist"
 <span class="prompt">$</span> git push</pre>
-        <p class="micro-note"><code>machinist init</code> adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. Flags pre-answer questions and skip them: <code>--spec-source</code>, <code>--harness</code>, <code>--test-cmd</code>, and <code>--notifications</code>; <code>--no-input</code> (or any non-interactive shell) skips every question and keeps the silent defaults with test-command auto-detection. <code>--no-workflows</code> records <code>manage_workflows: false</code> for externally managed workflows; <code>doctor</code> then reports that its managed drift check was intentionally skipped.</p>
+        <p class="micro-note"><code>machinist init</code> adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. Flags pre-answer questions and skip them: <code>--spec-source</code>, <code>--harness</code>, <code>--test-cmd</code>, and <code>--notifications</code>; <code>--no-input</code> (or any non-interactive shell) skips every question and keeps safe defaults. A detected test command is only a suggestion unless <code>--test-cmd</code> is explicit. <code>--no-workflows</code> records <code>manage_workflows: false</code> for externally managed workflows; <code>doctor</code> then reports that its managed drift check was intentionally skipped.</p>
       </div>
     </section>
 
@@ -1256,7 +1256,7 @@ Add CSV export for filtered rows on the table.
           <div class="walk-copy">
             <span class="walk-index">07 / STAMP THE BLUEPRINT</span>
             <h3>Approve the PR number or the issue number.</h3>
-            <p>Read the spec first. Run <code>machinist approve --pr 18</code> for PR #18 (or <code>machinist approve --issue 42</code> for issue #42), or copy the SHA-bound <code>/machinist-execute &lt;full-spec-commit-sha&gt;</code> command from the PR body. The positional form is accepted only when the number is unambiguous. Approval is bound to the authorized commit; edits make it stale.</p>
+            <p>Read the spec first. Run <code>machinist approve --pr 18</code> for PR #18 (or <code>machinist approve --issue 42</code> for issue #42), or copy the SHA-bound <code>/machinist-execute &lt;full-spec-commit-sha&gt;</code> command from the PR body. The positional form is accepted only when the number is unambiguous. The CLI requests approval; the managed workflow verifies write access and the current head before recording it. <code>machinist status</code> remains <code>awaiting approval</code> until that finishes; <code>approval pending</code> means a label is visible without trusted SHA evidence. Approval is bound to the authorized commit; edits make it stale.</p>
             <span class="walk-command">machinist approve --pr 18</span>
 
             <div class="tip-box">
@@ -1354,9 +1354,11 @@ machinist retry 42 --phase execute --run --fresh</pre>
         <div class="status-track shell">
           <article class="status-item machine"><div class="status-dot"></div><code>awaiting spec</code><p>The trigger exists. Local watch or the configured CI owner must write the plan.</p></article>
           <article class="status-item user"><div class="status-dot"></div><code>awaiting approval</code><p>A draft spec is ready. Read it before authorizing implementation.</p></article>
-          <article class="status-item alert"><div class="status-dot"></div><code>approval pending</code><p>The label exists without trusted SHA evidence. Approve again.</p></article>
+          <article class="status-item alert"><div class="status-dot"></div><code>approval pending</code><p>The label exists without trusted SHA evidence. Inspect the approval workflow before retrying.</p></article>
           <article class="status-item alert"><div class="status-dot"></div><code>approval stale</code><p>The branch changed after approval. Review and approve the new head.</p></article>
           <article class="status-item machine"><div class="status-dot"></div><code>approved</code><p>The exact head can execute. Run the watcher or the issue directly.</p></article>
+          <article class="status-item machine"><div class="status-dot"></div><code>execute running</code><p>A live Claim owns the Task. Runs show the current named stage, gate number, and elapsed time.</p></article>
+          <article class="status-item alert"><div class="status-dot"></div><code>execute interrupted</code><p>The projection says running but no Claim is held. Use the exact <code>Next:</code> recovery command.</p></article>
           <article class="status-item done"><div class="status-dot"></div><code>in review</code><p>Implementation reached the ready PR. You own review and merge.</p></article>
         </div>
       </div>
@@ -1412,7 +1414,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
         </details>
         <details>
           <summary>Status says approval pending</summary>
-          <div class="detail-body"><p>The label exists, but no trusted marker names the current SHA. Approve the PR again with the CLI or exact comment.</p><code>machinist approve --pr &lt;pr&gt;</code></div>
+          <div class="detail-body"><p>The label exists, but no trusted marker names the current SHA. Inspect the managed approval workflow first; approve again only if that run failed.</p><code>machinist status</code></div>
         </details>
         <details>
           <summary>Status says approval stale</summary>
@@ -1436,7 +1438,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
         </details>
         <details>
           <summary>The macOS watcher is quiet</summary>
-          <div class="detail-body"><p>Check whether its LaunchAgent is loaded, then read the bounded recent stdout and stderr. Service logs remain after stop or uninstall.</p><code>machinist service status</code><br><code>machinist service logs --lines 100</code></div>
+          <div class="detail-body"><p>Check launchd registration, the last watcher poll, health, and active Task Runs, then read the bounded recent stdout and stderr. Service lifecycle actions refuse active Claims unless explicitly forced; logs remain after stop or uninstall.</p><code>machinist service status</code><br><code>machinist service logs --lines 100</code></div>
         </details>
       </div>
     </section>
@@ -1451,7 +1453,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
             <li><label><input type="checkbox" value="tools"> <span>Git, gh, uv, and one harness respond</span></label></li>
             <li><label><input type="checkbox" value="version"> <span><code>machinist --version</code> matches this guide</span></label></li>
             <li><label><input type="checkbox" value="config"> <span>Harness, spec owner, and test command are set</span></label></li>
-            <li><label><input type="checkbox" value="doctor"> <span><code>machinist doctor</code> has no FAIL checks</span></label></li>
+            <li><label><input type="checkbox" value="doctor"> <span><code>machinist doctor --run-gates</code> has no FAIL checks</span></label></li>
             <li><label><input type="checkbox" value="persisted"> <span>Generated files and the runtime ignore are reviewed, committed, and pushed</span></label></li>
             <li><label><input type="checkbox" value="issue"> <span>A small issue has acceptance criteria and <code>agent-task</code></span></label></li>
             <li><label><input type="checkbox" value="merge"> <span>I know the machine never merges for me</span></label></li>
@@ -1485,11 +1487,11 @@ machinist retry 42 --phase execute --run --fresh</pre>
           <tbody>
             <tr>
               <td><code>machinist init</code></td>
-              <td>Set up <code>machinist.yaml</code>, <code>.machinist/</code>, workflows, and labels. Asks setup questions in a terminal (<code>--no-input</code> skips them); auto-detects test runners.</td>
+              <td>Set up <code>machinist.yaml</code>, <code>.machinist/</code>, workflows, and labels. Asks setup questions in a terminal; <code>--no-input</code> keeps verification disabled unless <code>--test-cmd</code> is explicit.</td>
             </tr>
             <tr>
               <td><code>machinist doctor</code></td>
-              <td>Read-only diagnostics for Git, <code>gh</code>, harness binaries, test gate, and workflow drift.</td>
+              <td>Read-only diagnostics for Git, <code>gh</code>, Harness version/auth/argv compatibility, test gate, labels, permissions, and local/remote workflow drift. <code>--run-gates</code> opts into gate execution.</td>
             </tr>
             <tr>
               <td><code>machinist config validate|show|schema|set</code></td>

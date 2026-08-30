@@ -385,7 +385,8 @@ claude --version                     <span class="comment"># or opencode / pi / 
     <div class="cell local">
       <span class="chip local">Local</span>
       <pre><code>machinist init        <span class="comment"># dispatch mode: local</span>
-machinist doctor
+machinist doctor --run-gates
+machinist sync-labels --check
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add -p .github/workflows
 git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>

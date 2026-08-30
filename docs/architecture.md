@@ -53,12 +53,12 @@ both the label and a marker matching the current PR head. A later branch
 update naturally invalidates approval.
 
 Both authorization paths check the actor before any evidence is minted. A
-`/machinist-execute` comment is honored only from OWNER, MEMBER, or
-COLLABORATOR. Applying the approval label stamps the head only when the actor
-has write or admin access, because GitHub grants label permission at triage
-level and triage cannot push code. The permission check fails closed: a
-permission that cannot be read mints no evidence. The approver's login is
-recorded alongside the marker, so the comment reads:
+`/machinist-execute` comment is considered only from OWNER, MEMBER, or
+COLLABORATOR, and both comment and label paths independently require write or
+admin access. GitHub association and label permissions can be weaker than push
+authority, so neither is sufficient by itself. The permission check fails
+closed: a permission that cannot be read mints no evidence. The approver's
+login is recorded alongside the marker, so the comment reads:
 
 ```text
 Approved by @<login> for `<40-hex-head-sha>`. <!-- agentmachinist:approval sha=<40-hex-head-sha> -->
@@ -74,10 +74,10 @@ contract.
 projection. Each attempt also has append-only JSONL history under
 `.machinist/runs/history/`; controller checkpoints record intent before remote
 effects and the observed result afterward. Records include the phase, attempt,
-timestamps, status, error, harness profile, duration, deviations, and
-reconciliation evidence. A local `flock` plus an in-process guard prevents
-overlapping work for one issue on a single host. It is not a distributed
-GitHub claim.
+timestamps, status, error, harness profile, duration, current named stage,
+progress heartbeat, deviations, and reconciliation evidence. A local `flock`
+plus an in-process guard prevents overlapping work for one issue on a single
+host. It is not a distributed GitHub claim.
 
 Task Run states are `running`, `succeeded`, `failed`, `retryable`, `cancelled`,
 and `abandoned`. Explicit recovery moves an interrupted or unsuccessful record
@@ -148,10 +148,13 @@ one missing or corrupt repository does not erase healthy repository results.
 On macOS, the managed service is one per-repository LaunchAgent. It schedules
 `machinist watch --once`, sets the repository working directory, uses an
 absolute controller executable, and retains stdout/stderr under
-`.machinist/runs/service/`. Stop preserves the plist; uninstall removes only the
-managed plist and retains logs. A locked, atomically replaced, bounded ledger
-under `.machinist/runs` deduplicates successful notification deliveries across
-one-shot watcher processes for 24 hours; delivery failures are never recorded.
+`.machinist/runs/service/`. Each completed pass atomically records a heartbeat
+used by `service status`; lifecycle actions refuse an active Task Claim unless
+the operator explicitly forces termination. Stop preserves the plist;
+uninstall removes only the managed plist and retains logs. A locked, atomically
+replaced, bounded ledger under `.machinist/runs` deduplicates successful
+notification deliveries across one-shot watcher processes for 24 hours;
+delivery failures are never recorded.
 
 When `github.spec_source` is `github-actions`, `github.spec_install` is `pypi`
 or `checkout`. Consumer repositories should keep `pypi`. This project's

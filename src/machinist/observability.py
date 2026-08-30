@@ -319,7 +319,7 @@ def summarize_run_report(
         if record.error:
             detail += f": {record.error}"
         lines.append(detail)
-        if disposition.next_action is not None and record.status is not RunStatus.SUCCEEDED:
+        if disposition.next_action is not None:
             lines.append(f"    Next: {disposition.next_action}")
 
     if report.history:

@@ -5,7 +5,8 @@
 Run from the configured repository root:
 
 ```sh
-machinist doctor
+machinist doctor --run-gates
+machinist sync-labels --check
 machinist sync-workflows --check
 machinist status
 ```
@@ -55,12 +56,15 @@ machinist service logs --lines 100
 The LaunchAgent runs `watch --once` from the repository at
 `github.poll_interval_seconds`. `start` starts an installed service,
 `restart` replaces its current process, and `stop` preserves its plist and
-logs. `status` reports `loaded/scheduled` because the one-shot watcher is
-normally idle between intervals; that is not a claim that a process is always
-running. `start`, `restart`, `stop`, `status`, `logs`, and `uninstall` remain
-available if `machinist.yaml` is missing or invalid or the installed controller
-is no longer on the current `PATH`. Only `install` needs a valid current config
-and executable. `uninstall` removes the managed plist but preserves logs. For
+logs. `status` reports `loaded/scheduled` plus watcher health, the last
+completed poll, and active Task Runs; the one-shot watcher is normally idle
+between intervals. Install, restart, stop, and uninstall refuse while a Task
+holds a Claim. Wait for it to finish, or use `--force` only when intentionally
+terminating it. `start`, `restart`, `stop`, `status`, `logs`, and `uninstall`
+remain available if `machinist.yaml` is missing or invalid or the installed
+controller is no longer on the current `PATH`. Only `install` needs a valid
+current config and executable. `uninstall` removes the managed plist but
+preserves logs. For
 another scheduler, set the working directory to the repository root, use an
 absolute controller path, run `watch --once`, and capture stdout/stderr.
 
@@ -100,9 +104,16 @@ reported by `queue show`/the watcher.
 ## Observe
 
 `machinist status` shows `awaiting spec`, `awaiting approval`,
-`approval pending`, `approval stale`, `approved`, and `in review`. When a local
-Task Run is active or needs intervention, its `spec running`, `execute failed`,
-or `execute retryable` state overrides the GitHub eligibility state.
+`approval pending`, `approval stale`, `approved`, and `in review`. Local
+outcomes add `spec running`, `spec interrupted`, `spec failed`,
+`spec cancelled`, `spec abandoned`, `spec closed`, `execute running`,
+`execute interrupted`, `execute failed`, `execute cancelled`, and
+`execute abandoned`. A persisted `running` projection without a held Claim is
+reported as interrupted. `status`, `runs`, and `inspect` show named stages,
+attempt history, elapsed time, and an exact `Next:` command where recovery is
+available. A `retryable` persistence state projects back to remote eligibility
+so the watcher can dispatch it; it is not shown as a second competing pipeline
+state.
 
 Local Task Run records are under `.machinist/runs/`. They are runtime state and
 should remain ignored by Git. `machinist init` idempotently adds
@@ -279,7 +290,8 @@ labels; the next sync intentionally replaces drift.
 
 1. Update `CHANGELOG.md` and `pyproject.toml` to the same version.
 2. Run `uv lock` and `bash scripts/verify.sh`; this runs tests, checks managed
-   workflows, builds both distributions, and smoke-tests the wheel.
+   workflows, builds both distributions, installs the wheel and sdist, and
+   exercises a generated first-run project.
 3. Run `machinist sync-workflows --check` (after a version bump, run `machinist sync-workflows`, review, and commit the projection).
 4. Commit and push, then verify CI for that exact commit.
 5. Create GitHub Release `v<version>`. The release workflow repeats verification,
