@@ -96,3 +96,25 @@ def test_setup_pr_refuses_unmanaged_initializer_output_before_commit(tmp_path):
     assert git(repo, "log", "-1", "--format=%s") == "initial"
     assert git(repo, "branch", "--show-current") == "chore/agentmachinist-setup"
     assert (repo / "surprise.txt").exists()
+
+
+def test_setup_pr_runs_readiness_validation_before_commit(tmp_path) -> None:
+    repo, _remote = repository(tmp_path)
+
+    def initialize() -> None:
+        (repo / "machinist.yaml").write_text("version: 1\n")
+
+    def validate() -> None:
+        raise OnboardingError("setup preflight failed: verification")
+
+    with pytest.raises(OnboardingError, match="setup preflight failed"):
+        deliver_setup_pr(
+            repo,
+            github=FakeGitHub(),
+            initialize=initialize,
+            validate=validate,
+        )
+
+    assert git(repo, "log", "-1", "--format=%s") == "initial"
+    assert git(repo, "branch", "--show-current") == "chore/agentmachinist-setup"
+    assert (repo / "machinist.yaml").exists()

@@ -38,6 +38,7 @@ def deliver_setup_pr(
     *,
     github,
     initialize: Callable[[], None],
+    validate: Callable[[], None] | None = None,
     runner: Callable[..., Any] = subprocess.run,
     branch: str = _SETUP_BRANCH,
 ) -> SetupPRResult:
@@ -63,6 +64,8 @@ def deliver_setup_pr(
             + ", ".join(unmanaged)
             + "; changes remain visible on the setup branch"
         )
+    if validate is not None:
+        validate()
     _git(root, runner, "add", "--", *changed)
     _git(
         root,

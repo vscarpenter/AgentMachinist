@@ -45,7 +45,7 @@ from machinist.config_cli import (
     write_schema as write_config_schema,
 )
 from machinist.doctor import run_doctor
-from machinist.explain import explain_task
+from machinist.explain import TaskExplanation, explain_task
 from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
@@ -271,7 +271,11 @@ def _print_init_receipt(
     )
     step += 1
     click.echo(
-        f"  {step}. Label an issue {trigger!r}; follow it with 'machinist status' and 'machinist runs'."
+        f"  {step}. Create a ready Task: machinist task new --title <title> --dispatch"
+    )
+    click.echo(
+        f"     Or lint an existing issue before applying {trigger!r}: "
+        "machinist task lint <issue>"
     )
 
 
@@ -662,9 +666,19 @@ def explain(issue_number: int, as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
-    click.echo(f"Issue #{issue_number}: {result.state}")
+    _print_task_explanation(result)
+
+
+def _print_task_explanation(result: TaskExplanation) -> None:
+    click.echo(f"Issue #{result.issue}: {result.state}")
     click.echo(f"  {result.url}")
     click.echo(f"  Next: {result.next_action or 'Human review or no action required'}")
+    dispatch = result.dispatch
+    managed = "managed" if dispatch["managed_workflows"] else "external"
+    click.echo(
+        f"Dispatch: Spec via {dispatch['spec_source']} ({dispatch['spec_install']}, "
+        f"{managed} workflows); ready transition: {dispatch['ready_transition_owner']}"
+    )
     click.echo("Effective Harness profiles:")
     for phase, profile in result.profiles.items():
         enabled = "enabled" if profile["enabled"] else "disabled"
@@ -680,6 +694,28 @@ def explain(issue_number: int, as_json: bool) -> None:
             click.echo(f"  {gate['name']}: {gate['command']}")
     else:
         click.echo("  No gates configured.")
+    click.echo("Instruction overlays:")
+    for phase, policy in result.instructions.items():
+        paths = ", ".join(policy["paths"]) or "none"
+        append = " + inline append" if policy["inline_append"] else ""
+        click.echo(f"  {phase}: {paths}{append}")
+    click.echo(
+        f"Workspace: {result.workspace['strategy']} · {result.workspace['branch']} · "
+        f"cleanup {result.workspace['cleanup']} · retained "
+        f"{len(result.workspace['retained'])}"
+    )
+    click.echo("Limits: " + json.dumps(result.limits, sort_keys=True))
+    click.echo("Queue: " + json.dumps(result.queue, sort_keys=True))
+    click.echo("Attempts:")
+    for phase, attempt in result.attempts.items():
+        summary = (
+            "none"
+            if attempt is None
+            else (f"#{attempt['attempt']} {attempt['status']}")
+        )
+        click.echo(f"  {phase}: {summary}")
+    if result.cancellation is not None:
+        click.echo(f"Cancellation: requested ({result.cancellation['reason']})")
     click.echo(
         "Credentials: values hidden; allowed Harness names: "
         + ", ".join(result.credentials["allowed_names"])
@@ -729,11 +765,35 @@ def onboard(
     def initialize() -> None:
         ctx.invoke(init, **arguments)
 
+    def validate() -> None:
+        config = _load_setup_config(repo_root)
+        project_workflows(
+            repo_root,
+            config,
+            installed_version=_installed_version(),
+            check=True,
+        )
+        sync_task_template(repo_root, check=True)
+        readiness = run_doctor(
+            repo_root,
+            config,
+            installed_version=_installed_version(),
+            run_gates=True,
+        )
+        failures = [
+            f"{check.name}: {check.detail}"
+            for check in readiness.checks
+            if check.level.value == "FAIL"
+        ]
+        if failures:
+            raise OnboardingError("setup preflight failed: " + "; ".join(failures))
+
     try:
         result = deliver_setup_pr(
             repo_root,
             github=GitHubClient(),
             initialize=initialize,
+            validate=validate,
         )
     except (OnboardingError, GitHubError) as exc:
         raise click.ClickException(str(exc)) from exc

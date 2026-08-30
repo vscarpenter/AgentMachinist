@@ -18,6 +18,7 @@ class TaskExplanation:
     url: str
     next_action: str | None
     profiles: dict[str, dict[str, Any]]
+    dispatch: dict[str, Any]
     instructions: dict[str, dict[str, Any]]
     verification: tuple[dict[str, Any], ...]
     workspace: dict[str, Any]
@@ -34,6 +35,7 @@ class TaskExplanation:
             "url": self.url,
             "next_action": self.next_action,
             "profiles": self.profiles,
+            "dispatch": self.dispatch,
             "instructions": self.instructions,
             "verification": list(self.verification),
             "workspace": self.workspace,
@@ -71,6 +73,7 @@ def explain_task(
         url=row.url,
         next_action=next_action_for_status(row),
         profiles=_profiles(config),
+        dispatch=_dispatch_policy(config),
         instructions=_instructions(config),
         verification=tuple(
             gate.model_dump(mode="json")
@@ -83,6 +86,17 @@ def explain_task(
         attempts=_attempts(lifecycle, issue),
         cancellation=_cancellation(cancellation, issue),
     )
+
+
+def _dispatch_policy(config: MachinistConfig) -> dict[str, Any]:
+    return {
+        "spec_source": config.github.spec_source.value,
+        "spec_install": config.github.spec_install.value,
+        "managed_workflows": config.github.manage_workflows,
+        "spec_secret_env": config.github.spec_secret_env,
+        "review_enabled": config.review.enabled,
+        "ready_transition_owner": "review" if config.review.enabled else "execute",
+    }
 
 
 def _profiles(config: MachinistConfig) -> dict[str, dict[str, Any]]:

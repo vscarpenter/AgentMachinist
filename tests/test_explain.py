@@ -65,6 +65,14 @@ def test_explain_reports_effective_policy_state_and_recovery_without_values(tmp_
     assert explanation["next_action"] == "machinist review 42"
     assert explanation["profiles"]["execute"]["harness"] == "codex"
     assert explanation["profiles"]["review"]["model"] == "review-model"
+    assert explanation["dispatch"] == {
+        "spec_source": "local",
+        "spec_install": "pypi",
+        "managed_workflows": True,
+        "spec_secret_env": "OPENAI_API_KEY",
+        "review_enabled": True,
+        "ready_transition_owner": "review",
+    }
     assert explanation["verification"][0]["command"] == "pytest -q"
     assert "OPENAI_API_KEY" in explanation["credentials"]["allowed_names"]
     serialized = str(explanation)
