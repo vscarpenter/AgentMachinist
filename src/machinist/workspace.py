@@ -547,6 +547,25 @@ class Workspace:
         ).split("\0")
         return sorted({name for name in [*tracked, *untracked] if name})
 
+    def diff_against(self, path: Path, base_ref: str, *, max_bytes: int) -> str:
+        """Return a bounded text diff for a controller-owned read-only review."""
+        if max_bytes < 1:
+            raise WorkspaceError("maximum diff size must be positive")
+        self._assert_bound_custody(path)
+        self._resolve_commit(path, base_ref)
+        diff = self._git(
+            path,
+            "diff",
+            "--no-ext-diff",
+            "--no-color",
+            "--find-renames",
+            f"{base_ref}...HEAD",
+        )
+        size = len(diff.encode("utf-8"))
+        if size > max_bytes:
+            raise WorkspaceError(f"review diff is {size} bytes; maximum is {max_bytes}")
+        return diff
+
     def change_snapshot(self, path: Path) -> str:
         """Return a deterministic fingerprint of all Git-visible changes.
 

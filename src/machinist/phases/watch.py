@@ -107,6 +107,8 @@ def plan_watch_tasks(
             continue
         if row.state == "approved":
             tasks.append(WatchTask("execute", row.issue_number, row))
+        elif row.state == "awaiting review":
+            tasks.append(WatchTask("review", row.issue_number, row))
         elif (
             row.state == "awaiting spec"
             and config.github.spec_source is SpecSource.LOCAL
@@ -115,7 +117,8 @@ def plan_watch_tasks(
 
     # Keep the ordering contract local even if the human-facing status order is
     # changed later. Stable sorting preserves GitHub order within each phase.
-    return tuple(sorted(tasks, key=lambda task: 0 if task.phase == "execute" else 1))
+    priority = {"review": 0, "execute": 1, "spec": 2}
+    return tuple(sorted(tasks, key=lambda task: priority[task.phase]))
 
 
 def watch_once(
@@ -124,6 +127,7 @@ def watch_once(
     *,
     run_spec,
     run_execute,
+    run_review=None,
     state: WatchState,
     notify: Callable[[str], None] | None = None,
     notify_stale: Callable[[int, str], None] | None = None,
@@ -173,24 +177,17 @@ def watch_once(
             deferred.append(task)
             continue
         attempted.append(task)
-        action = run_execute if task.phase == "execute" else run_spec
+        if task.phase == "review":
+            action = run_review
+            if action is None:
+                raise ValueError("run_review is required when Review is enabled")
+        else:
+            action = run_execute if task.phase == "execute" else run_spec
         event, failure = _dispatch(
             action,
             task,
             state,
-            success=(
-                (
-                    lambda pr, issue=task.issue_number: (
-                        f"execute: issue #{issue} → PR #{pr.number} ready for review ({pr.url})"
-                    )
-                )
-                if task.phase == "execute"
-                else (
-                    lambda pr, issue=task.issue_number: (
-                        f"spec: issue #{issue} → draft PR #{pr.number} ({pr.url})"
-                    )
-                )
-            ),
+            success=_success_message(task),
             notify=notify,
         )
         events.append(event)
@@ -202,6 +199,21 @@ def watch_once(
         failures=tuple(failures),
         attempted=tuple(attempted),
         deferred=tuple(deferred),
+    )
+
+
+def _success_message(task: WatchTask):
+    if task.phase == "review":
+        return lambda pr, issue=task.issue_number: (
+            f"review: issue #{issue} → PR #{pr.number} independent review complete "
+            f"({pr.url})"
+        )
+    if task.phase == "execute":
+        return lambda pr, issue=task.issue_number: (
+            f"execute: issue #{issue} → PR #{pr.number} delivered ({pr.url})"
+        )
+    return lambda pr, issue=task.issue_number: (
+        f"spec: issue #{issue} → draft PR #{pr.number} ({pr.url})"
     )
 
 

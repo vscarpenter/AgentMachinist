@@ -123,6 +123,42 @@ def test_approved_draft_pr_dispatches_execute_with_issue_number():
     assert any("#42" in e for e in events)
 
 
+def test_awaiting_review_dispatches_review_before_new_spec(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(
+        42,
+        Phase.EXECUTE,
+        lambda claim: claim.checkpoint(push_observed_sha="a" * 40),
+    )
+    config = MachinistConfig.model_validate({"review": {"enabled": True}})
+    github = FakeGitHub(
+        issues=[issue(7)],
+        prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])],
+        approvals={57: "a" * 40},
+    )
+    order = []
+
+    def dispatch(phase):
+        def run_phase(issue_number):
+            order.append((phase, issue_number))
+            return DraftPR(number=57, url="https://github.com/x/y/pull/57")
+
+        return run_phase
+
+    result = watch_once(
+        config,
+        github,
+        run_spec=dispatch("spec"),
+        run_execute=dispatch("execute"),
+        run_review=dispatch("review"),
+        state=WatchState(),
+        lifecycle=lifecycle,
+    )
+
+    assert order == [("review", 42), ("spec", 7)]
+    assert any("independent review complete" in event for event in result.events)
+
+
 def test_awaiting_approval_and_in_review_prs_dispatch_nothing():
     run_spec, run_execute = Dispatcher(), Dispatcher()
     github = FakeGitHub(

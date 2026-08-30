@@ -14,6 +14,7 @@ harness:
   # Optional Phase 1 overrides: name, model, command, extra_args, timeout_minutes.
   spec: null
   execute: null                # optional Phase 3 overrides; omitted values inherit from above
+  review: null                 # optional read-only independent Review overrides
 
 # Optional repository-specific prompt additions. Paths are ordered, UTF-8,
 # repository-relative files; inline append text follows file contents.
@@ -24,6 +25,13 @@ instructions:
   execute:
     paths: []                  # e.g. [AGENTS.md, docs/implementation-guidance.md]
     append: null
+  review:
+    paths: []                  # e.g. [AGENTS.md, docs/review-guidance.md]
+    append: null
+
+# Keep implementations draft until a separate read-only Harness review passes.
+review:
+  enabled: true
 
 github:
   repo: null                   # "owner/repo"; null = controller binds the exact Git origin

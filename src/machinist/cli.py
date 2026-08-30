@@ -67,6 +67,7 @@ from machinist.phases.execute import (
     normalize_operator_feedback,
     run_execute_phase,
 )
+from machinist.phases.review import ReviewPhaseError, run_review_phase
 from machinist.phases.spec import SpecPhaseError, preview_spec_phase, run_spec_phase
 from machinist.phases.status import StatusRow, next_action_for_status, pipeline_status
 from machinist.phases.watch import WatchState, plan_watch_tasks, watch_once
@@ -407,6 +408,7 @@ _MACHINIST_ERRORS = (
     HarnessError,
     SpecPhaseError,
     ExecutePhaseError,
+    ReviewPhaseError,
     WorkspaceError,
     LifecycleError,
     WorkflowDriftError,
@@ -934,7 +936,7 @@ def retry(
                     issue=issue_number,
                     pr=pr.number,
                 )
-            else:
+            elif record.phase is Phase.EXECUTE:
                 pr = lifecycle.run(
                     issue_number,
                     Phase.EXECUTE,
@@ -967,6 +969,17 @@ def retry(
                     f"Issue #{issue_number} implementation is ready in PR #{pr.number}",
                     issue=issue_number,
                     pr=pr.number,
+                )
+            else:
+                pr = _run_review_task(
+                    issue_number,
+                    config,
+                    lifecycle,
+                    repo_root=repo_root,
+                    cancellation=cancellation,
+                )
+                click.echo(
+                    f"PR #{pr.number} passed independent review and is ready: {pr.url}"
                 )
         else:
             click.echo(
@@ -1250,14 +1263,21 @@ def watch(
                 ),
             ),
         )
-        _deliver_notification(
+        if not config.review.enabled:
+            _notify_pr_ready(config, issue_number, pr.number)
+        return pr
+
+    def dispatch_review(issue_number: int):
+        click.echo(f"Dispatching Review Task Run for issue #{issue_number}...")
+        pr = _run_review_task(
+            issue_number,
             config,
-            NotificationEvent.PR_READY,
-            "Machinist PR ready",
-            f"Issue #{issue_number} implementation is ready in PR #{pr.number}",
-            issue=issue_number,
-            pr=pr.number,
+            lifecycle,
+            repo_root=repo_root,
+            cancellation=cancellation_store,
+            github=github,
         )
+        _notify_pr_ready(config, issue_number, pr.number)
         return pr
 
     state = WatchState()
@@ -1305,6 +1325,7 @@ def watch(
                     github,
                     run_spec=dispatch_spec,
                     run_execute=dispatch_execute,
+                    run_review=dispatch_review,
                     state=state,
                     notify=lambda message: _deliver_notification(
                         config,
@@ -1454,15 +1475,36 @@ def run(
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"PR #{pr.number} implemented and marked ready for review: {pr.url}")
-    _deliver_notification(
-        config,
-        NotificationEvent.PR_READY,
-        "Machinist PR ready",
-        f"Issue #{issue_number} implementation is ready in PR #{pr.number}",
-        issue=issue_number,
-        pr=pr.number,
-    )
+    if config.review.enabled:
+        click.echo(
+            f"PR #{pr.number} implemented; independent review is pending. "
+            f"{pr.url}\nNext: machinist review {issue_number}"
+        )
+    else:
+        click.echo(f"PR #{pr.number} implemented and ready for review: {pr.url}")
+        _notify_pr_ready(config, issue_number, pr.number)
+
+
+@main.command()
+@click.argument("issue_number", type=click.IntRange(min=1))
+def review(issue_number: int) -> None:
+    """Independently review ISSUE_NUMBER's implemented draft pull request."""
+    repo_root = Path.cwd()
+    runs_dir = repo_root / ".machinist/runs"
+    try:
+        config = load_config()
+        lifecycle = TaskLifecycle(runs_dir, repo_root=repo_root)
+        pr = _run_review_task(
+            issue_number,
+            config,
+            lifecycle,
+            repo_root=repo_root,
+            cancellation=CancellationStore(runs_dir, repo_root=repo_root),
+        )
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"PR #{pr.number} passed independent review and is ready: {pr.url}")
+    _notify_pr_ready(config, issue_number, pr.number)
 
 
 def _read_feedback_file(path: Path) -> str:
@@ -1560,21 +1602,67 @@ def amend(
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"PR #{pr.number} amended and marked ready for review: {pr.url}")
-    _deliver_notification(
-        config,
-        NotificationEvent.PR_READY,
-        "Machinist PR amended",
-        f"Issue #{issue_number} amendment is ready in PR #{pr.number}",
-        issue=issue_number,
-        pr=pr.number,
-    )
+    if config.review.enabled:
+        click.echo(
+            f"PR #{pr.number} amended; independent review is pending. "
+            f"Next: machinist review {issue_number}"
+        )
+    else:
+        click.echo(f"PR #{pr.number} amended and ready for review: {pr.url}")
+        _notify_pr_ready(config, issue_number, pr.number)
 
 
 def _fresh_attempt(claim) -> int | None:
     """Keep the first-run path stable and isolate every later attempt."""
     attempt = getattr(claim, "attempt", 1)
     return attempt if attempt > 1 else None
+
+
+def _run_review_task(
+    issue_number: int,
+    config: MachinistConfig,
+    lifecycle: TaskLifecycle,
+    *,
+    repo_root: Path,
+    cancellation: CancellationStore,
+    github=None,
+):
+    execute = lifecycle.record(issue_number, Phase.EXECUTE)
+    if execute is None or execute.status is not RunStatus.SUCCEEDED:
+        raise LifecycleError(
+            f"issue #{issue_number} has no successful Execute Task Run to review"
+        )
+    github = github or _bound_github_client(config, repo_root=repo_root)
+    return lifecycle.run(
+        issue_number,
+        Phase.REVIEW,
+        lambda claim: run_review_phase(
+            issue_number,
+            config,
+            github=github,
+            harness=_task_harness(
+                config,
+                Phase.REVIEW,
+                issue_number,
+                repo_root / ".machinist/runs",
+            ),
+            workspace=Workspace(repo_root=repo_root, config=config.workspace),
+            execute_evidence=dict(execute.evidence),
+            claim=claim,
+            cancel_check=cancellation.check(issue_number),
+        ),
+    )
+
+
+def _notify_pr_ready(config: MachinistConfig, issue: int, pr: int) -> None:
+    _deliver_notification(
+        config,
+        NotificationEvent.PR_READY,
+        "Machinist PR ready",
+        f"Issue #{issue} implementation is ready in PR #{pr}",
+        issue=issue,
+        pr=pr,
+    )
 
 
 def _deliver_notification(

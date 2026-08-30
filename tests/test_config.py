@@ -277,6 +277,39 @@ def test_phase_harness_overrides_inherit_and_can_clear_legacy_values():
     assert execute.timeout_minutes == 90
 
 
+def test_review_profile_inherits_read_only_timeout_and_instructions(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "REVIEW.md").write_text("Check public compatibility.")
+    config = MachinistConfig.model_validate(
+        {
+            "review": {"enabled": True},
+            "harness": {
+                "name": "claude-code",
+                "spec_timeout_minutes": 8,
+                "review": {"name": "codex", "model": "reviewer"},
+            },
+            "instructions": {"review": {"paths": ["REVIEW.md"]}},
+        }
+    )
+
+    review = config.harness_for("review")
+
+    assert config.review.enabled is True
+    assert review.name is HarnessName.CODEX
+    assert review.model == "reviewer"
+    assert review.spec_timeout_minutes == 8
+    assert config.resolve_instructions("review", repo) == "Check public compatibility."
+
+
+def test_review_defaults_off_for_existing_configuration():
+    config = MachinistConfig()
+
+    assert config.review.enabled is False
+    assert config.instructions.review.paths == []
+    assert config.harness_for("review").name is HarnessName.CLAUDE_CODE
+
+
 def test_null_phase_timeout_inherits_legacy_budget():
     config = MachinistConfig.model_validate(
         {

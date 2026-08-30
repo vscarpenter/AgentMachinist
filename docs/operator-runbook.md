@@ -104,11 +104,13 @@ reported by `queue show`/the watcher.
 ## Observe
 
 `machinist status` shows `awaiting spec`, `awaiting approval`,
-`approval pending`, `approval stale`, `approved`, and `in review`. Local
+`approval pending`, `approval stale`, `approved`, `awaiting review`, and
+`in review`. Local
 outcomes add `spec running`, `spec interrupted`, `spec failed`,
 `spec cancelled`, `spec abandoned`, `spec closed`, `execute running`,
-`execute interrupted`, `execute failed`, `execute cancelled`, and
-`execute abandoned`. A persisted `running` projection without a held Claim is
+`execute interrupted`, `execute failed`, `execute cancelled`,
+`execute abandoned`, `review running`, `review interrupted`, `review failed`,
+`review cancelled`, and `review abandoned`. A persisted `running` projection without a held Claim is
 reported as interrupted. `status`, `runs`, and `inspect` show named stages,
 attempt history, elapsed time, and an exact `Next:` command where recovery is
 available. A `retryable` persistence state projects back to remote eligibility

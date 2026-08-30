@@ -277,7 +277,7 @@ def _effective_harness(
     harness = config.harness_for(phase)
     timeout = (
         harness.spec_timeout_minutes
-        if phase is HarnessPhase.SPEC
+        if phase in {HarnessPhase.SPEC, HarnessPhase.REVIEW}
         else harness.timeout_minutes
     )
     return {

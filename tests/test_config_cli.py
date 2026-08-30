@@ -162,6 +162,13 @@ tests:
             "extra_args": ["--verbose"],
             "timeout_minutes": 45,
         },
+        "review": {
+            "name": "codex",
+            "command": "/opt/codex",
+            "model": "shared-model",
+            "extra_args": ["--verbose"],
+            "timeout_minutes": 7,
+        },
     }
     assert effective["verification"]["gates"] == [
         {

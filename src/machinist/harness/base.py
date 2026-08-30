@@ -1,7 +1,7 @@
 """Base class for coding-harness adapters.
 
 An adapter's job is small on purpose: build the argv that runs its CLI
-headlessly for the two phases. Subprocess mechanics, timeouts, and error
+    headlessly for the pipeline phases. Subprocess mechanics, timeouts, and error
 translation live here so adapters stay one screen long.
 """
 
@@ -85,6 +85,10 @@ class Harness(ABC):
     def implement_argv(self, prompt: str) -> list[str]:
         """Argv that makes the harness edit files headlessly per the prompt."""
 
+    def review_argv(self, prompt: str) -> list[str]:
+        """Argv for independent read-only review; defaults to Spec custody."""
+        return self.spec_argv(prompt)
+
     def version_argv(self) -> list[str]:
         """Read-only argv used by readiness diagnostics."""
         return [self.command, "--version"]
@@ -95,6 +99,8 @@ class Harness(ABC):
             argv = self.spec_argv("machinist compatibility probe")
         elif phase == "execute":
             argv = self.implement_argv("machinist compatibility probe")
+        elif phase == "review":
+            argv = self.review_argv("machinist compatibility probe")
         else:
             raise ValueError(f"unknown harness phase: {phase}")
         return [*argv, "--help"]
@@ -112,6 +118,11 @@ class Harness(ABC):
 
     def implement(self, prompt: str, cwd: Path) -> str:
         return self._run(self.implement_argv(prompt), cwd, self.config.timeout_minutes)
+
+    def review(self, prompt: str, cwd: Path) -> str:
+        return self._run(
+            self.review_argv(prompt), cwd, self.config.spec_timeout_minutes
+        )
 
     def _run(self, argv: list[str], cwd: Path, timeout_minutes: int) -> str:
         try:

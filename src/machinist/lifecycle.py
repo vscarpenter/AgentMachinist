@@ -128,6 +128,7 @@ class _ScopedLifecycleSignals:
 class Phase(str, Enum):
     SPEC = "spec"
     EXECUTE = "execute"
+    REVIEW = "review"
 
 
 class RunStatus(str, Enum):

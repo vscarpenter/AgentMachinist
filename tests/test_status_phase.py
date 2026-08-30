@@ -160,6 +160,24 @@ def test_non_draft_pr_is_in_review():
     assert rows[0].state == "in review"
 
 
+def test_successful_execute_projects_awaiting_review_until_review_runs(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(
+        42,
+        Phase.EXECUTE,
+        lambda claim: claim.checkpoint(push_observed_sha="a" * 40),
+    )
+    github = FakeGitHub(
+        prs=[pr(57, "agent/issue-42", labels=["machinist:approved"])],
+        approvals={57: "a" * 40},
+    )
+    config = MachinistConfig.model_validate({"review": {"enabled": True}})
+
+    row = pipeline_status(config, github, lifecycle=lifecycle)[0]
+
+    assert row.state == "awaiting review"
+
+
 def test_implemented_pr_with_leftover_label_is_in_review_not_approved():
     # After Phase 3 the PR is ready-for-review but still carries the label;
     # draft-ness outranks the label so it must NOT look runnable.

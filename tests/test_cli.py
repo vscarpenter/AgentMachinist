@@ -586,6 +586,7 @@ def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
         *,
         run_spec,
         run_execute,
+        run_review,
         state,
         notify,
         notify_stale,
@@ -634,6 +635,7 @@ def test_two_fresh_watch_invocations_dedupe_the_same_stale_approval(monkeypatch)
         *,
         run_spec,
         run_execute,
+        run_review,
         state,
         notify,
         notify_stale,
@@ -1010,7 +1012,8 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
             "recovery": "fresh",
         }
         assert "pull/57" in result.output
-        assert "ready for review" in result.output.lower()
+        assert "independent review is pending" in result.output.lower()
+        assert "machinist review 42" in result.output
 
 
 def test_run_renders_machinist_errors_without_traceback(monkeypatch):

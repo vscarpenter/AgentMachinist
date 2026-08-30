@@ -96,6 +96,7 @@ class HarnessName(str, Enum):
 class HarnessPhase(str, Enum):
     SPEC = "spec"
     EXECUTE = "execute"
+    REVIEW = "review"
 
 
 # Adapter-owned flags cannot be repeated in extra_args because many CLIs let the
@@ -241,7 +242,9 @@ def reserved_harness_extra_args(
     name: HarnessName, phase: HarnessPhase | str
 ) -> frozenset[str]:
     """Return argv tokens controlled by the named adapter and Phase."""
-    return RESERVED_HARNESS_EXTRA_ARGS[name][HarnessPhase(phase)]
+    resolved = HarnessPhase(phase)
+    custody_phase = HarnessPhase.SPEC if resolved is HarnessPhase.REVIEW else resolved
+    return RESERVED_HARNESS_EXTRA_ARGS[name][custody_phase]
 
 
 def validate_harness_extra_args(
@@ -300,6 +303,7 @@ class HarnessConfig(StrictModel):
     spec_timeout_minutes: int = Field(default=10, ge=1, le=60)
     spec: HarnessPhaseConfig | None = None
     execute: HarnessPhaseConfig | None = None
+    review: HarnessPhaseConfig | None = None
 
     @field_validator("command", "model")
     @classmethod
@@ -308,12 +312,15 @@ class HarnessConfig(StrictModel):
 
     @model_validator(mode="after")
     def _extra_args_preserve_adapter_controls(self) -> "HarnessConfig":
-        if (
-            self.spec is not None
-            and self.spec.timeout_minutes is not None
-            and self.spec.timeout_minutes > 60
-        ):
-            raise ValueError("harness.spec.timeout_minutes cannot exceed 60")
+        for phase_name, profile in (("spec", self.spec), ("review", self.review)):
+            if (
+                profile is not None
+                and profile.timeout_minutes is not None
+                and profile.timeout_minutes > 60
+            ):
+                raise ValueError(
+                    f"harness.{phase_name}.timeout_minutes cannot exceed 60"
+                )
         # The base remains directly consumable by older callers, so validate it
         # for both Phases even when a profile overrides it.
         for phase in HarnessPhase:
@@ -323,7 +330,11 @@ class HarnessConfig(StrictModel):
         return self
 
     def _profile(self, phase: HarnessPhase) -> HarnessPhaseConfig | None:
-        return self.spec if phase is HarnessPhase.SPEC else self.execute
+        if phase is HarnessPhase.SPEC:
+            return self.spec
+        if phase is HarnessPhase.REVIEW:
+            return self.review
+        return self.execute
 
     def _resolved_name_and_args(
         self, phase: HarnessPhase
@@ -359,10 +370,9 @@ class HarnessConfig(StrictModel):
 
         name = inherited("name", self.name) or self.name
         extra_args = inherited("extra_args", self.extra_args)
+        read_only_phase = resolved_phase in {HarnessPhase.SPEC, HarnessPhase.REVIEW}
         base_timeout = (
-            self.spec_timeout_minutes
-            if resolved_phase is HarnessPhase.SPEC
-            else self.timeout_minutes
+            self.spec_timeout_minutes if read_only_phase else self.timeout_minutes
         )
         phase_timeout = inherited("timeout_minutes", base_timeout)
         if phase_timeout is None:
@@ -375,17 +385,14 @@ class HarnessConfig(StrictModel):
             model=inherited("model", self.model),
             extra_args=list(extra_args or []),
             timeout_minutes=(
-                self.timeout_minutes
-                if resolved_phase is HarnessPhase.SPEC
-                else int(phase_timeout)
+                self.timeout_minutes if read_only_phase else int(phase_timeout)
             ),
             spec_timeout_minutes=(
-                int(phase_timeout)
-                if resolved_phase is HarnessPhase.SPEC
-                else self.spec_timeout_minutes
+                int(phase_timeout) if read_only_phase else self.spec_timeout_minutes
             ),
             spec=None,
             execute=None,
+            review=None,
         )
 
 
@@ -468,10 +475,15 @@ class InstructionsConfig(StrictModel):
 
     spec: PhaseInstructionsConfig = Field(default_factory=PhaseInstructionsConfig)
     execute: PhaseInstructionsConfig = Field(default_factory=PhaseInstructionsConfig)
+    review: PhaseInstructionsConfig = Field(default_factory=PhaseInstructionsConfig)
 
     def for_phase(self, phase: HarnessPhase | str) -> PhaseInstructionsConfig:
         resolved_phase = HarnessPhase(phase)
-        return self.spec if resolved_phase is HarnessPhase.SPEC else self.execute
+        if resolved_phase is HarnessPhase.SPEC:
+            return self.spec
+        if resolved_phase is HarnessPhase.REVIEW:
+            return self.review
+        return self.execute
 
     def resolve(self, phase: HarnessPhase | str, repo_root: str | Path) -> str:
         """Read and combine one Phase's safe repository-local instructions."""
@@ -709,6 +721,12 @@ class TestsConfig(StrictModel):
         return value
 
 
+class ReviewConfig(StrictModel):
+    """Independent read-only review before a pull request becomes ready."""
+
+    enabled: bool = False
+
+
 class Weekday(str, Enum):
     MON = "mon"
     TUE = "tue"
@@ -936,6 +954,7 @@ class MachinistConfig(StrictModel):
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
     tests: TestsConfig = Field(default_factory=TestsConfig)
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
     queue: QueueConfig = Field(default_factory=QueueConfig)
     notifications: NotificationConfig = Field(default_factory=NotificationConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
