@@ -16,7 +16,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.10.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.11.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -210,9 +210,19 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-08-30)
+## Current state (2026-09-01)
 
-- v0.10.0 is the current published release. It adds independent Review, guided
+- v0.11.0 is the current release. It makes `doctor` the single first-run health
+  check: a new read-only `task template` check closes the one managed file
+  nothing verified, and every FAIL now prints an exact remediation keyed on a
+  canonical name (`DOCTOR_CHECK_NAMES` in `doctor.py`) rather than matched
+  against rendered text — a new check without a fix fails a test. `init` and
+  `onboard` gained `--yes` (safe defaults *plus* the auto-detected test
+  command); `--no-input` deliberately keeps its stricter contract and still
+  will not convert a detected manifest into a test-gate guarantee. First run
+  now writes a ~20-line `machinist.yaml` that is semantically identical to the
+  packaged 94-line reference, and `--help` is grouped by workflow stage.
+  v0.10.0 added independent Review, guided
   onboarding and rehearsal, Harness plugins with provider-aware CI,
   explain/live status, structured Task intake, and local aggregate reports with
   opt-in OTLP export. Its plugin-capable Harness identifier remains compatible
