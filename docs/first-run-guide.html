@@ -892,17 +892,18 @@
         </div>
         <p>Already authenticated with GitHub and your coding harness? Here is the entire issue-to-tested-PR sequence at a glance.</p>
         <div class="terminal" aria-label="Quick start command block">
-          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist onboard&#10;# Answer the setup questions, review the generated files, then:&#10;machinist doctor --run-gates&#10;machinist sync-labels --check&#10;machinist sync-workflows --check&#10;machinist task template --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;machinist task new --title &quot;Add CSV export&quot; --dispatch&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and request approval explicitly:&#10;machinist approve --issue 42&#10;machinist status&#10;# Implement, verify, then independently review the delivered head:&#10;machinist run 42&#10;machinist review 42">Copy flow</button></div>
+          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist onboard  # or: machinist onboard --yes for hands-free defaults + auto-detected test command&#10;# Review the generated minimal machinist.yaml (~20 lines), then:&#10;machinist doctor --run-gates  # single health check — prints fix for any FAIL&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml&#10;git add -p .github/workflows  # review each hunk&#10;git diff --cached  # verify what will be committed&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;machinist task new --title &quot;Add CSV export&quot; --dispatch&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and request approval explicitly:&#10;machinist approve --issue 42&#10;machinist status&#10;# Implement, verify, then independently review the delivered head:&#10;machinist run 42&#10;machinist review 42">Copy flow</button></div>
           <pre><span class="comment"># 1. Install, then answer the onboarding questions in your repository:</span>
+<span class="comment">#    machinist onboard --yes accepts safe defaults + auto-detected test command</span>
 <span class="prompt">$</span> uv tool install agentmachinist &amp;&amp; machinist onboard
 
-<span class="comment"># 2. Review the generated files; verify:</span>
-<span class="prompt">$</span> machinist doctor --run-gates &amp;&amp; machinist sync-labels --check &amp;&amp; machinist sync-workflows --check &amp;&amp; machinist task template --check
+<span class="comment"># 2. Review the generated minimal machinist.yaml (~20 lines), then verify:</span>
+<span class="prompt">$</span> machinist doctor --run-gates  <span class="comment"># single health check — prints fix for any FAIL</span>
 <span class="prompt">$</span> git status --short
 <span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 <span class="prompt">$</span> git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-<span class="prompt">$</span> git add -p .github/workflows
-<span class="prompt">$</span> git diff --cached
+<span class="prompt">$</span> git add -p .github/workflows  <span class="comment"># review each hunk</span>
+<span class="prompt">$</span> git diff --cached  <span class="comment"># verify what will be committed</span>
 <span class="prompt">$</span> git commit -m "chore: configure AgentMachinist" &amp;&amp; git push
 
 <span class="comment"># 3. Create a linted Task, then generate its draft spec PR:</span>
@@ -1091,30 +1092,24 @@ machinist, version 0.10.0
     <section class="section shell" id="configure">
       <header class="section-head">
         <p class="section-kicker">Station 04 / initialize the project</p>
-        <h2>Four lines deserve your attention.</h2>
-        <p><code>machinist init</code> creates the file — and in a terminal it now asks about each of these choices directly: dispatch mode, managed workflows, harness, test gate, and notifications, each with a one-line explanation and a safe default. Answer them once and the config below is correct on the first write.</p>
+        <h2>Four lines deserve your attention — the rest has safe defaults.</h2>
+        <p><code>machinist onboard</code> (or <code>onboard --yes</code> for hands-free defaults + auto-detected test command) writes a minimal <code>machinist.yaml</code> (~20 lines). In a terminal it asks about each choice below with a one-line explanation and a safe default — answer once and the file is correct on the first write. <code>machinist --help</code> groups commands as Setup / Tasks / Build / Operate daily vs advanced. Errors outside a configured repo now point to <code>onboard</code> and this guide.</p>
       </header>
 
       <div class="config-layout">
         <div class="code-sheet" aria-label="Annotated machinist configuration">
-          <pre><span class="comment"># machinist.yaml</span>
+          <pre><span class="comment"># machinist.yaml — minimal file written by machinist onboard (~20 lines)</span>
 version: 1
 
 harness:
   name: <span class="code-hot">claude-code</span>
-  command: null
-  model: null
-  extra_args: []
-  timeout_minutes: 30
-  spec_timeout_minutes: 10
-  spec: null
-  execute: null
+
+tests:
+  command: <span class="code-hot">"uv run pytest"</span>  <span class="comment"># null when no test command is known</span>
 
 github:
   repo: null
   spec_source: <span class="code-hot">local</span>
-  spec_install: pypi
-  manage_workflows: true
   labels:
     trigger: agent-task
     approved: "machinist:approved"
@@ -1126,8 +1121,8 @@ workspace:
   cleanup: on_success
   branch_prefix: agent/
 
-tests:
-  command: <span class="code-hot">uv run pytest</span></pre>
+review:
+  enabled: true</pre>
         </div>
         <div class="annotations">
           <article class="annotation"><h3>Pick the harness you use</h3><p><code>claude-code</code>, <code>opencode</code>, <code>pi</code>, or <code>codex</code>. Local runs reuse its provider authentication. <code>model</code> is optional. AgentMachinist rejects adapter-owned safety flags in <code>extra_args</code>; keep other additions empty unless you have reviewed the final adapter command.</p></article>
@@ -1138,8 +1133,8 @@ tests:
       <p class="micro-note">This is an abridged first-run configuration. Before dispatch, use <code>machinist config validate</code> and <code>machinist config show</code>. Advanced configuration supports separate Spec/Execute/Review harness profiles, bounded instruction overlays, ordered named verification gates, notifications, local aggregate reporting, opt-in OTLP export, admission budgets, and change limits; the full reference is linked below.</p>
 
       <div class="terminal" style="margin-top: var(--space-6)" aria-label="Initialization and diagnostic commands">
-        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist onboard&#10;# Review machinist.yaml, verification status, and generated files, then:&#10;machinist doctor --run-gates&#10;machinist sync-labels --check&#10;machinist sync-workflows --check&#10;machinist task template --check&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml&#10;git add -p .github/workflows&#10;git diff --cached&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
-        <pre><span class="prompt">$</span> machinist onboard
+        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist onboard  # or: machinist onboard --yes for hands-free defaults + auto-detected test command&#10;# Review minimal machinist.yaml (~20 lines), then:&#10;machinist doctor --run-gates  # single health check — prints fix for any FAIL&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml&#10;git add -p .github/workflows  # review each hunk&#10;git diff --cached  # verify&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
+        <pre><span class="prompt">$</span> machinist onboard  <span class="comment"># or: machinist onboard --yes for hands-free defaults + auto-detected command</span>
 Configuring machinist.yaml — press Enter to accept a [default],
 or rerun with --no-input to skip these questions.
 
@@ -1154,29 +1149,27 @@ Test gate — command that must pass before an implementation PR is
 eligible for independent Review.
 Use detected test command 'uv run pytest'? [Y/n]:
 
-<span class="comment"># Review the generated files, then:</span>
-<span class="prompt">$</span> machinist doctor --run-gates
+<span class="comment"># Review the generated minimal machinist.yaml (~20 lines), then:</span>
+<span class="prompt">$</span> machinist doctor --run-gates  <span class="comment"># single health check — prints fix for any FAIL</span>
 PASS repository               /Users/you/code/your-project
 PASS GitHub authentication    gh auth is active
 PASS harness                  /path/to/claude
 PASS test gate                uv run pytest
 PASS workflows                managed workflows match config
 PASS Task Runs                no failed or abandoned runs
-
+<span class="comment"># only if doctor asks:</span>
 <span class="prompt">$</span> machinist sync-workflows --check
-Managed workflows match machinist.yaml.
 <span class="prompt">$</span> machinist task template --check
-Managed task template matches AgentMachinist.
 
 <span class="comment"># Review every generated file before making setup durable:</span>
 <span class="prompt">$</span> git status --short
 <span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 <span class="prompt">$</span> git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-<span class="prompt">$</span> git add -p .github/workflows
-<span class="prompt">$</span> git diff --cached
+<span class="prompt">$</span> git add -p .github/workflows  <span class="comment"># review each hunk</span>
+<span class="prompt">$</span> git diff --cached  <span class="comment"># verify</span>
 <span class="prompt">$</span> git commit -m "chore: configure AgentMachinist"
 <span class="prompt">$</span> git push</pre>
-        <p class="micro-note"><code>machinist init</code> adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. Flags pre-answer questions and skip them: <code>--spec-source</code>, <code>--harness</code>, <code>--test-cmd</code>, and <code>--notifications</code>; <code>--no-input</code> (or any non-interactive shell) skips every question and keeps safe defaults. A detected test command is only a suggestion unless <code>--test-cmd</code> is explicit. <code>--no-workflows</code> records <code>manage_workflows: false</code> for externally managed workflows; <code>doctor</code> then reports that its managed drift check was intentionally skipped.</p>
+        <p class="micro-note"><code>machinist onboard</code> writes a minimal <code>machinist.yaml</code> (~20 lines; see abridged config above) and adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. <code>doctor --run-gates</code> is the single health check and prints the exact fix for any <code>FAIL</code> — only run the individual <code>--check</code> commands if doctor asks. <code>machinist --help</code> groups commands as Setup / Tasks / Build / Operate daily vs advanced. Flags pre-answer questions and skip them: <code>--spec-source</code>, <code>--harness</code>, <code>--test-cmd</code>, and <code>--notifications</code>; <code>--yes</code> accepts safe defaults and auto-enables the detected test command; <code>--no-input</code> (or any non-interactive shell) also skips questions but needs <code>--test-cmd</code> to enable the gate. Errors outside a configured repo now point to <code>machinist onboard</code> and the guide. <code>--no-workflows</code> records <code>manage_workflows: false</code>; <code>doctor</code> then reports drift checking was intentionally skipped.</p>
       </div>
     </section>
 

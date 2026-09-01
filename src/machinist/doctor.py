@@ -22,6 +22,7 @@ from machinist.harness import get_harness, get_harness_descriptor
 from machinist.lifecycle import RunStatus, TaskLifecycle
 from machinist.observability import build_run_report
 from machinist.process import run_supervised
+from machinist.task_intake import TaskTemplateDriftError, sync_task_template
 from machinist.updates import UpdateCheck, UpdateStatus, check_for_update
 from machinist.verification import (
     VerificationError,
@@ -32,6 +33,124 @@ from machinist.workflows import WorkflowDriftError, expected_workflows, sync_wor
 from machinist.workspace import Workspace, github_repository_target
 
 _COMMAND_TIMEOUT_SECONDS = 10
+
+# Every check name run_doctor can emit. Names whose prefix varies with the
+# configured Harness or Phase are canonicalized to a placeholder form so the
+# fix table below can be keyed exactly instead of by substring matching.
+_STATIC_CHECK_NAMES: tuple[str, ...] = (
+    "git",
+    "gh",
+    "repository",
+    "origin",
+    "repository identity",
+    "GitHub authentication",
+    "GitHub repository",
+    "default branch",
+    "GitHub authorization",
+    "labels",
+    "workspace",
+    "runtime state",
+    "harness",
+    "Spec source",
+    "Actions Spec credential",
+    "test gate",
+    "verification commands",
+    "verification execution",
+    "workflows",
+    "remote workflows",
+    "task template",
+    "Task Runs",
+    "updates",
+)
+_VARIABLE_CHECK_NAMES: tuple[tuple[str, str], ...] = (
+    (" Harness compatibility", "<phase> Harness compatibility"),
+    (" version", "<harness> version"),
+    (" authentication", "<harness> authentication"),
+)
+DOCTOR_CHECK_NAMES: tuple[str, ...] = _STATIC_CHECK_NAMES + tuple(
+    canonical for _, canonical in _VARIABLE_CHECK_NAMES
+)
+
+# One actionable command per canonical check. `machinist doctor` prints these
+# beside each FAIL, so every name above must resolve to a concrete next step.
+_FIX_HINTS: dict[str, str] = {
+    "git": "install Git and make sure it is on PATH",
+    "gh": "install the GitHub CLI (https://cli.github.com) and make sure it is on PATH",
+    "repository": "run machinist from inside the Git repository you are configuring",
+    "origin": "add the GitHub remote: git remote add origin <url>",
+    "repository identity": (
+        "align github.repo in machinist.yaml with 'git remote get-url origin'"
+    ),
+    "GitHub authentication": "gh auth login",
+    "GitHub repository": (
+        "confirm the repository exists and your account can read it: "
+        "gh repo view <owner/repo>"
+    ),
+    "default branch": (
+        "give the repository a default branch, then push it: git push -u origin main"
+    ),
+    "GitHub authorization": (
+        "ask a repository admin for write access; minting approval evidence "
+        "requires write or admin"
+    ),
+    "labels": "machinist sync-labels --apply",
+    "workspace": (
+        "point workspace.root in machinist.yaml at a directory outside this repository"
+    ),
+    "runtime state": "add /.machinist/runs/ to .gitignore",
+    "harness": (
+        "install the configured harness, or change harness.name in machinist.yaml"
+    ),
+    "Spec source": (
+        "choose a harness with a hosted Spec CI profile, or set "
+        "github.spec_source: local in machinist.yaml"
+    ),
+    "Actions Spec credential": (
+        "gh secret set <NAME> using the secret the selected Spec harness declares"
+    ),
+    "test gate": "machinist config set tests.command 'uv run pytest'",
+    "verification commands": (
+        "make every configured gate command available on PATH, or correct it under "
+        "verification.gates in machinist.yaml"
+    ),
+    "verification execution": (
+        "fix the failing gate locally, then rerun machinist doctor --run-gates"
+    ),
+    "workflows": "machinist sync-workflows",
+    "remote workflows": (
+        "commit and push .github/workflows/ so GitHub can record SHA-bound approval"
+    ),
+    "task template": "machinist task template --write",
+    "Task Runs": (
+        "machinist runs to inspect, then machinist retry <issue> or machinist clean"
+    ),
+    "updates": "run machinist update-check and use the upgrade command it prints",
+    "<phase> Harness compatibility": (
+        "check the harness accepts the phase arguments AgentMachinist builds; "
+        "see docs/harnesses.md"
+    ),
+    "<harness> version": (
+        "reinstall or upgrade the configured harness so it reports a version"
+    ),
+    "<harness> authentication": (
+        "sign in to the configured harness (for example 'claude login')"
+    ),
+}
+
+
+def canonical_check_name(name: str) -> str:
+    """Fold a rendered check name onto the stable key used by the fix table."""
+    if name in _STATIC_CHECK_NAMES:
+        return name
+    for suffix, canonical in _VARIABLE_CHECK_NAMES:
+        if name.endswith(suffix):
+            return canonical
+    return name
+
+
+def fix_hint_for_check_name(name: str) -> str | None:
+    """Return the one-line remediation for a check, or None when unmapped."""
+    return _FIX_HINTS.get(canonical_check_name(name))
 
 
 class CheckLevel(str, Enum):
@@ -182,6 +301,23 @@ def _workspace_check(root: Path, repo_root: Path) -> DoctorCheck:
         CheckLevel.PASS,
         "workspace",
         f"{workspace_root} is safely contained; existing parent {existing} is writable",
+    )
+
+
+def _task_template_check(root: Path) -> DoctorCheck:
+    """Report sealed-issue-form drift. Installed even when workflows are external."""
+    try:
+        sync_task_template(root, check=True)
+    except TaskTemplateDriftError as exc:
+        return DoctorCheck(CheckLevel.FAIL, "task template", str(exc))
+    except Exception as exc:  # noqa: BLE001 - diagnostics must isolate read failures
+        return DoctorCheck(
+            CheckLevel.FAIL,
+            "task template",
+            f"cannot read the managed task template: {type(exc).__name__}: {exc}",
+        )
+    return DoctorCheck(
+        CheckLevel.PASS, "task template", "sealed issue form matches this release"
     )
 
 
@@ -1154,6 +1290,7 @@ def run_doctor(
                 )
             )
 
+    checks.append(_task_template_check(root))
     checks.append(_task_runs_check(root))
     checks.append(_update_check(installed_version, update_probe))
 

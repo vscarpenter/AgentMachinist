@@ -19,3 +19,6 @@ build/
 
 # Machinist runtime state (consumer repos keep specs; this repo doesn't run itself)
 .machinist/runs/
+
+# Local media/authoring scratch (contains large assets and virtualenvs)
+videos/

@@ -46,19 +46,22 @@ never appears in `update-check --json`.
 cd your-repository
 machinist onboard
 # Answer the setup questions, review the generated files, then:
-machinist doctor --run-gates
-machinist sync-labels --check
-machinist sync-workflows --check
-machinist task template --check
+machinist doctor --run-gates   # one command checks config, labels, workflows, gates
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows
-git diff --cached
+git add -p .github/workflows   # review each hunk
+git diff --cached              # verify what will be committed
 git commit -m "chore: configure AgentMachinist"
 git push
 machinist watch
 ```
+
+`machinist doctor --run-gates` is the single health check — it already verifies
+labels, workflow drift, the sealed issue form, and verification gates, and prints
+the exact fix for any `FAIL`. Only run the individual
+`machinist sync-labels --check`, `machinist sync-workflows --check`, or
+`machinist task template --check` if doctor asks for them.
 
 Use `machinist onboard --setup-pr` when you want AgentMachinist to put only its
 managed setup files on a pushed `chore/agentmachinist-setup` branch and open a
@@ -67,13 +70,17 @@ recovery command. Before creating a real issue, run `machinist rehearse` for a
 no-model, no-API controller simulation; `--harness` is the explicit opt-in to
 invoke the configured providers inside the disposable repository.
 
-In a terminal, `machinist init` asks a short set of setup questions — dispatch
-mode, managed workflows, harness, test gate, and notifications — each with a
-one-line explanation and a safe default. Flags such as `--harness`,
-`--test-cmd`, `--spec-source`, and `--notifications` pre-answer their
-questions; `--no-input` (or a non-interactive shell) skips the questions and
-uses safe defaults. A detected test command is reported as a suggestion but is
-not enabled non-interactively unless you pass `--test-cmd`.
+In a terminal, `machinist onboard` (the recommended entry point) asks a short
+set of setup questions — dispatch mode, managed workflows, harness, test gate,
+and notifications — each with a one-line explanation and a safe default. Flags
+such as `--harness`, `--test-cmd`, `--spec-source`, and `--notifications`
+pre-answer their questions; `--yes` accepts all safe defaults and auto-enables the
+detected test command for hands-free quickstart; `--no-input` (or a non-interactive
+shell) also skips questions but does not auto-enable the test command unless you
+pass `--test-cmd`. Errors outside a configured repo now point you to `machinist
+onboard` and the first-run guide. `machinist init` is the same setup step without
+the guided receipt — prefer `onboard` for new repositories. `machinist --help`
+groups commands as `Setup`, `Tasks`, `Build`, and `Operate — daily` vs `Operate — advanced`.
 
 Review the staged diff before committing. The managed Task form is installed
 even when Actions workflows are externally managed. Managed workflows must be
@@ -135,10 +142,10 @@ PR.
 
 | Command | Purpose |
 | --- | --- |
-| `machinist init` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--no-input` skips them). |
-| `machinist onboard [--setup-pr]` | Run guided setup in place or deliver only managed setup files on a draft PR. |
+| `machinist init [--yes]` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--yes` hands-free, `--no-input` skips without auto-enabling test command). |
+| `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
 | `machinist rehearse [--harness]` | Simulate the lifecycle in a disposable local repository; model/API use is opt-in. |
-| `machinist doctor` | Run read-only setup and workflow-drift diagnostics. |
+| `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |

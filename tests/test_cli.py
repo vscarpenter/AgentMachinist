@@ -3,13 +3,21 @@
 import json
 import subprocess
 from contextlib import contextmanager
+from importlib.resources import files
 from pathlib import Path
 
+import click
 import pytest
+import yaml
 from click.testing import CliRunner
 
-from machinist.cli import _workflow_drift_notice, main
-from machinist.config import HarnessName, load_config
+from machinist.cli import (
+    _COMMAND_GROUPS,
+    _render_init_config,
+    _workflow_drift_notice,
+    main,
+)
+from machinist.config import HarnessName, MachinistConfig, load_config
 from machinist.workflows import WorkflowDriftError
 
 _BaseCliRunner = CliRunner
@@ -2946,3 +2954,109 @@ def test_watch_warns_when_managed_workflows_drift(monkeypatch):
         result = runner.invoke(main, ["watch", "--once"])
 
     assert "sync-workflows" in result.output
+
+
+def test_rendered_init_config_is_semantically_identical_to_the_reference_template():
+    """The minimal file must differ from the packaged reference only by inputs."""
+    reference = MachinistConfig.model_validate(
+        yaml.safe_load((files("machinist") / "templates/machinist.yaml").read_text())
+    )
+    rendered = MachinistConfig.model_validate(
+        yaml.safe_load(
+            _render_init_config(
+                harness_name=None,
+                test_command=None,
+                manage_workflows=True,
+                spec_source=None,
+            )
+        )
+    )
+
+    assert rendered.model_dump(mode="json") == reference.model_dump(mode="json")
+
+
+def test_rendered_init_config_omits_manage_workflows_only_when_default():
+    enabled = _render_init_config(
+        harness_name=None, test_command=None, manage_workflows=True, spec_source=None
+    )
+    disabled = _render_init_config(
+        harness_name=None, test_command=None, manage_workflows=False, spec_source=None
+    )
+
+    assert "manage_workflows" not in enabled
+    assert "manage_workflows: false" in disabled
+    assert (
+        MachinistConfig.model_validate(yaml.safe_load(disabled)).github.manage_workflows
+        is False
+    )
+
+
+def test_init_yes_enables_the_detected_test_command():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text(
+            '[project]\nname = "x"\nversion = "0.1"\n'
+            '[dependency-groups]\ndev = ["pytest"]\n'
+        )
+
+        result = runner.invoke(main, ["init", "--no-workflows", "--yes"])
+
+        assert result.exit_code == 0, result.output
+        assert load_config(Path("machinist.yaml")).tests.command == "python -m pytest"
+
+
+def test_init_no_input_still_refuses_to_enable_a_merely_detected_command():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("pyproject.toml").write_text(
+            '[project]\nname = "x"\nversion = "0.1"\n'
+            '[dependency-groups]\ndev = ["pytest"]\n'
+        )
+
+        result = runner.invoke(main, ["init", "--no-workflows", "--no-input"])
+
+        assert result.exit_code == 0, result.output
+        assert load_config(Path("machinist.yaml")).tests.command is None
+        assert "not enabled" in result.output
+
+
+def test_init_receipt_omits_the_workflow_stage_when_workflows_are_external():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["init", "--no-workflows", "--yes"])
+
+        assert result.exit_code == 0, result.output
+        assert "git add machinist.yaml" in result.output
+        assert ".github/workflows" not in result.output
+
+
+def test_help_groups_every_registered_command_by_workflow_stage():
+    grouped = {name for _, members in _COMMAND_GROUPS for name in members}
+    registered = set(main.commands)
+
+    assert registered - grouped == set(), "ungrouped command(s) fall into 'Other'"
+    assert grouped - registered == set(), "grouped name(s) match no command"
+
+
+def test_help_hides_hidden_commands_like_click_does():
+    hidden = click.Command("secret-command", hidden=True, help="hidden")
+    main.add_command(hidden)
+    try:
+        output = CliRunner().invoke(main, ["--help"]).output
+    finally:
+        main.commands.pop("secret-command")
+
+    assert "secret-command" not in output
+
+
+def test_doctor_prints_the_exact_fix_for_each_failing_check():
+    runner = _GitCliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows", "--yes"])
+        Path(".github/ISSUE_TEMPLATE/agentmachinist-task.yml").unlink()
+
+        result = runner.invoke(main, ["doctor"])
+
+        assert result.exit_code == 1
+        assert "→ fix (task template): machinist task template --write" in result.output
+        assert "see 'machinist doctor" not in result.output

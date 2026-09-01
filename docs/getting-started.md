@@ -96,8 +96,9 @@ Harness process.
 `machinist rehearse --harness` is the explicit opt-in to run configured
 profiles in the disposable repository.
 
-In a terminal, `init` walks you through the choices that matter on the first
-run, each with a one-line explanation and a safe default:
+In a terminal, `onboard` (recommended) walks you through the choices that matter on the first
+run, each with a one-line explanation and a safe default — `init` is the same
+setup step without the guided receipt:
 
 - **Dispatch mode** — `local` (the `machinist watch` daemon runs the Spec
   phase on your machine) or `github-actions` (CI runs it; requires an
@@ -113,10 +114,13 @@ run, each with a one-line explanation and a safe default:
 - **Notifications** — failures only, all key events, or none.
 
 Flags pre-answer their questions and skip them: `--spec-source`, `--harness`,
-`--test-cmd`, `--workflows/--no-workflows`, and `--notifications`. Passing
-`--no-input`, or running without a terminal (CI, pipes), skips every question
-and uses safe defaults. Manifest detection may print a test-command suggestion,
-but non-interactive setup does not enable it unless `--test-cmd` is explicit.
+`--test-cmd`, `--workflows/--no-workflows`, and `--notifications`. For hands-free
+quickstart, use `machinist onboard --yes` (or `init --yes`) — it accepts all safe
+defaults and auto-enables the detected test command. Passing `--no-input`, or
+running without a terminal (CI, pipes), skips every question and uses safe
+defaults but does not auto-enable the test command unless `--test-cmd` is
+explicit or `--yes` is used. Run `machinist --help` to see commands grouped as
+`Setup`, `Tasks`, `Build`, and `Operate — daily` vs `Operate — advanced`.
 
 `--no-workflows` is the explicit externally-managed mode. It writes
 `github.manage_workflows: false`, skips workflow generation, and makes
@@ -136,31 +140,41 @@ Then verify the installation without changing it:
 
 ```sh
 machinist doctor --run-gates
-machinist sync-labels --check
-machinist sync-workflows --check
-machinist task template --check
 ```
 
-Resolve every `FAIL`. Treat a warning that no verification gates are configured
-as an explicit decision, not a harmless default.
+`doctor --run-gates` is the single health check — it verifies config, labels,
+workflow drift, the sealed issue form, and verification gates, and prints the
+exact fix for any `FAIL` (e.g. `machinist sync-labels --check`,
+`machinist sync-workflows --check`, or `machinist task template --check` only if
+doctor asks). Resolve every `FAIL`. Treat a warning that no verification gates
+are configured as an explicit decision, not a harmless default.
 
 Review and persist the setup before the first task. The approval workflow must
-exist on GitHub before a comment or label can record SHA-bound approval:
+exist on GitHub before a comment or label can record SHA-bound approval. If you
+ran outside a configured repo, errors now point you to `machinist onboard` and
+the visual guide at https://agentmachinist.vinny.dev/first-run-guide.html:
 
 ```sh
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows
-git diff --cached
+git add -p .github/workflows   # review each hunk
+git diff --cached              # verify what will be committed
 git commit -m "chore: configure AgentMachinist"
 git push
+```
+
+Or skip the prompts entirely:
+
+```sh
+machinist onboard --yes   # accepts safe defaults and auto-enables detected test command
 ```
 
 If your repository already ignored `.machinist/runs/`, the initializer leaves
 that rule unchanged. Omit an unchanged `.gitignore` from the staged files. Do
 not commit anything until the staged diff matches the configuration you intend
-to run.
+to run. Run `machinist --help` to see setup, task, build, and daily vs advanced
+operate commands grouped by workflow.
 
 ## Your first agent task
 
@@ -308,6 +322,40 @@ or `GEMINI_API_KEY`). `github.spec_secret_env` overrides the secret name, not
 its value. A plugin without a CI Spec profile must use local dispatch.
 
 ## Configuration reference
+
+What `machinist onboard` writes to disk is intentionally minimal — about 20 lines:
+
+```yaml
+# AgentMachinist configuration
+# See docs/getting-started.md for all options.
+version: 1
+
+harness:
+  name: claude-code
+
+tests:
+  command: null  # or "uv run pytest" when detected / --test-cmd is used
+
+github:
+  repo: null
+  spec_source: local
+  labels:
+    trigger: agent-task
+    approved: "machinist:approved"
+  poll_interval_seconds: 60
+
+workspace:
+  root: ~/.machinist/workspaces
+  strategy: worktree
+  cleanup: on_success
+  branch_prefix: agent/
+
+review:
+  enabled: true
+```
+
+`machinist config show` renders the effective config with all defaults. The full
+reference below shows every key you can set — unknown keys fail validation:
 
 ```yaml
 version: 1
