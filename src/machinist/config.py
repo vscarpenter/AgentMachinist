@@ -1087,7 +1087,13 @@ def config_json_schema() -> dict[str, Any]:
 def load_config(path: str | Path = CONFIG_FILENAME) -> MachinistConfig:
     path = Path(path)
     if not path.exists():
-        raise ConfigError(f"{path} not found. Run 'machinist init' first.")
+        raise ConfigError(
+            f"{path} not found. This repo is not configured yet. "
+            "Run 'machinist onboard' (recommended) or 'machinist onboard --setup-pr' on GitHub "
+            "— fallback: 'machinist init'. "
+            "After setup, verify with 'machinist doctor --run-gates'. "
+            "Guide: https://agentmachinist.vinny.dev/first-run-guide.html"
+        )
     try:
         text = read_config_text(path)
     except UnicodeError as exc:

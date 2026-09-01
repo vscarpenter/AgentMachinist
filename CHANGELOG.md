@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Add a `task template` check to `machinist doctor`. The sealed issue form is
+  installed even when Actions workflows are externally managed, but nothing
+  reported drift in it outside an explicit `machinist task template --check`.
+- Print an exact remediation beside every failing `doctor` check. Hints are
+  keyed on a canonical check name (`DOCTOR_CHECK_NAMES`) instead of matched
+  against rendered text, so a new check without a fix fails a test rather than
+  degrading to generic advice.
+- Add `--yes` to `machinist init` and `machinist onboard`: skip the prompts and
+  accept safe defaults *and* the auto-detected test command. `--no-input`
+  keeps its existing, deliberately more conservative behavior — it never
+  converts a detected manifest into a test-gate guarantee without `--test-cmd`.
+- Write a minimal `machinist.yaml` (about 20 lines) on first run instead of the
+  94-line commented reference. The result is semantically identical: every
+  omitted key matches its schema default, and the full reference remains in
+  `docs/getting-started.md` and the packaged template.
+- Group `machinist --help` by workflow stage (Setup, Tasks, Build, Operate) and
+  point setup errors at `machinist onboard` and the first-run guide.
+- Omit the `.github/workflows` staging line from the setup receipt when
+  `--no-workflows` selected externally managed workflows.
+
 ## 0.10.0 — 2026-08-30
 
 - Preserve the declared Pydantic 2.7 minimum by expressing plugin-capable

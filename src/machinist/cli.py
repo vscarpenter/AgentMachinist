@@ -11,7 +11,6 @@ import time
 import tomllib
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
-from importlib.resources import files
 from pathlib import Path
 
 import click
@@ -44,7 +43,12 @@ from machinist.config_cli import (
 from machinist.config_cli import (
     write_schema as write_config_schema,
 )
-from machinist.doctor import run_doctor
+from machinist.doctor import (
+    CheckLevel,
+    DoctorReport,
+    fix_hint_for_check_name,
+    run_doctor,
+)
 from machinist.explain import TaskExplanation, explain_task
 from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
@@ -124,7 +128,6 @@ from machinist.workflows import (
 from machinist.workflows import sync_workflows as project_workflows
 from machinist.workspace import Workspace, WorkspaceError
 
-_TEMPLATES = files("machinist") / "templates"
 _LABEL_COLORS = {"trigger": "1d76db", "approved": "0e8a16"}
 _RUNTIME_IGNORE = "/.machinist/runs/"
 _SUBPROCESS_TIMEOUT_SECONDS = 30
@@ -241,7 +244,10 @@ def _print_init_receipt(
     if not gates:
         command = suggested_test_command or "<your test command>"
         click.echo(
-            f"  {step}. Configure a required gate: machinist init --force --test-cmd {json.dumps(command)}"
+            f"  {step}. Configure a required gate: machinist config set tests.command {json.dumps(command)}"
+        )
+        click.echo(
+            f"     (or: machinist init --force --test-cmd {json.dumps(command)})"
         )
         step += 1
     if not labels_ready:
@@ -260,11 +266,22 @@ def _print_init_receipt(
             f"  {step}. Configure CI authentication: gh secret set {secret_name}"
         )
         step += 1
+    # Collapse the old 4-check preflight into a single doctor invocation; doctor
+    # covers labels, workflow drift, the sealed task template, and the gates.
     click.echo(
-        f"  {step}. Review machinist.yaml, then commit and push the generated files."
+        f"  {step}. Verify setup (one command checks everything): "
+        "machinist doctor --run-gates"
     )
     step += 1
-    click.echo(f"  {step}. Prove readiness: machinist doctor --run-gates")
+    click.echo(f"  {step}. Commit the generated files (copy-paste):")
+    click.echo("       git status --short")
+    click.echo("       git add machinist.yaml .machinist/specs/.gitkeep .gitignore")
+    click.echo("       git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml")
+    if config.github.manage_workflows:
+        click.echo("       git add -p .github/workflows   # review each hunk")
+    click.echo("       git diff --cached              # verify what will be committed")
+    click.echo('       git commit -m "chore: configure AgentMachinist"')
+    click.echo("       git push")
     step += 1
     click.echo(
         f"  {step}. Start dispatch: machinist watch  (or, on macOS, machinist service install)"
@@ -276,6 +293,10 @@ def _print_init_receipt(
     click.echo(
         f"     Or lint an existing issue before applying {trigger!r}: "
         "machinist task lint <issue>"
+    )
+    click.echo("")
+    click.echo(
+        "  Visual walkthrough: https://agentmachinist.vinny.dev/first-run-guide.html"
     )
 
 
@@ -370,41 +391,60 @@ def _render_init_config(
     notification_backend: str | None = None,
     notification_events: list[str] | None = None,
 ) -> str:
-    """Render and validate the commented template before replacing any config."""
-    text = (_TEMPLATES / "machinist.yaml").read_text()
-    if harness_name:
-        text = text.replace("name: claude-code", f"name: {harness_name}", 1)
-    if test_command:
-        # JSON string syntax is a valid YAML scalar and safely preserves ': ',
-        # '#', quotes, backslashes, and newlines from a shell command.  The
-        # replacement spans the whole template line so its example comment
-        # does not survive next to the real command.
-        text, replaced = re.subn(
-            r"tests:\n  command: null[^\n]*",
-            lambda _: f"tests:\n  command: {json.dumps(test_command)}",
-            text,
-            count=1,
-        )
-        if not replaced:
-            raise click.ClickException(
-                "packaged machinist.yaml template has no legacy tests.command field"
-            )
-    if spec_source:
-        text = text.replace("spec_source: local", f"spec_source: {spec_source}", 1)
-    if notification_backend:
-        text = text.replace("backend: desktop", f"backend: {notification_backend}", 1)
-    if notification_events:
-        text = text.replace(
-            "events: [failure]",
-            f"events: [{', '.join(notification_events)}]",
-            1,
-        )
-    if "manage_workflows:" in text:
-        text = text.replace(
-            "manage_workflows: true",
-            f"manage_workflows: {'true' if manage_workflows else 'false'}",
-            1,
-        )
+    """Render and validate a minimal first-run config.
+
+    The full 94-line reference stays in src/machinist/templates/machinist.yaml
+    and docs/getting-started.md; the file written to disk is intentionally
+    minimal (~18 lines) covering only essential keys.
+    """
+    harness = harness_name or "claude-code"
+    spec = spec_source or "local"
+    # JSON string syntax is a valid YAML scalar and safely preserves ': ',
+    # '#', quotes, backslashes, and newlines from a shell command.
+    command_value = json.dumps(test_command) if test_command else "null"
+    lines: list[str] = [
+        "# AgentMachinist configuration",
+        "# See docs/getting-started.md for all options.",
+        "version: 1",
+        "",
+        "harness:",
+        f"  name: {harness}",
+        "",
+        "tests:",
+        f"  command: {command_value}",
+        "",
+        "github:",
+        "  repo: null",
+        f"  spec_source: {spec}",
+    ]
+    # Only emit manage_workflows when it diverges from the default (true).
+    if not manage_workflows:
+        lines.append("  manage_workflows: false")
+    lines.extend(
+        [
+            "  labels:",
+            "    trigger: agent-task",
+            '    approved: "machinist:approved"',
+            "  poll_interval_seconds: 60",
+            "",
+            "workspace:",
+            "  root: ~/.machinist/workspaces",
+            "  strategy: worktree",
+            "  cleanup: on_success",
+            "  branch_prefix: agent/",
+            "",
+            "review:",
+            "  enabled: true",
+        ]
+    )
+    # Notifications are advanced; include only when explicitly configured.
+    if notification_backend is not None or notification_events is not None:
+        lines.extend(["", "notifications:"])
+        if notification_backend is not None:
+            lines.append(f"  backend: {notification_backend}")
+        if notification_events is not None:
+            lines.append(f"  events: [{', '.join(notification_events)}]")
+    text = "\n".join(lines) + "\n"
     try:
         MachinistConfig.model_validate(strict_yaml_load(text) or {})
     except (yaml.YAMLError, ValidationError) as exc:
@@ -428,7 +468,13 @@ def _load_setup_config(root: Path) -> MachinistConfig:
     relative = Path("machinist.yaml")
     text = read_managed_text(root, relative, max_bytes=MAX_CONFIG_BYTES)
     if text is None:
-        raise ConfigError("machinist.yaml not found. Run 'machinist init' first.")
+        raise ConfigError(
+            "machinist.yaml not found. This repo is not configured yet. "
+            "Run 'machinist onboard' (recommended) or 'machinist onboard --setup-pr' on GitHub "
+            "— fallback: 'machinist init'. "
+            "After setup, verify with 'machinist doctor --run-gates'. "
+            "Guide: https://agentmachinist.vinny.dev/first-run-guide.html"
+        )
     try:
         data = strict_yaml_load(text)
     except yaml.YAMLError as exc:
@@ -461,10 +507,93 @@ _MACHINIST_ERRORS = (
 )
 
 
-@click.group()
+_COMMAND_GROUPS: list[tuple[str, list[str]]] = [
+    (
+        "Setup  — first run & health",
+        [
+            "onboard",
+            "init",
+            "doctor",
+            "rehearse",
+            "sync-labels",
+            "sync-workflows",
+            "update-check",
+        ],
+    ),
+    (
+        "Tasks  — create and approve work",
+        ["task", "spec", "approve"],
+    ),
+    (
+        "Build  — implement and review",
+        ["run", "review", "amend", "retry", "cancel"],
+    ),
+    (
+        "Operate — daily",
+        ["watch", "status"],
+    ),
+    (
+        "Operate — advanced",
+        [
+            "queue",
+            "service",
+            "explain",
+            "inspect",
+            "report",
+            "runs",
+            "config",
+            "clean",
+            "repo",
+        ],
+    ),
+]
+
+
+class MachinistGroup(click.Group):
+    """Render top-level help in workflow order instead of alphabetically."""
+
+    def format_commands(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
+        # Show commands grouped by workflow phase so the onboarding path is obvious.
+        # Hidden commands are filtered exactly as click.Group.format_commands does.
+        visible = {
+            name: command
+            for name in self.list_commands(ctx)
+            if (command := self.get_command(ctx, name)) is not None
+            and not command.hidden
+        }
+        if not visible:
+            return
+        # Match Click's spacing: short help is truncated to the remaining width.
+        limit = formatter.width - 6 - max(len(name) for name in visible)
+
+        def section(label: str, names: list[str]) -> None:
+            rows = [
+                (name, visible[name].get_short_help_str(limit))
+                for name in names
+                if name in visible
+            ]
+            if rows:
+                with formatter.section(label):
+                    formatter.write_dl(rows)
+
+        # Declaration order inside each group is the workflow order, not alphabetical.
+        for label, members in _COMMAND_GROUPS:
+            section(label, members)
+        grouped = {name for _, members in _COMMAND_GROUPS for name in members}
+        section("Other", sorted(set(visible) - grouped))
+
+
+@click.group(cls=MachinistGroup)
 @click.version_option(package_name="agentmachinist")
 def main() -> None:
-    """AgentMachinist: spec, approve, and execute GitHub issues with local coding agents."""
+    """AgentMachinist: spec, approve, and execute GitHub issues with local coding agents.
+
+    Start with 'machinist onboard' — it creates machinist.yaml, workflows, and
+    labels, then prints the exact next steps. See
+    https://agentmachinist.vinny.dev/first-run-guide.html for a visual walkthrough.
+    """
 
 
 @main.command()
@@ -473,32 +602,37 @@ def main() -> None:
     "--workflows/--no-workflows",
     "install_workflows",
     default=None,
-    help="Install the GitHub Actions workflow templates.",
+    help="Install managed GitHub workflows (approval + optional CI dispatch).",
 )
 @click.option(
     "--harness",
     "harness_name",
     type=click.Choice([h.value for h in HarnessName]),
-    help="Coding harness to configure (default: claude-code).",
+    help="Coding harness to use (default: claude-code). Managed CI installs the selected harness.",
 )
 @click.option(
     "--test-cmd",
-    help="Test command to run for the implementation test gate.",
+    help="Test command that must pass before a PR is marked ready (e.g. 'uv run pytest').",
 )
 @click.option(
     "--spec-source",
     type=click.Choice(["local", "github-actions"]),
-    help="Who runs the Spec phase: the local watch daemon or GitHub Actions CI.",
+    help="Who generates specs: 'local' via machinist watch, or 'github-actions' via CI.",
 )
 @click.option(
     "--notifications",
     type=click.Choice(["desktop", "disabled"]),
-    help="Desktop notification backend for pipeline events.",
+    help="Desktop notification backend.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Skip prompts and use safe defaults plus auto-detected test command (hands-free quickstart). Implies --no-input.",
 )
 @click.option(
     "--no-input",
     is_flag=True,
-    help="Skip interactive questions; use explicit flags and safe suggestions.",
+    help="Skip prompts; use flags and safe defaults (for CI or scripts). Use --yes to also auto-enable the detected test command.",
 )
 def init(
     force: bool,
@@ -508,8 +642,13 @@ def init(
     spec_source: str | None = None,
     notifications: str | None = None,
     no_input: bool = False,
+    yes: bool = False,
 ) -> None:
-    """Set up machinist.yaml, .machinist/, and GitHub workflows in this repository."""
+    """Set up machinist.yaml, .machinist/, and GitHub workflows in this repository.
+
+    Prefer 'machinist onboard' for new repositories — it wraps this command
+    with a guided receipt and an optional reviewable draft PR.
+    """
     repo_root = _repository_root(Path.cwd())
     config_relative = Path("machinist.yaml")
     try:
@@ -536,7 +675,7 @@ def init(
         )
 
     detected_test_cmd = _detect_test_command(repo_root)
-    interactive = not no_input and _stdin_is_interactive()
+    interactive = not no_input and not yes and _stdin_is_interactive()
     if interactive:
         answers = run_init_wizard(
             detected_test_command=detected_test_cmd,
@@ -547,12 +686,15 @@ def init(
             notifications=notifications,
         )
     else:
+        # --no-input skips prompts but intentionally does NOT enable auto-detected
+        # test command. --yes implies --no-input plus auto-enable detected command.
+        effective_test_cmd = test_cmd
+        if yes and effective_test_cmd is None:
+            effective_test_cmd = detected_test_cmd
         answers = InitAnswers(
             spec_source=spec_source,
             harness_name=harness_name,
-            # Detection is a suggestion, not proof. Non-interactive setup must
-            # not silently convert a manifest into a passing-test guarantee.
-            test_command=test_cmd,
+            test_command=effective_test_cmd,
             install_workflows=True if install_workflows is None else install_workflows,
             notification_backend=notifications,
             notification_events=None,
@@ -578,7 +720,7 @@ def init(
     except (ManagedPathError, WorkflowDriftError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo("wrote machinist.yaml")
-    if not interactive and detected_test_cmd and not test_cmd:
+    if not interactive and detected_test_cmd and not test_cmd and not yes:
         click.echo(
             f"suggested test runner (not enabled): '{detected_test_cmd}'; "
             "confirm it with --test-cmd"
@@ -726,16 +868,44 @@ def _print_task_explanation(result: TaskExplanation) -> None:
 @click.option(
     "--setup-pr",
     is_flag=True,
-    help="Deliver generated setup files on a pushed draft pull request.",
+    help="Create a draft PR with setup files for team review (recommended on GitHub).",
 )
-@click.option("--workflows/--no-workflows", "install_workflows", default=None)
 @click.option(
-    "--harness", "harness_name", type=click.Choice([h.value for h in HarnessName])
+    "--workflows/--no-workflows",
+    "install_workflows",
+    default=None,
+    help="Install managed GitHub workflows (approval + optional CI dispatch).",
 )
-@click.option("--test-cmd")
-@click.option("--spec-source", type=click.Choice(["local", "github-actions"]))
-@click.option("--notifications", type=click.Choice(["desktop", "disabled"]))
-@click.option("--no-input", is_flag=True)
+@click.option(
+    "--harness",
+    "harness_name",
+    type=click.Choice([h.value for h in HarnessName]),
+    help="Coding harness to use (default: claude-code).",
+)
+@click.option(
+    "--test-cmd",
+    help="Test command that must pass before a PR is marked ready (e.g. 'uv run pytest').",
+)
+@click.option(
+    "--spec-source",
+    type=click.Choice(["local", "github-actions"]),
+    help="Who generates specs: 'local' via machinist watch, or 'github-actions' via CI.",
+)
+@click.option(
+    "--notifications",
+    type=click.Choice(["desktop", "disabled"]),
+    help="Desktop notification backend.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Skip prompts and use safe defaults plus auto-detected test command (hands-free quickstart). Implies --no-input.",
+)
+@click.option(
+    "--no-input",
+    is_flag=True,
+    help="Skip prompts; use flags and safe defaults (for CI or scripts). Use --yes to also auto-enable the detected test command.",
+)
 @click.pass_context
 def onboard(
     ctx: click.Context,
@@ -746,8 +916,20 @@ def onboard(
     spec_source: str | None,
     notifications: str | None,
     no_input: bool,
+    yes: bool = False,
 ) -> None:
-    """Guide first-run setup, optionally through a reviewable draft PR."""
+    """Set up this repository for AgentMachinist (recommended first command).
+
+    Creates machinist.yaml, .machinist/specs/, the sealed task issue form,
+    and managed GitHub workflows/labels. In a terminal it asks a few
+    questions (dispatch mode, harness, test gate) with safe defaults — use
+    flags or --no-input to pre-answer.
+
+    Prefer 'machinist onboard --setup-pr' when setup should be reviewed
+    as a draft PR rather than committed directly.
+
+    Visual walkthrough: https://agentmachinist.vinny.dev/first-run-guide.html
+    """
     arguments = {
         "force": False,
         "install_workflows": install_workflows,
@@ -756,6 +938,7 @@ def onboard(
         "spec_source": spec_source,
         "notifications": notifications,
         "no_input": no_input,
+        "yes": yes,
     }
     if not setup_pr:
         ctx.invoke(init, **arguments)
@@ -878,12 +1061,38 @@ def task_lint(issue_number: int, as_json: bool) -> None:
 )
 def task_new(title: str, dispatch: bool) -> None:
     """Prompt for a structured Task and create a GitHub issue."""
+    click.echo("Creating a structured Task — 5 prompts, then local lint before GitHub:")
+    click.echo(
+        "  Objective: one sentence describing the outcome (e.g. 'Make auth errors actionable')."
+    )
+    click.echo(
+        "  Acceptance: checkboxes the reviewer can verify (e.g. '- [ ] Error names the credential')."
+    )
+    click.echo(
+        "  Constraints: what must not change (e.g. 'Preserve the public CLI contract')."
+    )
+    click.echo(
+        "  Verification: how to prove it (e.g. 'Run uv run pytest tests/test_auth.py')."
+    )
+    click.echo("  Context: background or links (optional, default: Not provided).")
+    click.echo("")
     body = render_task_body(
-        objective=click.prompt("Objective"),
-        acceptance=click.prompt("Acceptance criteria"),
-        constraints=click.prompt("Constraints"),
-        verification=click.prompt("Verification"),
-        context=click.prompt("Context", default="Not provided", show_default=False),
+        objective=click.prompt("Objective", prompt_suffix=" — one sentence outcome: "),
+        acceptance=click.prompt(
+            "Acceptance criteria", prompt_suffix=" — checkboxes to verify: "
+        ),
+        constraints=click.prompt(
+            "Constraints", prompt_suffix=" — what must not change: "
+        ),
+        verification=click.prompt(
+            "Verification", prompt_suffix=" — how to prove it (command): "
+        ),
+        context=click.prompt(
+            "Context",
+            default="Not provided",
+            show_default=False,
+            prompt_suffix=" — background/links: ",
+        ),
     )
     report = lint_task_body(body)
     if not report.ready:
@@ -1046,6 +1255,21 @@ def sync_labels_command(ctx: click.Context, check: bool, apply: bool) -> None:
     click.echo("Required GitHub labels are present.")
 
 
+def _doctor_fix_hints(report: DoctorReport) -> list[str]:
+    """Return one remediation line per failing check, attributed to that check.
+
+    Hints are keyed on the canonical check name rather than matched against
+    rendered text, so a new check without a fix fails a test instead of
+    silently degrading to generic advice.
+    """
+    return [
+        f"  → fix ({check.name}): {hint}"
+        for check in report.checks
+        if check.level is CheckLevel.FAIL
+        and (hint := fix_hint_for_check_name(check.name))
+    ]
+
+
 @main.command()
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
 @click.option(
@@ -1071,6 +1295,9 @@ def doctor(ctx: click.Context, as_json: bool, run_gates: bool) -> None:
     else:
         for check in report.checks:
             click.echo(f"{check.level.value:<4} {check.name:<28} {check.detail}")
+        if not report.ok:
+            for hint in _doctor_fix_hints(report):
+                click.echo(hint)
     if not report.ok:
         ctx.exit(1)
 

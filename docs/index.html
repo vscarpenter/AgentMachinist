@@ -422,16 +422,16 @@
             <p class="tline c"># install the controller</p>
             <p class="tline p"><b>$ </b>uv tool install agentmachinist</p>
             <p class="tline">&nbsp;</p>
-            <p class="tline c"># in your repository — answer the onboarding questions</p>
-            <p class="tline p"><b>$ </b>machinist onboard</p>
-            <p class="tline p"><b>$ </b>machinist doctor --run-gates</p>
-            <p class="tline p"><b>$ </b>machinist sync-labels --check</p>
-            <p class="tline p"><b>$ </b>machinist task template --check</p>
+            <p class="tline c"># in your repository — writes minimal machinist.yaml (~20 lines)</p>
+            <p class="tline p"><b>$ </b>machinist onboard  <span class="c" style="color:var(--terminal-muted)"># or: onboard --yes for hands-free</span></p>
+            <p class="tline p"><b>$ </b>machinist doctor --run-gates  <span class="c" style="color:var(--terminal-muted)"># single health check — prints fix</span></p>
             <p class="tline">&nbsp;</p>
             <p class="tline c"># review the generated files, then make setup durable</p>
+            <p class="tline p"><b>$ </b>git status --short</p>
             <p class="tline p"><b>$ </b>git add machinist.yaml .machinist/specs/.gitkeep .gitignore</p>
             <p class="tline p"><b>$ </b>git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml</p>
-            <p class="tline p"><b>$ </b>git add -p .github/workflows</p>
+            <p class="tline p"><b>$ </b>git add -p .github/workflows  <span class="c" style="color:var(--terminal-muted)"># review each hunk</span></p>
+            <p class="tline p"><b>$ </b>git diff --cached  <span class="c" style="color:var(--terminal-muted)"># verify</span></p>
             <p class="tline p"><b>$ </b>git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</p>
             <p class="tline">&nbsp;</p>
             <p class="tline c"># create a linted Task, then run the loop</p>

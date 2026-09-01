@@ -384,36 +384,34 @@ claude --version                     <span class="comment"># or opencode / pi / 
     </div>
     <div class="cell local">
       <span class="chip local">Local</span>
-      <pre><code>machinist onboard     <span class="comment"># dispatch mode: local</span>
-machinist doctor --run-gates
-machinist sync-labels --check
-machinist sync-workflows --check
-machinist task template --check
+      <pre><code>machinist onboard     <span class="comment"># dispatch mode: local — writes minimal machinist.yaml (~20 lines)</span>
+machinist doctor --run-gates   <span class="comment"># single health check — prints fix for any FAIL</span>
+<span class="comment"># or hands-free: machinist onboard --yes  # defaults + auto-detected test command</span>
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows
-git diff --cached
+git add -p .github/workflows   <span class="comment"># review each hunk</span>
+git diff --cached              <span class="comment"># verify what will be committed</span>
 git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
       <p class="note">The wizard asks dispatch mode, harness, test gate, and
-      notifications — each with a safe default.</p>
+      notifications — each with a safe default. <code>doctor --run-gates</code> already
+      checks labels, workflows, and the issue form; only run the individual
+      <code>--check</code> commands if doctor asks. <code>machinist --help</code> groups
+      commands as Setup / Tasks / Build / Operate daily vs advanced.</p>
     </div>
     <div class="cell ci">
       <span class="chip ci">GitHub Actions</span>
       <pre><code>machinist onboard --spec-source github-actions
 gh secret set OPENAI_API_KEY          <span class="comment"># use the selected Spec adapter's secret</span>
-machinist sync-workflows
-machinist doctor --run-gates
-machinist sync-labels --check
-machinist sync-workflows --check
-machinist task template --check
+machinist doctor --run-gates   <span class="comment"># single health check</span>
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows
+git add -p .github/workflows   <span class="comment"># review each hunk</span>
 git diff --cached
 git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
       <p class="note">Workflows must be pushed before GitHub can record a
       SHA-bound approval. Managed CI installs the selected Spec adapter and
-      reads its declared repository secret.</p>
+      reads its declared repository secret. Only run <code>sync-labels --check</code> /
+      <code>sync-workflows --check</code> if doctor asks.</p>
     </div>
 
     <div class="stage-bar">

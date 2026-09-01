@@ -8,8 +8,15 @@ from types import SimpleNamespace
 import pytest
 
 from machinist.config import MachinistConfig
-from machinist.doctor import CheckLevel, run_doctor
+from machinist.doctor import (
+    DOCTOR_CHECK_NAMES,
+    CheckLevel,
+    canonical_check_name,
+    fix_hint_for_check_name,
+    run_doctor,
+)
 from machinist.lifecycle import Phase, TaskLifecycle
+from machinist.task_intake import sync_task_template
 from machinist.workflows import sync_workflows
 
 
@@ -645,3 +652,87 @@ def test_doctor_can_opt_in_to_executing_configured_gates(tmp_path):
 
     assert execution.level is CheckLevel.PASS
     assert "all 1" in execution.detail
+
+
+def test_doctor_fails_when_the_sealed_task_template_is_missing(tmp_path):
+    """Docs promise doctor covers the issue form; drift must surface as a FAIL."""
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig.model_validate({"github": {"manage_workflows": False}})
+
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path),
+    )
+
+    template = next(check for check in report.checks if check.name == "task template")
+    assert template.level is CheckLevel.FAIL
+    assert "machinist task template --write" in template.detail
+
+
+def test_doctor_passes_when_the_sealed_task_template_matches(tmp_path):
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig.model_validate({"github": {"manage_workflows": False}})
+    sync_task_template(tmp_path, check=False)
+
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path),
+    )
+
+    template = next(check for check in report.checks if check.name == "task template")
+    assert template.level is CheckLevel.PASS
+
+
+def test_every_canonical_doctor_check_name_has_a_fix_hint():
+    """The docs promise an exact fix for any FAIL; no name may fall through."""
+    missing = [name for name in DOCTOR_CHECK_NAMES if not fix_hint_for_check_name(name)]
+    assert missing == []
+
+
+@pytest.mark.parametrize(
+    ("rendered", "canonical"),
+    [
+        ("claude-code version", "<harness> version"),
+        ("codex authentication", "<harness> authentication"),
+        ("Spec Harness compatibility", "<phase> Harness compatibility"),
+        ("Execute Harness compatibility", "<phase> Harness compatibility"),
+        ("workflows", "workflows"),
+    ],
+)
+def test_canonical_check_name_folds_variable_prefixes(rendered, canonical):
+    assert canonical_check_name(rendered) == canonical
+
+
+def test_doctor_emits_only_canonical_check_names(tmp_path):
+    """Guards the hint table against silent drift when checks are added."""
+    (tmp_path / ".git").mkdir()
+    observed: set[str] = set()
+    for overrides in (
+        {},
+        {"github": {"manage_workflows": False}, "tests": {"command": "pytest -q"}},
+        {"github": {"spec_source": "github-actions"}},
+    ):
+        config = MachinistConfig.model_validate(overrides)
+        report = run_doctor(
+            tmp_path,
+            config,
+            installed_version="0.2.0",
+            which=lambda name: f"/bin/{name}",
+            runner=_runner_for(tmp_path),
+            run_gates=True,
+            gate_runner=lambda command, **kwargs: subprocess.CompletedProcess(
+                command, 0, "", ""
+            ),
+        )
+        observed.update(canonical_check_name(check.name) for check in report.checks)
+
+    assert observed, "expected doctor to emit checks"
+    assert observed <= set(DOCTOR_CHECK_NAMES), sorted(
+        observed - set(DOCTOR_CHECK_NAMES)
+    )

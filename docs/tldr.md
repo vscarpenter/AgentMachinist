@@ -20,11 +20,13 @@ One-time setup (per repo):
 
 ```sh
 cd your-repo
-machinist onboard                     # answer questions → creates machinist.yaml, labels, workflows
-machinist doctor --run-gates          # preflight: git, gh, harness, test gate
-machinist sync-labels --check         # verify labels exist on GitHub
-machinist sync-workflows --check      # verify workflows match config
-git add machinist.yaml .github/ && git commit -m "chore: configure AgentMachinist" && git push
+machinist onboard                     # answer questions → creates minimal machinist.yaml (~20 lines), labels, workflows
+machinist doctor --run-gates          # single health check: git, gh, harness, test gate + labels/workflows/template; prints fix for any FAIL
+# or hands-free: machinist onboard --yes   # accepts defaults + auto-enables detected test command
+git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
+git add -p .github/workflows   # review each hunk
+git diff --cached && git commit -m "chore: configure AgentMachinist" && git push
 machinist watch                       # start the daemon (or: machinist service install/start)
 ```
 
@@ -56,14 +58,17 @@ One-time setup (per repo):
 
 ```sh
 cd your-repo
-machinist init --spec-source github-actions      # or onboard; needs an ANTHROPIC_API_KEY repo secret
-machinist sync-labels --check
-machinist sync-workflows                         # writes .github/workflows/machinist-*.yml
-git add . && git commit -m "chore: configure AgentMachinist" && git push
+machinist onboard --spec-source github-actions   # or: init --spec-source github-actions; needs an ANTHROPIC_API_KEY repo secret
+machinist doctor --run-gates          # single health check; only run sync-labels/sync-workflows --check if doctor asks
+machinist sync-workflows              # writes .github/workflows/machinist-*.yml (doctor verifies drift)
+git add machinist.yaml .machinist/specs/.gitkeep .gitignore
+git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
+git add -p .github/workflows && git diff --cached && git commit -m "chore: configure AgentMachinist" && git push
 ```
 
 Plus: add the harness API key secret
-(`gh secret set ANTHROPIC_API_KEY`).
+(`gh secret set ANTHROPIC_API_KEY`). `machinist --help` groups commands as
+`Setup`, `Tasks`, `Build`, and `Operate — daily` vs `Operate — advanced`.
 
 Each task:
 

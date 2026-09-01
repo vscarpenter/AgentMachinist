@@ -5,7 +5,10 @@
 Run from the configured repository root:
 
 ```sh
-machinist doctor --run-gates
+machinist doctor --run-gates   # single health check — prints the exact fix for any FAIL
+
+# Read-only confirmations of one subsystem at a time. doctor already covers all
+# three; reach for these only when you want to re-check one in isolation.
 machinist sync-labels --check
 machinist sync-workflows --check
 machinist task template --check
