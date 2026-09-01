@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.11.0 — 2026-09-01
+
 - Add a `task template` check to `machinist doctor`. The sealed issue form is
   installed even when Actions workflows are externally managed, but nothing
   reported drift in it outside an explicit `machinist task template --check`.

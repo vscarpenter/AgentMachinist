@@ -446,3 +446,30 @@ GitHub Release tagged `v0.10.0`; Trusted Publishing will rerun the gate and
 publish the prepared package to PyPI.
 
 Blockers: none.
+
+## First-run onboarding and 0.11.0 release preparation
+
+- [x] Review the uncommitted onboarding change and report findings
+- [x] Add the missing `task template` doctor check rather than weaken the docs
+- [x] Key doctor fix hints on a canonical name and test that coverage is total
+- [x] Restore Click's hidden-command filter and width in the grouped help
+- [x] Add contract tests for `--yes`, the minimal config, and the grouped help
+- [x] Fix the Ruff lint and format failures blocking CI
+- [x] Ignore the 396 MB local `videos/` authoring tree
+- [x] Install this repository's own sealed task issue form
+- [x] Align version, changelog, release copy, and visual documentation to 0.11.0
+
+### Resuming From Here
+
+Done: PR #32 merged to main with all 15 CI checks green (Ubuntu + macOS across
+Python 3.12/3.13/3.14, minimum-dependency resolution, quality, coverage,
+package, CodeQL). 950 tests pass at 85.05% coverage. Every 0.11.0 release
+surface is aligned and the canonical gate is green.
+
+Next: push this branch and open its pull request. After merge, publish the
+GitHub Release tagged `v0.11.0`; Trusted Publishing will rerun the gate and
+publish the prepared package to PyPI.
+
+Blockers: branch protection on `main` still requires two status contexts the CI
+matrix no longer emits (`test (ubuntu-latest)`, `test (macos-latest)`), so every
+merge needs `--admin` until the required-checks list is replaced with `CI gate`.
