@@ -8,13 +8,14 @@ spec file, commits, pushes, and opens the draft PR.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from importlib.resources import files
 from pathlib import Path
 from string import Template
 from uuid import uuid4
 
 from machinist.config import MachinistConfig
+from machinist.evidence import EvidenceError, TaskEvidence
 from machinist.github import DraftPR, Issue, PullRequest, normalize_repository_identity
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, write_managed_text
@@ -72,8 +73,11 @@ def run_spec_phase(
     issue = github.get_issue(issue_number)
     _validate_issue(issue, config)
     _raise_if_cancelled(cancel_check, issue.number)
-    previous = dict(getattr(claim, "previous_evidence", {}) or {})
-    base = _checkpointed_pr_base(previous) or github.default_branch()
+    previous = TaskEvidence.load(getattr(claim, "previous_evidence", {}) or {})
+    try:
+        base = previous.pr_base() or github.default_branch()
+    except EvidenceError as exc:
+        raise SpecPhaseError("prior Spec checkpoint has an invalid PR base") from exc
     _validate_pr_base(base, source="GitHub default branch")
     if claim is not None:
         claim.checkpoint(
@@ -115,7 +119,7 @@ def run_spec_phase(
             remote_sha=remote_before,
             expected_repository=repository_identity,
         )
-        recovery_sha = _checkpointed_push_sha(previous)
+        recovery_sha = previous.spec_delivery_sha()
         delivery_only = (
             not revise and recovery_sha is not None and remote_before == recovery_sha
         )
@@ -311,7 +315,7 @@ def _select_delivery_pr(
     branch: str,
     expected_base: str,
     revise: bool,
-    previous: Mapping[str, object],
+    previous: TaskEvidence,
     remote_sha: str | None,
     expected_repository: str,
 ):
@@ -350,10 +354,10 @@ def _select_delivery_pr(
             )
         return existing_pr
 
-    recovery_sha = _checkpointed_push_sha(previous)
+    recovery_sha = previous.spec_delivery_sha()
     recovery_matches = recovery_sha is not None and remote_sha == recovery_sha
     if existing_pr is not None:
-        checkpointed_pr = previous.get("pr_number")
+        checkpointed_pr = previous.pr_number
         identity_matches = checkpointed_pr in (None, existing_pr.number)
         if (
             recovery_matches
@@ -371,31 +375,6 @@ def _select_delivery_pr(
             "to extend it without matching retry checkpoints"
         )
     return None
-
-
-def _checkpointed_push_sha(previous: Mapping[str, object]) -> str | None:
-    """Return a consistent prior push intent suitable for custody recovery."""
-    spec_sha = previous.get("spec_sha")
-    intended_sha = previous.get("push_intended_sha")
-    observed_sha = previous.get("push_observed_sha")
-    if not isinstance(spec_sha, str) or not isinstance(intended_sha, str):
-        return None
-    if spec_sha != intended_sha:
-        return None
-    if observed_sha is not None and observed_sha != intended_sha:
-        return None
-    return intended_sha
-
-
-def _checkpointed_pr_base(previous: Mapping[str, object]) -> str | None:
-    """Return the base bound by an earlier delivery attempt, if present."""
-    value = previous.get("pr_base")
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise SpecPhaseError("prior Spec checkpoint has an invalid PR base")
-    _validate_pr_base(value, source="prior Spec checkpoint")
-    return value
 
 
 def _validate_pr_base(value: str, *, source: str) -> None:

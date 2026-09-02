@@ -27,6 +27,7 @@ from machinist.config import (
     MachinistConfig,
     VerificationGateConfig,
 )
+from machinist.evidence import EvidenceError, TaskEvidence
 from machinist.github import PullRequest, normalize_repository_identity
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
@@ -36,7 +37,6 @@ from machinist.runtime_paths import RuntimePathError, write_text_file
 
 _IMPLEMENT_PROMPT = files("machinist") / "templates" / "implement-prompt.md"
 _RECOVERY_MODES = frozenset({"fresh", "resume"})
-_FULL_SHA_LENGTH = 40
 MAX_FEEDBACK_CHARS = 50_000
 MAX_FEEDBACK_FILE_BYTES = MAX_FEEDBACK_CHARS * 4
 _MAX_HARNESS_REPORT_CHARS = 2_000
@@ -190,8 +190,13 @@ def run_execute_phase(
         raise ExecutePhaseError(
             f"no open PR for branch '{branch}'; run 'machinist spec {issue_number}' first"
         )
-    previous = dict(getattr(claim, "previous_evidence", {}) or {})
-    base = _checkpointed_pr_base(previous) or github.default_branch()
+    previous = TaskEvidence.load(getattr(claim, "previous_evidence", {}) or {})
+    try:
+        base = previous.pr_base() or github.default_branch()
+    except EvidenceError as exc:
+        raise ExecutePhaseError(
+            "prior Execute checkpoint has an invalid PR base"
+        ) from exc
     _validate_pr_base(base, source="GitHub default branch")
     if pr.base and pr.base != base:
         raise ExecutePhaseError(
@@ -222,12 +227,12 @@ def run_execute_phase(
             github=github,
             claim=claim,
             implementation_sha=reconciled_sha,
-            change_summary=_mapping(previous.get("change_summary")),
-            verification_report=_mapping(previous.get("verification_report")),
-            comment_id=_positive_int(previous.get("completion_comment_id")),
+            change_summary=previous.change_summary,
+            verification_report=previous.verification_report,
+            comment_id=previous.completion_comment_id,
             recovered=True,
-            harness_details=_mapping(previous.get("harness")),
-            harness_report_excerpt=_string(previous.get("harness_report_excerpt")),
+            harness_details=previous.harness,
+            harness_report_excerpt=previous.harness_report_excerpt,
             attempt=getattr(claim, "attempt", None),
             duration_seconds=_duration(started_at),
             branch=branch,
@@ -255,12 +260,8 @@ def run_execute_phase(
     if recovery == "resume":
         _checkpoint(
             claim,
-            feedback_supplied=previous.get("feedback_supplied") is True,
-            feedback_characters=(
-                previous.get("feedback_characters")
-                if isinstance(previous.get("feedback_characters"), int)
-                else 0
-            ),
+            feedback_supplied=previous.feedback_supplied,
+            feedback_characters=previous.feedback_characters,
         )
     else:
         _checkpoint(
@@ -291,11 +292,12 @@ def run_execute_phase(
         )
         resume_stage = "harness"
 
-    comment_id = _positive_int(previous.get("completion_comment_id"))
+    comment_id = previous.completion_comment_id
     try:
         if resume_stage == "push":
             report_progress(claim, "resume push", branch)
-            implementation_sha = str(previous["push_intended_sha"])
+            implementation_sha = previous.intended_push_sha
+            assert implementation_sha is not None
             _retry_intended_push(
                 workspace,
                 path,
@@ -312,12 +314,12 @@ def run_execute_phase(
                 github=github,
                 claim=claim,
                 implementation_sha=implementation_sha,
-                change_summary=_mapping(previous.get("change_summary")),
-                verification_report=_mapping(previous.get("verification_report")),
+                change_summary=previous.change_summary,
+                verification_report=previous.verification_report,
                 comment_id=comment_id,
                 recovered=True,
-                harness_details=_mapping(previous.get("harness")),
-                harness_report_excerpt=_string(previous.get("harness_report_excerpt")),
+                harness_details=previous.harness,
+                harness_report_excerpt=previous.harness_report_excerpt,
                 attempt=getattr(claim, "attempt", None),
                 duration_seconds=_duration(started_at),
                 branch=branch,
@@ -411,10 +413,8 @@ def run_execute_phase(
                     git_custody=git_custody,
                 )
             else:
-                harness_details = _mapping(previous.get("harness")) or _harness_details(
-                    harness
-                )
-                harness_report_excerpt = _string(previous.get("harness_report_excerpt"))
+                harness_details = previous.harness or _harness_details(harness)
+                harness_report_excerpt = previous.harness_report_excerpt
 
             if not workspace.has_changes(path):
                 raise ExecutePhaseError(
@@ -546,7 +546,7 @@ def run_execute_phase(
 def _provision_fresh_workspace(
     workspace,
     claim,
-    previous: dict[str, Any],
+    previous: TaskEvidence,
     *,
     issue_number: int,
     branch: str,
@@ -567,15 +567,10 @@ def _provision_fresh_workspace(
             attempt=attempt,
         )
 
-    raw_prior_paths = previous.get("prior_workspace_paths")
-    prior_paths = (
-        [value for value in raw_prior_paths if isinstance(value, str)]
-        if isinstance(raw_prior_paths, list)
-        else []
-    )
-    previous_path = previous.get("workspace_path")
+    prior_paths = previous.prior_workspace_paths
+    previous_path = previous.workspace_path
     if (
-        isinstance(previous_path, str)
+        previous_path is not None
         and previous_path != str(path)
         and previous_path not in prior_paths
     ):
@@ -617,26 +612,26 @@ def _reset_fresh_execution_evidence(claim) -> None:
 def _resume_workspace(
     workspace,
     claim,
-    previous: dict[str, Any],
+    previous: TaskEvidence,
     *,
     branch: str,
     approval_sha: str,
 ) -> tuple[Path, str, dict[str, object] | None]:
     if claim is None:
         raise ExecutePhaseError("--resume requires a claimed Task Run")
-    resume_blocker = previous.get("resume_forbidden_reason")
-    if isinstance(resume_blocker, str) and resume_blocker:
+    resume_blocker = previous.resume_forbidden_reason
+    if resume_blocker:
         raise ExecutePhaseError(
             "retained workspace is not eligible for --resume because "
             f"{resume_blocker}; start a fresh retry"
         )
-    if previous.get("approved_sha") != approval_sha:
+    if previous.approved_sha != approval_sha:
         raise ExecutePhaseError(
             "retained workspace was created for a different approved SHA; "
             "start a fresh retry"
         )
-    raw_path = previous.get("workspace_path")
-    if not isinstance(raw_path, str) or not raw_path:
+    raw_path = previous.workspace_path
+    if not raw_path:
         raise ExecutePhaseError(
             "previous Task Run has no retained workspace checkpoint to resume"
         )
@@ -644,15 +639,15 @@ def _resume_workspace(
     git_custody = _resume_workspace_custody(
         workspace,
         Path(raw_path),
-        previous.get("git_custody"),
+        previous.git_custody,
     )
 
-    intended_sha = previous.get("push_intended_sha")
-    implementation_sha = previous.get("implementation_sha")
-    if _is_full_sha(intended_sha) and intended_sha == implementation_sha:
-        expected_sha = str(intended_sha)
+    intended_sha = previous.intended_push_sha
+    implementation_sha = previous.implementation_sha
+    if intended_sha is not None and intended_sha == implementation_sha:
+        expected_sha = intended_sha
         stage = "push"
-    elif previous.get("harness_completed") is True:
+    elif previous.harness_completed:
         expected_sha = approval_sha
         stage = "post_harness"
     else:
@@ -1493,35 +1488,24 @@ def _completion_comment(
 
 
 def _reconciled_push(
-    previous: dict[str, Any],
+    previous: TaskEvidence,
     approval_sha: str | None,
     pr: PullRequest,
     *,
     force: bool,
 ) -> str | None:
-    if force or approval_sha is None or previous.get("approved_sha") != approval_sha:
+    if force or approval_sha is None or previous.approved_sha != approval_sha:
         return None
-    intended = previous.get("push_intended_sha") or previous.get("implementation_sha")
-    if _is_full_sha(intended) and intended == pr.head_sha:
-        return str(intended)
-    observed = previous.get("push_observed_sha")
-    if _is_full_sha(observed) and observed != pr.head_sha:
+    intended = previous.intended_push_sha or previous.implementation_sha
+    if intended is not None and intended == pr.head_sha:
+        return intended
+    observed = previous.pushed_sha
+    if observed is not None and observed != pr.head_sha:
         raise ExecutePhaseError(
             "the previously observed implementation push no longer matches the PR head; "
             "inspect the remote branch before retrying"
         )
     return None
-
-
-def _checkpointed_pr_base(previous: dict[str, Any]) -> str | None:
-    """Return the PR base bound by an earlier Execute attempt, if present."""
-    value = previous.get("pr_base")
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ExecutePhaseError("prior Execute checkpoint has an invalid PR base")
-    _validate_pr_base(value, source="prior Execute checkpoint")
-    return value
 
 
 def _validate_pr_base(value: str, *, source: str) -> None:
@@ -1538,30 +1522,8 @@ def _checkpoint(claim, **evidence: Any) -> None:
         claim.checkpoint(**evidence)
 
 
-def _mapping(value: Any) -> dict[str, Any] | None:
-    return dict(value) if isinstance(value, dict) else None
-
-
-def _string(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
-
-
 def _harness_details(harness) -> dict[str, Any]:
     return harness_evidence(harness, profile="execute")
-
-
-def _positive_int(value: Any) -> int | None:
-    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-        return value
-    return None
-
-
-def _is_full_sha(value: Any) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == _FULL_SHA_LENGTH
-        and all(character in "0123456789abcdefABCDEF" for character in value)
-    )
 
 
 def _markdown_cell(value: Any) -> str:

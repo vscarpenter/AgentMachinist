@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from machinist.config import MachinistConfig
+from machinist.evidence import TaskEvidence
 from machinist.github import normalize_repository_identity
 from machinist.lifecycle import Phase, RunStatus
 
@@ -124,7 +125,7 @@ def pipeline_status(
                 and pr.is_draft
                 and execute is not None
                 and execute.status is RunStatus.SUCCEEDED
-                and execute.evidence.get("push_observed_sha") == pr.head_sha
+                and TaskEvidence.load(execute.evidence).pushed_sha == pr.head_sha
             ):
                 state = "awaiting review"
             record = lifecycle.latest(issue_number)

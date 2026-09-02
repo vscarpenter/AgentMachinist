@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from machinist.config import MachinistConfig
+from machinist.evidence import EvidenceError, TaskEvidence
 from machinist.github import PullRequest
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
@@ -74,7 +75,8 @@ def run_review_phase(
         raise ReviewPhaseError("independent Review is disabled in machinist.yaml")
     branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
     pr = _find_pr(github, config, branch)
-    expected_sha, base = _review_identity(pr, execute_evidence, github)
+    evidence = TaskEvidence.load(execute_evidence)
+    expected_sha, base = _review_identity(pr, evidence, github)
     report_progress(claim, "provision Review preview", branch)
     path = workspace.provision_preview(
         f"review-issue-{issue_number}", branch, f"origin/{base}"
@@ -91,7 +93,7 @@ def run_review_phase(
             branch=branch,
             base=base,
             expected_sha=expected_sha,
-            execute_evidence=execute_evidence,
+            execute_evidence=evidence,
             claim=claim,
             cancel_check=cancel_check,
         )
@@ -111,7 +113,7 @@ def _run_in_preview(
     branch: str,
     base: str,
     expected_sha: str,
-    execute_evidence: dict[str, Any],
+    execute_evidence: TaskEvidence,
     claim,
     cancel_check,
 ) -> PullRequest:
@@ -149,10 +151,10 @@ def _run_in_preview(
 
 
 def _review_identity(
-    pr: PullRequest, execute_evidence: dict[str, Any], github
+    pr: PullRequest, execute_evidence: TaskEvidence, github
 ) -> tuple[str, str]:
-    expected_sha = execute_evidence.get("push_observed_sha")
-    if not _full_sha(expected_sha):
+    expected_sha = execute_evidence.pushed_sha
+    if expected_sha is None:
         raise ReviewPhaseError("successful Execute evidence has no delivered head SHA")
     if pr.head_sha != expected_sha:
         raise ReviewPhaseError(
@@ -160,8 +162,11 @@ def _review_identity(
         )
     if not pr.is_draft:
         raise ReviewPhaseError(f"PR #{pr.number} is already ready for human review")
-    base = execute_evidence.get("pr_base") or github.default_branch()
-    if not isinstance(base, str) or not base.strip():
+    try:
+        base = execute_evidence.pr_base() or github.default_branch()
+    except EvidenceError as exc:
+        raise ReviewPhaseError("Execute evidence has an invalid PR base") from exc
+    if not base.strip():
         raise ReviewPhaseError("Execute evidence has an invalid PR base")
     return expected_sha, base
 
@@ -174,7 +179,7 @@ def _review_prompt(
     path: Path,
     *,
     base: str,
-    execute_evidence: dict[str, Any],
+    execute_evidence: TaskEvidence,
 ) -> str:
     spec = _read_spec(path, issue_number, config)
     diff = workspace.diff_against(path, f"origin/{base}", max_bytes=_MAX_DIFF_BYTES)
@@ -182,8 +187,8 @@ def _review_prompt(
     instructions = config.resolve_instructions("review", path)
     evidence = json.dumps(
         {
-            "change_summary": execute_evidence.get("change_summary"),
-            "verification_report": execute_evidence.get("verification_report"),
+            "change_summary": execute_evidence.change_summary,
+            "verification_report": execute_evidence.verification_report,
         },
         sort_keys=True,
     )
@@ -234,11 +239,13 @@ def _deliver_review(
 ) -> None:
     current = _exact_pr(github, pr, branch, expected_sha)
     _cancel(cancel_check, "before Review comment")
-    previous = getattr(claim, "previous_evidence", {}) if claim is not None else {}
+    previous = TaskEvidence.load(
+        getattr(claim, "previous_evidence", {}) if claim is not None else {}
+    )
     comment_id = github.upsert_pr_comment(
         current.number,
         _review_comment(issue_number, expected_sha, report),
-        comment_id=_positive_int(previous.get("review_comment_id")),
+        comment_id=previous.review_comment_id,
     )
     _checkpoint(claim, review_comment_id=comment_id)
     current = _exact_pr(github, pr, branch, expected_sha)
@@ -342,18 +349,6 @@ def _level(value: object, field: str) -> str:
     if text not in _LEVELS:
         raise ReviewPhaseError(f"review finding {field} must be low, medium, or high")
     return text
-
-
-def _full_sha(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 40
-        and all(ch in "0123456789abcdefABCDEF" for ch in value)
-    )
-
-
-def _positive_int(value: object) -> int | None:
-    return value if type(value) is int and value > 0 else None
 
 
 def _checkpoint_review(claim, expected_sha: str, harness, report: ReviewReport) -> None:

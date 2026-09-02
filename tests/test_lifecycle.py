@@ -150,6 +150,46 @@ def test_attempt_history_is_append_only_across_retry(tmp_path):
     ]
 
 
+def test_inventory_owns_attempt_and_orphan_discovery(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    with pytest.raises(RuntimeError):
+        lifecycle.run(
+            42,
+            Phase.EXECUTE,
+            lambda claim: (_ for _ in ()).throw(RuntimeError("first")),
+        )
+    lifecycle.retry(42, Phase.EXECUTE)
+    lifecycle.run(42, Phase.EXECUTE, lambda claim: None)
+
+    inventory = lifecycle.inventory()
+
+    assert [(record.attempt, record.status) for record in inventory.attempts] == [
+        (1, RunStatus.FAILED),
+        (2, RunStatus.SUCCEEDED),
+    ]
+    assert [(record.attempt, record.status) for record in inventory.orphans] == [
+        (1, RunStatus.FAILED)
+    ]
+
+
+def test_inventory_describes_corrupt_journal_artifact(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    journal = tmp_path / "runs" / "history" / "issue-42-review" / "attempt-000003.jsonl"
+    journal.parent.mkdir(parents=True)
+    journal.write_text("not json\n")
+
+    inventory = lifecycle.inventory()
+
+    assert inventory.corrupt == (journal,)
+    assert len(inventory.artifacts) == 1
+    artifact = inventory.artifacts[0]
+    assert artifact.path == journal
+    assert artifact.kind == "journal"
+    assert artifact.issue == 42
+    assert artifact.phase is Phase.REVIEW
+    assert artifact.attempt == 3
+
+
 def test_checkpoint_rejects_non_json_evidence_without_persisting_it(tmp_path):
     lifecycle = TaskLifecycle(tmp_path / "runs")
 
@@ -162,6 +202,18 @@ def test_checkpoint_rejects_non_json_evidence_without_persisting_it(tmp_path):
     record = lifecycle.record(42, Phase.EXECUTE)
     assert record.status is RunStatus.FAILED
     assert "opaque" not in record.evidence
+
+
+def test_checkpoint_applies_phase_aware_evidence_contract(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+
+    def invalid_checkpoint(claim):
+        claim.checkpoint(implementation_sha="a" * 40)
+
+    with pytest.raises(LifecycleError, match="implementation_sha.*Spec"):
+        lifecycle.run(42, Phase.SPEC, invalid_checkpoint)
+
+    assert "implementation_sha" not in lifecycle.record(42, Phase.SPEC).evidence
 
 
 def test_claim_progress_persists_named_stage_and_heartbeat(tmp_path):

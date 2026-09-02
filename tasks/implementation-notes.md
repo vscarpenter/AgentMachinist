@@ -11,3 +11,9 @@
 - Keep CLI presentation and notification policy in `cli.py`; move only Task Run
   construction and dependency wiring into dispatch.
 - No tactical deviations yet.
+- Evidence persistence remains an open JSON mapping. `TaskEvidence` owns known
+  typed reads and `checkpoint_evidence` validates only newly written known fields,
+  so weakly typed historical values stay inspectable instead of becoming an
+  upgrade-time failure.
+- `RunInventory` now includes attempts, orphans, and typed corrupt artifacts while
+  retaining its original `records` and `corrupt` fields for compatibility.

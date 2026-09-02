@@ -50,6 +50,7 @@ from machinist.doctor import (
     run_doctor,
 )
 from machinist.explain import TaskExplanation, explain_task
+from machinist.evidence import TaskEvidence
 from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
@@ -1720,7 +1721,9 @@ def spec(
     prefix = "Revised draft" if revise else "Draft"
     click.echo(f"{prefix} PR #{pr.number}: {pr.url}")
     record = lifecycle.record(issue_number, Phase.SPEC)
-    spec_sha = record.evidence.get("spec_sha") if record is not None else None
+    spec_sha = (
+        TaskEvidence.load(record.evidence).spec_sha if record is not None else None
+    )
     approval_hint = (
         "Review the spec, then approve with "
         f"'machinist approve --issue {issue_number}' or the "
@@ -3045,7 +3048,7 @@ def _active_task_runs() -> list[dict[str, object]]:
                 "issue": record.issue,
                 "phase": record.phase.value,
                 "attempt": record.attempt,
-                "stage": record.evidence.get("current_stage"),
+                "stage": TaskEvidence.load(record.evidence).current_stage,
             }
             for record in records
             if record.status is RunStatus.RUNNING and lifecycle.claim_held(record.issue)

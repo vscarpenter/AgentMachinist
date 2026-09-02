@@ -22,8 +22,15 @@ from enum import Enum
 from pathlib import Path
 from threading import Lock
 from types import FrameType
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 
+from machinist.evidence import (
+    Evidence,
+    EvidenceError,
+    EvidenceValue,
+    checkpoint_evidence,
+    validate_evidence,
+)
 from machinist.runtime_paths import (
     RuntimeDirectory,
     RuntimePathError,
@@ -40,11 +47,6 @@ _SCHEMA_VERSION = 1
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled", "abandoned"})
 _MAX_PROJECTION_BYTES = 8 * 1024 * 1024
 _MAX_JOURNAL_BYTES = 32 * 1024 * 1024
-
-type EvidenceValue = (
-    str | int | float | bool | None | list[EvidenceValue] | dict[str, EvidenceValue]
-)
-type Evidence = dict[str, EvidenceValue]
 
 
 class LifecycleError(Exception):
@@ -155,11 +157,25 @@ class RunRecord:
 
 
 @dataclass(frozen=True)
+class RunArtifact:
+    """Lifecycle-owned meaning for a malformed or noncanonical artifact."""
+
+    path: Path
+    kind: str
+    issue: int | None = None
+    phase: Phase | None = None
+    attempt: int | None = None
+
+
+@dataclass(frozen=True)
 class RunInventory:
     """Valid current projections and artifacts that could not be decoded."""
 
     records: tuple[RunRecord, ...] = ()
     corrupt: tuple[Path, ...] = ()
+    attempts: tuple[RunRecord, ...] = ()
+    orphans: tuple[RunRecord, ...] = ()
+    artifacts: tuple[RunArtifact, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -203,7 +219,14 @@ class TaskClaim:
 
     def checkpoint(self, **evidence: EvidenceValue) -> None:
         """Atomically project and append Evidence needed for reconciliation."""
-        merged = _validate_evidence({**self._record.evidence, **evidence})
+        try:
+            merged = checkpoint_evidence(
+                self.phase.value,
+                self._record.evidence,
+                evidence,
+            )
+        except EvidenceError as exc:
+            raise LifecycleError(str(exc)) from exc
         updated = self._lifecycle._replace(self._record, evidence=merged)
         self._lifecycle._persist(updated, event="checkpointed")
         self._record = updated
@@ -516,29 +539,67 @@ class TaskLifecycle:
             except LifecycleError:
                 corrupt.append(path)
 
-        history_root = self.history_root()
+        journal_identities: set[tuple[int, Phase]] = set()
+        journal_keys: set[tuple[int, Phase, int]] = set()
+        history_root = self._history_root()
         try:
             history_names = list_directory_names(history_root)
             for directory_name in history_names:
                 directory = history_root / directory_name
-                if not _history_directory_name(directory_name):
+                identity = _history_identity(directory_name)
+                if identity is None:
                     corrupt.append(directory)
                     continue
+                journal_identities.add(identity)
                 for filename in list_directory_names(directory):
                     path = directory / filename
-                    if not _journal_filename(filename):
+                    attempt = _journal_attempt(filename)
+                    if attempt is None:
                         corrupt.append(path)
                         continue
+                    journal_keys.add((*identity, attempt))
                     _, malformed = self._read_journal(path)
                     if malformed:
                         corrupt.append(path)
         except RuntimePathError as exc:
             raise LifecycleError(f"unsafe Task Run history inventory: {exc}") from exc
 
-        records.sort(key=lambda item: (item.issue, item.phase.value, item.attempt))
-        return RunInventory(tuple(records), tuple(sorted(set(corrupt))))
+        attempts_by_key: dict[tuple[int, Phase, int], RunRecord] = {}
+        identities = journal_identities | {
+            (record.issue, record.phase) for record in records
+        }
+        for issue, phase in sorted(
+            identities, key=lambda item: (item[0], item[1].value)
+        ):
+            for record in self.history(issue, phase):
+                attempts_by_key[(record.issue, record.phase, record.attempt)] = record
+        for record in records:
+            attempts_by_key.setdefault(
+                (record.issue, record.phase, record.attempt), record
+            )
 
-    def history_root(self) -> Path:
+        records.sort(key=_run_sort_key)
+        attempts = tuple(sorted(attempts_by_key.values(), key=_run_sort_key))
+        current_keys = {
+            (record.issue, record.phase, record.attempt) for record in records
+        }
+        orphans = tuple(
+            record
+            for record in attempts
+            if (record.issue, record.phase, record.attempt) in journal_keys
+            and (record.issue, record.phase, record.attempt) not in current_keys
+        )
+        corrupt_paths = tuple(sorted(set(corrupt)))
+        artifacts = tuple(_artifact(path) for path in corrupt_paths)
+        return RunInventory(
+            tuple(records),
+            corrupt_paths,
+            attempts,
+            orphans,
+            artifacts,
+        )
+
+    def _history_root(self) -> Path:
         """Return the validated, non-creating append-only history directory."""
         try:
             return self._runtime.subdirectory("history", create=False)
@@ -708,7 +769,7 @@ class TaskLifecycle:
     def _journal_paths(self, issue: int, phase: Phase) -> list[Path]:
         directory = self._journal_directory(issue, phase)
         try:
-            self.history_root()
+            self._history_root()
             self._runtime.subdirectory(
                 "history", f"issue-{issue}-{phase.value}", create=False
             )
@@ -1009,35 +1070,25 @@ def _record_from_payload(payload: Any, *, source: object) -> RunRecord:
 
 
 def _validate_evidence(value: object) -> Evidence:
-    if not isinstance(value, dict):
-        raise LifecycleError("Task Run evidence must be an object")
-    for key, item in value.items():
-        if not isinstance(key, str):
-            raise LifecycleError("Task Run evidence keys must be strings")
-        _validate_evidence_value(item, path=key)
-    return cast(Evidence, dict(value))
+    try:
+        return validate_evidence(value)
+    except EvidenceError as exc:
+        raise LifecycleError(str(exc)) from exc
 
 
-def _validate_evidence_value(value: object, *, path: str) -> None:
-    if value is None or isinstance(value, (str, bool, int)):
-        return
-    if isinstance(value, float):
-        if math.isfinite(value):
-            return
-        raise LifecycleError(f"Task Run evidence '{path}' must be finite")
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _validate_evidence_value(item, path=f"{path}[{index}]")
-        return
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise LifecycleError(f"Task Run evidence '{path}' keys must be strings")
-            _validate_evidence_value(item, path=f"{path}.{key}")
-        return
-    raise LifecycleError(
-        f"Task Run evidence '{path}' has unsupported type {type(value).__name__}"
-    )
+def _artifact(path: Path) -> RunArtifact:
+    projection = _projection_identity(path.name)
+    if projection is not None:
+        return RunArtifact(path, "projection", projection[0], projection[1])
+    history = _history_identity(path.parent.name)
+    attempt = _journal_attempt(path.name)
+    if history is not None and attempt is not None:
+        return RunArtifact(path, "journal", history[0], history[1], attempt)
+    return RunArtifact(path, "artifact")
+
+
+def _run_sort_key(record: RunRecord) -> tuple[int, str, int, str]:
+    return record.issue, record.phase.value, record.attempt, record.started_at
 
 
 def _duration(started_at: str, ended_at: str) -> float | None:
