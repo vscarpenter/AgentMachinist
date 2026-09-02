@@ -114,15 +114,17 @@ def render_starter_config(
         )
     except ValidationError as exc:
         raise ConfigError(f"generated machinist.yaml is invalid: {exc}") from exc
+    lines = _starter_header_lines(projection)
+    lines.extend(_starter_github_lines(projection["github"]))
+    lines.extend(_starter_workspace_lines(projection))
+    lines.extend(_starter_notification_lines(projection.get("notifications")))
+    return "\n".join(lines) + "\n"
 
+
+def _starter_header_lines(projection: dict[str, Any]) -> list[str]:
     harness = projection["harness"]
     tests = projection["tests"]
-    github = projection["github"]
-    labels = github["labels"]
-    workspace = projection["workspace"]
-    review = projection["review"]
-    command_value = json.dumps(tests["command"])
-    lines: list[str] = [
+    return [
         "# AgentMachinist configuration",
         "# See docs/getting-started.md for all options.",
         f"version: {projection['version']}",
@@ -131,8 +133,14 @@ def render_starter_config(
         f"  name: {harness['name']}",
         "",
         "tests:",
-        f"  command: {command_value}",
+        f"  command: {json.dumps(tests['command'])}",
         "",
+    ]
+
+
+def _starter_github_lines(github: dict[str, Any]) -> list[str]:
+    labels = github["labels"]
+    lines = [
         "github:",
         f"  repo: {json.dumps(github['repo'])}",
         f"  spec_source: {github['spec_source']}",
@@ -146,24 +154,35 @@ def render_starter_config(
             f"    approved: {json.dumps(labels['approved'])}",
             f"  poll_interval_seconds: {github['poll_interval_seconds']}",
             "",
-            "workspace:",
-            f"  root: {workspace['root']}",
-            f"  strategy: {workspace['strategy']}",
-            f"  cleanup: {workspace['cleanup']}",
-            f"  branch_prefix: {workspace['branch_prefix']}",
-            "",
-            "review:",
-            f"  enabled: {str(review['enabled']).lower()}",
         ]
     )
-    notifications = projection.get("notifications")
-    if isinstance(notifications, dict):
-        lines.extend(["", "notifications:"])
-        if "backend" in notifications:
-            lines.append(f"  backend: {notifications['backend']}")
-        if "events" in notifications:
-            lines.append(f"  events: [{', '.join(notifications['events'])}]")
-    return "\n".join(lines) + "\n"
+    return lines
+
+
+def _starter_workspace_lines(projection: dict[str, Any]) -> list[str]:
+    workspace = projection["workspace"]
+    review = projection["review"]
+    return [
+        "workspace:",
+        f"  root: {workspace['root']}",
+        f"  strategy: {workspace['strategy']}",
+        f"  cleanup: {workspace['cleanup']}",
+        f"  branch_prefix: {workspace['branch_prefix']}",
+        "",
+        "review:",
+        f"  enabled: {str(review['enabled']).lower()}",
+    ]
+
+
+def _starter_notification_lines(notifications: object) -> list[str]:
+    if not isinstance(notifications, dict):
+        return []
+    lines = ["", "notifications:"]
+    if "backend" in notifications:
+        lines.append(f"  backend: {notifications['backend']}")
+    if "events" in notifications:
+        lines.append(f"  events: [{', '.join(notifications['events'])}]")
+    return lines
 
 
 def validate(path: str | Path = CONFIG_FILENAME) -> ConfigValidationResult:
