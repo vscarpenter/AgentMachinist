@@ -22,18 +22,27 @@ from pathlib import Path, PurePosixPath
 from string import Template
 from typing import Any
 
-from machinist.config import (
-    GateMutationPolicy,
-    MachinistConfig,
-    VerificationGateConfig,
-)
+from machinist.config import MachinistConfig, VerificationGateConfig
 from machinist.evidence import EvidenceError, TaskEvidence
-from machinist.github import PullRequest, normalize_repository_identity
+from machinist.github import PullRequest
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
+from machinist.repository_custody import (
+    PullRequestExpectation,
+    RepositoryCustodyError,
+    bind_repository,
+    same_repository_pr,
+    validate_pr_base,
+    verify_pull_request,
+)
 from machinist.runtime_paths import RuntimePathError, write_text_file
+from machinist.verification import (
+    VerificationError,
+    VerificationFailed,
+    run_verification_gates,
+)
 
 _IMPLEMENT_PROMPT = files("machinist") / "templates" / "implement-prompt.md"
 _RECOVERY_MODES = frozenset({"fresh", "resume"})
@@ -176,13 +185,13 @@ def run_execute_phase(
         )
 
     branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
-    repository_identity = _assert_repository_custody(config, github, workspace)
+    repository_identity = _bind_repository(config, github, workspace)
     pr = next(
         (
             candidate
             for candidate in github.open_machinist_prs(config.workspace.branch_prefix)
             if candidate.branch == branch
-            and _same_repository_pr(candidate, repository_identity)
+            and same_repository_pr(candidate, repository_identity)
         ),
         None,
     )
@@ -197,7 +206,7 @@ def run_execute_phase(
         raise ExecutePhaseError(
             "prior Execute checkpoint has an invalid PR base"
         ) from exc
-    _validate_pr_base(base, source="GitHub default branch")
+    _require_pr_base(base, source="GitHub default branch")
     if pr.base and pr.base != base:
         raise ExecutePhaseError(
             f"PR #{pr.number} targets base {pr.base!r}; expected {base!r}; "
@@ -1024,31 +1033,6 @@ def _invoke_verification_engine(
     test_runner,
     cancel_check,
 ) -> dict[str, Any]:
-    try:
-        from machinist.verification import (
-            VerificationError,
-            VerificationFailed,
-            run_verification_gates,
-        )
-    except ModuleNotFoundError as exc:
-        if exc.name != "machinist.verification":
-            raise ExecutePhaseError(
-                f"verification engine dependency is unavailable: {exc}"
-            ) from exc
-        return _fallback_verification(
-            path,
-            gates,
-            log_dir=log_dir,
-            workspace=workspace,
-            claim=claim,
-            test_runner=test_runner,
-            cancel_check=cancel_check,
-        )
-    except ImportError as exc:
-        raise ExecutePhaseError(
-            f"verification engine API is unavailable or incompatible: {exc}"
-        ) from exc
-
     _checkpoint(claim, verification_log_dir=str(log_dir))
     try:
         report = run_verification_gates(
@@ -1096,108 +1080,6 @@ def _verification_resume_blocker(evidence: Mapping[str, Any]) -> str | None:
         gate_name = name if isinstance(name, str) and name else "a verification gate"
         return f"mutation-forbidden gate {gate_name!r} changed it"
     return None
-
-
-def _fallback_verification(
-    path: Path,
-    gates,
-    *,
-    log_dir: Path,
-    workspace,
-    claim,
-    test_runner,
-    cancel_check,
-) -> dict[str, Any]:
-    """Compatibility fallback used only while the engine module is unavailable."""
-    log_dir.mkdir(parents=True, exist_ok=True)
-    results: list[dict[str, Any]] = []
-    for index, gate in enumerate(gates, start=1):
-        before = (
-            workspace.change_snapshot(path)
-            if gate.mutation_policy is GateMutationPolicy.FORBID
-            else None
-        )
-        if cancel_check is not None and cancel_check():
-            completed = None
-            status = "cancelled"
-            stdout = ""
-            stderr = "cancelled before verification gate dispatch"
-        else:
-            try:
-                completed = test_runner(
-                    gate.command,
-                    shell=True,
-                    cwd=path,
-                    capture_output=True,
-                    text=True,
-                    timeout=gate.timeout_minutes * 60,
-                )
-                status = "passed" if completed.returncode == 0 else "failed"
-                stdout = completed.stdout or ""
-                stderr = completed.stderr or ""
-            except subprocess.TimeoutExpired as exc:
-                completed = None
-                status = "timed_out"
-                stdout = str(exc.output or "")
-                stderr = str(exc.stderr or "")
-        after = (
-            workspace.change_snapshot(path)
-            if gate.mutation_policy is GateMutationPolicy.FORBID
-            else None
-        )
-        if before != after:
-            status = "mutation_detected"
-        stem = f"{index:02d}-{gate.name.replace(' ', '-')}"
-        stdout_log = log_dir / f"{stem}.stdout.log"
-        stderr_log = log_dir / f"{stem}.stderr.log"
-        stdout_log.write_text(stdout)
-        stderr_log.write_text(stderr)
-        passed = status == "passed"
-        blocking = status in {"cancelled", "mutation_detected"} or (
-            gate.required and not passed
-        )
-        results.append(
-            {
-                "name": gate.name,
-                "command": gate.command,
-                "required": gate.required,
-                "mutation_policy": gate.mutation_policy.value,
-                "status": status,
-                "passed": passed,
-                "blocking": blocking,
-                "returncode": None if completed is None else completed.returncode,
-                "stdout_excerpt": stdout[-4000:],
-                "stderr_excerpt": stderr[-4000:],
-                "stdout_log": str(stdout_log),
-                "stderr_log": str(stderr_log),
-                "snapshot_before": before,
-                "snapshot_after": after,
-            }
-        )
-    failures = [result["name"] for result in results if result["blocking"]]
-    evidence = {
-        "success": not failures,
-        "duration_seconds": 0.0,
-        "blocking_failures": failures,
-        "required_failures": [
-            result["name"]
-            for result in results
-            if result["required"] and not result["passed"]
-        ],
-        "advisory_failures": [
-            result["name"]
-            for result in results
-            if not result["required"] and not result["passed"]
-        ],
-        "gates": results,
-    }
-    _checkpoint(claim, verification_report=evidence)
-    if failures:
-        message = _verification_failure_message(evidence)
-        if any(result["status"] == "cancelled" for result in results):
-            raise ExecutePhaseCancelled(message)
-        raise ExecutePhaseError(message)
-    return evidence
 
 
 def _verification_failure_message(report: dict[str, Any]) -> str:
@@ -1331,90 +1213,44 @@ def _delivery_pr_at_sha(
 ) -> PullRequest:
     """Re-read the exact PR so origin and GitHub cannot silently diverge."""
     current = github.pr_for_branch(branch)
-    if current is None:
-        raise ExecutePhaseError(
-            f"PR #{original.number} for branch '{branch}' is no longer available"
-        )
-    expected_repository = normalize_repository_identity(getattr(github, "repo", None))
-    if (
-        current.number != original.number
-        or current.branch != branch
-        or (current.base and current.base != expected_base)
-        or current.state != "OPEN"
-        or not _same_repository_pr(current, expected_repository)
-    ):
+    expected = PullRequestExpectation(
+        number=original.number,
+        branch=branch,
+        base=expected_base,
+        head_sha=implementation_sha,
+        repository=getattr(github, "repo", None),
+    )
+    try:
+        return verify_pull_request(current, expected)
+    except RepositoryCustodyError as exc:
+        if "missing" in exc.reasons:
+            raise ExecutePhaseError(
+                f"PR #{original.number} for branch '{branch}' is no longer available"
+            ) from exc
+        if "head" in exc.reasons:
+            observed = "missing" if current is None else current.head_sha or "missing"
+            raise ExecutePhaseError(
+                "GitHub PR head does not match the pushed implementation "
+                f"({observed} != {implementation_sha}); refusing completion delivery"
+            ) from exc
         raise ExecutePhaseError(
             "GitHub PR identity/state changed after implementation push; "
             "refusing completion delivery"
-        )
-    if current.head_sha != implementation_sha:
-        raise ExecutePhaseError(
-            "GitHub PR head does not match the pushed implementation "
-            f"({current.head_sha or 'missing'} != {implementation_sha}); "
-            "refusing completion delivery"
-        )
-    return current
-
-
-def _same_repository_pr(pr: PullRequest, expected_repository: str | None) -> bool:
-    if pr.is_cross_repository:
-        return False
-    return not (
-        expected_repository is not None
-        and pr.head_repository is not None
-        and normalize_repository_identity(pr.head_repository) != expected_repository
-    )
-
-
-def _assert_repository_custody(config: MachinistConfig, github, workspace) -> str:
-    resolver = getattr(workspace, "repository_target", None)
-    if not callable(resolver):
-        raise ExecutePhaseError(
-            "cannot prove controller Git origin repository identity"
-        )
-    try:
-        origin_host, raw_origin_identity = resolver()
-        origin_identity = normalize_repository_identity(raw_origin_identity)
-    except Exception as exc:
-        raise ExecutePhaseError(
-            "cannot prove controller Git origin repository identity"
         ) from exc
-    if not isinstance(origin_host, str) or not origin_host:
-        raise ExecutePhaseError("cannot prove controller Git origin repository host")
-    configured = normalize_repository_identity(config.github.repo)
-    if (
-        (config.github.repo is not None and configured is None)
-        or origin_identity is None
-        or (configured is not None and configured != origin_identity)
-    ):
-        raise ExecutePhaseError(
-            "controller Git origin does not match configured GitHub repository"
-        )
-    client_target = normalize_repository_identity(getattr(github, "repo", None))
-    if client_target is not None and client_target != origin_identity:
-        raise ExecutePhaseError(
-            "configured GitHub repository does not match the GitHub client target"
-        )
-    client_host = getattr(github, "repo_host", None)
-    if (
-        client_host is not None
-        and str(client_host).casefold() != origin_host.casefold()
-    ):
-        raise ExecutePhaseError(
-            "GitHub client host does not match controller Git origin host"
-        )
-    binder = getattr(github, "bind_repository", None)
+
+
+def _bind_repository(config: MachinistConfig, github, workspace) -> str:
     try:
-        if callable(binder):
-            binder(origin_identity, hostname=origin_host)
-        else:
-            github.repo = origin_identity
-            github.repo_host = origin_host
-    except Exception as exc:
-        raise ExecutePhaseError(
-            "could not bind GitHub client to controller origin repository"
-        ) from exc
-    return origin_identity
+        return bind_repository(config, github, workspace).identity
+    except RepositoryCustodyError as exc:
+        raise ExecutePhaseError(str(exc)) from exc
+
+
+def _require_pr_base(value: str, *, source: str) -> str:
+    try:
+        return validate_pr_base(value, source=source)
+    except RepositoryCustodyError as exc:
+        raise ExecutePhaseError(str(exc)) from exc
 
 
 def _completion_comment(
@@ -1506,15 +1342,6 @@ def _reconciled_push(
             "inspect the remote branch before retrying"
         )
     return None
-
-
-def _validate_pr_base(value: str, *, source: str) -> None:
-    if (
-        not value
-        or value != value.strip()
-        or any(character in value for character in ("\0", "\n", "\r"))
-    ):
-        raise ExecutePhaseError(f"{source} returned an invalid PR base")
 
 
 def _checkpoint(claim, **evidence: Any) -> None:

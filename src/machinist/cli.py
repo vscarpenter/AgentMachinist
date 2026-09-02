@@ -49,9 +49,9 @@ from machinist.doctor import (
     fix_hint_for_check_name,
     run_doctor,
 )
-from machinist.explain import TaskExplanation, explain_task
 from machinist.evidence import TaskEvidence
-from machinist.github import GitHubClient, GitHubError, normalize_repository_identity
+from machinist.explain import TaskExplanation, explain_task
+from machinist.github import GitHubClient, GitHubError
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
@@ -98,6 +98,10 @@ from machinist.reporting import (
     ReportingError,
     build_metrics_report,
     parse_since_duration,
+)
+from machinist.repository_custody import (
+    RepositoryCustodyError,
+    bind_repository,
 )
 from machinist.service import (
     LaunchdService,
@@ -330,28 +334,12 @@ def _bound_github_client(
 ) -> GitHubClient:
     """Bind every gh operation to the controller origin's exact authority."""
     root = (repo_root or Path.cwd()).resolve()
-    host, identity = Workspace(
-        repo_root=root,
-        config=config.workspace,
-    ).repository_target()
-    configured = normalize_repository_identity(config.github.repo)
-    if config.github.repo is not None and configured is None:
-        raise WorkspaceError("configured GitHub repository identity is invalid")
-    if configured is not None and configured != identity:
-        raise WorkspaceError(
-            "controller Git origin does not match configured GitHub repository"
-        )
-
-    github = GitHubClient(repo=identity)
-    binder = getattr(github, "bind_repository", None)
-    if callable(binder):
-        binder(identity, hostname=host)
-    else:
-        # Lightweight test doubles predate the binding API.  Production uses
-        # GitHubClient.bind_repository; retaining this seam keeps command tests
-        # focused on orchestration rather than duplicating the client.
-        github.repo = identity
-        github.repo_host = host
+    workspace = Workspace(repo_root=root, config=config.workspace)
+    github = GitHubClient()
+    try:
+        bind_repository(config, github, workspace)
+    except RepositoryCustodyError as exc:
+        raise WorkspaceError(str(exc)) from exc
     return github
 
 
@@ -503,6 +491,7 @@ _MACHINIST_ERRORS = (
     ManagedPathError,
     OnboardingError,
     RehearsalError,
+    RepositoryCustodyError,
     TaskTemplateDriftError,
     ReportingError,
 )

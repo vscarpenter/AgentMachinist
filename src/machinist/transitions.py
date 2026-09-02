@@ -173,6 +173,7 @@ def classify_run(
     claim_held: bool | None = None,
 ) -> TransitionDecision:
     """Project an active or terminal Task Run into a pipeline decision."""
+    state: PipelineState | None
     if record.status is RunStatus.RUNNING and claim_held is False:
         state = _INTERRUPTED_STATES[record.phase]
     else:

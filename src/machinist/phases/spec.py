@@ -16,11 +16,19 @@ from uuid import uuid4
 
 from machinist.config import MachinistConfig
 from machinist.evidence import EvidenceError, TaskEvidence
-from machinist.github import DraftPR, Issue, PullRequest, normalize_repository_identity
+from machinist.github import DraftPR, Issue
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, write_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
+from machinist.repository_custody import (
+    PullRequestExpectation,
+    RepositoryCustodyError,
+    bind_repository,
+    same_repository_pr,
+    validate_pr_base,
+    verify_pull_request,
+)
 
 _APPROVED_LABEL_COLOR = "0e8a16"
 _SPEC_PROMPT = files("machinist") / "templates" / "spec-prompt.md"
@@ -69,7 +77,7 @@ def run_spec_phase(
     if hasattr(workspace, "cancel_check"):
         workspace.cancel_check = cancel_check
     report_progress(claim, "read Task", f"fetching GitHub issue #{issue_number}")
-    repository_identity = _assert_repository_custody(config, github, workspace)
+    repository_identity = _bind_repository(config, github, workspace)
     issue = github.get_issue(issue_number)
     _validate_issue(issue, config)
     _raise_if_cancelled(cancel_check, issue.number)
@@ -78,7 +86,7 @@ def run_spec_phase(
         base = previous.pr_base() or github.default_branch()
     except EvidenceError as exc:
         raise SpecPhaseError("prior Spec checkpoint has an invalid PR base") from exc
-    _validate_pr_base(base, source="GitHub default branch")
+    _require_pr_base(base, source="GitHub default branch")
     if claim is not None:
         claim.checkpoint(
             pr_base=base,
@@ -283,7 +291,7 @@ def preview_spec_phase(
     cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     """Generate a Spec preview without writing, committing, pushing, or opening a PR."""
-    _assert_repository_custody(config, github, workspace)
+    _bind_repository(config, github, workspace)
     issue = github.get_issue(issue_number)
     _validate_issue(issue, config)
     _raise_if_cancelled(cancel_check, issue.number)
@@ -324,7 +332,7 @@ def _select_delivery_pr(
         raise SpecPhaseError(
             f"PR #{existing_pr.number} is cross-repository; refusing Spec custody"
         )
-    if existing_pr is not None and not _same_repository_pr(
+    if existing_pr is not None and not same_repository_pr(
         existing_pr, expected_repository
     ):
         raise SpecPhaseError(
@@ -377,15 +385,6 @@ def _select_delivery_pr(
     return None
 
 
-def _validate_pr_base(value: str, *, source: str) -> None:
-    if (
-        not value
-        or value != value.strip()
-        or any(character in value for character in ("\0", "\n", "\r"))
-    ):
-        raise SpecPhaseError(f"{source} returned an invalid PR base")
-
-
 def _assert_delivered_pr(
     observed_pr,
     pr: DraftPR,
@@ -396,92 +395,34 @@ def _assert_delivered_pr(
     expected_repository: str,
 ) -> None:
     """Verify GitHub observes this repository's exact delivered branch and SHA."""
-    if observed_pr is None:
-        raise SpecPhaseError(
-            f"GitHub did not observe PR #{pr.number} for branch {branch!r} after delivery"
-        )
-    mismatches: list[str] = []
-    if observed_pr.number != pr.number:
-        mismatches.append(f"number #{observed_pr.number} != #{pr.number}")
-    if observed_pr.branch != branch:
-        mismatches.append(f"branch {observed_pr.branch!r} != {branch!r}")
-    if observed_pr.base and observed_pr.base != expected_base:
-        mismatches.append(f"base {observed_pr.base!r} != {expected_base!r}")
-    if observed_pr.state != "OPEN":
-        mismatches.append(f"state {observed_pr.state!r} != 'OPEN'")
-    if observed_pr.is_cross_repository:
-        mismatches.append("PR is cross-repository")
-    elif not _same_repository_pr(observed_pr, expected_repository):
-        mismatches.append("PR head repository does not match controller origin")
-    if not observed_pr.is_draft:
-        mismatches.append("PR is not a draft")
-    if observed_pr.head_sha != spec_sha:
-        mismatches.append(
-            f"head {(observed_pr.head_sha or 'missing')[:12]} != {spec_sha[:12]}"
-        )
-    if mismatches:
-        raise SpecPhaseError(
-            f"GitHub PR delivery verification failed for PR #{pr.number}: "
-            + "; ".join(mismatches)
-        )
-
-
-def _same_repository_pr(pr: PullRequest, expected_repository: str) -> bool:
-    if pr.is_cross_repository:
-        return False
-    return not (
-        pr.head_repository is not None
-        and normalize_repository_identity(pr.head_repository) != expected_repository
+    expected = PullRequestExpectation(
+        number=pr.number,
+        branch=branch,
+        base=expected_base,
+        head_sha=spec_sha,
+        repository=expected_repository,
+        is_draft=True,
     )
+    try:
+        verify_pull_request(observed_pr, expected)
+    except RepositoryCustodyError as exc:
+        raise SpecPhaseError(
+            f"GitHub PR delivery verification failed for PR #{pr.number}: {exc}"
+        ) from exc
 
 
-def _assert_repository_custody(config: MachinistConfig, github, workspace) -> str:
-    resolver = getattr(workspace, "repository_target", None)
-    if not callable(resolver):
-        raise SpecPhaseError("cannot prove controller Git origin repository identity")
+def _bind_repository(config: MachinistConfig, github, workspace) -> str:
     try:
-        origin_host, raw_origin_identity = resolver()
-        origin_identity = normalize_repository_identity(raw_origin_identity)
-    except Exception as exc:
-        raise SpecPhaseError(
-            "cannot prove controller Git origin repository identity"
-        ) from exc
-    if not isinstance(origin_host, str) or not origin_host:
-        raise SpecPhaseError("cannot prove controller Git origin repository host")
-    configured = normalize_repository_identity(config.github.repo)
-    if (
-        (config.github.repo is not None and configured is None)
-        or origin_identity is None
-        or (configured is not None and configured != origin_identity)
-    ):
-        raise SpecPhaseError(
-            "controller Git origin does not match configured GitHub repository"
-        )
-    client_target = normalize_repository_identity(getattr(github, "repo", None))
-    if client_target is not None and client_target != origin_identity:
-        raise SpecPhaseError(
-            "configured GitHub repository does not match the GitHub client target"
-        )
-    client_host = getattr(github, "repo_host", None)
-    if (
-        client_host is not None
-        and str(client_host).casefold() != origin_host.casefold()
-    ):
-        raise SpecPhaseError(
-            "GitHub client host does not match controller Git origin host"
-        )
-    binder = getattr(github, "bind_repository", None)
+        return bind_repository(config, github, workspace).identity
+    except RepositoryCustodyError as exc:
+        raise SpecPhaseError(str(exc)) from exc
+
+
+def _require_pr_base(value: str, *, source: str) -> str:
     try:
-        if callable(binder):
-            binder(origin_identity, hostname=origin_host)
-        else:
-            github.repo = origin_identity
-            github.repo_host = origin_host
-    except Exception as exc:
-        raise SpecPhaseError(
-            "could not bind GitHub client to controller origin repository"
-        ) from exc
-    return origin_identity
+        return validate_pr_base(value, source=source)
+    except RepositoryCustodyError as exc:
+        raise SpecPhaseError(str(exc)) from exc
 
 
 def _raise_if_cancelled(

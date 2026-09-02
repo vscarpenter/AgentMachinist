@@ -20,3 +20,9 @@
 - `PipelineState` retains every existing rendered value. `TransitionDecision`
   centralizes priority, dispatch Phase, and next action; Task Run dispositions now
   consume the same model without adding retryable/succeeded pipeline states.
+- Repository custody now returns a normalized host/identity and structured PR
+  mismatch reasons. Phase code translates those reasons into its existing
+  operator-facing failure context without reimplementing the checks.
+- Execute imports the authoritative Verification Gate implementation directly.
+  The internal fallback was deleted; existing Gate behavior tests cover the sole
+  path.

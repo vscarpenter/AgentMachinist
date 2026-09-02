@@ -13,6 +13,12 @@ from machinist.github import PullRequest
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
+from machinist.repository_custody import (
+    PullRequestExpectation,
+    RepositoryCustodyError,
+    same_repository_pr,
+    verify_pull_request,
+)
 
 _MAX_REPORT_CHARS = 100_000
 _MAX_DIFF_BYTES = 2 * 1024 * 1024
@@ -263,6 +269,7 @@ def _find_pr(github, config: MachinistConfig, branch: str) -> PullRequest:
             item
             for item in github.open_machinist_prs(config.workspace.branch_prefix)
             if item.branch == branch
+            and same_repository_pr(item, getattr(github, "repo", None))
         ),
         None,
     )
@@ -273,15 +280,19 @@ def _find_pr(github, config: MachinistConfig, branch: str) -> PullRequest:
 
 def _exact_pr(github, original: PullRequest, branch: str, sha: str) -> PullRequest:
     current = github.pr_for_branch(branch)
-    if (
-        current is None
-        or current.number != original.number
-        or current.branch != branch
-        or current.state != "OPEN"
-        or current.head_sha != sha
-    ):
-        raise ReviewPhaseError("PR identity or head changed during independent Review")
-    return current
+    expected = PullRequestExpectation(
+        number=original.number,
+        branch=branch,
+        base=original.base,
+        head_sha=sha,
+        repository=getattr(github, "repo", None),
+    )
+    try:
+        return verify_pull_request(current, expected)
+    except RepositoryCustodyError as exc:
+        raise ReviewPhaseError(
+            "PR identity or head changed during independent Review"
+        ) from exc
 
 
 def _parse_finding(raw: object) -> ReviewFinding:

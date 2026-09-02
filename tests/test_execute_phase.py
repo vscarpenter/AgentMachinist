@@ -1162,6 +1162,14 @@ def test_named_verification_report_is_checkpointed_and_in_completion_comment(tmp
     assert "passed" in comment[2]
 
 
+def test_execute_has_one_authoritative_verification_engine():
+    import machinist.phases.execute as execute_module
+    from machinist.verification import run_verification_gates
+
+    assert execute_module.run_verification_gates is run_verification_gates
+    assert not hasattr(execute_module, "_fallback_verification")
+
+
 def test_advisory_forbidden_mutation_is_checkpointed_and_never_committed(tmp_path):
     github = FakeGitHub(prs=[make_pr()])
     workspace = FakeWorkspace(tmp_path)
