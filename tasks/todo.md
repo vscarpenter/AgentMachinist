@@ -1,4 +1,4 @@
-# Architecture deepening (IN PROGRESS)
+# Architecture deepening (COMPLETE)
 
 Spec: `tasks/spec.md`
 
@@ -11,21 +11,25 @@ Spec: `tasks/spec.md`
 - [x] Move Phase Task Run construction out of `cli.py`.
 - [x] Make validated configuration the source of starter/effective behavior.
 - [x] Reconcile domain/module documentation and changelog.
-- [ ] Run focused tests and `bash scripts/verify.sh`.
-- [ ] Produce the change report and comprehension quiz.
+- [x] Run focused tests and `bash scripts/verify.sh`.
+- [x] Produce the change report and comprehension quiz.
 
 ### Resuming From Here
 
-Done: the user approved all seven architecture recommendations; the contract and
-decision record are captured on `codex/deepen-architecture`.
+Done: all seven approved architecture recommendations are implemented and
+committed on `codex/deepen-architecture`. The release-grade gate passes; exact
+final verification evidence is recorded in the handoff.
 
-Next: run the complete verification gate, inspect the final diff, then distill
-and remove the implementation ledger.
+Next: user review and the comprehension gate. Push, PR creation, merge,
+publication, and deployment remain outside this pass unless explicitly requested.
 
-Blockers: none.
+Blockers: none for implementation. The comprehension gate remains required before
+merge.
 
 Assumptions: observable CLI, configuration, persistence, and trust behavior remain
 unchanged; this pass deepens internal ownership rather than adding features.
+
+Completed 2026-09-02. No external state was changed.
 
 # Documentation reconciliation for comprehensive review (COMPLETE)
 

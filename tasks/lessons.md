@@ -20,3 +20,24 @@
 - A PEP 695 type alias can work with current Pydantic while failing schema
   generation on the declared minimum. Exercise configuration model creation
   and JSON Schema generation under minimum dependencies before release.
+
+## Deep module ownership
+
+- Keep persisted Task Run Evidence open for compatibility, but give production
+  callers a typed read Interface and validate known fields when checkpoints are
+  written. This adds locality without making historical records an upgrade Gate.
+- Journal paths are lifecycle implementation detail. Inventory should return
+  attempts, orphans, and typed corrupt artifacts so admission and reporting do
+  not learn filename grammar.
+- Pipeline state strings become hidden policy when callers sort, dispatch, and
+  derive recovery commands from them. A transition module should return all four
+  decisions together.
+- Construct every claimed Phase through one dispatcher Interface. Inject Phase
+  functions at the CLI seam so focused command tests remain useful while Claim,
+  Harness, Workshop, cancellation, and retry wiring stay in one implementation.
+- Repository custody should normalize the controller origin once and reuse exact
+  PR identity checks across Spec, Execute, and Review. Verification likewise has
+  more leverage as one engine than as a primary path plus an internal fallback.
+- Starter files and effective configuration displays should project from the
+  validated model. Rendering may choose a sparse presentation, but it should not
+  restate runtime defaults.
