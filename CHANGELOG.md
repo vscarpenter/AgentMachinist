@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-09-02
 
 - Reconcile every operating, visual, historical, and architecture document with
   the three-Phase lifecycle and deep-module ownership model. Simplify the TLDR

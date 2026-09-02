@@ -1,3 +1,29 @@
+# AgentMachinist 0.12.0 release preparation (IN PROGRESS)
+
+- [x] Confirm the release version and inspect origin, branch protection, required
+      checks, release automation, and secret metadata.
+- [x] Align package metadata, changelog, current-release documentation, and
+      rendered guides to 0.12.0.
+- [x] Refresh the lockfile and managed workflow projections.
+- [ ] Run the complete local release gate from the exact release commit.
+- [ ] Commit and push the release-ready branch for protected-branch validation.
+
+### Resuming From Here
+
+Done: the release target is 0.12.0. Origin is unchanged, the architecture and
+documentation branch is twelve commits ahead of `main`, all required release
+surfaces have been identified, and repository protection and publication
+automation have been inspected without reading any secret value.
+
+Next: regenerate derived files, run the release gate, and commit the exact
+candidate that will be pushed. PR checks, merge, tag, GitHub Release, PyPI, and
+live verification are external release states and are reported separately.
+
+Blockers: none.
+
+Assumptions: the deep-module refactor preserves public behavior and merits the
+next minor version because it changes the documented architecture contract.
+
 # Documentation and TLDR reconciliation (COMPLETE)
 
 - [x] Verify every ADR is tracked and follows the repository ADR format.
