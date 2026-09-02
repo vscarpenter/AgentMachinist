@@ -1,3 +1,38 @@
+# Documentation and TLDR reconciliation (COMPLETE)
+
+- [x] Verify every ADR is tracked and follows the repository ADR format.
+- [x] Audit every current Markdown and HTML document against the shipped CLI,
+      configuration, lifecycle, trust model, and deep module ownership changes.
+- [x] Mark historical design records clearly without rewriting their historical
+      decisions as current behavior.
+- [x] Simplify `docs/tldr.md` into one short setup path and two concise Task flows.
+- [x] Extend documentation drift checks for ADR completeness and TLDR contracts.
+- [x] Run focused documentation, config projection, and custody tests.
+- [x] Run `bash scripts/verify.sh`.
+- [x] Commit the complete documentation pass and record the final handoff state.
+
+### Resuming From Here
+
+Done: every file under `docs/` has been audited. Both ADRs are tracked,
+format-complete, and linked from the documentation index. Current guides and
+rendered pages are reconciled; historical records remain explicitly archived.
+The TLDR is reduced to one setup path and two explicit Task flows. Focused tests
+and browser rendering checks pass. The documentation unit is committed as
+`d762f3e`; the full release-grade gate passed 993 tests with 85.98% coverage,
+built both distributions, and smoke-tested wheel and sdist installs on Python
+3.13.
+
+Next: user review and the outstanding architecture comprehension gate. Push, PR
+creation, merge, publication, and deployment remain outside this pass unless
+explicitly requested.
+
+Blockers: none.
+
+Assumptions: this pass changes documentation and documentation tests only; shipped
+CLI, configuration, persistence, trust, and external behavior remain unchanged.
+
+Completed 2026-09-02. No external state was changed.
+
 # Architecture deepening (COMPLETE)
 
 Spec: `tasks/spec.md`
