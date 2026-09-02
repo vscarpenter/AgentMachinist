@@ -31,6 +31,7 @@ _TRUST_MODEL_PATH = _REPO_ROOT / "docs" / "trust-model.md"
 _DOCS_INDEX_PATH = _REPO_ROOT / "docs" / "README.md"
 _README_PATH = _REPO_ROOT / "README.md"
 _CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
+_CONTEXT_PATH = _REPO_ROOT / "CONTEXT.md"
 _CHANGELOG_PATH = _REPO_ROOT / "CHANGELOG.md"
 
 if not (_REPO_ROOT / "docs").exists():
@@ -142,6 +143,22 @@ def test_guide_uses_real_label_names():
 def test_operator_trust_architecture_and_harness_docs_exist():
     for name in _REQUIRED_DOCS:
         assert (_REPO_ROOT / "docs" / name).is_file(), f"docs/{name} is missing"
+
+
+def test_domain_and_architecture_docs_name_the_deep_phase_modules():
+    context = _CONTEXT_PATH.read_text()
+    architecture = (_REPO_ROOT / "docs/architecture.md").read_text()
+
+    assert "Spec, Execute, or Review" in context
+    for module in (
+        "dispatch.py",
+        "evidence.py",
+        "lifecycle.py",
+        "repository_custody.py",
+        "transitions.py",
+        "verification.py",
+    ):
+        assert f"`{module}`" in architecture
 
 
 def test_documented_pipeline_states_match_implementation_constants():

@@ -46,8 +46,8 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
 
 - `cli.py` — Click entrypoints: `init [--harness --test-cmd]`, `doctor`,
   `sync-workflows [--check]`, `spec`, `approve`, `run [--force --retry]`,
-  `watch [--once -v --interval]`, `retry [--phase --run]`, `status [-v]`,
-  `update-check [--json --timeout]`,
+  `review`, `amend`, `watch [--once -v --interval]`,
+  `retry [--phase --run]`, `status [-v]`, `update-check [--json --timeout]`,
   `clean [--issue --all --force]`, `inspect`. Ergonomics worth knowing:
   `init` auto-detects the test gate from the project manifest
   (`_detect_test_command`: pyproject/uv.lock → `uv run pytest`, package.json
@@ -55,15 +55,29 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `approve <n>` accepts a PR number *or* an issue number (falling back to the
   `<branch_prefix>issue-<n>` branch); `retry --run` and `run --retry` are the
   same recovery in either direction; `inspect <issue>` prints issue, PR,
-  approval SHA, workspace path, and both Task Run records in one pass.
+  approval SHA, workspace path, and all Task Run records in one pass. Click
+  owns validation, rendering, notifications, and the daemon loop; it delegates
+  claimed Phase construction to `dispatch.py`.
 - `config.py` — strict pydantic schema for `machinist.yaml`
   (`extra="forbid"`: unknown keys fail loudly). Validates label shapes,
-  branch prefix safety, timeout bounds. `harness.model` (str | None) and
+  branch prefix safety, and timeout bounds. The validated model also owns the
+  sparse starter projection and compatibility-resolved effective projection.
+  `config_cli.py` renders or persists those values without restating defaults.
+  `harness.model` (str | None) and
   `harness.extra_args` (list[str]) are optional pass-throughs into adapter
   argv — the controller never interprets them.
+- `dispatch.py` — the only constructor for claimed Spec, Execute, and Review
+  Task Runs. It wires Claims, Harnesses, Workshops, cancellation, verification,
+  and Phase functions; commands and watcher callbacks consume this interface.
+- `evidence.py` — typed reads and Phase-aware validation for known Task Run
+  Evidence. Persistence remains an open JSON mapping so historical and future
+  unknown keys remain readable.
 - `github.py` — `GitHubClient`, a thin wrapper over the `gh` CLI (auth stays
   in `gh`; no tokens in this codebase). Also parses/writes the approval
   marker comment.
+- `repository_custody.py` — binds the GitHub client to the controller origin
+  host/repository and verifies exact same-repository PR number, branch, base,
+  head, state, and draft expectations.
 - `workspace.py` — isolated per-task checkouts (git worktree by default, or
   clone) under `workspace.root` (`~/.machinist/workspaces`); commit, leased
   push (`--force-with-lease`), cleanup policies. Directories are named
@@ -73,12 +87,21 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   only falls back to `rmtree` when that fails or the strategy is `clone`.
 - `lifecycle.py` — durable Task Run records at
   `.machinist/runs/issue-<n>-<phase>.json` (atomic tmp+fsync+rename writes),
-  `flock`-based local claims, explicit retry, checkpoints for crash recovery.
+  `flock`-based local claims, explicit retry, checkpoints for crash recovery,
+  and the only parser for projection/journal discovery and corrupt/orphan
+  artifact meaning.
+- `transitions.py` — canonical pipeline state vocabulary, priority, dispatch
+  eligibility, Task Run disposition, and next-action decisions. Status,
+  watcher planning, explain, and observability consume its typed decisions.
+- `verification.py` — the sole Verification Gate engine after Harness work,
+  including required/advisory outcomes, mutation checks, cancellation,
+  timeouts, logs, and Evidence projection.
 - `harness/` — `base.py` owns subprocess mechanics, timeouts, 30s heartbeat
   callbacks, and credential scrubbing (removes `GH_TOKEN`, `GITHUB_TOKEN`,
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
-  (`claude_code`, `codex`, `pi`, `opencode`) only build argv for the two
-  phases and stay one screen long. Registry in `__init__.py`. Every adapter
+  (`claude_code`, `codex`, `pi`, `opencode`) build a read-only argv profile
+  (shared by Spec and Review) and an Execute edit profile, and stay one screen
+  long. Registry in `__init__.py`. Every adapter
   threads `harness.model` (as `--model <value>`) and `harness.extra_args`
   into both `spec_argv` and `implement_argv`. **Order matters**: `claude-code`
   passes the prompt via `-p <prompt>`, so the new args append at the end;
@@ -95,8 +118,12 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   (`verification.harness_may_run_gates` opts out); the claude-code adapter
   allowlists exactly those commands via `Harness.allowed_commands`. Contains
   partial-push recovery via checkpoint evidence.
-- `phases/status.py` — classifies pipeline state; `PIPELINE_STATES` is the
-  canonical list (docs tests assert against it).
+- `phases/review.py` — independent read-only review of the exact delivered
+  Execute head; posts a bounded structured report and marks the PR ready only
+  after rechecking custody.
+- `phases/status.py` — projects GitHub and Task Run facts through
+  `transitions.py`; its compatibility `PIPELINE_STATES` tuple derives from the
+  canonical enum (docs tests assert against it).
 - `phases/watch.py` — one dispatch pass; the daemon loop lives in `cli.py`.
   Failed issues are never re-dispatched within a daemon lifetime.
 - `workflows.py` — deterministic projection of config + installed version
@@ -150,13 +177,16 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    re-executable without `run --force` (which demands fresh approval).
 4. **Leased pushes**: implementation pushes use `--force-with-lease` against
    the approved SHA so concurrent remote changes fail loudly.
-5. **Single dispatcher**: `github.spec_source` (`local` | `github-actions`)
+5. **Single Task Run dispatcher**: every claimed Spec, Execute, and Review run
+   is constructed by `TaskDispatcher`; Click and watcher code do not recreate
+   Phase dependency wiring.
+6. **Single Spec source**: `github.spec_source` (`local` | `github-actions`)
    decides who owns Phase 1; managed workflows are projected from config,
    never hand-edited (the next sync intentionally replaces drift).
-6. **Explicit retry only**: a failed Task Run blocks re-runs until
+7. **Explicit retry only**: a failed Task Run blocks re-runs until
    `machinist retry`; a crash after push is reconciled from checkpoints
    (tests rerun, harness does not).
-7. **Security wording**: never claim a harness "has no Git access" — the
+8. **Security wording**: never claim a harness "has no Git access" — the
    trust model (docs/trust-model.md, SECURITY.md) is credential *reduction*
    and detection, not OS-level isolation. `pull_request_target` automation
    must never check out or execute PR-head code.
@@ -165,7 +195,8 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 
 - TDD is the house style: lifecycle/behavior changes start with a failing
   contract test. Keep `gh` construction behind `GitHubClient`, git behind
-  `Workspace`, eligibility/persistence in lifecycle and phase modules.
+  `Workspace`, Evidence interpretation in `evidence.py`, Task Run construction
+  in `dispatch.py`, and transition decisions in `transitions.py`.
 - Conventional-commit prefixes: `feat:`, `fix:`, `docs:`, `chore:`, with
   optional scope (`feat(cli):`, `docs(spec):`).
 - `tests/test_docs.py` enforces documentation drift: documented subcommands

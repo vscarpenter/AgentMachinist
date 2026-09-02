@@ -35,3 +35,6 @@
   compatibility-resolved effective projection. `config_cli` only renders, loads,
   and persists those model-owned values; the Click adapter no longer restates
   defaults.
+- Documentation now names all three Phases and records each deep module's
+  Interface. No operator-facing, persisted, or external contract changed during
+  implementation.

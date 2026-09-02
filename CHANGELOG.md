@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Concentrate controller policy in deep internal modules without changing
+  version-1 Task Run or configuration persistence: typed Evidence reads and
+  Phase-aware checkpoint validation, lifecycle-owned journal inventory,
+  canonical pipeline transitions, exact repository/PR custody, and one Task Run
+  dispatcher now serve every command and watcher path.
+- Remove Execute's duplicate Verification Gate fallback so required/advisory,
+  cancellation, timeout, mutation, and logging semantics have one authoritative
+  engine. Derive starter and effective configuration projections from the
+  validated model instead of repeating defaults in the CLI.
+
 ## 0.11.0 — 2026-09-01
 
 - Add a `task template` check to `machinist doctor`. The sealed issue form is
