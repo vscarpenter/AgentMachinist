@@ -26,3 +26,8 @@
 - Execute imports the authoritative Verification Gate implementation directly.
   The internal fallback was deleted; existing Gate behavior tests cover the sole
   path.
+- `TaskDispatcher` now owns lifecycle entry and Phase dependency construction for
+  Spec, Execute, Review, watcher dispatch, retry-now, and amendments. Click keeps
+  argument checks, progress rendering, result text, and notifications.
+- Runner functions remain injected by the CLI adapter so existing narrow command
+  tests can replace Phase behavior without bypassing dispatcher contracts.

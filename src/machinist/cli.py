@@ -43,6 +43,7 @@ from machinist.config_cli import (
 from machinist.config_cli import (
     write_schema as write_config_schema,
 )
+from machinist.dispatch import TaskDispatcher
 from machinist.doctor import (
     CheckLevel,
     DoctorReport,
@@ -145,10 +146,34 @@ def _make_harness(config, phase: Phase):
     return harness
 
 
-def _task_harness(config, phase: Phase, issue_number: int, runs_dir: Path):
+def _preview_harness(config, phase: Phase, issue_number: int, runs_dir: Path):
     harness = _make_harness(config, phase)
     harness.cancel_check = CancellationStore(runs_dir).check(issue_number)
     return harness
+
+
+def _task_dispatcher(
+    config: MachinistConfig,
+    *,
+    repo_root: Path,
+    lifecycle: TaskLifecycle | None = None,
+    cancellation: CancellationStore | None = None,
+    github: object | None = None,
+) -> TaskDispatcher:
+    """Construct Phase dispatch with CLI presentation adapters."""
+    return TaskDispatcher(
+        config,
+        repo_root=repo_root,
+        lifecycle=lifecycle,
+        cancellation=cancellation,
+        github=github,
+        github_factory=lambda: _bound_github_client(config, repo_root=repo_root),
+        progress=lambda message: click.echo(f"  … {message}"),
+        spec_runner=run_spec_phase,
+        execute_runner=run_execute_phase,
+        review_runner=run_review_phase,
+        test_runner=run_supervised,
+    )
 
 
 def _installed_version() -> str:
@@ -1498,8 +1523,10 @@ def retry(
     if (resume or fresh) and not run_now:
         raise click.UsageError("--resume/--fresh require --run")
     try:
-        lifecycle = TaskLifecycle(Path(".machinist/runs"))
-        cancellation = CancellationStore(Path(".machinist/runs"))
+        repo_root = Path.cwd()
+        runs_dir = repo_root / ".machinist/runs"
+        lifecycle = TaskLifecycle(runs_dir)
+        cancellation = CancellationStore(runs_dir)
         observed_cancellation = cancellation.get(issue_number)
         selected = (
             lifecycle.record(issue_number, Phase(phase))
@@ -1516,30 +1543,18 @@ def retry(
                 f"after attempt {record.attempt}."
             )
             config = load_config()
-            repo_root = Path.cwd()
-            cancellation = CancellationStore(repo_root / ".machinist/runs")
+            dispatcher = _task_dispatcher(
+                config,
+                repo_root=repo_root,
+                lifecycle=lifecycle,
+                cancellation=cancellation,
+            )
+            pr = dispatcher.run_phase(
+                issue_number,
+                record.phase,
+                recovery="resume" if resume else "fresh",
+            )
             if record.phase is Phase.SPEC:
-                pr = lifecycle.run(
-                    issue_number,
-                    Phase.SPEC,
-                    lambda claim: run_spec_phase(
-                        issue_number,
-                        config,
-                        github=_bound_github_client(config, repo_root=repo_root),
-                        harness=_task_harness(
-                            config,
-                            Phase.SPEC,
-                            issue_number,
-                            repo_root / ".machinist/runs",
-                        ),
-                        workspace=Workspace(
-                            repo_root=repo_root, config=config.workspace
-                        ),
-                        claim=claim,
-                        attempt=_fresh_attempt(claim),
-                        cancel_check=cancellation.check(issue_number),
-                    ),
-                )
                 click.echo(f"Draft PR #{pr.number}: {pr.url}")
                 _deliver_notification(
                     config,
@@ -1550,28 +1565,6 @@ def retry(
                     pr=pr.number,
                 )
             elif record.phase is Phase.EXECUTE:
-                pr = lifecycle.run(
-                    issue_number,
-                    Phase.EXECUTE,
-                    lambda claim: run_execute_phase(
-                        issue_number,
-                        config,
-                        github=_bound_github_client(config, repo_root=repo_root),
-                        harness=_task_harness(
-                            config,
-                            Phase.EXECUTE,
-                            issue_number,
-                            repo_root / ".machinist/runs",
-                        ),
-                        workspace=Workspace(
-                            repo_root=repo_root, config=config.workspace
-                        ),
-                        test_runner=run_supervised,
-                        claim=claim,
-                        recovery="resume" if resume else "fresh",
-                        cancel_check=cancellation.check(issue_number),
-                    ),
-                )
                 click.echo(
                     f"PR #{pr.number} implemented and marked ready for review: {pr.url}"
                 )
@@ -1584,13 +1577,6 @@ def retry(
                     pr=pr.number,
                 )
             else:
-                pr = _run_review_task(
-                    issue_number,
-                    config,
-                    lifecycle,
-                    repo_root=repo_root,
-                    cancellation=cancellation,
-                )
                 click.echo(
                     f"PR #{pr.number} passed independent review and is ready: {pr.url}"
                 )
@@ -1650,7 +1636,7 @@ def spec(
                 issue_number,
                 config,
                 github=github,
-                harness=_task_harness(
+                harness=_preview_harness(
                     config,
                     Phase.SPEC,
                     issue_number,
@@ -1684,26 +1670,15 @@ def spec(
             return
         action = "Revising" if revise else "Starting"
         click.echo(f"{action} Spec Task Run for issue #{issue_number}...")
-        pr = lifecycle.run(
+        pr = _task_dispatcher(
+            config,
+            repo_root=Path.cwd(),
+            lifecycle=lifecycle,
+            cancellation=cancellations,
+            github=github,
+        ).run_spec(
             issue_number,
-            Phase.SPEC,
-            lambda claim: run_spec_phase(
-                issue_number,
-                config,
-                github=github,
-                harness=_task_harness(
-                    config,
-                    Phase.SPEC,
-                    issue_number,
-                    Path(".machinist/runs"),
-                ),
-                workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
-                claim=claim,
-                revise=revise,
-                attempt=_fresh_attempt(claim),
-                cancel_check=cancellations.check(issue_number),
-            ),
-            repeat_succeeded=revise,
+            revise=revise,
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -1780,6 +1755,13 @@ def watch(
             repo_root / ".machinist/runs", repo_root=repo_root
         )
         queue_control = QueueControl(repo_root / ".machinist/runs", repo_root=repo_root)
+        dispatcher = _task_dispatcher(
+            config,
+            repo_root=repo_root,
+            lifecycle=lifecycle,
+            cancellation=cancellation_store,
+            github=github,
+        )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     configured_max = getattr(getattr(config, "queue", None), "max_tasks_per_pass", None)
@@ -1825,25 +1807,7 @@ def watch(
 
     def dispatch_spec(issue_number: int):
         click.echo(f"Dispatching Spec Task Run for issue #{issue_number}...")
-        pr = lifecycle.run(
-            issue_number,
-            Phase.SPEC,
-            lambda claim: run_spec_phase(
-                issue_number,
-                config,
-                github=github,
-                harness=_task_harness(
-                    config,
-                    Phase.SPEC,
-                    issue_number,
-                    repo_root / ".machinist/runs",
-                ),
-                workspace=Workspace(repo_root=repo_root, config=config.workspace),
-                claim=claim,
-                attempt=_fresh_attempt(claim),
-                cancel_check=cancellation_store.check(issue_number),
-            ),
-        )
+        pr = dispatcher.run_spec(issue_number)
         _deliver_notification(
             config,
             NotificationEvent.SPEC_READY,
@@ -1856,42 +1820,14 @@ def watch(
 
     def dispatch_execute(issue_number: int):
         click.echo(f"Dispatching Execute Task Run for issue #{issue_number}...")
-        pr = lifecycle.run(
-            issue_number,
-            Phase.EXECUTE,
-            lambda claim: run_execute_phase(
-                issue_number,
-                config,
-                github=github,
-                harness=_task_harness(
-                    config,
-                    Phase.EXECUTE,
-                    issue_number,
-                    repo_root / ".machinist/runs",
-                ),
-                workspace=Workspace(repo_root=repo_root, config=config.workspace),
-                test_runner=run_supervised,
-                claim=claim,
-                recovery="fresh",
-                cancel_check=CancellationStore(repo_root / ".machinist/runs").check(
-                    issue_number
-                ),
-            ),
-        )
+        pr = dispatcher.run_execute(issue_number, recovery="fresh")
         if not config.review.enabled:
             _notify_pr_ready(config, issue_number, pr.number)
         return pr
 
     def dispatch_review(issue_number: int):
         click.echo(f"Dispatching Review Task Run for issue #{issue_number}...")
-        pr = _run_review_task(
-            issue_number,
-            config,
-            lifecycle,
-            repo_root=repo_root,
-            cancellation=cancellation_store,
-            github=github,
-        )
+        pr = dispatcher.run_review(issue_number)
         _notify_pr_ready(config, issue_number, pr.number)
         return pr
 
@@ -2066,27 +2002,15 @@ def run(
                 f"run 'machinist cancel {issue_number} --clear' before starting"
             )
         click.echo(f"Starting Execute Task Run for issue #{issue_number}...")
-        pr = lifecycle.run(
+        pr = _task_dispatcher(
+            config,
+            repo_root=Path.cwd(),
+            lifecycle=lifecycle,
+            cancellation=cancellations,
+        ).run_execute(
             issue_number,
-            Phase.EXECUTE,
-            lambda claim: run_execute_phase(
-                issue_number,
-                config,
-                github=_bound_github_client(config),
-                harness=_task_harness(
-                    config,
-                    Phase.EXECUTE,
-                    issue_number,
-                    Path(".machinist/runs"),
-                ),
-                workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
-                test_runner=run_supervised,
-                force=force,
-                claim=claim,
-                recovery="resume" if resume else "fresh",
-                cancel_check=cancellations.check(issue_number),
-            ),
-            repeat_succeeded=force,
+            force=force,
+            recovery="resume" if resume else "fresh",
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -2109,13 +2033,13 @@ def review(issue_number: int) -> None:
     try:
         config = load_config()
         lifecycle = TaskLifecycle(runs_dir, repo_root=repo_root)
-        pr = _run_review_task(
-            issue_number,
+        cancellation = CancellationStore(runs_dir, repo_root=repo_root)
+        pr = _task_dispatcher(
             config,
-            lifecycle,
             repo_root=repo_root,
-            cancellation=CancellationStore(runs_dir, repo_root=repo_root),
-        )
+            lifecycle=lifecycle,
+            cancellation=cancellation,
+        ).run_review(issue_number)
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"PR #{pr.number} passed independent review and is ready: {pr.url}")
@@ -2192,28 +2116,16 @@ def amend(
                 f"issue #{issue_number} has a cancellation request; clear it first"
             )
         click.echo(f"Starting amendment Task Run for issue #{issue_number}...")
-        pr = lifecycle.run(
+        pr = _task_dispatcher(
+            config,
+            repo_root=Path.cwd(),
+            lifecycle=lifecycle,
+            cancellation=cancellations,
+        ).run_execute(
             issue_number,
-            Phase.EXECUTE,
-            lambda claim: run_execute_phase(
-                issue_number,
-                config,
-                github=_bound_github_client(config),
-                harness=_task_harness(
-                    config,
-                    Phase.EXECUTE,
-                    issue_number,
-                    runs_dir,
-                ),
-                workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
-                test_runner=run_supervised,
-                force=True,
-                claim=claim,
-                recovery="fresh",
-                feedback=feedback,
-                cancel_check=cancellations.check(issue_number),
-            ),
-            repeat_succeeded=True,
+            force=True,
+            recovery="fresh",
+            feedback=feedback,
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -2225,48 +2137,6 @@ def amend(
     else:
         click.echo(f"PR #{pr.number} amended and ready for review: {pr.url}")
         _notify_pr_ready(config, issue_number, pr.number)
-
-
-def _fresh_attempt(claim) -> int | None:
-    """Keep the first-run path stable and isolate every later attempt."""
-    attempt = getattr(claim, "attempt", 1)
-    return attempt if attempt > 1 else None
-
-
-def _run_review_task(
-    issue_number: int,
-    config: MachinistConfig,
-    lifecycle: TaskLifecycle,
-    *,
-    repo_root: Path,
-    cancellation: CancellationStore,
-    github=None,
-):
-    execute = lifecycle.record(issue_number, Phase.EXECUTE)
-    if execute is None or execute.status is not RunStatus.SUCCEEDED:
-        raise LifecycleError(
-            f"issue #{issue_number} has no successful Execute Task Run to review"
-        )
-    github = github or _bound_github_client(config, repo_root=repo_root)
-    return lifecycle.run(
-        issue_number,
-        Phase.REVIEW,
-        lambda claim: run_review_phase(
-            issue_number,
-            config,
-            github=github,
-            harness=_task_harness(
-                config,
-                Phase.REVIEW,
-                issue_number,
-                repo_root / ".machinist/runs",
-            ),
-            workspace=Workspace(repo_root=repo_root, config=config.workspace),
-            execute_evidence=dict(execute.evidence),
-            claim=claim,
-            cancel_check=cancellation.check(issue_number),
-        ),
-    )
 
 
 def _notify_pr_ready(config: MachinistConfig, issue: int, pr: int) -> None:

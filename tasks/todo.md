@@ -8,7 +8,7 @@ Spec: `tasks/spec.md`
 - [x] Concentrate pipeline transition vocabulary and decisions.
 - [x] Concentrate repository and PR custody.
 - [x] Remove the duplicate Verification Gate fallback.
-- [ ] Move Phase Task Run construction out of `cli.py`.
+- [x] Move Phase Task Run construction out of `cli.py`.
 - [ ] Make validated configuration the source of starter/effective behavior.
 - [ ] Reconcile domain/module documentation and changelog.
 - [ ] Run focused tests and `bash scripts/verify.sh`.
@@ -19,8 +19,8 @@ Spec: `tasks/spec.md`
 Done: the user approved all seven architecture recommendations; the contract and
 decision record are captured on `codex/deepen-architecture`.
 
-Next: move all Phase Task Run construction into dispatch, then deepen validated
-configuration projection.
+Next: deepen validated configuration projection, then reconcile durable
+documentation.
 
 Blockers: none.
 
