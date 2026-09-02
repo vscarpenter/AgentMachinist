@@ -1,3 +1,32 @@
+# Architecture deepening (IN PROGRESS)
+
+Spec: `tasks/spec.md`
+
+- [x] Record the approved architecture contract and ADR.
+- [ ] Deepen Task Run Evidence and migrate production readers.
+- [ ] Concentrate Task Run journal inventory in lifecycle.
+- [ ] Concentrate pipeline transition vocabulary and decisions.
+- [ ] Concentrate repository and PR custody.
+- [ ] Remove the duplicate Verification Gate fallback.
+- [ ] Move Phase Task Run construction out of `cli.py`.
+- [ ] Make validated configuration the source of starter/effective behavior.
+- [ ] Reconcile domain/module documentation and changelog.
+- [ ] Run focused tests and `bash scripts/verify.sh`.
+- [ ] Produce the change report and comprehension quiz.
+
+### Resuming From Here
+
+Done: the user approved all seven architecture recommendations; the contract and
+decision record are captured on `codex/deepen-architecture`.
+
+Next: begin with failing Evidence and lifecycle inventory contract tests, then
+implement each item in dependency order with checkpoint commits.
+
+Blockers: none.
+
+Assumptions: observable CLI, configuration, persistence, and trust behavior remain
+unchanged; this pass deepens internal ownership rather than adding features.
+
 # Documentation reconciliation for comprehensive review (COMPLETE)
 
 - [x] Make initialization review, commit, and push explicit in canonical docs.
