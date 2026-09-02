@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from machinist.evidence import TaskEvidence
-from machinist.lifecycle import Phase, RunRecord, RunStatus, TaskLifecycle
+from machinist.lifecycle import RunRecord, RunStatus, TaskLifecycle
+from machinist.transitions import describe_run
 
 _READ_MODEL_SCHEMA_VERSION = 1
 
@@ -112,79 +113,6 @@ class RunReport:
             "sources": source_payload,
             "source_errors": [error.to_dict() for error in self.source_errors],
         }
-
-
-@dataclass(frozen=True)
-class RunDisposition:
-    """Canonical operator-facing meaning of a Task Run projection."""
-
-    display: str
-    owner: str
-    severity: str
-    dispatchable: bool
-    active: bool | None
-    next_action: str | None
-
-
-def describe_run(
-    record: RunRecord,
-    *,
-    claim_held: bool | None = None,
-) -> RunDisposition:
-    """Map persistence vocabulary to one stable operator-facing state."""
-    phase = record.phase.value
-    issue = record.issue
-    if record.status is RunStatus.RUNNING:
-        if claim_held is False:
-            return RunDisposition(
-                f"{phase} interrupted",
-                "operator",
-                "error",
-                False,
-                False,
-                f"machinist retry {issue} --phase {phase}",
-            )
-        return RunDisposition(
-            f"{phase} running",
-            "machinist",
-            "info",
-            False,
-            claim_held,
-            f"machinist cancel {issue}",
-        )
-    if record.status is RunStatus.RETRYABLE:
-        return RunDisposition(
-            f"{phase} retryable",
-            "watcher",
-            "info",
-            True,
-            False,
-            "machinist watch --once -v",
-        )
-    if record.status in {
-        RunStatus.FAILED,
-        RunStatus.CANCELLED,
-        RunStatus.ABANDONED,
-    }:
-        return RunDisposition(
-            f"{phase} {record.status.value}",
-            "operator",
-            "error" if record.status is RunStatus.FAILED else "warning",
-            False,
-            False,
-            f"machinist retry {issue} --phase {phase}",
-        )
-    next_action = (
-        f"machinist approve --issue {issue}" if record.phase is Phase.SPEC else None
-    )
-    return RunDisposition(
-        f"{phase} succeeded",
-        "operator",
-        "success",
-        False,
-        False,
-        next_action,
-    )
 
 
 def capture_source(source: str, loader: RemoteLoader) -> SourceEnvelope:

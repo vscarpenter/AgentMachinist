@@ -5,7 +5,7 @@ Spec: `tasks/spec.md`
 - [x] Record the approved architecture contract and ADR.
 - [x] Deepen Task Run Evidence and migrate production readers.
 - [x] Concentrate Task Run journal inventory in lifecycle.
-- [ ] Concentrate pipeline transition vocabulary and decisions.
+- [x] Concentrate pipeline transition vocabulary and decisions.
 - [ ] Concentrate repository and PR custody.
 - [ ] Remove the duplicate Verification Gate fallback.
 - [ ] Move Phase Task Run construction out of `cli.py`.
@@ -19,8 +19,8 @@ Spec: `tasks/spec.md`
 Done: the user approved all seven architecture recommendations; the contract and
 decision record are captured on `codex/deepen-architecture`.
 
-Next: deepen pipeline transitions, then concentrate repository custody and the
-Verification Gate implementation.
+Next: concentrate repository custody and remove Execute's duplicate Verification
+Gate fallback.
 
 Blockers: none.
 

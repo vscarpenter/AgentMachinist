@@ -17,3 +17,6 @@
   upgrade-time failure.
 - `RunInventory` now includes attempts, orphans, and typed corrupt artifacts while
   retaining its original `records` and `corrupt` fields for compatibility.
+- `PipelineState` retains every existing rendered value. `TransitionDecision`
+  centralizes priority, dispatch Phase, and next action; Task Run dispositions now
+  consume the same model without adding retryable/succeeded pipeline states.
