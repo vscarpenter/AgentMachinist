@@ -29,6 +29,8 @@ _EXPLAINER_PATH = _REPO_ROOT / "docs" / "explainer.html"
 _JOB_CARD_PATH = _REPO_ROOT / "docs" / "job-card.html"
 _TRUST_MODEL_PATH = _REPO_ROOT / "docs" / "trust-model.md"
 _DOCS_INDEX_PATH = _REPO_ROOT / "docs" / "README.md"
+_TLDR_PATH = _REPO_ROOT / "docs" / "tldr.md"
+_ADR_DIRECTORY = _REPO_ROOT / "docs" / "adr"
 _README_PATH = _REPO_ROOT / "README.md"
 _CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
 _CONTEXT_PATH = _REPO_ROOT / "CONTEXT.md"
@@ -56,6 +58,7 @@ _REQUIRED_HEADINGS = (
 
 _REQUIRED_DOCS = (
     "README.md",
+    "tldr.md",
     "architecture.md",
     "operator-runbook.md",
     "trust-model.md",
@@ -151,6 +154,8 @@ def test_domain_and_architecture_docs_name_the_deep_phase_modules():
 
     assert "Spec, Execute, or Review" in context
     for module in (
+        "config.py",
+        "config_cli.py",
         "dispatch.py",
         "evidence.py",
         "lifecycle.py",
@@ -159,6 +164,67 @@ def test_domain_and_architecture_docs_name_the_deep_phase_modules():
         "verification.py",
     ):
         assert f"`{module}`" in architecture
+
+
+def test_local_document_links_resolve():
+    docs_root = _REPO_ROOT / "docs"
+    paths = sorted(docs_root.rglob("*.md"))
+    for path in paths:
+        for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", path.read_text()):
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            relative = target.split("#", 1)[0].strip("<>")
+            if relative:
+                assert (path.parent / relative).exists(), (
+                    f"broken link in {path}: {target}"
+                )
+
+    for path in sorted(docs_root.glob("*.html")):
+        for target in re.findall(r'href="([^"]+)"', path.read_text()):
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            relative = target.split("#", 1)[0]
+            assert (path.parent / relative).exists(), f"broken link in {path}: {target}"
+
+
+def test_adrs_are_complete_and_discoverable():
+    adrs = sorted(_ADR_DIRECTORY.glob("[0-9][0-9][0-9][0-9]-*.md"))
+    assert adrs, "docs/adr has no architecture decision records"
+    docs_index = _DOCS_INDEX_PATH.read_text()
+
+    for path in adrs:
+        text = path.read_text()
+        assert re.search(r"^Date: \d{4}-\d{2}-\d{2}$", text, flags=re.MULTILINE), path
+        assert re.search(
+            r"^Status: (accepted|deprecated|superseded)$",
+            text,
+            flags=re.MULTILINE | re.IGNORECASE,
+        ), path
+        assert re.search(r"^Deciders: \S", text, flags=re.MULTILINE), path
+        for heading in (
+            "## Context",
+            "## Decision",
+            "## Consequences",
+            "## Alternatives rejected",
+        ):
+            assert heading in text, f"{path} is missing {heading}"
+        assert f"(adr/{path.name})" in docs_index, f"docs index does not link {path}"
+
+
+def test_tldr_is_one_short_provider_neutral_path():
+    text = _TLDR_PATH.read_text()
+    assert len(text.splitlines()) <= 85
+    assert text.count("## One-time setup") == 1
+    assert "selected Spec adapter's declared secret" in text
+    assert "machinist run <issue>" in text
+    assert "machinist review <issue>" in text
+    assert "AgentMachinist never merges" in text
+    for provider_secret in (
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+    ):
+        assert provider_secret not in text
 
 
 def test_documented_pipeline_states_match_implementation_constants():

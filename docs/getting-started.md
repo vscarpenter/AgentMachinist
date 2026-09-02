@@ -101,8 +101,8 @@ run, each with a one-line explanation and a safe default — `init` is the same
 setup step without the guided receipt:
 
 - **Dispatch mode** — `local` (the `machinist watch` daemon runs the Spec
-  phase on your machine) or `github-actions` (CI runs it; requires an
-  `ANTHROPIC_API_KEY` repository secret).
+  phase on your machine) or `github-actions` (CI runs it; requires the selected
+  Spec adapter's declared repository secret).
 - **Managed workflows** — install the Machinist-owned
   `.github/workflows/machinist-*.yml` files.
 - **Harness** — `claude-code`, `codex`, `opencode`, `pi`, or an installed v1

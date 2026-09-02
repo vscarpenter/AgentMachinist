@@ -26,6 +26,9 @@ approval automation never checks out or executes PR-head code.
   sufficient by itself. The check fails closed: an unreadable permission mints
   no approval evidence. The approver's login is recorded on the approval
   comment.
+- Repository custody binds GitHub operations to the controller origin's host,
+  owner, and repository, then checks the expected same-repository PR number,
+  base, head, state, and draft status before a Phase changes it.
 - Codex read-only sandbox, Pi read-tool allowlist, and Claude plan/read-tool
   arguments during spec generation.
 - Rejection of any dirty repository after spec generation.
@@ -79,13 +82,17 @@ re-checks that fingerprint before each later Git call, and the check runs
 before the first Git subprocess so a planted `core.fsmonitor`, clean filter,
 or hook never gets a process to execute in.
 
-Config files are compared by key rather than by bytes. A change trips the
-guard when it touches a key that can execute a program, name a path Git will
-trust, or redirect the network: `core.fsmonitor`, `core.hooksPath`,
-`core.pager`, `core.sshCommand`, `core.worktree`, `filter.*.clean`,
-`filter.*.smudge`, `diff.*.command`, `alias.*`, `credential.*`, `url.*`,
-`include.path`, `remote.origin.url`, and the rest of the same family. Editing
-`diff.tool`, `user.name`, or adding a second remote does not trip it.
+Config files shared with the controller repository under
+`workspace.strategy: worktree` are compared by security-sensitive key. A
+change trips the guard when it touches a key that can execute a program, name a
+path Git will trust, or redirect the network: `core.fsmonitor`,
+`core.hooksPath`, `core.pager`, `core.sshCommand`, `core.worktree`,
+`filter.*.clean`, `filter.*.smudge`, `diff.*.command`, `alias.*`,
+`credential.*`, `url.*`, `include.path`, `remote.origin.url`, and the rest of
+the same family. Editing `diff.tool`, `user.name`, or adding a second remote
+does not trip a shared-config comparison. A clone Workshop owns its config, so
+that file is compared byte for byte. An unreadable config fails custody rather
+than being assumed safe.
 
 Hooks, `info/`, and `objects/` stay compared byte for byte. A hook body is
 code, so there is no benign subset to carve out.

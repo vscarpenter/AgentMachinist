@@ -16,8 +16,8 @@ path that matches what you are trying to do:
 
 - [Getting Started](getting-started.md) — complete installation, configuration,
   first Task, and troubleshooting reference.
-- [TL;DR](tldr.md) — two cheat sheets for the local and GitHub flows:
-  create an issue, label it, watch, approve, run, merge.
+- [TL;DR](tldr.md) — one setup checklist plus concise local and GitHub Actions
+  Task flows.
 - [Machinist Job Card](https://agentmachinist.vinny.dev/job-card.html) — compact
   local-versus-Actions checklist.
 - [Operator runbook](operator-runbook.md) — readiness, dispatch, recovery,
@@ -42,6 +42,11 @@ prove the controller flow without a model. During operation, `machinist explain
 <issue>`, `machinist status --watch`, and `machinist report` expose effective
 policy, live state, and local reliability. Run `machinist --help` for grouped
 `Setup`, `Tasks`, `Build`, and `Operate — daily` vs `Operate — advanced` help.
+
+## Architecture decisions
+
+- [ADR 0001: Review, plugin, and telemetry boundaries](adr/0001-review-plugin-telemetry-boundaries.md)
+- [ADR 0002: Deep module ownership for controller policy](adr/0002-deep-module-ownership.md)
 
 ## Historical design records
 

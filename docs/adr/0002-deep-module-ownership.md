@@ -2,7 +2,7 @@
 
 Date: 2026-09-02
 
-Status: accepted
+Status: Accepted
 
 Deciders: Vinny Carpenter
 

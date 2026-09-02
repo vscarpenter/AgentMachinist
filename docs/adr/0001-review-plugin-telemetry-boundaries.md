@@ -2,7 +2,9 @@
 
 Date: 2026-08-30
 
-Status: accepted
+Status: Accepted
+
+Deciders: Vinny Carpenter
 
 ## Context
 
@@ -33,8 +35,8 @@ allowlisted attributes. It never serializes Task evidence wholesale.
 ## Consequences
 
 - The pipeline state model gains `awaiting review` and Review run states.
-- Existing configurations remain two-phase unless Review is explicitly enabled;
-  new starter configurations enable it.
+- Existing configurations preserve the disabled Review default unless Review is
+  explicitly enabled; newly rendered starter configurations enable it.
 - Adapter authors have a stable versioned integration seam and conformance
   tests, but plugin code is trusted code running in the controller process.
 - CI projection fails early when a selected adapter cannot describe a safe Spec
@@ -57,4 +59,3 @@ allowlisted attributes. It never serializes Task evidence wholesale.
   diagnostics, and future fields that were not designed for disclosure.
 - Adding an OpenTelemetry SDK dependency: unnecessary for the first aggregate
   OTLP/HTTP metrics contract and increases adoption cost.
-

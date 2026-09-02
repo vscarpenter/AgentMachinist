@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Reconcile every operating, visual, historical, and architecture document with
+  the three-Phase lifecycle and deep-module ownership model. Simplify the TLDR
+  to one provider-neutral setup path, make both ADRs discoverable and
+  format-complete, and correct Git-config custody and hosted-Spec secret
+  guidance.
 - Concentrate controller policy in deep internal modules without changing
   version-1 Task Run or configuration persistence: typed Evidence reads and
   Phase-aware checkpoint validation, lifecycle-owned journal inventory,

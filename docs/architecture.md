@@ -1,8 +1,8 @@
 # Architecture and lifecycle
 
 AgentMachinist is a controller around four external systems: Git, GitHub, a
-coding harness, and the repository's test command. Its useful boundary is a
-ready-for-review pull request—not merge or deployment.
+coding Harness, and the repository's configured verification commands. Its
+useful boundary is a ready-for-review pull request—not merge or deployment.
 
 ## Ownership
 
