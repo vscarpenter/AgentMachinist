@@ -9,7 +9,7 @@ Spec: `tasks/spec.md`
 - [x] Concentrate repository and PR custody.
 - [x] Remove the duplicate Verification Gate fallback.
 - [x] Move Phase Task Run construction out of `cli.py`.
-- [ ] Make validated configuration the source of starter/effective behavior.
+- [x] Make validated configuration the source of starter/effective behavior.
 - [ ] Reconcile domain/module documentation and changelog.
 - [ ] Run focused tests and `bash scripts/verify.sh`.
 - [ ] Produce the change report and comprehension quiz.
@@ -19,8 +19,8 @@ Spec: `tasks/spec.md`
 Done: the user approved all seven architecture recommendations; the contract and
 decision record are captured on `codex/deepen-architecture`.
 
-Next: deepen validated configuration projection, then reconcile durable
-documentation.
+Next: reconcile durable documentation, distill the implementation ledger, and
+run the complete verification gate.
 
 Blockers: none.
 

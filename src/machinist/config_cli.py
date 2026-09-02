@@ -22,10 +22,8 @@ from pydantic import ValidationError
 from machinist.config import (
     CONFIG_FILENAME,
     ConfigError,
-    HarnessPhase,
     MachinistConfig,
     config_json_schema,
-    harness_identifier,
     load_config,
     read_config_text,
     strict_yaml_load,
@@ -95,6 +93,79 @@ class ConfigValidationResult:
         raise ConfigError(self.error.message)
 
 
+def render_starter_config(
+    *,
+    harness_name: str | None,
+    test_command: str | None,
+    manage_workflows: bool,
+    spec_source: str | None = None,
+    notification_backend: str | None = None,
+    notification_events: list[str] | None = None,
+) -> str:
+    """Render the model-owned sparse starter projection as stable YAML."""
+    try:
+        projection = MachinistConfig.starter_projection(
+            harness_name=harness_name,
+            test_command=test_command,
+            manage_workflows=manage_workflows,
+            spec_source=spec_source,
+            notification_backend=notification_backend,
+            notification_events=notification_events,
+        )
+    except ValidationError as exc:
+        raise ConfigError(f"generated machinist.yaml is invalid: {exc}") from exc
+
+    harness = projection["harness"]
+    tests = projection["tests"]
+    github = projection["github"]
+    labels = github["labels"]
+    workspace = projection["workspace"]
+    review = projection["review"]
+    command_value = json.dumps(tests["command"])
+    lines: list[str] = [
+        "# AgentMachinist configuration",
+        "# See docs/getting-started.md for all options.",
+        f"version: {projection['version']}",
+        "",
+        "harness:",
+        f"  name: {harness['name']}",
+        "",
+        "tests:",
+        f"  command: {command_value}",
+        "",
+        "github:",
+        f"  repo: {json.dumps(github['repo'])}",
+        f"  spec_source: {github['spec_source']}",
+    ]
+    if "manage_workflows" in github:
+        lines.append(f"  manage_workflows: {str(github['manage_workflows']).lower()}")
+    lines.extend(
+        [
+            "  labels:",
+            f"    trigger: {labels['trigger']}",
+            f"    approved: {json.dumps(labels['approved'])}",
+            f"  poll_interval_seconds: {github['poll_interval_seconds']}",
+            "",
+            "workspace:",
+            f"  root: {workspace['root']}",
+            f"  strategy: {workspace['strategy']}",
+            f"  cleanup: {workspace['cleanup']}",
+            f"  branch_prefix: {workspace['branch_prefix']}",
+            "",
+            "review:",
+            f"  enabled: {str(review['enabled']).lower()}",
+        ]
+    )
+    notifications = projection.get("notifications")
+    if isinstance(notifications, dict):
+        lines.extend(["", "notifications:"])
+        if "backend" in notifications:
+            lines.append(f"  backend: {notifications['backend']}")
+        if "events" in notifications:
+            lines.append(f"  events: [{', '.join(notifications['events'])}]")
+    return "\n".join(lines) + "\n"
+
+
 def validate(path: str | Path = CONFIG_FILENAME) -> ConfigValidationResult:
     """Validate one config file and return data instead of ``ConfigError``."""
     config_path = Path(path)
@@ -142,22 +213,7 @@ def show_effective(path: str | Path = CONFIG_FILENAME) -> dict[str, Any]:
     phase-specific harness and named-gate shapes.  The returned mapping is for
     presentation and inspection; it contains no Pydantic, Enum, or Path values.
     """
-    config = load_config(path)
-    effective = config.model_dump(mode="json")
-    effective["harness"] = {
-        phase.value: _effective_harness(config, phase) for phase in HarnessPhase
-    }
-    effective["workspace"]["root"] = str(config.workspace.resolved_root())
-    effective["verification"] = {
-        "gates": [
-            gate.model_dump(mode="json")
-            for gate in config.resolved_verification_gates()
-        ]
-    }
-    # The legacy field has been represented by verification.gates above.  Its
-    # removal prevents an effective view from containing contradictory inputs.
-    effective.pop("tests", None)
-    return effective
+    return load_config(path).effective_projection()
 
 
 def schema() -> dict[str, Any]:
@@ -269,22 +325,3 @@ def _failure(
         path=path,
         error=ConfigValidationError(kind=kind, path=path, message=message),
     )
-
-
-def _effective_harness(
-    config: MachinistConfig,
-    phase: HarnessPhase,
-) -> dict[str, Any]:
-    harness = config.harness_for(phase)
-    timeout = (
-        harness.spec_timeout_minutes
-        if phase in {HarnessPhase.SPEC, HarnessPhase.REVIEW}
-        else harness.timeout_minutes
-    )
-    return {
-        "name": harness_identifier(harness.name),
-        "command": harness.command,
-        "model": harness.model,
-        "extra_args": list(harness.extra_args),
-        "timeout_minutes": timeout,
-    }

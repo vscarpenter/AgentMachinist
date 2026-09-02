@@ -29,13 +29,14 @@ from machinist.config import (
     strict_yaml_load,
 )
 from machinist.config_cli import (
+    render_starter_config,
+    show_effective,
+)
+from machinist.config_cli import (
     schema as config_schema,
 )
 from machinist.config_cli import (
     set_value as set_config_value,
-)
-from machinist.config_cli import (
-    show_effective,
 )
 from machinist.config_cli import (
     validate as validate_config,
@@ -405,67 +406,18 @@ def _render_init_config(
     notification_backend: str | None = None,
     notification_events: list[str] | None = None,
 ) -> str:
-    """Render and validate a minimal first-run config.
-
-    The full 94-line reference stays in src/machinist/templates/machinist.yaml
-    and docs/getting-started.md; the file written to disk is intentionally
-    minimal (~18 lines) covering only essential keys.
-    """
-    harness = harness_name or "claude-code"
-    spec = spec_source or "local"
-    # JSON string syntax is a valid YAML scalar and safely preserves ': ',
-    # '#', quotes, backslashes, and newlines from a shell command.
-    command_value = json.dumps(test_command) if test_command else "null"
-    lines: list[str] = [
-        "# AgentMachinist configuration",
-        "# See docs/getting-started.md for all options.",
-        "version: 1",
-        "",
-        "harness:",
-        f"  name: {harness}",
-        "",
-        "tests:",
-        f"  command: {command_value}",
-        "",
-        "github:",
-        "  repo: null",
-        f"  spec_source: {spec}",
-    ]
-    # Only emit manage_workflows when it diverges from the default (true).
-    if not manage_workflows:
-        lines.append("  manage_workflows: false")
-    lines.extend(
-        [
-            "  labels:",
-            "    trigger: agent-task",
-            '    approved: "machinist:approved"',
-            "  poll_interval_seconds: 60",
-            "",
-            "workspace:",
-            "  root: ~/.machinist/workspaces",
-            "  strategy: worktree",
-            "  cleanup: on_success",
-            "  branch_prefix: agent/",
-            "",
-            "review:",
-            "  enabled: true",
-        ]
-    )
-    # Notifications are advanced; include only when explicitly configured.
-    if notification_backend is not None or notification_events is not None:
-        lines.extend(["", "notifications:"])
-        if notification_backend is not None:
-            lines.append(f"  backend: {notification_backend}")
-        if notification_events is not None:
-            lines.append(f"  events: [{', '.join(notification_events)}]")
-    text = "\n".join(lines) + "\n"
+    """Render the model-owned sparse starter config for Click callers."""
     try:
-        MachinistConfig.model_validate(strict_yaml_load(text) or {})
-    except (yaml.YAMLError, ValidationError) as exc:
-        raise click.ClickException(
-            f"generated machinist.yaml is invalid: {exc}"
-        ) from exc
-    return text
+        return render_starter_config(
+            harness_name=harness_name,
+            test_command=test_command,
+            manage_workflows=manage_workflows,
+            spec_source=spec_source,
+            notification_backend=notification_backend,
+            notification_events=notification_events,
+        )
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _ensure_runtime_ignore(root: Path) -> None:

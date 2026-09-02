@@ -1078,6 +1078,102 @@ class MachinistConfig(StrictModel):
             ),
         )
 
+    @classmethod
+    def starter_projection(
+        cls,
+        *,
+        harness_name: str | None = None,
+        test_command: str | None = None,
+        manage_workflows: bool = True,
+        spec_source: str | None = None,
+        notification_backend: str | None = None,
+        notification_events: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return the sparse, validated configuration written by ``init``."""
+        supplied: dict[str, Any] = {
+            "version": 1,
+            "tests": {"command": test_command},
+            "github": {"manage_workflows": manage_workflows},
+            "review": {"enabled": True},
+        }
+        if harness_name is not None:
+            supplied["harness"] = {"name": harness_name}
+        if spec_source is not None:
+            supplied["github"]["spec_source"] = spec_source
+        if notification_backend is not None or notification_events is not None:
+            notifications: dict[str, Any] = {}
+            if notification_backend is not None:
+                notifications["backend"] = notification_backend
+            if notification_events is not None:
+                notifications["events"] = notification_events
+            supplied["notifications"] = notifications
+
+        validated = cls.model_validate(supplied)
+        values = validated.model_dump(mode="json")
+        github = {
+            "repo": values["github"]["repo"],
+            "spec_source": values["github"]["spec_source"],
+            "labels": values["github"]["labels"],
+            "poll_interval_seconds": values["github"]["poll_interval_seconds"],
+        }
+        if validated.github.manage_workflows != GitHubConfig().manage_workflows:
+            github["manage_workflows"] = values["github"]["manage_workflows"]
+        projection: dict[str, Any] = {
+            "version": values["version"],
+            "harness": {"name": values["harness"]["name"]},
+            "tests": {"command": values["tests"]["command"]},
+            "github": github,
+            "workspace": {
+                "root": values["workspace"]["root"],
+                "strategy": values["workspace"]["strategy"],
+                "cleanup": values["workspace"]["cleanup"],
+                "branch_prefix": values["workspace"]["branch_prefix"],
+            },
+            "review": {"enabled": values["review"]["enabled"]},
+        }
+        if notification_backend is not None or notification_events is not None:
+            projection["notifications"] = {}
+            if notification_backend is not None:
+                projection["notifications"]["backend"] = values["notifications"][
+                    "backend"
+                ]
+            if notification_events is not None:
+                projection["notifications"]["events"] = values["notifications"][
+                    "events"
+                ]
+        # Guard this projection as a persisted protocol, not merely a display.
+        cls.model_validate(projection)
+        return projection
+
+    def effective_projection(self) -> dict[str, Any]:
+        """Return canonical JSON-safe runtime behavior after compatibility resolution."""
+        effective = self.model_dump(mode="json")
+        harnesses: dict[str, Any] = {}
+        for phase in HarnessPhase:
+            harness = self.harness_for(phase)
+            timeout = (
+                harness.spec_timeout_minutes
+                if phase in {HarnessPhase.SPEC, HarnessPhase.REVIEW}
+                else harness.timeout_minutes
+            )
+            harnesses[phase.value] = {
+                "name": harness_identifier(harness.name),
+                "command": harness.command,
+                "model": harness.model,
+                "extra_args": list(harness.extra_args),
+                "timeout_minutes": timeout,
+            }
+        effective["harness"] = harnesses
+        effective["workspace"]["root"] = str(self.workspace.resolved_root())
+        effective["verification"] = {
+            "gates": [
+                gate.model_dump(mode="json")
+                for gate in self.resolved_verification_gates()
+            ]
+        }
+        effective.pop("tests", None)
+        return effective
+
 
 def config_json_schema() -> dict[str, Any]:
     """Return the generated JSON Schema for editors and integration tooling."""

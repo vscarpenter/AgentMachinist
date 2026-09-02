@@ -31,3 +31,7 @@
   argument checks, progress rendering, result text, and notifications.
 - Runner functions remain injected by the CLI adapter so existing narrow command
   tests can replace Phase behavior without bypassing dispatcher contracts.
+- `MachinistConfig` now owns both the sparse validated starter projection and the
+  compatibility-resolved effective projection. `config_cli` only renders, loads,
+  and persists those model-owned values; the Click adapter no longer restates
+  defaults.

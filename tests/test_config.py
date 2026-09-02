@@ -75,6 +75,60 @@ def test_empty_file_yields_defaults(tmp_path):
     assert config.tests.command is None
 
 
+def test_starter_projection_is_a_validated_sparse_model_projection():
+    projection = MachinistConfig.starter_projection(
+        harness_name="codex",
+        test_command="pytest -q",
+        manage_workflows=False,
+        spec_source="github-actions",
+        notification_backend="disabled",
+        notification_events=["failure", "pr_ready"],
+    )
+
+    config = MachinistConfig.model_validate(projection)
+    assert config.harness.name is HarnessName.CODEX
+    assert config.tests.command == "pytest -q"
+    assert config.github.spec_source.value == "github-actions"
+    assert config.github.manage_workflows is False
+    assert config.review.enabled is True
+    assert config.notifications.backend.value == "disabled"
+    assert [event.value for event in config.notifications.events] == [
+        "failure",
+        "pr_ready",
+    ]
+
+
+def test_starter_projection_uses_model_defaults_without_redeclaring_them():
+    projection = MachinistConfig.starter_projection(manage_workflows=True)
+
+    assert "manage_workflows" not in projection["github"]
+    assert MachinistConfig.model_validate(projection).model_dump(mode="json") == (
+        MachinistConfig.model_validate({"review": {"enabled": True}}).model_dump(
+            mode="json"
+        )
+    )
+
+
+def test_effective_projection_resolves_profiles_gates_and_paths():
+    config = MachinistConfig.model_validate(
+        {
+            "harness": {
+                "name": "codex",
+                "execute": {"model": "strong", "timeout_minutes": 45},
+            },
+            "workspace": {"root": "~/agents"},
+            "tests": {"command": "pytest -q"},
+        }
+    )
+
+    effective = config.effective_projection()
+
+    assert effective["harness"]["execute"]["model"] == "strong"
+    assert effective["verification"]["gates"][0]["name"] == "legacy-tests"
+    assert "tests" not in effective
+    assert Path(effective["workspace"]["root"]).is_absolute()
+
+
 def test_full_config_round_trips(tmp_path):
     config = load_config(write_config(tmp_path, FULL_YAML))
     assert config.harness.name is HarnessName.CODEX
