@@ -191,36 +191,14 @@ def describe_run(
     claim_held: bool | None = None,
 ) -> RunDisposition:
     """Map persistence vocabulary to one stable operator-facing state."""
-    phase = record.phase.value
     if record.status is RunStatus.RETRYABLE:
-        return RunDisposition(
-            f"{phase} retryable",
-            "watcher",
-            "info",
-            True,
-            False,
-            "machinist watch --once -v",
-        )
+        return _retryable_disposition(record)
     if record.status is RunStatus.SUCCEEDED:
-        action = (
-            f"machinist approve --issue {record.issue}"
-            if record.phase is Phase.SPEC
-            else None
-        )
-        return RunDisposition(
-            f"{phase} succeeded", "operator", "success", False, False, action
-        )
+        return _succeeded_disposition(record)
 
     decision = classify_run(record, claim_held=claim_held)
     if record.status is RunStatus.RUNNING and claim_held is not False:
-        return RunDisposition(
-            decision.state.value,
-            "machinist",
-            "info",
-            False,
-            claim_held,
-            f"machinist cancel {record.issue}",
-        )
+        return _running_disposition(record, decision, claim_held)
     severity = (
         "error"
         if record.status is RunStatus.FAILED or record.status is RunStatus.RUNNING
@@ -233,6 +211,48 @@ def describe_run(
         False,
         False,
         decision.next_action,
+    )
+
+
+def _retryable_disposition(record: RunRecord) -> RunDisposition:
+    return RunDisposition(
+        f"{record.phase.value} retryable",
+        "watcher",
+        "info",
+        True,
+        False,
+        "machinist watch --once -v",
+    )
+
+
+def _succeeded_disposition(record: RunRecord) -> RunDisposition:
+    action = (
+        f"machinist approve --issue {record.issue}"
+        if record.phase is Phase.SPEC
+        else None
+    )
+    return RunDisposition(
+        f"{record.phase.value} succeeded",
+        "operator",
+        "success",
+        False,
+        False,
+        action,
+    )
+
+
+def _running_disposition(
+    record: RunRecord,
+    decision: TransitionDecision,
+    claim_held: bool | None,
+) -> RunDisposition:
+    return RunDisposition(
+        decision.state.value,
+        "machinist",
+        "info",
+        False,
+        claim_held,
+        f"machinist cancel {record.issue}",
     )
 
 

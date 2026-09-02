@@ -30,6 +30,9 @@ SpecRunner = Callable[..., DraftPR]
 ExecuteRunner = Callable[..., PullRequest]
 ReviewRunner = Callable[..., PullRequest]
 
+# Collaborators are opaque here because each Phase module owns its concrete
+# interface; dispatch only constructs and passes the selected adapters.
+
 
 class Lifecycle(Protocol):
     """Task Run persistence capability required by dispatch."""
@@ -97,7 +100,6 @@ class TaskDispatcher:
 
     def run_spec(self, issue: int, *, revise: bool | None = None) -> DraftPR:
         """Enter one claimed Spec Task Run."""
-        github = self._github_client()
 
         def invoke(claim: TaskClaim) -> DraftPR:
             options: dict[str, object] = {}
@@ -106,7 +108,7 @@ class TaskDispatcher:
             return self._spec_runner(
                 issue,
                 self.config,
-                github=github,
+                github=self._github_client(),
                 harness=self._harness(Phase.SPEC, issue),
                 workspace=self._workspace(),
                 claim=claim,
@@ -131,7 +133,6 @@ class TaskDispatcher:
         feedback: str | None = None,
     ) -> PullRequest:
         """Enter one claimed Execute Task Run, including amendment runs."""
-        github = self._github_client()
 
         def invoke(claim: TaskClaim) -> PullRequest:
             options: dict[str, object] = {}
@@ -142,7 +143,7 @@ class TaskDispatcher:
             return self._execute_runner(
                 issue,
                 self.config,
-                github=github,
+                github=self._github_client(),
                 harness=self._harness(Phase.EXECUTE, issue),
                 workspace=self._workspace(),
                 test_runner=self._test_runner,
@@ -166,14 +167,13 @@ class TaskDispatcher:
             raise LifecycleError(
                 f"issue #{issue} has no successful Execute Task Run to review"
             )
-        github = self._github_client()
         return self.lifecycle.run(
             issue,
             Phase.REVIEW,
             lambda claim: self._review_runner(
                 issue,
                 self.config,
-                github=github,
+                github=self._github_client(),
                 harness=self._harness(Phase.REVIEW, issue),
                 workspace=self._workspace(),
                 execute_evidence=dict(execute.evidence),

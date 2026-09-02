@@ -99,6 +99,30 @@ def test_spec_dispatch_constructs_dependencies_and_attempt_scope(tmp_path):
     assert callable(kwargs["cancel_check"])
 
 
+def test_external_dependencies_are_constructed_only_inside_the_claim(tmp_path):
+    lifecycle = FakeLifecycle()
+    observed = []
+
+    def github_factory():
+        observed.append(tuple(lifecycle.calls))
+        return object()
+
+    dispatcher = TaskDispatcher(
+        MachinistConfig(),
+        repo_root=tmp_path,
+        lifecycle=lifecycle,
+        cancellation=FakeCancellation(),
+        github_factory=github_factory,
+        harness_factory=lambda phase, issue: object(),
+        workspace_factory=lambda: object(),
+        spec_runner=lambda *args, **kwargs: DraftPR(number=57, url="pr"),
+    )
+
+    dispatcher.run_spec(42)
+
+    assert observed == [((42, Phase.SPEC, False),)]
+
+
 @pytest.mark.parametrize(
     ("force", "feedback", "repeat_succeeded"),
     [(False, None, False), (True, "Keep the API stable.", True)],

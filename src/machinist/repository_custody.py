@@ -114,25 +114,8 @@ def verify_pull_request(
             f"{expected.branch!r}",
             reasons=frozenset({"missing"}),
         )
-    mismatches: list[tuple[str, str]] = []
-    if observed.number != expected.number:
-        mismatches.append(
-            ("number", f"number #{observed.number} != #{expected.number}")
-        )
-    if observed.branch != expected.branch:
-        mismatches.append(
-            ("branch", f"branch {observed.branch!r} != {expected.branch!r}")
-        )
-    if observed.base and observed.base != expected.base:
-        mismatches.append(("base", f"base {observed.base!r} != {expected.base!r}"))
-    if observed.state != expected.state:
-        mismatches.append(("state", f"state {observed.state!r} != {expected.state!r}"))
-    if observed.is_cross_repository:
-        mismatches.append(("repository", "PR is cross-repository"))
-    elif not same_repository_pr(observed, expected.repository):
-        mismatches.append(
-            ("repository", "PR head repository does not match controller origin")
-        )
+    mismatches = _identity_mismatches(observed, expected)
+    mismatches.extend(_repository_mismatches(observed, expected))
     if expected.is_draft is not None and observed.is_draft is not expected.is_draft:
         expected_draft = "a draft" if expected.is_draft else "ready"
         mismatches.append(("draft", f"PR is not {expected_draft}"))
@@ -150,6 +133,37 @@ def verify_pull_request(
             reasons=frozenset(reason for reason, _ in mismatches),
         )
     return observed
+
+
+def _identity_mismatches(
+    observed: PullRequest,
+    expected: PullRequestExpectation,
+) -> list[tuple[str, str]]:
+    mismatches: list[tuple[str, str]] = []
+    if observed.number != expected.number:
+        mismatches.append(
+            ("number", f"number #{observed.number} != #{expected.number}")
+        )
+    if observed.branch != expected.branch:
+        mismatches.append(
+            ("branch", f"branch {observed.branch!r} != {expected.branch!r}")
+        )
+    if observed.base and observed.base != expected.base:
+        mismatches.append(("base", f"base {observed.base!r} != {expected.base!r}"))
+    if observed.state != expected.state:
+        mismatches.append(("state", f"state {observed.state!r} != {expected.state!r}"))
+    return mismatches
+
+
+def _repository_mismatches(
+    observed: PullRequest,
+    expected: PullRequestExpectation,
+) -> list[tuple[str, str]]:
+    if observed.is_cross_repository:
+        return [("repository", "PR is cross-repository")]
+    if not same_repository_pr(observed, expected.repository):
+        return [("repository", "PR head repository does not match controller origin")]
+    return []
 
 
 def _validate_client_target(github: RepositoryClient, host: str, identity: str) -> None:
