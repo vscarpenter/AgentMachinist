@@ -8,10 +8,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from machinist.config import ConfigError, HarnessName
+from machinist.config import ConfigError, HarnessName, MachinistConfig
 from machinist.config_cli import (
     ConfigValidationErrorKind,
     ConfigValidationResult,
+    render_starter_config,
     schema,
     set_value,
     show_effective,
@@ -24,6 +25,23 @@ def write_config(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "machinist.yaml"
     path.write_text(text)
     return path
+
+
+def test_render_starter_config_preserves_minimal_valid_cli_format():
+    rendered = render_starter_config(
+        harness_name="codex",
+        test_command="pytest -q",
+        manage_workflows=False,
+        spec_source="github-actions",
+        notification_backend="disabled",
+        notification_events=["failure", "pr_ready"],
+    )
+
+    assert rendered.startswith("# AgentMachinist configuration\n")
+    assert '  command: "pytest -q"' in rendered
+    assert "  manage_workflows: false" in rendered
+    assert "  events: [failure, pr_ready]" in rendered
+    assert MachinistConfig.model_validate(yaml.safe_load(rendered)).review.enabled
 
 
 def test_validate_returns_loaded_config_and_safe_result(tmp_path):

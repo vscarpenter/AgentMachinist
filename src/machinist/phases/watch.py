@@ -19,6 +19,7 @@ from typing import Callable
 
 from machinist.config import MachinistConfig, SpecSource
 from machinist.phases.status import StatusRow, pipeline_status
+from machinist.transitions import transition_for
 
 
 @dataclass
@@ -105,20 +106,24 @@ def plan_watch_tasks(
     for row in projected_rows:
         if row.issue_number is None:
             continue
-        if row.state == "approved":
-            tasks.append(WatchTask("execute", row.issue_number, row))
-        elif row.state == "awaiting review":
-            tasks.append(WatchTask("review", row.issue_number, row))
-        elif (
-            row.state == "awaiting spec"
-            and config.github.spec_source is SpecSource.LOCAL
-        ):
-            tasks.append(WatchTask("spec", row.issue_number, row))
+        decision = transition_for(row.state, issue=row.issue_number)
+        phase = decision.dispatch_phase
+        if phase is None:
+            continue
+        if phase.value == "spec" and config.github.spec_source is not SpecSource.LOCAL:
+            continue
+        tasks.append(WatchTask(phase.value, row.issue_number, row))
 
     # Keep the ordering contract local even if the human-facing status order is
     # changed later. Stable sorting preserves GitHub order within each phase.
-    priority = {"review": 0, "execute": 1, "spec": 2}
-    return tuple(sorted(tasks, key=lambda task: priority[task.phase]))
+    return tuple(
+        sorted(
+            tasks,
+            key=lambda task: (
+                transition_for(task.row.state, issue=task.issue_number).priority
+            ),
+        )
+    )
 
 
 def watch_once(

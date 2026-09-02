@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-09-02
+
+- Reconcile every operating, visual, historical, and architecture document with
+  the three-Phase lifecycle and deep-module ownership model. Simplify the TLDR
+  to one provider-neutral setup path, make both ADRs discoverable and
+  format-complete, and correct Git-config custody and hosted-Spec secret
+  guidance.
+- Concentrate controller policy in deep internal modules without changing
+  version-1 Task Run or configuration persistence: typed Evidence reads and
+  Phase-aware checkpoint validation, lifecycle-owned journal inventory,
+  canonical pipeline transitions, exact repository/PR custody, and one Task Run
+  dispatcher now serve every command and watcher path.
+- Remove Execute's duplicate Verification Gate fallback so required/advisory,
+  cancellation, timeout, mutation, and logging semantics have one authoritative
+  engine. Derive starter and effective configuration projections from the
+  validated model instead of repeating defaults in the CLI.
 
 ## 0.11.0 — 2026-09-01
 

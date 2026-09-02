@@ -1,3 +1,100 @@
+# AgentMachinist 0.12.0 release preparation (COMPLETE)
+
+- [x] Confirm the release version and inspect origin, branch protection, required
+      checks, release automation, and secret metadata.
+- [x] Align package metadata, changelog, current-release documentation, and
+      rendered guides to 0.12.0.
+- [x] Refresh the lockfile and managed workflow projections.
+- [x] Run the complete local release gate from the release candidate commit.
+- [x] Record the verified release candidate for protected-branch validation.
+
+### Resuming From Here
+
+Done: the release target is 0.12.0. Origin was unchanged when preparation
+started, all required release surfaces are aligned, the lockfile is refreshed,
+and managed workflows match their projection. Candidate `41cd33b` passed the
+release-grade gate: 993 tests at 86.00% coverage, both distributions built, and
+isolated wheel and sdist smoke installs reported 0.12.0. Repository protection
+and publication automation were inspected without reading any secret value.
+
+Next: push the final candidate and verify protected PR checks, merge, tag,
+GitHub Release, PyPI, and live documentation as separate external states.
+
+Blockers: none.
+
+Assumptions: the deep-module refactor preserves public behavior and merits the
+next minor version because it changes the documented architecture contract.
+
+Completed 2026-09-02. No external state was changed during preparation.
+
+# Documentation and TLDR reconciliation (COMPLETE)
+
+- [x] Verify every ADR is tracked and follows the repository ADR format.
+- [x] Audit every current Markdown and HTML document against the shipped CLI,
+      configuration, lifecycle, trust model, and deep module ownership changes.
+- [x] Mark historical design records clearly without rewriting their historical
+      decisions as current behavior.
+- [x] Simplify `docs/tldr.md` into one short setup path and two concise Task flows.
+- [x] Extend documentation drift checks for ADR completeness and TLDR contracts.
+- [x] Run focused documentation, config projection, and custody tests.
+- [x] Run `bash scripts/verify.sh`.
+- [x] Commit the complete documentation pass and record the final handoff state.
+
+### Resuming From Here
+
+Done: every file under `docs/` has been audited. Both ADRs are tracked,
+format-complete, and linked from the documentation index. Current guides and
+rendered pages are reconciled; historical records remain explicitly archived.
+The TLDR is reduced to one setup path and two explicit Task flows. Focused tests
+and browser rendering checks pass. The documentation unit is committed as
+`d762f3e`; the full release-grade gate passed 993 tests with 85.98% coverage,
+built both distributions, and smoke-tested wheel and sdist installs on Python
+3.13.
+
+Next: user review and the outstanding architecture comprehension gate. Push, PR
+creation, merge, publication, and deployment remain outside this pass unless
+explicitly requested.
+
+Blockers: none.
+
+Assumptions: this pass changes documentation and documentation tests only; shipped
+CLI, configuration, persistence, trust, and external behavior remain unchanged.
+
+Completed 2026-09-02. No external state was changed.
+
+# Architecture deepening (COMPLETE)
+
+Spec: `tasks/spec.md`
+
+- [x] Record the approved architecture contract and ADR.
+- [x] Deepen Task Run Evidence and migrate production readers.
+- [x] Concentrate Task Run journal inventory in lifecycle.
+- [x] Concentrate pipeline transition vocabulary and decisions.
+- [x] Concentrate repository and PR custody.
+- [x] Remove the duplicate Verification Gate fallback.
+- [x] Move Phase Task Run construction out of `cli.py`.
+- [x] Make validated configuration the source of starter/effective behavior.
+- [x] Reconcile domain/module documentation and changelog.
+- [x] Run focused tests and `bash scripts/verify.sh`.
+- [x] Produce the change report and comprehension quiz.
+
+### Resuming From Here
+
+Done: all seven approved architecture recommendations are implemented and
+committed on `codex/deepen-architecture`. The release-grade gate passes; exact
+final verification evidence is recorded in the handoff.
+
+Next: user review and the comprehension gate. Push, PR creation, merge,
+publication, and deployment remain outside this pass unless explicitly requested.
+
+Blockers: none for implementation. The comprehension gate remains required before
+merge.
+
+Assumptions: observable CLI, configuration, persistence, and trust behavior remain
+unchanged; this pass deepens internal ownership rather than adding features.
+
+Completed 2026-09-02. No external state was changed.
+
 # Documentation reconciliation for comprehensive review (COMPLETE)
 
 - [x] Make initialization review, commit, and push explicit in canonical docs.

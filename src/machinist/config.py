@@ -1078,6 +1078,165 @@ class MachinistConfig(StrictModel):
             ),
         )
 
+    @classmethod
+    def starter_projection(
+        cls,
+        *,
+        harness_name: str | None = None,
+        test_command: str | None = None,
+        manage_workflows: bool = True,
+        spec_source: str | None = None,
+        notification_backend: str | None = None,
+        notification_events: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return the sparse, validated configuration written by ``init``."""
+        validated = cls.model_validate(
+            _starter_input(
+                harness_name=harness_name,
+                test_command=test_command,
+                manage_workflows=manage_workflows,
+                spec_source=spec_source,
+                notification_backend=notification_backend,
+                notification_events=notification_events,
+            )
+        )
+        projection = _starter_projection(
+            validated,
+            include_notification_backend=notification_backend is not None,
+            include_notification_events=notification_events is not None,
+        )
+        # Guard this projection as a persisted protocol, not merely a display.
+        cls.model_validate(projection)
+        return projection
+
+    def effective_projection(self) -> dict[str, Any]:
+        """Return canonical JSON-safe runtime behavior after compatibility resolution."""
+        effective = self.model_dump(mode="json")
+        harnesses: dict[str, Any] = {}
+        for phase in HarnessPhase:
+            harness = self.harness_for(phase)
+            timeout = (
+                harness.spec_timeout_minutes
+                if phase in {HarnessPhase.SPEC, HarnessPhase.REVIEW}
+                else harness.timeout_minutes
+            )
+            harnesses[phase.value] = {
+                "name": harness_identifier(harness.name),
+                "command": harness.command,
+                "model": harness.model,
+                "extra_args": list(harness.extra_args),
+                "timeout_minutes": timeout,
+            }
+        effective["harness"] = harnesses
+        effective["workspace"]["root"] = str(self.workspace.resolved_root())
+        effective["verification"] = {
+            "gates": [
+                gate.model_dump(mode="json")
+                for gate in self.resolved_verification_gates()
+            ]
+        }
+        effective.pop("tests", None)
+        return effective
+
+
+def _starter_input(
+    *,
+    harness_name: str | None,
+    test_command: str | None,
+    manage_workflows: bool,
+    spec_source: str | None,
+    notification_backend: str | None,
+    notification_events: list[str] | None,
+) -> dict[str, Any]:
+    supplied: dict[str, Any] = {
+        "version": 1,
+        "tests": {"command": test_command},
+        "github": {"manage_workflows": manage_workflows},
+        "review": {"enabled": True},
+    }
+    if harness_name is not None:
+        supplied["harness"] = {"name": harness_name}
+    if spec_source is not None:
+        supplied["github"]["spec_source"] = spec_source
+    notifications = _starter_notification_input(
+        notification_backend,
+        notification_events,
+    )
+    if notifications is not None:
+        supplied["notifications"] = notifications
+    return supplied
+
+
+def _starter_notification_input(
+    backend: str | None,
+    events: list[str] | None,
+) -> dict[str, Any] | None:
+    if backend is None and events is None:
+        return None
+    notifications: dict[str, Any] = {}
+    if backend is not None:
+        notifications["backend"] = backend
+    if events is not None:
+        notifications["events"] = events
+    return notifications
+
+
+def _starter_projection(
+    config: MachinistConfig,
+    *,
+    include_notification_backend: bool,
+    include_notification_events: bool,
+) -> dict[str, Any]:
+    values = config.model_dump(mode="json")
+    projection: dict[str, Any] = {
+        "version": values["version"],
+        "harness": {"name": values["harness"]["name"]},
+        "tests": {"command": values["tests"]["command"]},
+        "github": _starter_github_projection(config, values),
+        "workspace": {
+            key: values["workspace"][key]
+            for key in ("root", "strategy", "cleanup", "branch_prefix")
+        },
+        "review": {"enabled": values["review"]["enabled"]},
+    }
+    notifications = _starter_notification_projection(
+        values,
+        include_backend=include_notification_backend,
+        include_events=include_notification_events,
+    )
+    if notifications is not None:
+        projection["notifications"] = notifications
+    return projection
+
+
+def _starter_github_projection(
+    config: MachinistConfig,
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    github = {
+        key: values["github"][key]
+        for key in ("repo", "spec_source", "labels", "poll_interval_seconds")
+    }
+    if config.github.manage_workflows != GitHubConfig().manage_workflows:
+        github["manage_workflows"] = values["github"]["manage_workflows"]
+    return github
+
+
+def _starter_notification_projection(
+    values: dict[str, Any],
+    *,
+    include_backend: bool,
+    include_events: bool,
+) -> dict[str, Any] | None:
+    if not include_backend and not include_events:
+        return None
+    notifications: dict[str, Any] = {}
+    if include_backend:
+        notifications["backend"] = values["notifications"]["backend"]
+    if include_events:
+        notifications["events"] = values["notifications"]["events"]
+    return notifications
+
 
 def config_json_schema() -> dict[str, Any]:
     """Return the generated JSON Schema for editors and integration tooling."""

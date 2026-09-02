@@ -1,115 +1,85 @@
 # AgentMachinist TL;DR
 
-Quick-reference instructions for driving the pipeline on your machine.
-Label names come from `machinist.yaml` (`github.labels`); the defaults are
-`agent-task` (trigger) and `machinist:approved` (approval).
+AgentMachinist turns one GitHub issue into a reviewed pull request:
 
-One setting changes the whole flow: `github.spec_source`.
+```text
+Task → Spec → approve exact SHA → Execute → verify → Review → ready PR → you merge
+```
 
-- `local` — your `machinist watch` daemon owns Phase 1 (spec writing).
-- `github-actions` — CI owns Phase 1.
+The controller owns Git and GitHub transitions. The Harness writes the Spec,
+edits code, and reviews the result. AgentMachinist never merges.
 
-Either way, Execute and Review always run on your machine via `watch`/`run`;
-the setting only moves spec generation. Approval is always SHA-bound: the
-label alone is never enough — the managed approve workflow must also record
-a trusted comment marker matching the exact PR head.
-
-## TL;DR — Local flow (`spec_source: local`)
-
-One-time setup (per repo):
+## One-time setup
 
 ```sh
-cd your-repo
-machinist onboard                     # answer questions → creates minimal machinist.yaml (~20 lines), labels, workflows
-machinist doctor --run-gates          # single health check: git, gh, harness, test gate + labels/workflows/template; prints fix for any FAIL
-# or hands-free: machinist onboard --yes   # accepts defaults + auto-enables detected test command
+cd your-repository
+machinist onboard                 # choose local or github-actions Spec dispatch
+machinist doctor --run-gates      # resolve every FAIL before unattended work
+git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows   # review each hunk
-git diff --cached && git commit -m "chore: configure AgentMachinist" && git push
-machinist watch                       # start the daemon (or: machinist service install/start)
+git add -p .github/workflows      # review generated workflows
+git diff --cached
+git commit -m "chore: configure AgentMachinist"
+git push
 ```
 
-Each task:
+`local` is the recommended first-run mode. If `github.spec_source` is
+`github-actions`, add the selected Spec adapter's declared secret and push the
+generated workflow before the first Task. CI owns only Spec; Execute and Review
+still run locally. See the [Harness matrix](harnesses.md) for secret names.
+
+## Local Spec flow
 
 ```sh
-# 1. Create the issue + apply the trigger label
-machinist task new --title "Fix login redirect"   # or: gh issue create + gh issue edit <n> --add-label agent-task
-
-# 2. Daemon picks it up → harness writes spec → draft PR appears
-machinist status                                  # check progress
-
-# 3. Review the spec PR on GitHub, then approve (binds to exact SHA)
-machinist approve --issue <n>
-
-# 4. Daemon implements it, runs your tests, does read-only review → PR goes ready
-machinist inspect <n>                             # see everything in one pass
-
-# 5. You review + merge on GitHub. Done.
+machinist task new --title "Fix login redirect" --dispatch
+machinist spec <issue>             # or leave machinist watch running
+# Read the draft Spec PR, then:
+machinist approve --issue <issue>
+machinist status                   # continue only when state is approved
+machinist run <issue>              # Execute + authoritative Verification Gate
+machinist review <issue>           # independent Review marks the PR ready
 ```
 
-Useful along the way: `machinist status -v`, `machinist retry <n>
---phase spec|execute|review` after any failure, `machinist spec <n> --revise`
-to redo a bad spec.
+Review the ready PR and merge it yourself.
 
-## TL;DR — GitHub flow (`spec_source: github-actions`)
-
-One-time setup (per repo):
+## GitHub Actions Spec flow
 
 ```sh
-cd your-repo
-machinist onboard --spec-source github-actions   # or: init --spec-source github-actions; needs an ANTHROPIC_API_KEY repo secret
-machinist doctor --run-gates          # single health check; only run sync-labels/sync-workflows --check if doctor asks
-machinist sync-workflows              # writes .github/workflows/machinist-*.yml (doctor verifies drift)
-git add machinist.yaml .machinist/specs/.gitkeep .gitignore
-git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows && git diff --cached && git commit -m "chore: configure AgentMachinist" && git push
+machinist task new --title "Fix login redirect" --dispatch
+# The managed workflow writes the Spec and opens its draft PR.
+
+# Read the draft Spec PR, then:
+machinist approve --issue <issue>
+machinist status                   # wait for trusted SHA Evidence
+
+machinist run <issue>              # implementation always runs locally
+machinist review <issue>           # Review also runs locally
 ```
 
-Plus: add the harness API key secret
-(`gh secret set ANTHROPIC_API_KEY`). `machinist --help` groups commands as
-`Setup`, `Tasks`, `Build`, and `Operate — daily` vs `Operate — advanced`.
+You can leave `machinist watch` running instead of invoking Spec, Execute, and
+Review manually. `github.spec_source` changes only who writes the Spec.
 
-Each task:
+## When something stops
 
 ```sh
-# 1. Create the issue on GitHub (use the managed Task form) and add the label
-gh issue create --title "Fix login redirect" --body "..." --label agent-task
-# (or click "Task" template in the GitHub UI and add the agent-task label)
-
-# 2. CI sees the label → runs the Spec phase → draft PR appears on GitHub
-#    (nothing runs on your machine yet)
-
-# 3. Review the spec PR, then approve — either:
-gh pr comment <pr> --body "/machinist-execute <full-spec-commit-sha>"
-#    (the SHA is shown in the PR body) — or from your machine:
-machinist approve --issue <n>
-
-# 4. The approve workflow verifies your write access + the exact SHA,
-#    then records the evidence and label.
-
-# 5. Now execute locally (CI never implements):
-machinist run <n>          # or let `machinist watch` dispatch it automatically
-
-# 6. Implementation + test gate + independent review run → PR goes ready
-# 7. You merge on GitHub. Done.
+machinist doctor --run-gates
+machinist inspect <issue>
+machinist retry <issue> --phase review   # or spec / execute
 ```
 
-## The mental model in one line each
+For a failed Execute attempt, choose retained edits or a clean Workshop:
 
-- Local: `label issue → watch writes spec → you approve → watch implements → you merge`
-- GitHub: `label issue → CI writes spec → you approve (comment or CLI) → run/watch implements locally → you merge`
+```sh
+machinist retry <issue> --phase execute --run --resume
+machinist retry <issue> --phase execute --run --fresh   # default
+```
 
-## Gotchas worth remembering
+Revise a successful Spec with `machinist spec <issue> --revise`. Do not edit
+managed workflows directly; change `machinist.yaml`, run
+`machinist sync-workflows`, review the diff, commit, and push it. Approval
+becomes stale whenever the Spec head changes.
 
-- **Never edit the managed workflows by hand** — they are projected from
-  `machinist.yaml`, and the next `sync-workflows` silently replaces your
-  edits. Drift shows up in `doctor`, `watch` startup, and `update-check`.
-- **Approval goes stale automatically** — if the spec branch moves after you
-  approve, the old approval no longer matches the PR head and execution is
-  blocked until you re-approve. That is the SHA-binding doing its job, not a
-  bug.
-- **A ready PR is the finish line** — AgentMachinist never merges; the human
-  gate at the end is deliberate.
-
-For the full walkthrough, see [getting-started.md](getting-started.md).
+For setup details, recovery cases, and trust limits, see
+[Getting Started](getting-started.md), the [operator runbook](operator-runbook.md),
+and the [trust model](trust-model.md).

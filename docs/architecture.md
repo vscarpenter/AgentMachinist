@@ -1,21 +1,40 @@
 # Architecture and lifecycle
 
 AgentMachinist is a controller around four external systems: Git, GitHub, a
-coding harness, and the repository's test command. Its useful boundary is a
-ready-for-review pull request—not merge or deployment.
+coding Harness, and the repository's configured verification commands. Its
+useful boundary is a ready-for-review pull request—not merge or deployment.
 
 ## Ownership
 
 | Owner | Responsibilities |
 | --- | --- |
 | GitHub | Issues, PRs, branch heads, approval marker comments, labels. |
-| AgentMachinist | Eligibility, local claims, Task Runs, workspaces, commits, leased pushes, PR readiness. |
+| AgentMachinist | Eligibility, local Claims, Task Runs, Workshops, commits, leased pushes, PR readiness. |
 | Harness | Read repository context, return a spec or working-tree edits, and independently review the delivered diff; may pre-run configured verification gates to iterate. |
 | Human | Issue intent, spec approval, code review, merge. |
 
 The controller keeps Git authority. Prompts tell the harness not to use Git;
 postconditions detect commits, remote branch changes, and `.machinist/` edits
 before the controller proceeds.
+
+## Deep policy seams
+
+The controller keeps one authoritative implementation for each policy that can
+change custody, spend Harness time, or interpret durable state:
+
+| Policy | Owner | Interface |
+| --- | --- | --- |
+| Known Task Run Evidence | `evidence.py` | Typed reads plus Phase-aware validation for new checkpoints; persisted mappings stay open for historical compatibility. |
+| Claims, journals, and inventory | `lifecycle.py` | Current projections, append-only attempts, orphan classification, and corrupt-artifact meaning. Callers do not parse journal paths. |
+| Phase Task Run construction | `dispatch.py` | The only wiring point for Claims, Harnesses, Workshops, cancellation, verification, and Spec/Execute/Review functions. |
+| Pipeline transitions | `transitions.py` | State vocabulary, priority, dispatch eligibility, Task Run disposition, and next action. |
+| Repository and PR custody | `repository_custody.py` | One bound origin host/repository and exact same-repository PR identity checks. |
+| Verification Gates | `verification.py` | The sole required/advisory, timeout, cancellation, mutation, logging, and result implementation. |
+| Configuration behavior | `config.py` | Validated starter and effective projections; terminal rendering and atomic persistence live in `config_cli.py`. |
+
+These are internal module seams, not persistence migrations. Version-1 Task Run
+records and `machinist.yaml` remain compatible, and CLI text, JSON, and GitHub
+effects keep their existing contracts.
 
 ## Lifecycle
 
@@ -162,7 +181,12 @@ cannot serialize issue bodies, prompts, diffs, commands, errors, environment
 values, or arbitrary Evidence. Export is disabled without explicit config or a
 command flag.
 
-## Dispatcher ownership
+## Dispatch sources and admission
+
+Every local claimed Phase enters through `TaskDispatcher`. Click commands keep
+argument validation, output, notifications, and daemon presentation; watcher,
+retry-now, amendment, and direct Spec/Execute/Review paths share the same Task
+Run construction.
 
 `github.spec_source` prevents local `watch` and GitHub Actions from both
 claiming Phase 1. `sync-workflows` deterministically projects config and the

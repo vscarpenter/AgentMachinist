@@ -1,263 +1,134 @@
-# Toolkit expansion specification
+# Architecture deepening specification
 
-Status: approved through the prior feature-review decision
+Status: approved by the user on 2026-09-02
 
-This specification implements roadmap items 1, 2, 4, 5, 7, and 8 as one
-coherent adoption and operations release. It preserves AgentMachinist's
-local-first controller, SHA-bound approval, draft-PR safety gate, and explicit
-human merge boundary.
+This specification implements all seven recommendations from the whole-codebase
+architecture review in one continuous pass. The change deepens existing modules
+without changing AgentMachinist's operator-facing workflow or trust model.
 
-## Outcomes
+## Goal
 
-1. An implementation receives an independent, read-only Review Task Run before
-   AgentMachinist marks its pull request ready.
-2. A first-time adopter can generate setup changes as a reviewable draft pull
-   request and can rehearse a lifecycle without creating a real issue or PR.
-3. Harnesses are discoverable through a versioned Python entry-point contract,
-   and managed Spec CI is rendered from the selected harness rather than being
-   hard-coded to Claude Code.
-4. Operators can explain one Task's effective policy and watch live status
-   transitions without reverse-engineering configuration and runtime files.
-5. Task authors get a managed issue form, structured issue creation, and
-   readiness linting before expensive agent work begins.
-6. Operators get local aggregate reliability reports and may explicitly export
-   redacted metrics through OTLP/HTTP JSON.
+Concentrate Task Run Evidence, repository custody, Phase dispatch, pipeline
+transitions, configuration behavior, verification, and journal interpretation so
+each policy has one authoritative implementation.
 
-## Product invariants
+## Inputs and outputs
 
-- GitHub remains the durable collaboration plane; local runtime records remain
-  the durable execution plane.
-- No command in this release merges a pull request.
-- Setup-PR mode creates only a branch, commit, push, and draft PR after a clean
-  preflight. It never edits the default branch directly.
-- Review receives the approved Spec, repository diff, gate evidence, and task
-  metadata. Its harness argv must use the adapter's read-only controls.
-- A successful Execute run leaves the PR draft when Review is enabled. Only a
-  successful Review run may mark it ready.
-- Review findings are advisory in v1: high-severity findings are made visible
-  but do not trigger an autonomous repair loop.
-- Plugins are trusted local code, but they cannot silently replace a built-in
-  adapter name. Discovery failures are isolated and explained.
-- Reports never include issue bodies, prompts, source code, command arguments,
-  environment values, or credentials. OTLP export is disabled by default.
-- Existing version-1 configuration remains valid. New behaviors use safe
-  defaults and managed templates opt in where behavior changes.
+- Inputs remain the current CLI arguments, `machinist.yaml` schema, GitHub state,
+  Workshop state, and version-1 Task Run projections/journals.
+- Outputs remain the current CLI text/JSON, GitHub mutations, Task Run JSON, local
+  reports, and managed files.
+- Internal callers receive typed Evidence interpretation, one repository-custody
+  decision, one Phase-dispatch implementation, one transition decision, one
+  configuration projection, one Verification Gate implementation, and one Task
+  Run inventory.
 
-## Configuration
+## Constraints
 
-### Review
+- The controller, never the Harness, owns commits, pushes, PR transitions, Claims,
+  and Task Runs.
+- Approval remains bound to one exact Spec SHA; Review remains a first-class,
+  read-only Phase; human review and merge remain the final Gate.
+- Existing Task Run projection and journal schema version 1 remains readable and
+  writable without migration.
+- `RunRecord.evidence` remains a JSON mapping for persistence and compatibility;
+  production code interprets known Evidence through the deep Evidence module.
+- Unknown historical Evidence keys remain readable. Known checkpoint keys receive
+  Phase-aware type and consistency validation.
+- The append-only journal remains the source of attempt history. Callers may not
+  parse its directory or filename grammar.
+- Configuration version 1 and generated starter behavior remain compatible.
+- The Verification Gate remains authoritative after Harness work and keeps its
+  current required/advisory, cancellation, timeout, and fail-closed semantics.
+- No new dependency is introduced.
 
-```yaml
-review:
-  enabled: true
-```
+## Design
 
-`review.enabled` defaults to `false` for existing configurations. The starter
-template enables it. Review uses `harness.review` when supplied and otherwise
-inherits the base Harness fields. Its timeout defaults to the Spec timeout.
+1. Add a deep Evidence module that owns known key vocabulary, typed reads,
+   Phase-aware checkpoint validation, and recovery relationships while preserving
+   JSON persistence.
+2. Add a repository-custody module that owns origin/GitHub binding, PR-base
+   validation, same-repository checks, and exact delivered-PR validation. Phase
+   modules retain only their distinct transition policy and error type.
+3. Add a Task Run dispatcher that owns Harness, Workshop, cancellation, Claim,
+   and Phase-function wiring. Click commands retain argument validation, rendering,
+   notifications, and daemon-loop presentation.
+4. Remove Execute's dynamic import and fallback Verification Gate. The existing
+   verification module becomes the sole implementation.
+5. Add a pipeline transition model that owns state vocabulary, ordering,
+   dispatch eligibility, and next-action derivation. Status, watch, explain, and
+   observability consume that decision model.
+6. Make validated configuration own starter projection and effective behavior;
+   CLI helpers perform persistence and presentation without restating defaults.
+7. Extend lifecycle inventory to own journal discovery, identity parsing, orphan
+   classification, and corrupt-artifact meaning. Admission and observability
+   consume lifecycle results only.
 
-### Harness plugins and CI
+## Edge cases
 
-`harness.name` and phase-profile names accept a validated adapter identifier
-instead of a closed enum. Built-ins retain the names `claude-code`, `codex`,
-`opencode`, and `pi`.
+- Legacy Task Run Evidence with unknown keys or earlier weakly typed values remains
+  readable; new inconsistent known checkpoints fail before persistence.
+- A retry after an interrupted Spec or Execute run still reconciles only when the
+  intended, observed, and current SHAs agree.
+- Cross-repository PRs, mismatched GitHub hosts, changed bases, changed heads, and
+  unbound origins continue to fail closed.
+- A successful Execute Task Run is dispatchable to Review only when Review is
+  enabled and the draft PR head matches delivered Evidence.
+- Malformed or noncanonical journal artifacts remain visible and block budgeted
+  dispatch as they do today.
+- Legacy `tests.command` still resolves to the same effective named Verification
+  Gate representation.
 
-Third-party distributions register one Harness subclass per entry point:
+## Out of scope
 
-```toml
-[project.entry-points."agentmachinist.harnesses.v1"]
-example = "example_harness:ExampleHarness"
-```
+- New commands, configuration fields, pipeline states, persistence migrations, or
+  release/version changes.
+- Renaming the public `Workspace` code interface to Workshop.
+- Splitting every oversized historical file or changing unrelated internals.
+- Push, pull-request creation, merge, publication, or deployment.
 
-The entry-point name and class `name` must match. The class must expose a
-version-1 descriptor with install guidance, supported phases, structured-usage
-support, and an optional CI Spec profile. Plugin names cannot collide with a
-built-in or another loaded plugin.
+## Acceptance criteria
 
-Managed Spec CI reads the selected Spec adapter's descriptor. The descriptor
-provides the install command and default secret environment name. A repository
-may override only the validated secret name through
-`github.spec_secret_env`; secrets remain GitHub expressions and are never
-written to configuration. If an adapter has no CI profile, workflow projection
-fails with an actionable message and local Spec remains available.
+1. Spec, Execute, Review, status, reporting, and recovery no longer duplicate
+   known Evidence parsing for the migrated fields; checkpoint contradictions are
+   rejected by a Phase-aware contract.
+2. Spec and Execute use one repository-custody implementation, and Review uses its
+   exact-PR checks without weakening Review independence.
+3. Spec, Execute, Review, retry-now, amendment, and watcher dispatch enter Task
+   Runs through the dispatcher; CLI output and notifications stay unchanged.
+4. Execute imports and invokes the verification module directly; the fallback and
+   compatibility import path are deleted.
+5. `PIPELINE_STATES`, ordering, watcher eligibility, and next actions derive from
+   one transition model with unchanged observable values.
+6. Starter/effective configuration projections derive from validated model
+   behavior and remain semantically identical to current output.
+7. Admission and observability contain no Task Run journal path grammar; lifecycle
+   inventory supplies attempts, orphans, and typed corrupt artifacts.
+8. `CONTEXT.md`, architecture documentation, changelog, and module map describe
+   the deepened architecture and include Review in the Phase definition.
+9. Targeted tests pass after each red/green/refactor cycle; `scripts/verify.sh`
+   passes with at least 80% coverage and the worktree contains no temporary files.
 
-### Telemetry
+## Test stubs
 
-```yaml
-telemetry:
-  otlp_endpoint: null
-  timeout_seconds: 5
-```
+- Evidence rejects a known key in the wrong Phase and contradictory push SHAs,
+  while preserving unknown legacy keys on read.
+- Repository custody binds one exact host/repository and reports Phase-specific
+  errors for origin, base, head, state, and fork mismatches.
+- Dispatcher tests prove dependency construction and lifecycle options for Spec,
+  Execute, Review, retry, and amendment without Click.
+- Verification tests prove Execute has one direct engine path and preserves
+  checkpoint callbacks and required/advisory outcomes.
+- Table-driven transition tests cover every pipeline state, priority, Phase, and
+  next action; watch consumes transition decisions rather than state literals.
+- Configuration tests prove starter text validates and effective output resolves
+  defaults, profiles, legacy tests, and path normalization from one model.
+- Lifecycle inventory tests cover current, historical, orphaned, malformed, and
+  noncanonical artifacts; admission and observability tests use no path parser.
 
-The endpoint is optional and must be HTTP(S). The exporter sends aggregate
-metric data only. An authorization header may be read from
-`MACHINIST_OTLP_AUTHORIZATION`; configuration never stores it.
+## Verification plan
 
-## Review phase
-
-### Lifecycle
-
-`Phase.REVIEW` adds `issue-<n>-review.json` projections and normal JSONL
-history events. Retry, cancellation, reporting, and queue admission use the
-same primitives as Spec and Execute.
-
-When Review is enabled:
-
-1. Execute verifies, commits, pushes, and updates its bounded delivery comment.
-2. Execute leaves the pull request draft and records its delivered head SHA.
-3. Status projects `awaiting review` when Execute succeeded and the draft PR
-   head still matches the delivered SHA.
-4. Watch dispatches Review ahead of new Spec work.
-5. Review prepares a clean read-only workspace for the exact remote head,
-   renders the Review prompt, invokes the review Harness, parses the structured
-   report, upserts a bounded PR comment, and marks the PR ready.
-
-The report schema is versioned JSON:
-
-```json
-{
-  "version": 1,
-  "summary": "string",
-  "findings": [
-    {
-      "severity": "low|medium|high",
-      "confidence": "low|medium|high",
-      "file": "repository/relative/path",
-      "line": 1,
-      "requirement": "spec or acceptance criterion",
-      "message": "actionable explanation",
-      "remediation": "bounded next step"
-    }
-  ]
-}
-```
-
-Malformed or oversized output fails Review without marking the PR ready. File
-paths must be repository-relative and lines positive. A report with findings
-still succeeds because v1 is advisory.
-
-The manual command is `machinist review ISSUE`. `machinist retry ISSUE --phase
-review` reopens failed/cancelled/abandoned Review work under existing lifecycle
-rules.
-
-## Guided adoption
-
-### `machinist onboard`
-
-`machinist onboard` uses the existing setup renderer and defaults to an
-interactive guided session. `--no-input` requires enough explicit inputs to
-remain deterministic.
-
-`--setup-pr` adds a transactional delivery step:
-
-- require a Git repository with a configured GitHub origin and clean tracked
-  worktree before setup;
-- create a unique `chore/agentmachinist-setup` branch;
-- write only AgentMachinist-managed setup files;
-- run configuration, workflow, label-readiness, and doctor preflights that do
-  not require the newly pushed branch to be default;
-- commit only the generated allowlist, push that branch, and create a draft PR;
-- print the PR URL and exact next action.
-
-Failure before push restores the original branch and leaves generated changes
-visible for recovery; it does not delete user data. Failure after push reports
-the pushed branch and a recovery command.
-
-### `machinist rehearse`
-
-Rehearsal creates an ephemeral local Git repository, sample issue/Spec, and a
-deterministic verification gate. By default it performs a no-cost controller
-simulation and prints the lifecycle transitions. `--harness` explicitly invokes
-the configured Harness against the disposable repository. It never binds a
-GitHub client, pushes, or creates remote artifacts. Temporary data is removed
-on success and retained with its path on failure.
-
-## Explain and live status
-
-`machinist explain ISSUE [--json]` is side-effect free and reports:
-
-- current pipeline state and exact next command;
-- resolved Spec, Execute, and Review harness/model/timeout profiles;
-- instruction discovery policy and verification gates;
-- workspace strategy, cleanup policy, denied paths, and mutation limits;
-- configured credential names (never values) and reduced-environment policy;
-- queue limits, cancellation state, attempts, duration, and retained workspace;
-- managed CI ownership and Review readiness behavior.
-
-`machinist status --watch [--interval SECONDS]` refreshes only when the read
-model changes. Human output clears/redraws only on a TTY; non-TTY output emits
-timestamped snapshots. `--json --watch` emits one compact JSON object per line.
-Ctrl-C prints `status watch stopped.` and exits successfully.
-
-## Task intake
-
-The managed issue form lives at
-`.github/ISSUE_TEMPLATE/agentmachinist-task.yml`. It captures objective,
-acceptance criteria, constraints, verification, and context. Managed-file
-ownership uses the same sealed-content protections as workflows.
-
-Commands:
-
-- `machinist task template --write|--check` projects or checks the issue form.
-- `machinist task new --title TITLE` prompts for the five sections, creates an
-  unlabeled issue by default, prints its URL, then prints the lint command.
-  `--dispatch` applies the configured trigger label after a passing local lint.
-- `machinist task lint ISSUE [--json]` validates the live GitHub issue. Missing
-  sections, placeholder text, vague one-line objectives, absent acceptance
-  checkboxes, and absent verification steps are actionable errors. Warnings do
-  not block dispatch; errors do.
-
-## Reporting and OTLP export
-
-`machinist report --since DURATION [--json] [--otlp-endpoint URL]` reads local
-JSONL history. Accepted durations are integer values with `h`, `d`, or `w`
-suffixes.
-
-The report includes:
-
-- attempts and terminal outcomes by phase;
-- success rate, retry count, cancellation count, and median/p95 duration;
-- failure categories derived from exception type and controller checkpoint;
-- verification-gate failure counts when recorded;
-- Harness/model breakdown only when present in structured evidence;
-- token totals only when a Harness declares structured usage and records it.
-
-Export uses OTLP/HTTP JSON metric names prefixed `machinist.`. The payload has
-repository identity, phase, status, harness, and model attributes only. The CLI
-prints export success/failure separately from the local report. Export failure
-returns non-zero but never modifies local history.
-
-## Error and recovery states
-
-- Unknown adapter: list installed adapters and the entry-point group.
-- Broken plugin: identify the distribution/entry point without importing other
-  plugins unsuccessfully.
-- Review head changed: fail closed and require a fresh Execute approval/run.
-- Review output invalid: leave PR draft and point to `machinist retry`.
-- Setup dirty tree: list paths and stop before mutation.
-- Rehearsal Harness failure: retain the temporary path and print the gate/result.
-- Issue-form drift: refuse overwrite of unrecognized content.
-- Task lint failure: print each field and its concrete correction.
-- Invalid report window or endpoint: fail before reading or transmitting data.
-- OTLP timeout/HTTP error: retain local report and redact response bodies.
-
-## Verification strategy
-
-- Unit tests pin configuration compatibility, plugin discovery isolation,
-  adapter descriptors, workflow rendering, Review parsing, status/watch
-  projection, issue-form ownership, lint rules, reports, and OTLP redaction.
-- Phase tests prove Execute stays draft and Review alone marks ready.
-- CLI tests cover every new command's success, empty, invalid, interrupted, and
-  recovery states.
-- Packaging tests install a fixture entry-point plugin from an isolated path.
-- Existing tests must remain green; the full verification script is the release
-  gate.
-
-## Non-goals
-
-- Autonomous repair loops or merging after Review.
-- A hosted control plane, web dashboard, or central telemetry collector.
-- Sending prompts, source, diffs, logs, tool arguments, or credentials to OTLP.
-- Replacing GitHub issue/PR collaboration with a proprietary task database.
-- Automatically installing secrets or changing branch protection.
-
+Run focused tests for each logical change, then run `bash scripts/verify.sh` for
+workflow drift, formatting, lint, types, coverage, distributions, and isolated
+package smoke tests. Review the final diff and confirm no persisted or public
+contract drift.

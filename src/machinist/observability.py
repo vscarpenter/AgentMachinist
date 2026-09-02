@@ -9,24 +9,20 @@ from one another so an unavailable source never hides usable local state.
 from __future__ import annotations
 
 import math
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 
-from machinist.lifecycle import Phase, RunRecord, RunStatus, TaskLifecycle
+from machinist.evidence import TaskEvidence
+from machinist.lifecycle import RunRecord, RunStatus, TaskLifecycle
+from machinist.transitions import describe_run
 
 _READ_MODEL_SCHEMA_VERSION = 1
-_PROJECTION_NAME = re.compile(r"^issue-(\d+)-(spec|execute|review)\.json$")
-_HISTORY_DIRECTORY = re.compile(r"^issue-(\d+)-(spec|execute|review)$")
-_JOURNAL_NAME = re.compile(r"^attempt-(\d+)\.jsonl$")
 
 type JsonValue = (
     str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
 )
 type RemoteLoader = Callable[[], JsonValue]
-type _RunKey = tuple[int, Phase, int]
 
 
 @dataclass(frozen=True)
@@ -119,79 +115,6 @@ class RunReport:
         }
 
 
-@dataclass(frozen=True)
-class RunDisposition:
-    """Canonical operator-facing meaning of a Task Run projection."""
-
-    display: str
-    owner: str
-    severity: str
-    dispatchable: bool
-    active: bool | None
-    next_action: str | None
-
-
-def describe_run(
-    record: RunRecord,
-    *,
-    claim_held: bool | None = None,
-) -> RunDisposition:
-    """Map persistence vocabulary to one stable operator-facing state."""
-    phase = record.phase.value
-    issue = record.issue
-    if record.status is RunStatus.RUNNING:
-        if claim_held is False:
-            return RunDisposition(
-                f"{phase} interrupted",
-                "operator",
-                "error",
-                False,
-                False,
-                f"machinist retry {issue} --phase {phase}",
-            )
-        return RunDisposition(
-            f"{phase} running",
-            "machinist",
-            "info",
-            False,
-            claim_held,
-            f"machinist cancel {issue}",
-        )
-    if record.status is RunStatus.RETRYABLE:
-        return RunDisposition(
-            f"{phase} retryable",
-            "watcher",
-            "info",
-            True,
-            False,
-            "machinist watch --once -v",
-        )
-    if record.status in {
-        RunStatus.FAILED,
-        RunStatus.CANCELLED,
-        RunStatus.ABANDONED,
-    }:
-        return RunDisposition(
-            f"{phase} {record.status.value}",
-            "operator",
-            "error" if record.status is RunStatus.FAILED else "warning",
-            False,
-            False,
-            f"machinist retry {issue} --phase {phase}",
-        )
-    next_action = (
-        f"machinist approve --issue {issue}" if record.phase is Phase.SPEC else None
-    )
-    return RunDisposition(
-        f"{phase} succeeded",
-        "operator",
-        "success",
-        False,
-        False,
-        next_action,
-    )
-
-
 def capture_source(source: str, loader: RemoteLoader) -> SourceEnvelope:
     """Collect one JSON source without leaking its failure into other reads."""
     if not isinstance(source, str) or not source.strip():
@@ -241,32 +164,26 @@ def build_run_report(
             key=_run_sort_key,
         )
     )
-    current_keys = {_run_key(record) for record in current}
-    journal_keys = _journal_attempt_keys(lifecycle, issue=issue)
-
-    candidate_issues = {record.issue for record in current}
-    candidate_issues.update(key[0] for key in journal_keys)
-    if issue is not None:
-        candidate_issues.add(issue)
-
-    history_by_key: dict[_RunKey, RunRecord] = {}
-    for issue_number in sorted(candidate_issues):
-        for record in lifecycle.history(issue_number):
-            if issue is None or record.issue == issue:
-                history_by_key[_run_key(record)] = record
-    history = tuple(sorted(history_by_key.values(), key=_run_sort_key))
-    orphans = tuple(
+    history = tuple(
         record
-        for record in history
-        if _run_key(record) in journal_keys and _run_key(record) not in current_keys
+        for record in inventory.attempts
+        if issue is None or record.issue == issue
+    )
+    orphans = tuple(
+        record for record in inventory.orphans if issue is None or record.issue == issue
     )
 
-    all_corrupt = (_corrupt_artifact(path) for path in inventory.corrupt)
     corrupt = tuple(
         sorted(
             (
-                artifact
-                for artifact in all_corrupt
+                CorruptArtifact(
+                    path=str(artifact.path),
+                    kind=artifact.kind,
+                    issue=artifact.issue,
+                    phase=None if artifact.phase is None else artifact.phase.value,
+                    attempt=artifact.attempt,
+                )
+                for artifact in inventory.artifacts
                 if issue is None or artifact.issue == issue
             ),
             key=lambda artifact: artifact.path,
@@ -315,8 +232,8 @@ def summarize_run_report(
             f"  #{record.issue} {disposition.display} "
             f"(attempt {record.attempt}{duration})"
         )
-        stage = record.evidence.get("current_stage")
-        if isinstance(stage, str) and stage:
+        stage = TaskEvidence.load(record.evidence).current_stage
+        if stage:
             detail += f" — stage: {stage}"
         if record.error:
             detail += f": {record.error}"
@@ -387,58 +304,6 @@ def _run_record_dict(record: RunRecord) -> dict[str, JsonValue]:
         "error": record.error,
         "evidence": _json_value(record.evidence, path="Task Run evidence"),
     }
-
-
-def _journal_attempt_keys(
-    lifecycle: TaskLifecycle, *, issue: int | None
-) -> set[_RunKey]:
-    keys: set[_RunKey] = set()
-    history_root = lifecycle.history_root()
-    if not history_root.exists():
-        return keys
-
-    for path in history_root.glob("issue-*-*/attempt-*.jsonl"):
-        directory_match = _HISTORY_DIRECTORY.fullmatch(path.parent.name)
-        journal_match = _JOURNAL_NAME.fullmatch(path.name)
-        if directory_match is None or journal_match is None or not path.is_file():
-            continue
-        issue_number = int(directory_match.group(1))
-        attempt = int(journal_match.group(1))
-        if (
-            issue_number < 1
-            or attempt < 1
-            or (issue is not None and issue_number != issue)
-        ):
-            continue
-        keys.add((issue_number, Phase(directory_match.group(2)), attempt))
-    return keys
-
-
-def _corrupt_artifact(path: Path) -> CorruptArtifact:
-    projection = _PROJECTION_NAME.fullmatch(path.name)
-    if projection is not None:
-        return CorruptArtifact(
-            path=str(path),
-            kind="projection",
-            issue=int(projection.group(1)),
-            phase=projection.group(2),
-        )
-
-    directory = _HISTORY_DIRECTORY.fullmatch(path.parent.name)
-    journal = _JOURNAL_NAME.fullmatch(path.name)
-    if directory is not None and journal is not None:
-        return CorruptArtifact(
-            path=str(path),
-            kind="journal",
-            issue=int(directory.group(1)),
-            phase=directory.group(2),
-            attempt=int(journal.group(1)),
-        )
-    return CorruptArtifact(path=str(path), kind="artifact")
-
-
-def _run_key(record: RunRecord) -> _RunKey:
-    return record.issue, record.phase, record.attempt
 
 
 def _run_sort_key(record: RunRecord) -> tuple[int, str, int, str]:

@@ -9,7 +9,7 @@ A GitHub issue selected for AgentMachinist. One Task has at most one active Spec
 _Avoid_: Job, ticket, work item
 
 **Phase**:
-One of the ordered kinds of machine work: Spec or Execute. Approve is a human Gate between them, not a machine Phase.
+One of the ordered kinds of machine work: Spec, Execute, or Review. Approval is a human Gate between Spec and Execute; human review and merge remain the final Gate after the machine Review Phase.
 _Avoid_: Stage, step
 
 **Spec**:
@@ -41,7 +41,7 @@ A coding-agent CLI selected by configuration. Claude Code, OpenCode, PI, and Cod
 _Avoid_: Agent provider, model
 
 **Evidence**:
-Durable facts produced by a Task Run: approved Spec commit, test command and result, implementation commit, PR, and error details.
+Durable facts produced by a Task Run: approved Spec commit, verification result, implementation commit, independent Review report, PR, and error details.
 _Avoid_: Log, output
 
 ## Flagged ambiguities
@@ -54,4 +54,3 @@ _Avoid_: Log, output
 **Developer:** "Why did Execute stop after I fixed the Spec?"
 
 **AgentMachinist:** "The Approval names the earlier Spec commit, so Gate 1 is stale. Approve the new Task branch head, then retry the Execute Phase. The failed Task Run and Workshop remain available as Evidence."
-

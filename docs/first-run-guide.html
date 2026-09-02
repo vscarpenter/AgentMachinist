@@ -799,12 +799,12 @@
   <main id="main">
     <section class="hero shell" id="top">
       <div class="hero-copy reveal">
-        <p class="hero-kicker">A visual field guide for the 0.11 release</p>
+        <p class="hero-kicker">A visual field guide for the 0.12 release</p>
         <h1>Your first issue, machined into a PR.</h1>
         <p class="hero-lede">Set up AgentMachinist, choose who writes the spec, approve the exact plan you read, and let your coding harness build behind a test gate.</p>
         <div class="version-note" role="note">
           <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <p><strong>AgentMachinist 0.11.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints an older version, run <code>uv tool upgrade agentmachinist</code>.</p>
+          <p><strong>AgentMachinist 0.12.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints an older version, run <code>uv tool upgrade agentmachinist</code>.</p>
         </div>
       </div>
 
@@ -996,7 +996,7 @@
           <h2>Install, then check the number.</h2>
           <ol>
             <li>Install the current release directly from PyPI.</li>
-            <li>Confirm the CLI reports <strong>0.11.0</strong>.</li>
+            <li>Confirm the CLI reports <strong>0.12.0</strong>.</li>
             <li>Change into the repository you want agents to work on.</li>
           </ol>
           <p class="micro-note">Already installed an earlier version? Run <code>uv tool upgrade agentmachinist</code> instead.</p>
@@ -1006,7 +1006,7 @@
           <pre><span class="prompt">$</span> uv tool install agentmachinist
 
 <span class="prompt">$</span> machinist --version
-machinist, version 0.11.0
+machinist, version 0.12.0
 
 <span class="prompt">$</span> cd ~/code/your-project</pre>
         </div>
@@ -1511,7 +1511,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
             </tr>
             <tr>
               <td><code>machinist run &lt;n&gt; [--retry]</code></td>
-              <td>Execute implementation and run test gate for issue <code>&lt;n&gt;</code> (Phase 3).</td>
+              <td>Run the Execute Phase and authoritative Verification Gate for issue <code>&lt;n&gt;</code>.</td>
             </tr>
             <tr>
               <td><code>machinist amend &lt;n&gt; --feedback "text"</code></td>
@@ -1568,7 +1568,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
   </main>
 
   <footer class="shell">
-    <div class="footer-row"><span>AgentMachinist 0.11 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
+    <div class="footer-row"><span>AgentMachinist 0.12 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
   </footer>
 
   <div id="live-region" class="mono" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>

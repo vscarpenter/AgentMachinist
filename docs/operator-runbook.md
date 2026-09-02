@@ -29,7 +29,7 @@ library code, so upgrading the package alone leaves the previous workflow in
 place; the advisory names `machinist sync-workflows` so the gap is not silent.
 It never blocks a command and never appears in `update-check --json`. `doctor`
 remains the check that fails on drift. Decide explicitly whether a
-warning that no verification gates are configured is acceptable. A Task Runs
+warning that no verification gates are configured is acceptable. A Task Run
 warning points to a failed or process-abandoned record that should be inspected
 and explicitly retried.
 

@@ -13,7 +13,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 The controller—not the harness—owns commits, pushes, PR transitions, and task
 records. AgentMachinist never merges.
 
-Current release: [AgentMachinist 0.11.0 on PyPI](https://pypi.org/project/agentmachinist/0.11.0/).
+Current release: [AgentMachinist 0.12.0 on PyPI](https://pypi.org/project/agentmachinist/0.12.0/).
 
 ## Install
 
@@ -177,12 +177,14 @@ PR.
 
 ## Documentation
 
+- [TL;DR](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/tldr.md)
 - [Getting started](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md)
 - [Visual first-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
 - [Architecture and lifecycle](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md)
 - [Operator runbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md)
 - [Trust model](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md)
 - [Harness support](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/harnesses.md)
+- [Architecture decisions](https://github.com/vscarpenter/AgentMachinist/tree/main/docs/adr)
 - [Contributing](https://github.com/vscarpenter/AgentMachinist/blob/main/CONTRIBUTING.md)
 - [Changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md)
 

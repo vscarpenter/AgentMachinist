@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from machinist.evidence import TaskEvidence
 from machinist.lifecycle import RunRecord, RunStatus
 
 _DURATION = re.compile(r"^([1-9][0-9]*)([hdw])$")
@@ -184,8 +185,8 @@ def _series(records: tuple[RunRecord, ...]) -> tuple[MetricSeries, ...]:
 
 
 def _harness_identity(record: RunRecord) -> tuple[str | None, str | None]:
-    harness = record.evidence.get("harness")
-    if not isinstance(harness, dict):
+    harness = TaskEvidence.load(record.evidence).harness
+    if harness is None:
         return None, None
     name = harness.get("name")
     model = harness.get("model")
@@ -207,8 +208,8 @@ def _failure_categories(records: tuple[RunRecord, ...]) -> dict[str, int]:
 
 
 def _checkpoint(record: RunRecord) -> str:
-    stage = record.evidence.get("current_stage")
-    if not isinstance(stage, str):
+    stage = TaskEvidence.load(record.evidence).current_stage
+    if stage is None:
         return "controller"
     for prefix in (
         "verification",
@@ -226,8 +227,8 @@ def _checkpoint(record: RunRecord) -> str:
 def _gate_failures(records: tuple[RunRecord, ...]) -> dict[str, int]:
     failures: Counter[str] = Counter()
     for record in records:
-        report = record.evidence.get("verification_report")
-        gates = report.get("gates") if isinstance(report, dict) else None
+        report = TaskEvidence.load(record.evidence).verification_report
+        gates = report.get("gates") if report is not None else None
         if not isinstance(gates, list):
             continue
         for gate in gates:
@@ -255,11 +256,12 @@ def _harness_breakdown(
 def _token_totals(records: tuple[RunRecord, ...]) -> dict[str, int]:
     totals: Counter[str] = Counter()
     for record in records:
-        harness = record.evidence.get("harness")
-        usage = record.evidence.get("usage")
-        if not isinstance(harness, dict) or harness.get("structured_usage") is not True:
+        evidence = TaskEvidence.load(record.evidence)
+        harness = evidence.harness
+        usage = evidence.usage
+        if harness is None or harness.get("structured_usage") is not True:
             continue
-        if not isinstance(usage, dict):
+        if usage is None:
             continue
         for key in _USAGE_KEYS:
             value = usage.get(key)

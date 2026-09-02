@@ -335,7 +335,7 @@
 <body>
 <div class="shell">
   <header>
-    <p class="kicker">AgentMachinist · Job card · Rev 0.11.0</p>
+    <p class="kicker">AgentMachinist · Job card · Rev 0.12.0</p>
     <h1>Machinist Job Card</h1>
     <p class="lede">One GitHub issue in, one reviewed pull request out. The
     machine writes the spec and the code; you approve the exact spec commit
@@ -350,6 +350,7 @@
       <span class="gate">approve SHA</span><span class="arrow">→</span>
       <span class="step">implement</span><span class="arrow">→</span>
       <span class="step">test gate</span><span class="arrow">→</span>
+      <span class="step">independent review</span><span class="arrow">→</span>
       <span class="step">ready PR</span><span class="arrow">→</span>
       <span class="gate">you merge</span>
     </div>
@@ -401,7 +402,7 @@ git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
     <div class="cell ci">
       <span class="chip ci">GitHub Actions</span>
       <pre><code>machinist onboard --spec-source github-actions
-gh secret set OPENAI_API_KEY          <span class="comment"># use the selected Spec adapter's secret</span>
+gh secret set ANTHROPIC_API_KEY       <span class="comment"># default claude-code adapter; see Harness matrix for others</span>
 machinist doctor --run-gates   <span class="comment"># single health check</span>
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml

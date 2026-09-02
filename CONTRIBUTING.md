@@ -11,9 +11,12 @@ bash scripts/verify.sh
 
 Changes to lifecycle behavior should start with a failing contract test. Keep
 GitHub CLI construction behind `GitHubClient`, Git behavior behind `Workspace`,
-and lifecycle eligibility/persistence behind the lifecycle and phase modules.
-Keep local aggregation in `reporting.py` and all network projection in
-`telemetry.py`; OTLP attributes are an allowlist, not a redaction pass.
+known Evidence interpretation in `evidence.py`, Task Run construction in
+`dispatch.py`, journal discovery in `lifecycle.py`, transition decisions in
+`transitions.py`, repository/PR checks in `repository_custody.py`, and Gate
+execution in `verification.py`. Keep local aggregation in `reporting.py` and
+all network projection in `telemetry.py`; OTLP attributes are an allowlist, not
+a redaction pass.
 
 When config affects GitHub Actions, update the source template and projection
 tests, then run:
