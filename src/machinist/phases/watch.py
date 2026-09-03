@@ -13,7 +13,7 @@ its next pass.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -42,12 +42,11 @@ class WatchFailure:
     phase: str
     issue_number: int
     message: str
-    exception_type: str
 
 
-@dataclass(frozen=True, eq=False)
-class WatchResult(Sequence[str]):
-    """Structured pass result with list-like access to display events."""
+@dataclass(frozen=True)
+class WatchResult:
+    """One dispatch pass: display events plus the structured facts behind them."""
 
     events: tuple[str, ...] = ()
     failures: tuple[WatchFailure, ...] = ()
@@ -57,27 +56,6 @@ class WatchResult(Sequence[str]):
     @property
     def ok(self) -> bool:
         return not self.failures
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.events)
-
-    def __len__(self) -> int:
-        return len(self.events)
-
-    def __getitem__(self, index):
-        return self.events[index]
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, WatchResult):
-            return (
-                self.events == other.events
-                and self.failures == other.failures
-                and self.attempted == other.attempted
-                and self.deferred == other.deferred
-            )
-        if isinstance(other, (list, tuple)):
-            return self.events == tuple(other)
-        return NotImplemented
 
 
 Admission = Callable[[WatchTask], bool]
@@ -232,7 +210,6 @@ def _dispatch(action, task: WatchTask, state: WatchState, *, success, notify=Non
             phase=task.phase,
             issue_number=task.issue_number,
             message=message,
-            exception_type=type(exc).__name__,
         )
         if notify is not None and state.notified_failures.get(key) != message:
             notify(message)

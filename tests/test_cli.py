@@ -18,6 +18,7 @@ from machinist.cli import (
     main,
 )
 from machinist.config import HarnessName, MachinistConfig, load_config
+from machinist.phases.watch import WatchFailure, WatchResult
 from machinist.workflows import WorkflowDriftError
 
 _BaseCliRunner = CliRunner
@@ -710,10 +711,13 @@ def test_watch_without_config_points_at_init():
 
 
 def test_watch_once_prints_dispatch_events(monkeypatch):
-    events = [
-        "spec: issue #7 → draft PR #97 (https://github.com/x/y/pull/97)",
-        "error: execute for issue #8 failed: boom",
-    ]
+    events = WatchResult(
+        events=(
+            "spec: issue #7 → draft PR #97 (https://github.com/x/y/pull/97)",
+            "error: execute for issue #8 failed: boom",
+        ),
+        failures=(WatchFailure("execute", 8, "execute for issue #8 failed: boom"),),
+    )
     monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: events)
 
     runner = CliRunner()
@@ -759,7 +763,7 @@ def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
     ):
         assert lifecycle.runs_dir == Path.cwd() / ".machinist/runs"
         notify("spec for issue #7 failed: boom")
-        return []
+        return WatchResult()
 
     monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
 
@@ -807,7 +811,7 @@ def test_two_fresh_watch_invocations_dedupe_the_same_stale_approval(monkeypatch)
         lifecycle,
     ):
         notify_stale(42, "PR #57 approval is stale")
-        return []
+        return WatchResult()
 
     monkeypatch.setattr("machinist.cli.notify_event", fake_notify)
     monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
@@ -829,7 +833,9 @@ def test_two_fresh_watch_invocations_dedupe_the_same_stale_approval(monkeypatch)
 
 
 def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
-    monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "machinist.cli.watch_once", lambda *args, **kwargs: WatchResult()
+    )
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -895,7 +901,7 @@ def test_watch_spec_dispatch_wires_durable_cancellation_check(monkeypatch):
 
     def fake_watch_once(*args, run_spec, **kwargs):
         run_spec(42)
-        return ["spec dispatched"]
+        return WatchResult(events=("spec dispatched",))
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
     monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
@@ -2947,7 +2953,9 @@ def test_workflow_drift_notice_is_advisory_and_never_raises(monkeypatch):
 
 
 def test_watch_warns_when_managed_workflows_drift(monkeypatch):
-    monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "machinist.cli.watch_once", lambda *args, **kwargs: WatchResult()
+    )
     monkeypatch.setattr("machinist.cli.project_workflows", _raise_drift)
 
     runner = CliRunner()

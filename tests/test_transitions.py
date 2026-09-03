@@ -84,3 +84,41 @@ def test_pull_request_transition_prioritizes_review_delivery_evidence():
 def test_unknown_pipeline_state_fails_closed():
     with pytest.raises(ValueError, match="unknown pipeline state"):
         transition_for("mystery", issue=42)
+
+
+def _record(status, *, phase=Phase.SPEC):
+    return RunRecord(
+        issue=42,
+        phase=phase,
+        status=status,
+        attempt=1,
+        started_at="2026-09-03T00:00:00+00:00",
+        updated_at="2026-09-03T00:01:00+00:00",
+        evidence={},
+    )
+
+
+def test_run_disposition_carries_only_what_operators_see():
+    from dataclasses import fields
+
+    from machinist.transitions import RunDisposition
+
+    assert [field.name for field in fields(RunDisposition)] == [
+        "display",
+        "next_action",
+    ]
+
+
+def test_describe_run_names_the_state_and_next_action():
+    from machinist.transitions import describe_run
+
+    retryable = describe_run(_record(RunStatus.RETRYABLE))
+    assert retryable.display == "spec retryable"
+    assert retryable.next_action == "machinist watch --once -v"
+
+    succeeded = describe_run(_record(RunStatus.SUCCEEDED))
+    assert succeeded.display == "spec succeeded"
+    assert succeeded.next_action == "machinist approve --issue 42"
+
+    executed = describe_run(_record(RunStatus.SUCCEEDED, phase=Phase.EXECUTE))
+    assert executed.next_action is None

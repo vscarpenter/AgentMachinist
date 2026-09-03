@@ -87,7 +87,7 @@ from machinist.phases.execute import (
 from machinist.phases.review import ReviewPhaseError, run_review_phase
 from machinist.phases.spec import SpecPhaseError, preview_spec_phase, run_spec_phase
 from machinist.phases.status import StatusRow, next_action_for_status, pipeline_status
-from machinist.phases.watch import WatchState, plan_watch_tasks, watch_once
+from machinist.phases.watch import WatchResult, WatchState, plan_watch_tasks, watch_once
 from machinist.portfolio import (
     DEFAULT_REGISTRY_PATH,
     PortfolioError,
@@ -1842,10 +1842,10 @@ def watch(
                     raise click.ClickException(str(exc)) from exc
                 click.echo(f"poll error: {exc}", err=True)
                 poll_failure = str(exc)
-                result = []
-            for event in result:
+                result = WatchResult()
+            for event in result.events:
                 click.echo(event)
-            deferred_tasks = tuple(getattr(result, "deferred", ()))
+            deferred_tasks = result.deferred
             for task in deferred_tasks:
                 reason = deferred_reasons.get(
                     (task.phase, task.issue_number),
@@ -1855,21 +1855,17 @@ def watch(
                     f"deferred: {task.phase} for issue #{task.issue_number}: {reason}"
                 )
             if deferred_tasks:
-                attempted = len(getattr(result, "attempted", ()))
+                attempted = len(result.attempted)
                 click.echo(
                     f"Pass summary: {attempted} dispatched, "
                     f"{len(deferred_tasks)} deferred."
                 )
-            failures = getattr(
-                result,
-                "failures",
-                tuple(event for event in result if event.startswith("error:")),
-            )
+            failures = result.failures
             failure_count = len(failures) + int(poll_failure is not None)
             try:
                 write_watcher_heartbeat(
                     repo_root,
-                    attempted=len(getattr(result, "attempted", ())),
+                    attempted=len(result.attempted),
                     deferred=len(deferred_tasks),
                     failures=failure_count,
                     interval_seconds=poll_interval,
@@ -1879,7 +1875,7 @@ def watch(
                     raise click.ClickException(str(exc)) from exc
                 click.echo(f"watcher health error: {exc}", err=True)
             if once:
-                if not result and not deferred_tasks:
+                if not result.events and not deferred_tasks:
                     click.echo("Nothing to do.")
                 if failures:
                     raise click.ClickException(

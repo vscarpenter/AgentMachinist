@@ -89,7 +89,7 @@ def test_awaiting_spec_issue_dispatches_spec_phase():
     events = run(FakeGitHub(issues=[issue(7)]), run_spec=run_spec)
 
     assert run_spec.calls == [7]
-    assert any("issue #7" in e for e in events)
+    assert any("issue #7" in e for e in events.events)
 
 
 def test_github_actions_spec_source_prevents_local_spec_dispatch():
@@ -107,7 +107,7 @@ def test_github_actions_spec_source_prevents_local_spec_dispatch():
     )
 
     assert run_spec.calls == []
-    assert events == []
+    assert events.events == ()
 
 
 def test_approved_draft_pr_dispatches_execute_with_issue_number():
@@ -120,7 +120,7 @@ def test_approved_draft_pr_dispatches_execute_with_issue_number():
     events = run(github, run_execute=run_execute)
 
     assert run_execute.calls == [42]
-    assert any("#42" in e for e in events)
+    assert any("#42" in e for e in events.events)
 
 
 def test_awaiting_review_dispatches_review_before_new_spec(tmp_path):
@@ -174,7 +174,7 @@ def test_awaiting_approval_and_in_review_prs_dispatch_nothing():
 
     assert run_spec.calls == []
     assert run_execute.calls == []
-    assert events == []
+    assert events.events == ()
 
 
 def test_dispatch_failure_becomes_structured_result_and_daemon_survives():
@@ -209,7 +209,7 @@ def test_dispatch_failure_notifies_with_issue_and_reason():
     )
 
     assert notifications == ["spec for issue #7 failed: boom"]
-    assert events == ["error: spec for issue #7 failed: boom"]
+    assert events.events == ("error: spec for issue #7 failed: boom",)
 
 
 def test_successful_dispatch_does_not_notify():
@@ -218,7 +218,7 @@ def test_successful_dispatch_does_not_notify():
     events = run(FakeGitHub(issues=[issue(7)]), notify=notifications.append)
 
     assert notifications == []
-    assert any("draft PR" in e for e in events)
+    assert any("draft PR" in e for e in events.events)
 
 
 def test_failed_issue_is_reconsidered_on_next_pass_for_durable_retry():
@@ -464,12 +464,21 @@ def test_live_watch_dispatches_execute_after_explicit_retry(tmp_path):
     ]
 
 
-def test_watch_result_remains_iterable_and_list_comparable_for_cli_compatibility():
+def test_watch_result_is_a_plain_record_not_a_list():
+    from collections.abc import Sequence
+    from dataclasses import fields
+
+    from machinist.phases.watch import WatchFailure
+
     result = run(FakeGitHub(issues=[issue(7)]))
 
-    assert list(result) == list(result.events)
-    assert result == list(result.events)
-    assert bool(result)
+    assert not isinstance(result, Sequence)
+    assert result != []
+    assert [field.name for field in fields(WatchFailure)] == [
+        "phase",
+        "issue_number",
+        "message",
+    ]
 
 
 def test_max_tasks_must_not_be_negative():
