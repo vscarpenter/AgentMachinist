@@ -42,6 +42,7 @@ class FakeGitHub:
 
     def ensure_label(self, name, *, color, description):
         self.calls.append(("ensure_label", name))
+        self.labels = {**getattr(self, "labels", {}), name: (color, description)}
 
     def create_draft_pr(self, *, branch, base, title, body):
         self.calls.append(("create_draft_pr", branch, base, title, body))
@@ -448,7 +449,7 @@ def test_revise_updates_existing_draft_pr_and_invalidates_approval(tmp_path):
         claim=FakeClaim(),
     )
 
-    assert result == DraftPR(number=57, url=existing.url)
+    assert (result.number, result.url) == (57, existing.url)
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
     assert ("remove_pr_label", 57, "machinist:approved") in github.calls
     assert any(call[0] == "update_pr" for call in github.calls)
@@ -966,3 +967,68 @@ def test_spec_requires_a_claim(tmp_path):
             harness=FakeHarness(),
             workspace=FakeWorkspace(tmp_path),
         )
+
+
+def test_run_spec_phase_returns_the_observed_pull_request(tmp_path):
+    github = FakeGitHub()
+
+    result = run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=FakeHarness(),
+        workspace=FakeWorkspace(tmp_path),
+        claim=FakeClaim(),
+    )
+
+    assert result.number == 57
+    assert result.head_sha == "b" * 40
+    assert result.branch == "agent/issue-42"
+
+
+def test_spec_rejects_an_existing_pr_on_another_branch_through_custody(tmp_path):
+    stray = PullRequest(
+        number=57,
+        title="Spec",
+        url="https://github.com/vscarpenter/demo/pull/57",
+        branch="agent/issue-99",
+        is_draft=True,
+        head_sha="b" * 40,
+        base="main",
+    )
+    github = FakeGitHub(existing_pr=stray)
+    workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = stray.head_sha
+
+    with pytest.raises(
+        SpecPhaseError, match=r"branch 'agent/issue-99' != 'agent/issue-42'"
+    ):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=FakeHarness(),
+            workspace=workspace,
+            revise=True,
+            claim=FakeClaim(),
+        )
+
+
+def test_spec_uses_the_shared_approved_label_metadata(tmp_path):
+    from machinist.github import APPROVED_LABEL_COLOR, APPROVED_LABEL_DESCRIPTION
+
+    github = FakeGitHub()
+
+    run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=FakeHarness(),
+        workspace=FakeWorkspace(tmp_path),
+        claim=FakeClaim(),
+    )
+
+    assert github.labels["machinist:approved"] == (
+        APPROVED_LABEL_COLOR,
+        APPROVED_LABEL_DESCRIPTION,
+    )

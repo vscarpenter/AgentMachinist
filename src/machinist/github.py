@@ -42,6 +42,12 @@ class Issue:
     labels: list[str] = field(default_factory=list)
 
 
+# Label metadata every setup path (init, sync-labels, Spec delivery) agrees on.
+TRIGGER_LABEL_COLOR = "1d76db"
+APPROVED_LABEL_COLOR = "0e8a16"
+APPROVED_LABEL_DESCRIPTION = "Machinist: spec approved for implementation"
+
+
 @dataclass(frozen=True)
 class DraftPR:
     number: int

@@ -53,7 +53,13 @@ from machinist.doctor import (
 )
 from machinist.evidence import TaskEvidence
 from machinist.explain import TaskExplanation, explain_task
-from machinist.github import GitHubClient, GitHubError
+from machinist.github import (
+    APPROVED_LABEL_COLOR,
+    APPROVED_LABEL_DESCRIPTION,
+    TRIGGER_LABEL_COLOR,
+    GitHubClient,
+    GitHubError,
+)
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
@@ -135,7 +141,6 @@ from machinist.workflows import (
 from machinist.workflows import sync_workflows as project_workflows
 from machinist.workspace import Workspace, WorkspaceError
 
-_LABEL_COLORS = {"trigger": "1d76db", "approved": "0e8a16"}
 _RUNTIME_IGNORE = "/.machinist/runs/"
 _SUBPROCESS_TIMEOUT_SECONDS = 30
 _MAX_GITIGNORE_BYTES = 1024 * 1024
@@ -144,12 +149,6 @@ _MAX_GITIGNORE_BYTES = 1024 * 1024
 def _make_harness(config, phase: Phase):
     harness = get_harness(config.harness_for(phase.value))
     harness.on_progress = lambda message: click.echo(f"  … {message}")
-    return harness
-
-
-def _preview_harness(config, phase: Phase, issue_number: int, runs_dir: Path):
-    harness = _make_harness(config, phase)
-    harness.cancel_check = CancellationStore(runs_dir).check(issue_number)
     return harness
 
 
@@ -171,6 +170,7 @@ def _task_dispatcher(
         github_factory=lambda: _bound_github_client(config, repo_root=repo_root),
         progress=lambda message: click.echo(f"  … {message}"),
         spec_runner=run_spec_phase,
+        preview_runner=preview_spec_phase,
         execute_runner=run_execute_phase,
         review_runner=run_review_phase,
         test_runner=run_supervised,
@@ -728,13 +728,13 @@ def init(
         github = _bound_github_client(config, repo_root=repo_root)
         github.ensure_label(
             config.github.labels.trigger,
-            color=_LABEL_COLORS["trigger"],
+            color=TRIGGER_LABEL_COLOR,
             description="Machinist: run the pipeline on this issue",
         )
         github.ensure_label(
             config.github.labels.approved,
-            color=_LABEL_COLORS["approved"],
-            description="Machinist: spec approved for implementation",
+            color=APPROVED_LABEL_COLOR,
+            description=APPROVED_LABEL_DESCRIPTION,
         )
         click.echo(
             f"ensured GitHub labels '{config.github.labels.trigger}' "
@@ -1199,12 +1199,12 @@ def sync_labels_command(ctx: click.Context, check: bool, apply: bool) -> None:
         github = _bound_github_client(config)
         required = {
             config.github.labels.trigger: (
-                _LABEL_COLORS["trigger"],
+                TRIGGER_LABEL_COLOR,
                 "Machinist: run the pipeline on this issue",
             ),
             config.github.labels.approved: (
-                _LABEL_COLORS["approved"],
-                "Machinist: spec approved for implementation",
+                APPROVED_LABEL_COLOR,
+                APPROVED_LABEL_DESCRIPTION,
             ),
         }
         if apply:
@@ -1580,19 +1580,13 @@ def spec(
         github = _bound_github_client(config)
         branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
         if dry_run:
-            preview = preview_spec_phase(
-                issue_number,
+            preview = _task_dispatcher(
                 config,
+                repo_root=Path.cwd(),
+                lifecycle=lifecycle,
+                cancellation=cancellations,
                 github=github,
-                harness=_preview_harness(
-                    config,
-                    Phase.SPEC,
-                    issue_number,
-                    Path(".machinist/runs"),
-                ),
-                workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
-                cancel_check=cancellations.check(issue_number),
-            )
+            ).preview_spec(issue_number)
             click.echo(preview)
             return
         if abandon:

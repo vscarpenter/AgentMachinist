@@ -204,3 +204,31 @@ def test_run_spec_forwards_a_plain_revise_flag_by_default(tmp_path):
 
     kwargs = calls[0][2]
     assert kwargs["revise"] is False
+
+
+def test_preview_spec_builds_dependencies_without_a_task_run(tmp_path):
+    lifecycle = FakeLifecycle()
+    calls = []
+
+    def preview_runner(issue, config, **kwargs):
+        calls.append(("preview", issue, kwargs))
+        return "## Preview\n"
+
+    dispatcher = TaskDispatcher(
+        MachinistConfig(),
+        repo_root=tmp_path,
+        lifecycle=lifecycle,
+        cancellation=FakeCancellation(),
+        github=object(),
+        harness_factory=lambda phase, issue: ("harness", phase, issue),
+        workspace_factory=lambda: "workspace",
+        preview_runner=preview_runner,
+    )
+
+    assert dispatcher.preview_spec(42) == "## Preview\n"
+    kind, issue, kwargs = calls[0]
+    assert (kind, issue) == ("preview", 42)
+    assert kwargs["harness"] == ("harness", Phase.SPEC, 42)
+    assert kwargs["workspace"] == "workspace"
+    assert callable(kwargs["cancel_check"])
+    assert lifecycle.calls == []

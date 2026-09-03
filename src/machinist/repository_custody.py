@@ -115,7 +115,7 @@ def verify_pull_request(
             reasons=frozenset({"missing"}),
         )
     mismatches = _identity_mismatches(observed, expected)
-    mismatches.extend(_repository_mismatches(observed, expected))
+    mismatches.extend(_repository_mismatches(observed, expected.repository))
     if expected.is_draft is not None and observed.is_draft is not expected.is_draft:
         expected_draft = "a draft" if expected.is_draft else "ready"
         mismatches.append(("draft", f"PR is not {expected_draft}"))
@@ -155,13 +155,36 @@ def _identity_mismatches(
     return mismatches
 
 
+def verify_branch_pr(
+    pr: PullRequest,
+    *,
+    branch: str,
+    base: str,
+    repository: str | None,
+) -> None:
+    """Require an existing branch PR to be this repository's PR at the expected
+    branch and base, whatever its state; callers decide what to do with a
+    closed or diverged one."""
+    mismatches: list[tuple[str, str]] = []
+    if pr.branch != branch:
+        mismatches.append(("branch", f"branch {pr.branch!r} != {branch!r}"))
+    if pr.base and pr.base != base:
+        mismatches.append(("base", f"base {pr.base!r} != {base!r}"))
+    mismatches.extend(_repository_mismatches(pr, repository))
+    if mismatches:
+        raise RepositoryCustodyError(
+            "; ".join(message for _, message in mismatches),
+            reasons=frozenset(reason for reason, _ in mismatches),
+        )
+
+
 def _repository_mismatches(
     observed: PullRequest,
-    expected: PullRequestExpectation,
+    repository: str | None,
 ) -> list[tuple[str, str]]:
     if observed.is_cross_repository:
         return [("repository", "PR is cross-repository")]
-    if not same_repository_pr(observed, expected.repository):
+    if not same_repository_pr(observed, repository):
         return [("repository", "PR head repository does not match controller origin")]
     return []
 

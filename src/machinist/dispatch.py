@@ -8,7 +8,7 @@ from typing import Protocol, TypeVar
 
 from machinist.cancellation import CancellationStore
 from machinist.config import MachinistConfig
-from machinist.github import DraftPR, GitHubClient, PullRequest
+from machinist.github import GitHubClient, PullRequest
 from machinist.harness import get_harness
 from machinist.lifecycle import (
     LifecycleError,
@@ -20,13 +20,14 @@ from machinist.lifecycle import (
 )
 from machinist.phases.execute import run_execute_phase
 from machinist.phases.review import run_review_phase
-from machinist.phases.spec import run_spec_phase
+from machinist.phases.spec import preview_spec_phase, run_spec_phase
 from machinist.process import run_supervised
 from machinist.repository_custody import bind_repository
 from machinist.workspace import Workspace
 
 _Result = TypeVar("_Result")
-SpecRunner = Callable[..., DraftPR]
+SpecRunner = Callable[..., PullRequest]
+PreviewRunner = Callable[..., str]
 ExecuteRunner = Callable[..., PullRequest]
 ReviewRunner = Callable[..., PullRequest]
 
@@ -71,6 +72,7 @@ class TaskDispatcher:
         workspace_factory: Callable[[], object] | None = None,
         progress: Callable[[str], None] | None = None,
         spec_runner: SpecRunner = run_spec_phase,
+        preview_runner: PreviewRunner = preview_spec_phase,
         execute_runner: ExecuteRunner = run_execute_phase,
         review_runner: ReviewRunner = run_review_phase,
         test_runner: Callable[..., object] = run_supervised,
@@ -94,14 +96,26 @@ class TaskDispatcher:
         self._workspace_factory = workspace_factory
         self._progress = progress
         self._spec_runner = spec_runner
+        self._preview_runner = preview_runner
         self._execute_runner = execute_runner
         self._review_runner = review_runner
         self._test_runner = test_runner
 
-    def run_spec(self, issue: int, *, revise: bool = False) -> DraftPR:
+    def preview_spec(self, issue: int) -> str:
+        """Generate a read-only Spec preview with the same wiring, outside any Task Run."""
+        return self._preview_runner(
+            issue,
+            self.config,
+            github=self._github_client(),
+            harness=self._harness(Phase.SPEC, issue),
+            workspace=self._workspace(issue),
+            cancel_check=self.cancellation.check(issue),
+        )
+
+    def run_spec(self, issue: int, *, revise: bool = False) -> PullRequest:
         """Enter one claimed Spec Task Run."""
 
-        def invoke(claim: TaskClaim) -> DraftPR:
+        def invoke(claim: TaskClaim) -> PullRequest:
             return self._spec_runner(
                 issue,
                 self.config,
@@ -181,7 +195,7 @@ class TaskDispatcher:
         phase: Phase,
         *,
         resume: bool = False,
-    ) -> DraftPR | PullRequest:
+    ) -> PullRequest:
         """Dispatch the Phase selected by an explicit retry-now transition."""
         if phase is Phase.SPEC:
             return self.run_spec(issue)
