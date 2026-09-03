@@ -101,12 +101,11 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
   (`claude_code`, `codex`, `pi`, `opencode`) build a read-only argv profile
   (shared by Spec and Review) and an Execute edit profile, and stay one screen
-  long. Registry in `__init__.py`. Every adapter
-  threads `harness.model` (as `--model <value>`) and `harness.extra_args`
-  into both `spec_argv` and `implement_argv`. **Order matters**: `claude-code`
-  passes the prompt via `-p <prompt>`, so the new args append at the end;
-  `codex`, `opencode`, and `pi` take the prompt as the final positional, so
-  model/extra_args are inserted *before* the prompt is appended.
+  long. Registry in `__init__.py`. Every adapter splices
+  `Harness._passthrough_argv()` (`--model <value>` plus `harness.extra_args`)
+  into both `spec_argv` and `implement_argv` at its own prompt-relative
+  position: `claude-code` after `-p <prompt>`, `codex`, `opencode`, and `pi`
+  before the final positional prompt.
 - `phases/spec.py` — Phase 1: issue → harness in read-only mode → spec file →
   branch → push → draft PR ("Closes #n"). Rejects empty specs and any
   working-tree change made by the harness.
@@ -207,9 +206,9 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   states, update README/docs in the same change or the suite fails.
 - Harness adapters have exact-argv tests (`tests/test_harness.py`). Changing
   an adapter means updating its argv test, `docs/harnesses.md`, and the
-  changelog together. New pass-through options must be added to both
-  `spec_argv` and `implement_argv` on all four adapters, respecting each
-  one's prompt position.
+  changelog together. New pass-through options go in
+  `Harness._passthrough_argv()` on the base class; every adapter already
+  splices it into both profiles.
 - When config affects GitHub Actions: edit the template under
   `src/machinist/templates/github/`, update projection tests, then run
   `uv run machinist sync-workflows` and commit the reviewed projection.
