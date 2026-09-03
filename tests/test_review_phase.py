@@ -1,16 +1,18 @@
 """Independent Review Phase orchestration and report-contract tests."""
 
+import subprocess
 from dataclasses import replace
 
 import pytest
 
-from machinist.config import MachinistConfig
+from machinist.config import MachinistConfig, WorkspaceConfig
 from machinist.github import Issue, PullRequest
 from machinist.phases.review import (
     ReviewPhaseError,
     parse_review_report,
     run_review_phase,
 )
+from machinist.workspace import Workspace
 
 
 def make_pr(*, head_sha: str = "c" * 40, draft: bool = True) -> PullRequest:
@@ -151,6 +153,11 @@ def test_review_parses_structured_findings_and_marks_exact_pr_ready(tmp_path):
     assert "Approved spec" in harness.prompts[0]
     assert "Clear next action" in harness.prompts[0]
     assert "diff --git" in harness.prompts[0]
+    assert (
+        "severity and confidence must each be low, medium, or high"
+        in harness.prompts[0]
+    )
+    assert "Output exactly one JSON object and nothing else" in harness.prompts[0]
     comment = next(call for call in github.calls if call[0] == "upsert_pr_comment")
     assert "Independent review" in comment[2]
     assert "Recovery copy can be more specific" in comment[2]
@@ -163,6 +170,61 @@ def test_review_parses_structured_findings_and_marks_exact_pr_ready(tmp_path):
         "structured_usage": False,
     }
     assert any(call[0] == "cleanup_preview" for call in workspace.calls)
+    provision = next(call for call in workspace.calls if call[0] == "provision_preview")
+    assert provision[1].startswith("preview-review-issue-42-")
+
+
+def test_review_provisions_its_preview_inside_a_real_managed_workspace(tmp_path):
+    """Regression: the Review preview name must satisfy Workspace's preview contract."""
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(origin)],
+        capture_output=True,
+        check=True,
+    )
+    repo = tmp_path / "repo"
+    subprocess.run(
+        ["git", "clone", str(origin), str(repo)], capture_output=True, check=True
+    )
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+
+    git("config", "user.email", "test@example.com")
+    git("config", "user.name", "Test User")
+    (repo / "README.md").write_text("hello\n")
+    git("add", "-A")
+    git("commit", "-m", "init")
+    git("push", "origin", "main")
+    git("checkout", "-b", "agent/issue-42")
+    spec = repo / ".machinist/specs/issue-42-spec.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("## Approved spec\nKeep the CLI clear.\n")
+    git("add", "-A")
+    git("commit", "-m", "spec")
+    git("push", "origin", "agent/issue-42")
+    head_sha = git("rev-parse", "HEAD")
+    git("checkout", "main")
+    workspace = Workspace(repo_root=repo, config=WorkspaceConfig(root=tmp_path / "ws"))
+    github = FakeGitHub(make_pr(head_sha=head_sha))
+    evidence = {**execute_evidence(), "push_observed_sha": head_sha}
+
+    pr = run_review_phase(
+        42,
+        config(),
+        github=github,
+        harness=FakeHarness(),
+        workspace=workspace,
+        execute_evidence=evidence,
+        claim=FakeClaim(),
+    )
+
+    assert pr.number == 57
+    assert ("mark_ready", 57) in github.calls
+    assert not list((tmp_path / "ws").glob("repo-preview-*"))
 
 
 @pytest.mark.parametrize(
@@ -185,6 +247,56 @@ def test_review_parses_structured_findings_and_marks_exact_pr_ready(tmp_path):
     ],
 )
 def test_review_report_contract_fails_closed(payload, message):
+    with pytest.raises(ReviewPhaseError, match=message):
+        parse_review_report(payload)
+
+
+_REPORT = (
+    '{"version":1,"summary":"Meets the approved spec","findings":['
+    '{"severity":"low","confidence":"high","file":"cli.py",'
+    '"line":12,"requirement":"Clear next action","message":"Tighten copy",'
+    '"remediation":"Name the retry command"}]}'
+)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _REPORT,
+        f"```json\n{_REPORT}\n```",
+        f"```\n{_REPORT}\n```",
+        f"  \n```json\n{_REPORT}\n```\n\n",
+        f"Here is the independent review.\n\n```json\n{_REPORT}\n```",
+        f"Review complete:\n{_REPORT}\n",
+    ],
+    ids=[
+        "bare",
+        "json-fence",
+        "plain-fence",
+        "padded-fence",
+        "prose-then-fence",
+        "prose-then-bare",
+    ],
+)
+def test_review_report_accepts_one_json_object_with_harness_chrome(payload):
+    report = parse_review_report(payload)
+
+    assert report.summary == "Meets the approved spec"
+    assert len(report.findings) == 1
+    assert report.findings[0].file == "cli.py"
+
+
+@pytest.mark.parametrize(
+    "payload, message",
+    [
+        (f"{_REPORT}\n{_REPORT}", "valid JSON"),
+        (f"{_REPORT}\nAnything else you need?", "valid JSON"),
+        (f"```json\n{_REPORT}\n```\nSecond thoughts: none.", "valid JSON"),
+        ("No JSON here, only prose.", "valid JSON"),
+    ],
+    ids=["two-objects", "trailing-prose", "prose-after-fence", "no-object"],
+)
+def test_review_report_rejects_ambiguous_output(payload, message):
     with pytest.raises(ReviewPhaseError, match=message):
         parse_review_report(payload)
 

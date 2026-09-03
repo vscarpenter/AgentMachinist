@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
+from uuid import uuid4
 
 from machinist.config import MachinistConfig
 from machinist.evidence import EvidenceError, TaskEvidence
@@ -48,12 +49,17 @@ class ReviewReport:
 
 
 def parse_review_report(payload: str) -> ReviewReport:
-    """Parse bounded version-1 JSON and reject ambiguous output."""
+    """Parse bounded version-1 JSON and reject ambiguous output.
+
+    Harnesses routinely wrap the object in a Markdown fence or lead with a
+    sentence, so one JSON object with that chrome is accepted. Anything after
+    the object other than whitespace or a closing fence still fails closed.
+    """
     if len(payload) > _MAX_REPORT_CHARS:
         raise ReviewPhaseError("review report exceeds 100000 characters")
     try:
-        raw = json.loads(payload)
-    except (json.JSONDecodeError, TypeError) as exc:
+        raw = _single_json_object(payload)
+    except (ValueError, TypeError) as exc:
         raise ReviewPhaseError("review report must be valid JSON") from exc
     if not isinstance(raw, dict) or raw.get("version") != 1:
         raise ReviewPhaseError("review report version must be 1")
@@ -84,9 +90,8 @@ def run_review_phase(
     evidence = TaskEvidence.load(execute_evidence)
     expected_sha, base = _review_identity(pr, evidence, github)
     report_progress(claim, "provision Review preview", branch)
-    path = workspace.provision_preview(
-        f"review-issue-{issue_number}", branch, f"origin/{base}"
-    )
+    preview_task = f"preview-review-issue-{issue_number}-{uuid4().hex[:12]}"
+    path = workspace.provision_preview(preview_task, branch, f"origin/{base}")
     try:
         return _run_in_preview(
             issue_number,
@@ -221,10 +226,12 @@ def _read_spec(path: Path, issue: int, config: MachinistConfig) -> str:
 
 def _prompt_sections(issue: int, task, spec: str, evidence: str, diff: str) -> str:
     return (
-        "Review this implementation independently and read-only. Return only "
-        "version-1 JSON with summary and findings. Findings require severity, "
-        "confidence, repository-relative file, positive line, requirement, "
-        "message, and remediation. Do not edit files.\n\n"
+        "Review this implementation independently and read-only. Output exactly "
+        "one JSON object and nothing else: no prose before or after it and no "
+        "Markdown fence. The object is version-1 JSON with summary and findings. "
+        "Each finding requires severity, confidence, repository-relative file, "
+        "positive line, requirement, message, and remediation; severity and "
+        "confidence must each be low, medium, or high. Do not edit files.\n\n"
         f"## Task #{issue}: {task.title}\n\n{task.body}\n\n"
         f"## Approved Spec\n\n{spec}\n\n"
         f"## Execute evidence\n\n```json\n{evidence}\n```\n\n"
@@ -347,6 +354,21 @@ def _repository_path(value: object) -> str:
     if path.is_absolute() or ".." in path.parts or path.as_posix() != text:
         raise ReviewPhaseError("review finding file must be repository-relative")
     return text
+
+
+def _single_json_object(payload: str) -> Any:
+    """Return the one JSON object in the payload, or raise ValueError."""
+    text = payload.strip()
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("review report contains no JSON object")
+    value, end = json.JSONDecoder().raw_decode(text, start)
+    trailer = text[end:].strip()
+    if trailer.startswith("```"):
+        trailer = trailer[3:].strip()
+    if trailer:
+        raise ValueError("review report has content after the JSON object")
+    return value
 
 
 def _text(value: object, field: str) -> str:

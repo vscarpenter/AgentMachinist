@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Fix independent Review failing at "provision Review preview" with a misleading
+  "outside managed workspace root" error. Review named its ephemeral clone
+  `review-issue-<n>`, but `Workspace` only accepts preview clones named
+  `<repo>-preview-*`; Review now uses `preview-review-issue-<n>-<hex>`, matching
+  Spec. A regression test drives `run_review_phase` through a real `Workspace`.
+- Accept a Review report that a harness wraps in a Markdown fence or prefixes
+  with a sentence, as long as it contains exactly one JSON object followed by
+  nothing but whitespace or the closing fence. Two objects, trailing prose, or
+  no object still fail closed with "review report must be valid JSON".
+- State the Review report contract in the prompt: exactly one JSON object with
+  no fence or prose, and severity and confidence limited to low, medium, or
+  high. A harness previously had to guess the allowed levels and could emit
+  values such as "critical" that the parser rejects.
+
 ## 0.12.0 — 2026-09-02
 
 - Reconcile every operating, visual, historical, and architecture document with
