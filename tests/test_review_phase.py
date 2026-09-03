@@ -1,16 +1,18 @@
 """Independent Review Phase orchestration and report-contract tests."""
 
+import subprocess
 from dataclasses import replace
 
 import pytest
 
-from machinist.config import MachinistConfig
+from machinist.config import MachinistConfig, WorkspaceConfig
 from machinist.github import Issue, PullRequest
 from machinist.phases.review import (
     ReviewPhaseError,
     parse_review_report,
     run_review_phase,
 )
+from machinist.workspace import Workspace
 
 
 def make_pr(*, head_sha: str = "c" * 40, draft: bool = True) -> PullRequest:
@@ -163,6 +165,61 @@ def test_review_parses_structured_findings_and_marks_exact_pr_ready(tmp_path):
         "structured_usage": False,
     }
     assert any(call[0] == "cleanup_preview" for call in workspace.calls)
+    provision = next(call for call in workspace.calls if call[0] == "provision_preview")
+    assert provision[1].startswith("preview-review-issue-42-")
+
+
+def test_review_provisions_its_preview_inside_a_real_managed_workspace(tmp_path):
+    """Regression: the Review preview name must satisfy Workspace's preview contract."""
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(origin)],
+        capture_output=True,
+        check=True,
+    )
+    repo = tmp_path / "repo"
+    subprocess.run(
+        ["git", "clone", str(origin), str(repo)], capture_output=True, check=True
+    )
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+
+    git("config", "user.email", "test@example.com")
+    git("config", "user.name", "Test User")
+    (repo / "README.md").write_text("hello\n")
+    git("add", "-A")
+    git("commit", "-m", "init")
+    git("push", "origin", "main")
+    git("checkout", "-b", "agent/issue-42")
+    spec = repo / ".machinist/specs/issue-42-spec.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("## Approved spec\nKeep the CLI clear.\n")
+    git("add", "-A")
+    git("commit", "-m", "spec")
+    git("push", "origin", "agent/issue-42")
+    head_sha = git("rev-parse", "HEAD")
+    git("checkout", "main")
+    workspace = Workspace(repo_root=repo, config=WorkspaceConfig(root=tmp_path / "ws"))
+    github = FakeGitHub(make_pr(head_sha=head_sha))
+    evidence = {**execute_evidence(), "push_observed_sha": head_sha}
+
+    pr = run_review_phase(
+        42,
+        config(),
+        github=github,
+        harness=FakeHarness(),
+        workspace=workspace,
+        execute_evidence=evidence,
+        claim=FakeClaim(),
+    )
+
+    assert pr.number == 57
+    assert ("mark_ready", 57) in github.calls
+    assert not list((tmp_path / "ws").glob("repo-preview-*"))
 
 
 @pytest.mark.parametrize(

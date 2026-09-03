@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fix independent Review failing at "provision Review preview" with a misleading
+  "outside managed workspace root" error. Review named its ephemeral clone
+  `review-issue-<n>`, but `Workspace` only accepts preview clones named
+  `<repo>-preview-*`; Review now uses `preview-review-issue-<n>-<hex>`, matching
+  Spec. A regression test drives `run_review_phase` through a real `Workspace`.
+
 ## 0.12.0 — 2026-09-02
 
 - Reconcile every operating, visual, historical, and architecture document with

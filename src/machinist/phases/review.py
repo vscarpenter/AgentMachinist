@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
+from uuid import uuid4
 
 from machinist.config import MachinistConfig
 from machinist.evidence import EvidenceError, TaskEvidence
@@ -84,9 +85,8 @@ def run_review_phase(
     evidence = TaskEvidence.load(execute_evidence)
     expected_sha, base = _review_identity(pr, evidence, github)
     report_progress(claim, "provision Review preview", branch)
-    path = workspace.provision_preview(
-        f"review-issue-{issue_number}", branch, f"origin/{base}"
-    )
+    preview_task = f"preview-review-issue-{issue_number}-{uuid4().hex[:12]}"
+    path = workspace.provision_preview(preview_task, branch, f"origin/{base}")
     try:
         return _run_in_preview(
             issue_number,
