@@ -1143,13 +1143,14 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
         test_runner,
         force,
         claim,
-        recovery,
+        resume,
+        feedback,
         cancel_check,
     ):
         seen["issue"] = issue_number
         seen["harness"] = harness.name
         seen["force"] = force
-        seen["recovery"] = recovery
+        seen["resume"] = resume
         assert callable(cancel_check)
         return PullRequest(
             number=57,
@@ -1172,7 +1173,7 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
             "issue": 42,
             "harness": "claude-code",
             "force": False,
-            "recovery": "fresh",
+            "resume": False,
         }
         assert "pull/57" in result.output
         assert "independent review is pending" in result.output.lower()
@@ -1207,7 +1208,7 @@ def test_amend_repeats_successful_execute_with_explicit_feedback(monkeypatch):
         seen.update(
             issue=issue_number,
             force=kwargs["force"],
-            recovery=kwargs["recovery"],
+            resume=kwargs["resume"],
             feedback=kwargs["feedback"],
             attempt=kwargs["claim"].attempt,
         )
@@ -1244,7 +1245,7 @@ def test_amend_repeats_successful_execute_with_explicit_feedback(monkeypatch):
         assert seen == {
             "issue": 42,
             "force": True,
-            "recovery": "fresh",
+            "resume": False,
             "feedback": "Keep the public API stable.",
             "attempt": 2,
         }
@@ -2282,11 +2283,13 @@ def test_retry_with_run_flag(monkeypatch):
         harness,
         workspace,
         test_runner,
+        force,
         claim,
-        recovery,
+        resume,
+        feedback,
         cancel_check,
     ):
-        executed.append((issue_number, recovery))
+        executed.append((issue_number, resume))
         return PullRequest(
             number=18,
             title="Spec: Task (#42)",
@@ -2317,7 +2320,7 @@ def test_retry_with_run_flag(monkeypatch):
         assert "Retrying issue #42 execute after attempt 1" in result.output
         assert "is retryable" not in result.output
         assert "PR #18 implemented" in result.output
-        assert executed == [(42, "fresh")]
+        assert executed == [(42, False)]
 
 
 def test_retry_run_does_not_claim_retryable_after_dispatch_failure(monkeypatch):
@@ -2412,10 +2415,11 @@ def test_run_with_retry_flag(monkeypatch):
         test_runner,
         force,
         claim,
-        recovery,
+        resume,
+        feedback,
         cancel_check,
     ):
-        executed.append((issue_number, recovery))
+        executed.append((issue_number, resume))
         return PullRequest(
             number=18,
             title="Spec: Task (#42)",
@@ -2444,7 +2448,7 @@ def test_run_with_retry_flag(monkeypatch):
         result = runner.invoke(main, ["run", "42", "--retry"])
         assert result.exit_code == 0, result.output
         assert "PR #18 implemented" in result.output
-        assert executed == [(42, "fresh")]
+        assert executed == [(42, False)]
 
 
 def test_retry_resume_wires_retained_workspace_mode(monkeypatch):
@@ -2453,8 +2457,8 @@ def test_retry_resume_wires_retained_workspace_mode(monkeypatch):
 
     recoveries = []
 
-    def fake_run_execute_phase(*args, recovery, **kwargs):
-        recoveries.append(recovery)
+    def fake_run_execute_phase(*args, resume, **kwargs):
+        recoveries.append(resume)
         return PullRequest(
             number=18,
             title="Spec: Task (#42)",
@@ -2483,7 +2487,7 @@ def test_retry_resume_wires_retained_workspace_mode(monkeypatch):
         )
 
         assert result.exit_code == 0, result.output
-        assert recoveries == ["resume"]
+        assert recoveries == [True]
 
 
 def test_retry_recovery_flags_are_safe_and_explicit():

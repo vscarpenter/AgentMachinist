@@ -190,11 +190,20 @@ class FakeClaim:
         self.previous_evidence = dict(previous_evidence or {})
         self.evidence = dict(self.previous_evidence)
         self.checkpoints = []
+        self.progress_calls = []
         self._log_root = tmp_path / "run-logs" / f"attempt-{attempt}"
 
     def log_path(self, name):
         self._log_root.mkdir(parents=True, exist_ok=True)
         return self._log_root / name
+
+    def log_directory(self, name):
+        directory = self._log_root / name
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def progress(self, stage, detail=None):
+        self.progress_calls.append((stage, detail))
 
     def checkpoint(self, **evidence):
         self.evidence.update(evidence)
@@ -360,6 +369,7 @@ def test_execute_grants_gate_commands_and_verification_prompt(tmp_path):
         harness=harness,
         workspace=workspace,
         test_runner=passing_tests,
+        claim=FakeClaim(tmp_path),
     )
 
     assert harness.allowed_commands == ("uv run pytest",)
@@ -384,6 +394,7 @@ def test_execute_withholds_gate_commands_when_disabled(tmp_path):
         harness=harness,
         workspace=workspace,
         test_runner=passing_tests,
+        claim=FakeClaim(tmp_path),
     )
 
     assert harness.allowed_commands == ()
@@ -408,6 +419,7 @@ def test_happy_path_implements_tests_pushes_and_marks_ready(tmp_path):
         harness=harness,
         workspace=workspace,
         test_runner=test_runner,
+        claim=FakeClaim(tmp_path),
     )
 
     assert pr.number == 57
@@ -443,6 +455,7 @@ def test_review_enabled_execute_delivers_implementation_but_leaves_pr_draft(tmp_
         harness=harness,
         workspace=workspace,
         test_runner=passing_tests,
+        claim=FakeClaim(tmp_path),
     )
 
     assert not any(call[0] == "mark_ready" for call in github.calls)
@@ -475,6 +488,7 @@ def test_execute_blocks_test_file_deletions_by_default(tmp_path, deleted_test):
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(call[0] == "commit_all" for call in workspace.calls)
@@ -499,6 +513,7 @@ def test_execute_allows_test_deletions_when_opted_in(tmp_path):
         harness=harness,
         workspace=workspace,
         test_runner=passing_tests,
+        claim=FakeClaim(tmp_path),
     )
 
     assert ("mark_ready", 57) in github.calls
@@ -518,6 +533,7 @@ def test_execute_permits_non_test_deletions(tmp_path):
         harness=harness,
         workspace=workspace,
         test_runner=passing_tests,
+        claim=FakeClaim(tmp_path),
     )
 
     assert ("mark_ready", 57) in github.calls
@@ -537,6 +553,7 @@ def test_execute_rejects_configured_repo_mismatch_before_github_read(tmp_path):
             harness=FakeHarness(on_implement=touch_file(workspace)),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert github.calls == []
@@ -570,6 +587,7 @@ def test_execute_ignores_fork_or_mismatched_head_branch_collision(tmp_path, unsa
             harness=FakeHarness(on_implement=touch_file(workspace)),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(call[0] == "provision" for call in workspace.calls)
@@ -752,7 +770,7 @@ def test_explicit_resume_reuses_completed_harness_changes_without_rerunning_it(
         workspace=workspace,
         test_runner=passing_tests,
         claim=claim,
-        recovery="resume",
+        resume=True,
     )
 
     assert ("resume", retained, "agent/issue-42", "a" * 40, None) in workspace.calls
@@ -770,6 +788,7 @@ def test_no_open_pr_for_branch_refuses(tmp_path):
             harness=FakeHarness(),
             workspace=FakeWorkspace(tmp_path),
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
 
@@ -784,6 +803,7 @@ def test_unapproved_pr_refuses_and_names_the_label(tmp_path):
             harness=FakeHarness(),
             workspace=FakeWorkspace(tmp_path),
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(c[0] == "mark_ready" for c in github.calls)
@@ -801,6 +821,7 @@ def test_missing_approval_sha_refuses(tmp_path):
             harness=FakeHarness(),
             workspace=FakeWorkspace(tmp_path),
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
 
@@ -816,6 +837,7 @@ def test_stale_approval_sha_refuses(tmp_path):
             harness=FakeHarness(),
             workspace=FakeWorkspace(tmp_path),
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
 
@@ -832,6 +854,7 @@ def test_provisioned_head_must_still_equal_approved_sha_before_harness_runs(tmp_
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert harness.prompts == []
@@ -852,6 +875,7 @@ def test_remote_head_must_still_equal_approved_sha_before_harness_runs(tmp_path)
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert harness.prompts == []
@@ -870,6 +894,7 @@ def test_already_implemented_pr_refuses_without_force(tmp_path):
             harness=harness,
             workspace=FakeWorkspace(tmp_path),
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert harness.prompts == []
@@ -888,6 +913,7 @@ def test_force_reimplements_a_ready_pr(tmp_path):
         workspace=workspace,
         test_runner=passing_tests,
         force=True,
+        claim=FakeClaim(tmp_path),
     )
 
     assert pr.number == 57
@@ -906,6 +932,7 @@ def test_missing_spec_file_fails_before_harness_runs(tmp_path):
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert harness.prompts == []
@@ -945,6 +972,7 @@ def test_execute_rejects_spec_symlink_without_disclosing_external_text(tmp_path,
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     protected = (
@@ -968,6 +996,7 @@ def test_execute_rejects_approved_spec_over_configured_size_limit(tmp_path):
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert harness.prompts == []
@@ -987,6 +1016,7 @@ def test_execute_bounds_spec_bytes_before_decoding_entire_file(tmp_path):
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert harness.prompts == []
@@ -1010,6 +1040,7 @@ def test_execute_rejects_non_utf8_approved_spec(tmp_path):
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert harness.prompts == []
@@ -1026,6 +1057,7 @@ def test_no_changes_from_harness_fails(tmp_path):
             harness=FakeHarness(),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(c[0] == "push" for c in workspace.calls)
@@ -1054,6 +1086,7 @@ def test_harness_git_and_pipeline_violations_are_rejected(tmp_path, violation):
             harness=FakeHarness(on_implement=violate),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(call[0] == "commit_all" for call in workspace.calls)
@@ -1102,6 +1135,7 @@ def test_real_execute_harness_cannot_seize_git_authority_or_leak_token(
             harness=FakeHarness(on_implement=malicious_harness),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not leak.exists()
@@ -1127,6 +1161,7 @@ def test_failing_test_gate_keeps_workspace_and_never_pushes(tmp_path):
             harness=harness,
             workspace=workspace,
             test_runner=failing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(c[0] in ("commit_all", "push") for c in workspace.calls)
@@ -1256,7 +1291,7 @@ def test_resume_refuses_workspace_changed_by_mutation_forbidden_gate(tmp_path):
             workspace=workspace,
             test_runner=passing_tests,
             claim=claim,
-            recovery="resume",
+            resume=True,
         )
 
     assert not any(
@@ -1314,6 +1349,7 @@ def test_cancellation_racing_after_verification_prevents_all_delivery(tmp_path):
             workspace=workspace,
             test_runner=passing_then_cancel,
             cancel_check=cancel_check,
+            claim=FakeClaim(tmp_path),
         )
 
     assert caught.value.cancelled is True
@@ -1385,6 +1421,7 @@ def test_change_file_limit_blocks_commit_and_push(tmp_path):
             harness=harness,
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
@@ -1406,6 +1443,7 @@ def test_pipeline_metadata_is_denied_even_if_custom_denied_paths_are_empty(tmp_p
             harness=FakeHarness(on_implement=change_pipeline),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
 
@@ -1424,6 +1462,7 @@ def test_change_byte_and_binary_limits_fail_closed(tmp_path):
             harness=FakeHarness(on_implement=write_binary),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     workspace = FakeWorkspace(tmp_path / "bytes")
@@ -1436,6 +1475,7 @@ def test_change_byte_and_binary_limits_fail_closed(tmp_path):
             harness=FakeHarness(on_implement=touch_file(workspace)),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
 
@@ -1453,6 +1493,7 @@ def test_null_test_command_skips_the_gate(tmp_path):
         harness=harness,
         workspace=workspace,
         test_runner=exploding_runner,
+        claim=FakeClaim(tmp_path),
     )
 
     assert pr.number == 57
@@ -1505,6 +1546,7 @@ def test_mutation_allowed_gate_cannot_erase_the_entire_implementation(tmp_path):
             harness=FakeHarness(on_implement=touch_file(workspace)),
             workspace=workspace,
             test_runner=erase_changes,
+            claim=FakeClaim(tmp_path),
         )
 
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
@@ -1615,6 +1657,7 @@ def test_delivery_refuses_when_github_pr_head_does_not_observe_pushed_sha(tmp_pa
             harness=FakeHarness(on_implement=touch_file(workspace)),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
@@ -1646,6 +1689,7 @@ def test_delivery_refuses_cross_repository_pr_observed_after_push(tmp_path):
             harness=FakeHarness(on_implement=touch_file(workspace)),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
@@ -1671,6 +1715,7 @@ def test_delivery_refuses_pr_retargeted_after_implementation_push(tmp_path):
             harness=FakeHarness(on_implement=touch_file(workspace)),
             workspace=workspace,
             test_runner=passing_tests,
+            claim=FakeClaim(tmp_path),
         )
 
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
@@ -1764,7 +1809,7 @@ def test_resume_after_unobserved_push_reuses_committed_workspace(tmp_path):
             AssertionError("verification must not rerun")
         ),
         claim=claim,
-        recovery="resume",
+        resume=True,
     )
 
     assert ("resume", retained, "agent/issue-42", "c" * 40, None) in workspace.calls
@@ -1894,7 +1939,25 @@ def test_resume_hands_the_checkpointed_custody_token_to_the_workshop(tmp_path):
         workspace=workspace,
         test_runner=passing_tests,
         claim=claim,
-        recovery="resume",
+        resume=True,
     )
 
     assert ("resume", retained, "agent/issue-42", "a" * 40, token) in workspace.calls
+
+
+def test_execute_requires_a_claim_and_a_boolean_resume_flag(tmp_path):
+    import inspect
+
+    parameters = inspect.signature(run_execute_phase).parameters
+    assert parameters["claim"].default is inspect.Parameter.empty
+    assert parameters["resume"].default is False
+    assert "recovery" not in parameters
+
+    with pytest.raises(TypeError, match="claim"):
+        run_execute_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path),
+        )

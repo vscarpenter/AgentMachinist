@@ -68,29 +68,26 @@ def run_spec_phase(
     github,
     harness,
     workspace,
-    claim=None,
+    claim,
     revise: bool = False,
     attempt: int | None = None,
     cancel_check: Callable[[], bool] | None = None,
 ) -> DraftPR:
-    if hasattr(workspace, "cancel_check"):
-        workspace.cancel_check = cancel_check
     report_progress(claim, "read Task", f"fetching GitHub issue #{issue_number}")
     repository_identity = _bind_repository(config, github, workspace)
     issue = github.get_issue(issue_number)
     _validate_issue(issue, config)
     _raise_if_cancelled(cancel_check, issue.number)
-    previous = TaskEvidence.load(getattr(claim, "previous_evidence", {}) or {})
+    previous = TaskEvidence.load(claim.previous_evidence)
     try:
         base = previous.pr_base() or github.default_branch()
     except EvidenceError as exc:
         raise SpecPhaseError("prior Spec checkpoint has an invalid PR base") from exc
     _require_pr_base(base, source="GitHub default branch")
-    if claim is not None:
-        claim.checkpoint(
-            pr_base=base,
-            harness=harness_evidence(harness, profile="spec"),
-        )
+    claim.checkpoint(
+        pr_base=base,
+        harness=harness_evidence(harness, profile="spec"),
+    )
     branch = f"{config.workspace.branch_prefix}issue-{issue.number}"
     # Always inspect the exact branch. GitHub permits only one open PR for a
     # head branch, and blindly calling create again makes a post-delivery crash
@@ -108,14 +105,9 @@ def run_spec_phase(
 
     provision_args = (f"issue-{issue.number}", branch, f"origin/{base}")
     report_progress(claim, "provision Workshop", branch)
-    path = (
-        workspace.provision(*provision_args)
-        if attempt is None
-        else workspace.provision(*provision_args, attempt=attempt)
-    )
+    path = workspace.provision(*provision_args, attempt=attempt)
     try:
-        if claim is not None:
-            claim.checkpoint(workspace_path=str(path))
+        claim.checkpoint(workspace_path=str(path))
         remote_before = workspace.remote_sha(path, branch)
         delivery_pr = _select_delivery_pr(
             existing_pr,
@@ -149,16 +141,14 @@ def run_spec_phase(
                     f"checkpointed Spec {spec_sha[:12]} is no longer remote branch "
                     f"{branch!r} ({(observed_sha or 'missing')[:12]})"
                 )
-            if claim is not None:
-                claim.checkpoint(
-                    spec_sha=spec_sha,
-                    push_intended_sha=spec_sha,
-                    push_observed_sha=observed_sha,
-                )
+            claim.checkpoint(
+                spec_sha=spec_sha,
+                push_intended_sha=spec_sha,
+                push_observed_sha=observed_sha,
+            )
         else:
             instructions = config.resolve_instructions("spec", path)
-            if claim is not None:
-                claim.checkpoint(**config.instructions.evidence("spec", instructions))
+            claim.checkpoint(**config.instructions.evidence("spec", instructions))
             _raise_if_cancelled(cancel_check, issue.number)
             report_progress(claim, "generate Spec", harness.name)
             bind_harness_progress(harness, claim, stage="generate Spec")
@@ -188,8 +178,7 @@ def run_spec_phase(
                 f"docs(spec): {action} implementation spec for issue #{issue.number}",
             )
             spec_sha = workspace.head_sha(path)
-            if claim is not None:
-                claim.checkpoint(spec_sha=spec_sha, push_intended_sha=spec_sha)
+            claim.checkpoint(spec_sha=spec_sha, push_intended_sha=spec_sha)
             _raise_if_cancelled(cancel_check, issue.number)
             report_progress(claim, "push Spec", branch)
             workspace.push(
@@ -203,8 +192,7 @@ def run_spec_phase(
                     f"pushed Spec {spec_sha[:12]}, but remote branch {branch!r} "
                     f"resolved to {(observed_sha or 'missing')[:12]}"
                 )
-            if claim is not None:
-                claim.checkpoint(push_observed_sha=observed_sha)
+            claim.checkpoint(push_observed_sha=observed_sha)
 
         _raise_if_cancelled(cancel_check, issue.number)
         report_progress(claim, "deliver draft PR", branch)
@@ -232,16 +220,15 @@ def run_spec_phase(
             if delivery_pr.state == "CLOSED":
                 _raise_if_cancelled(cancel_check, issue.number)
                 github.reopen_pr(delivery_pr.number)
-            if not delivery_pr.is_draft and hasattr(github, "mark_draft"):
+            if not delivery_pr.is_draft:
                 _raise_if_cancelled(cancel_check, issue.number)
                 github.mark_draft(delivery_pr.number)
             _raise_if_cancelled(cancel_check, issue.number)
             github.update_pr(delivery_pr.number, title=title, body=body)
             pr = DraftPR(number=delivery_pr.number, url=delivery_pr.url)
-        if claim is not None:
-            # Persist delivery identity before the verification read so a
-            # crash after GitHub accepts the PR is explicitly reconcilable.
-            claim.checkpoint(pr_number=pr.number, pr_url=pr.url)
+        # Persist delivery identity before the verification read so a
+        # crash after GitHub accepts the PR is explicitly reconcilable.
+        claim.checkpoint(pr_number=pr.number, pr_url=pr.url)
 
         observed_pr = github.pr_for_branch(branch)
         report_progress(claim, "verify draft PR", f"PR #{pr.number}")
@@ -281,11 +268,7 @@ def preview_spec_phase(
     base = github.default_branch()
     branch = f"{config.workspace.branch_prefix}issue-{issue.number}"
     preview_task = f"preview-issue-{issue.number}-{uuid4().hex[:12]}"
-    provision_preview = getattr(workspace, "provision_preview", None)
-    cleanup_preview = getattr(workspace, "cleanup_preview", None)
-    if not callable(provision_preview) or not callable(cleanup_preview):
-        raise SpecPhaseError("workspace does not support isolated Spec previews")
-    path = provision_preview(preview_task, branch, f"origin/{base}")
+    path = workspace.provision_preview(preview_task, branch, f"origin/{base}")
     try:
         instructions = config.resolve_instructions("spec", path)
         _raise_if_cancelled(cancel_check, issue.number)
@@ -297,7 +280,7 @@ def preview_spec_phase(
             )
         return spec_text
     finally:
-        cleanup_preview(path)
+        workspace.cleanup_preview(path)
 
 
 def _select_delivery_pr(
@@ -336,8 +319,6 @@ def _select_delivery_pr(
             f"expected {expected_base!r}"
         )
     if revise:
-        if existing_pr is None:  # guarded before provisioning; keeps helper total
-            return None
         if remote_sha != existing_pr.head_sha:
             raise SpecPhaseError(
                 f"existing PR #{existing_pr.number} head {existing_pr.head_sha[:12]} "

@@ -61,6 +61,9 @@ class FakeGitHub:
         self.calls.append(("pr_for_branch", branch))
         return self.existing_pr
 
+    def mark_draft(self, number):
+        self.calls.append(("mark_draft", number))
+
     def reopen_pr(self, number):
         self.calls.append(("reopen_pr", number))
         self.existing_pr = replace(self.existing_pr, state="OPEN")
@@ -147,9 +150,15 @@ class FakeWorkspace:
 
 
 class FakeClaim:
+    attempt = 1
+
     def __init__(self, previous=None):
         self.previous_evidence = dict(previous or {})
         self.evidence = dict(self.previous_evidence)
+        self.progress_calls = []
+
+    def progress(self, stage, detail=None):
+        self.progress_calls.append((stage, detail))
 
     def checkpoint(self, **evidence):
         self.evidence.update(evidence)
@@ -190,7 +199,14 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     workspace = FakeWorkspace(tmp_path)
     config = MachinistConfig()
 
-    pr = run_spec_phase(42, config, github=github, harness=harness, workspace=workspace)
+    pr = run_spec_phase(
+        42,
+        config,
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        claim=FakeClaim(),
+    )
 
     assert pr.number == 57
     assert ("provision", "issue-42", "agent/issue-42", "origin/main") in workspace.calls
@@ -291,6 +307,7 @@ def test_spec_rejects_symlink_trap_without_clobbering_external_file(tmp_path, tr
             github=FakeGitHub(),
             harness=harness,
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     protected = (
@@ -314,6 +331,7 @@ def test_spec_rejects_configured_repo_mismatch_before_github_read(tmp_path):
             github=github,
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert github.calls == []
@@ -357,6 +375,7 @@ def test_spec_refuses_fork_or_mismatched_existing_pr_custody(tmp_path, unsafe_pr
             harness=FakeHarness(),
             workspace=workspace,
             revise=True,
+            claim=FakeClaim(),
         )
 
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
@@ -370,7 +389,12 @@ def test_branch_prefix_comes_from_config(tmp_path):
     config = MachinistConfig.model_validate({"workspace": {"branch_prefix": "bot/"}})
 
     run_spec_phase(
-        42, config, github=FakeGitHub(), harness=FakeHarness(), workspace=workspace
+        42,
+        config,
+        github=FakeGitHub(),
+        harness=FakeHarness(),
+        workspace=workspace,
+        claim=FakeClaim(),
     )
 
     assert ("provision", "issue-42", "bot/issue-42", "origin/main") in workspace.calls
@@ -421,6 +445,7 @@ def test_revise_updates_existing_draft_pr_and_invalidates_approval(tmp_path):
         harness=FakeHarness(spec_text="## Revised\nDo the safer thing.\n"),
         workspace=workspace,
         revise=True,
+        claim=FakeClaim(),
     )
 
     assert result == DraftPR(number=57, url=existing.url)
@@ -451,6 +476,7 @@ def test_revise_reopens_a_closed_spec_pr_after_successful_push(tmp_path):
         harness=FakeHarness(),
         workspace=workspace,
         revise=True,
+        claim=FakeClaim(),
     )
 
     assert ("reopen_pr", 57) in github.calls
@@ -481,6 +507,7 @@ def test_revise_fails_if_mark_draft_does_not_take_effect(tmp_path):
             harness=FakeHarness(),
             workspace=workspace,
             revise=True,
+            claim=FakeClaim(),
         )
 
     assert ("mark_draft", 57) in github.calls
@@ -506,6 +533,7 @@ def test_revise_refuses_a_merged_spec_pr(tmp_path):
             harness=FakeHarness(),
             workspace=FakeWorkspace(tmp_path),
             revise=True,
+            claim=FakeClaim(),
         )
 
 
@@ -520,6 +548,7 @@ def test_empty_spec_output_fails_and_keeps_nothing(tmp_path):
             github=github,
             harness=FakeHarness(spec_text="  \n"),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -544,6 +573,7 @@ def test_oversized_issue_input_is_rejected_before_harness_runs(tmp_path):
             github=github,
             harness=harness,
             workspace=FakeWorkspace(tmp_path),
+            claim=FakeClaim(),
         )
 
     assert harness.prompts == []
@@ -560,6 +590,7 @@ def test_oversized_spec_output_is_rejected_before_write_or_push(tmp_path):
             github=github,
             harness=FakeHarness(spec_text="x" * 100_001),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
@@ -576,6 +607,7 @@ def test_harness_failure_cleans_up_and_propagates(tmp_path):
             github=FakeGitHub(),
             harness=FakeHarness(error=boom),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -597,6 +629,7 @@ def test_spec_harness_repository_mutation_is_rejected(tmp_path):
             github=FakeGitHub(),
             harness=MutatingHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert not any(call[0] == "commit_all" for call in workspace.calls)
@@ -616,6 +649,7 @@ def test_cancellation_racing_after_harness_never_commits_or_publishes(tmp_path):
             harness=FakeHarness(),
             workspace=workspace,
             cancel_check=lambda: next(checks),
+            claim=FakeClaim(),
         )
 
     assert caught.value.cancelled is True
@@ -666,6 +700,7 @@ def test_normal_run_refuses_to_hijack_existing_branch_pr(tmp_path):
             github=github,
             harness=harness,
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert harness.prompts == []
@@ -809,6 +844,7 @@ def test_post_delivery_rejects_pr_from_wrong_head(tmp_path):
             github=StaleGitHub(),
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -834,6 +870,7 @@ def test_post_delivery_rejects_cross_repository_pr_collision(tmp_path):
             github=ForkGitHub(),
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -855,6 +892,7 @@ def test_post_delivery_rejects_pr_retargeted_to_another_base(tmp_path):
             github=RetargetedGitHub(),
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -917,3 +955,14 @@ def test_spec_delivery_persists_no_observed_pr_copies(tmp_path):
     assert claim.evidence["pr_number"] == 57
     for key in ("pr_observed_number", "pr_observed_base", "pr_observed_sha"):
         assert key not in claim.evidence
+
+
+def test_spec_requires_a_claim(tmp_path):
+    with pytest.raises(TypeError, match="claim"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(),
+            harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path),
+        )

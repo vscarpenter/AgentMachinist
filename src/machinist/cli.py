@@ -1500,7 +1500,7 @@ def retry(
             pr = dispatcher.run_phase(
                 issue_number,
                 record.phase,
-                recovery="resume" if resume else "fresh",
+                resume=resume,
             )
             if record.phase is Phase.SPEC:
                 click.echo(f"Draft PR #{pr.number}: {pr.url}")
@@ -1768,7 +1768,7 @@ def watch(
 
     def dispatch_execute(issue_number: int):
         click.echo(f"Dispatching Execute Task Run for issue #{issue_number}...")
-        pr = dispatcher.run_execute(issue_number, recovery="fresh")
+        pr = dispatcher.run_execute(issue_number)
         if not config.review.enabled:
             _notify_pr_ready(config, issue_number, pr.number)
         return pr
@@ -1958,7 +1958,7 @@ def run(
         ).run_execute(
             issue_number,
             force=force,
-            recovery="resume" if resume else "fresh",
+            resume=resume,
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -2072,7 +2072,6 @@ def amend(
         ).run_execute(
             issue_number,
             force=True,
-            recovery="fresh",
             feedback=feedback,
         )
     except _MACHINIST_ERRORS as exc:

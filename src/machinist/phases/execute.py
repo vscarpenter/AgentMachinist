@@ -12,7 +12,6 @@ import fnmatch
 import os
 import stat
 import subprocess
-import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from importlib.resources import files
@@ -45,7 +44,6 @@ from machinist.verification import (
 )
 
 _IMPLEMENT_PROMPT = files("machinist") / "templates" / "implement-prompt.md"
-_RECOVERY_MODES = frozenset({"fresh", "resume"})
 MAX_FEEDBACK_CHARS = 50_000
 MAX_FEEDBACK_FILE_BYTES = MAX_FEEDBACK_CHARS * 4
 _MAX_HARNESS_REPORT_CHARS = 2_000
@@ -145,23 +143,17 @@ def run_execute_phase(
     workspace,
     test_runner=subprocess.run,
     force: bool = False,
-    claim=None,
-    recovery: str = "fresh",
+    claim,
+    resume: bool = False,
     feedback: str | None = None,
     cancel_check=None,
 ) -> PullRequest:
     """Implement an approved Task with durable retry and reconciliation state."""
-    if hasattr(workspace, "cancel_check"):
-        workspace.cancel_check = cancel_check
     started_at = time.monotonic()
     report_progress(claim, "read approved Task", f"issue #{issue_number}")
     # Validate before performing any GitHub or filesystem operation.
     feedback = normalize_operator_feedback(feedback)
-    if recovery not in _RECOVERY_MODES:
-        raise ExecutePhaseError(
-            f"unknown recovery mode '{recovery}'; expected 'fresh' or 'resume'"
-        )
-    if feedback and recovery == "resume":
+    if feedback and resume:
         raise ExecutePhaseError(
             "operator feedback requires a fresh implementation attempt; "
             "it cannot be applied while resuming completed harness output"
@@ -182,7 +174,7 @@ def run_execute_phase(
         raise ExecutePhaseError(
             f"no open PR for branch '{branch}'; run 'machinist spec {issue_number}' first"
         )
-    previous = TaskEvidence.load(getattr(claim, "previous_evidence", {}) or {})
+    previous = TaskEvidence.load(claim.previous_evidence)
     try:
         base = previous.pr_base() or github.default_branch()
     except EvidenceError as exc:
@@ -195,7 +187,7 @@ def run_execute_phase(
             f"PR #{pr.number} targets base {pr.base!r}; expected {base!r}; "
             "approve a PR targeting the bound base branch"
         )
-    _checkpoint(claim, pr_base=base)
+    claim.checkpoint(pr_base=base)
     approved_label = config.github.labels.approved
     if approved_label not in pr.labels:
         raise ExecutePhaseError(
@@ -212,7 +204,7 @@ def run_execute_phase(
     )
     if reconciled_sha is not None:
         report_progress(claim, "reconcile PR delivery", reconciled_sha[:12])
-        _checkpoint(claim, push_observed_sha=reconciled_sha)
+        claim.checkpoint(push_observed_sha=reconciled_sha)
         _complete_delivery(
             issue_number,
             pr,
@@ -225,7 +217,7 @@ def run_execute_phase(
             recovered=True,
             harness_details=previous.harness,
             harness_report_excerpt=previous.harness_report_excerpt,
-            attempt=getattr(claim, "attempt", None),
+            attempt=claim.attempt,
             duration_seconds=_duration(started_at),
             branch=branch,
             expected_base=base,
@@ -249,20 +241,18 @@ def run_execute_phase(
             "Re-run with --force to implement again on top of this branch."
         )
 
-    if recovery == "resume":
-        _checkpoint(
-            claim,
+    if resume:
+        claim.checkpoint(
             feedback_supplied=previous.feedback_supplied,
             feedback_characters=previous.feedback_characters,
         )
     else:
-        _checkpoint(
-            claim,
+        claim.checkpoint(
             feedback_supplied=bool(feedback),
             feedback_characters=len(feedback or ""),
         )
 
-    if recovery == "resume":
+    if resume:
         report_progress(claim, "resume Workshop", branch)
         path, resume_stage = _resume_workspace(
             workspace,
@@ -311,7 +301,7 @@ def run_execute_phase(
                 recovered=True,
                 harness_details=previous.harness,
                 harness_report_excerpt=previous.harness_report_excerpt,
-                attempt=getattr(claim, "attempt", None),
+                attempt=claim.attempt,
                 duration_seconds=_duration(started_at),
                 branch=branch,
                 expected_base=base,
@@ -323,10 +313,10 @@ def run_execute_phase(
             instructions = ""
             if resume_stage != "post_harness":
                 instructions = config.resolve_instructions("execute", path)
-                _checkpoint(
-                    claim, **config.instructions.evidence("execute", instructions)
+                claim.checkpoint(
+                    **config.instructions.evidence("execute", instructions)
                 )
-            if recovery == "fresh":
+            if not resume:
                 _reset_fresh_execution_evidence(claim)
             spec_relative = (
                 Path(".machinist") / "specs" / f"issue-{issue_number}-spec.md"
@@ -354,8 +344,7 @@ def run_execute_phase(
             if resume_stage != "post_harness":
                 harness_details = _harness_details(harness)
                 harness_report_excerpt: str | None
-                _checkpoint(
-                    claim,
+                claim.checkpoint(
                     harness=harness_details,
                 )
                 gates = (
@@ -401,8 +390,7 @@ def run_execute_phase(
                 workspace=workspace,
                 config=config,
             )
-            _checkpoint(
-                claim,
+            claim.checkpoint(
                 harness_completed=True,
                 change_summary=change_summary,
             )
@@ -446,7 +434,7 @@ def run_execute_phase(
                 workspace=workspace,
                 config=config,
             )
-            _checkpoint(claim, change_summary=change_summary)
+            claim.checkpoint(change_summary=change_summary)
 
             _raise_if_cancelled(cancel_check, "before commit")
             report_progress(claim, "commit implementation", branch)
@@ -460,8 +448,7 @@ def run_execute_phase(
                     "refusing to push a partially captured implementation"
                 )
             implementation_sha = workspace.head_sha(path)
-            _checkpoint(
-                claim,
+            claim.checkpoint(
                 approved_sha=approval_sha,
                 implementation_sha=implementation_sha,
                 push_intended_sha=implementation_sha,
@@ -476,7 +463,7 @@ def run_execute_phase(
                     "push returned without publishing the intended implementation "
                     f"({observed_sha or 'missing'} != {implementation_sha})"
                 )
-            _checkpoint(claim, push_observed_sha=implementation_sha)
+            claim.checkpoint(push_observed_sha=implementation_sha)
             _complete_delivery(
                 issue_number,
                 pr,
@@ -489,7 +476,7 @@ def run_execute_phase(
                 recovered=False,
                 harness_details=harness_details,
                 harness_report_excerpt=harness_report_excerpt,
-                attempt=getattr(claim, "attempt", None),
+                attempt=claim.attempt,
                 duration_seconds=_duration(started_at),
                 branch=branch,
                 expected_base=base,
@@ -518,10 +505,7 @@ def _provision_fresh_workspace(
     base_ref: str,
     approval_sha: str,
 ) -> Path:
-    claim_attempt = getattr(claim, "attempt", None)
-    attempt = (
-        claim_attempt if isinstance(claim_attempt, int) and claim_attempt > 1 else None
-    )
+    attempt = claim.attempt if claim.attempt > 1 else None
     path = workspace.provision(
         f"issue-{issue_number}", branch, base_ref, attempt=attempt
     )
@@ -536,8 +520,7 @@ def _provision_fresh_workspace(
         prior_paths.append(previous_path)
     # The Workshop captured its custody token during provision; persist it so
     # a fresh process can hand it back on resume.
-    _checkpoint(
-        claim,
+    claim.checkpoint(
         approved_sha=approval_sha,
         workspace_path=str(path),
         prior_workspace_paths=prior_paths,
@@ -548,8 +531,7 @@ def _provision_fresh_workspace(
 
 def _reset_fresh_execution_evidence(claim) -> None:
     """Clear stale stage evidence only after the approved head is revalidated."""
-    _checkpoint(
-        claim,
+    claim.checkpoint(
         harness_completed=False,
         harness=None,
         harness_report_path=None,
@@ -570,8 +552,6 @@ def _resume_workspace(
     branch: str,
     approval_sha: str,
 ) -> tuple[Path, str]:
-    if claim is None:
-        raise ExecutePhaseError("--resume requires a claimed Task Run")
     resume_blocker = _verification_resume_blocker(previous.verification_report or {})
     if resume_blocker:
         raise ExecutePhaseError(
@@ -612,8 +592,7 @@ def _resume_workspace(
         raise ExecutePhaseError(
             f"retained workspace {raw_path} cannot be resumed safely: {exc}"
         ) from exc
-    _checkpoint(
-        claim,
+    claim.checkpoint(
         workspace_path=str(path),
     )
     return path, stage
@@ -631,15 +610,14 @@ def _retry_intended_push(
 ) -> None:
     remote_sha = workspace.remote_sha(path, branch)
     if remote_sha == implementation_sha:
-        _checkpoint(claim, push_observed_sha=implementation_sha)
+        claim.checkpoint(push_observed_sha=implementation_sha)
         return
     if remote_sha != approval_sha:
         raise ExecutePhaseError(
             "cannot resume the intended push because the remote branch moved "
             f"to {remote_sha or 'missing'}"
         )
-    _checkpoint(
-        claim,
+    claim.checkpoint(
         approved_sha=approval_sha,
         implementation_sha=implementation_sha,
         push_intended_sha=implementation_sha,
@@ -653,7 +631,7 @@ def _retry_intended_push(
             "push returned without publishing the checkpointed implementation "
             f"({observed_sha or 'missing'} != {implementation_sha})"
         )
-    _checkpoint(claim, push_observed_sha=implementation_sha)
+    claim.checkpoint(push_observed_sha=implementation_sha)
 
 
 def _assert_head(
@@ -698,8 +676,6 @@ def _raise_if_cancelled(cancel_check, stage: str) -> None:
 def _capture_harness_report(claim, report: Any) -> str:
     text = "" if report is None else str(report)
     excerpt = text[-_MAX_HARNESS_REPORT_CHARS:]
-    if claim is None or not hasattr(claim, "log_path"):
-        return excerpt
     path = claim.log_path("harness-report.txt")
     try:
         write_text_file(path, text)
@@ -707,8 +683,7 @@ def _capture_harness_report(claim, report: Any) -> str:
         raise ExecutePhaseError(
             f"could not persist harness report at {path}: {exc}"
         ) from exc
-    _checkpoint(
-        claim,
+    claim.checkpoint(
         harness_report_path=str(path),
         harness_report_excerpt=excerpt,
     )
@@ -837,32 +812,18 @@ def _run_verification(
     gates = config.resolved_verification_gates()
     if not gates:
         report = VerificationReport(gates=(), duration_seconds=0.0).as_dict()
-        _checkpoint(claim, verification_report=report)
+        claim.checkpoint(verification_report=report)
         return report
 
-    if claim is not None and hasattr(claim, "log_path"):
-        directory_factory = getattr(claim, "log_directory", claim.log_path)
-        log_dir = directory_factory("verification-logs")
-        return _invoke_verification_engine(
-            path,
-            gates,
-            log_dir=log_dir,
-            workspace=workspace,
-            claim=claim,
-            test_runner=test_runner,
-            cancel_check=cancel_check,
-        )
-
-    with tempfile.TemporaryDirectory(prefix="machinist-verification-") as directory:
-        return _invoke_verification_engine(
-            path,
-            gates,
-            log_dir=Path(directory),
-            workspace=workspace,
-            claim=claim,
-            test_runner=test_runner,
-            cancel_check=cancel_check,
-        )
+    return _invoke_verification_engine(
+        path,
+        gates,
+        log_dir=claim.log_directory("verification-logs"),
+        workspace=workspace,
+        claim=claim,
+        test_runner=test_runner,
+        cancel_check=cancel_check,
+    )
 
 
 def _invoke_verification_engine(
@@ -892,14 +853,14 @@ def _invoke_verification_engine(
     except VerificationFailed as exc:
         # The engine owns the report shape and the blocked message; Execute
         # only persists the Evidence and types the failure.
-        _checkpoint(claim, verification_report=exc.report.as_dict())
+        claim.checkpoint(verification_report=exc.report.as_dict())
         if any(gate.status is GateStatus.CANCELLED for gate in exc.report.gates):
             raise ExecutePhaseCancelled(str(exc)) from exc
         raise ExecutePhaseError(str(exc)) from exc
     except VerificationError as exc:
         raise ExecutePhaseError(f"verification could not run safely: {exc}") from exc
     evidence = report.as_dict()
-    _checkpoint(claim, verification_report=evidence)
+    claim.checkpoint(verification_report=evidence)
     return evidence
 
 
@@ -966,7 +927,7 @@ def _complete_delivery(
         body,
         comment_id=comment_id,
     )
-    _checkpoint(claim, completion_comment_id=saved_comment_id)
+    claim.checkpoint(completion_comment_id=saved_comment_id)
     if review_enabled:
         if not current_pr.is_draft:
             raise ExecutePhaseError(
@@ -1014,7 +975,7 @@ def _delivery_pr_at_sha(
         branch=branch,
         base=expected_base,
         head_sha=implementation_sha,
-        repository=getattr(github, "repo", None),
+        repository=github.repo,
     )
     try:
         return verify_pull_request(current, expected)
@@ -1138,11 +1099,6 @@ def _reconciled_push(
             "inspect the remote branch before retrying"
         )
     return None
-
-
-def _checkpoint(claim, **evidence: Any) -> None:
-    if claim is not None:
-        claim.checkpoint(**evidence)
 
 
 def _harness_details(harness) -> dict[str, Any]:
