@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1 — 2026-09-03
 
 - Fix independent Review failing at "provision Review preview" with a misleading
   "outside managed workspace root" error. Review named its ephemeral clone

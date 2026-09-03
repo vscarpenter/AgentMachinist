@@ -1,3 +1,38 @@
+# AgentMachinist 0.12.1 release preparation (CANDIDATE READY)
+
+- [x] Confirm 0.12.0 is already published: PyPI lists 0.12.0, release run
+      33628066217 (build, publish, verify-published, release-assets) is green,
+      and tag `v0.12.0` sits at `78ad4c7`.
+- [x] Confirm the only unreleased change is PR #36 (three `fix(review):`
+      commits), so the next release is the patch 0.12.1.
+- [x] Align package metadata, changelog, current-release documentation, and
+      rendered guides to 0.12.1.
+- [x] Refresh the lockfile; managed workflows do not embed the version and
+      still match their projection.
+- [x] Run `bash scripts/verify.sh` from the release candidate.
+- [ ] Push `release/0.12.1`, open the PR, merge, publish GitHub Release
+      `v0.12.1`, and verify PyPI.
+
+### Resuming From Here
+
+Done: the release target is 0.12.1 on branch `release/0.12.1`. The candidate
+passed the release-grade gate: 1004 tests at 86.06% coverage, ruff format and
+lint clean, mypy clean, managed workflows match, both distributions built, and
+isolated wheel and sdist smoke installs reported 0.12.1.
+
+Next: push the branch, open the PR against `main` (protected: one review plus
+the test, package, and CodeQL checks), merge, then
+`gh release create v0.12.1` with the CHANGELOG 0.12.1 bullets as the body. The
+release workflow publishes to PyPI and attaches the distributions.
+
+Blockers: awaiting confirmation that 0.12.1 (patch) is the intended version.
+0.12.0 cannot be republished because PyPI versions are immutable.
+
+Assumptions: PR #36 contains only fixes to independent Review, so the change is
+a patch bump rather than a minor one.
+
+Prepared 2026-09-03. No external state was changed during preparation.
+
 # AgentMachinist 0.12.0 release preparation (COMPLETE)
 
 - [x] Confirm the release version and inspect origin, branch protection, required

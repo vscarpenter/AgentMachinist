@@ -16,7 +16,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.12.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.12.1).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -241,9 +241,16 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-09-02)
+## Current state (2026-09-03)
 
-- v0.12.0 is the current release. It concentrates Task Run Evidence, journal
+- v0.12.1 is the current release. It fixes three independent Review defects
+  found while dogfooding: Review named its ephemeral preview clone in a shape
+  `Workspace` rejects (it now uses `preview-review-issue-<n>-<hex>`, matching
+  Spec); the report parser accepts exactly one JSON object even when the
+  harness wraps it in a Markdown fence or prefixes a sentence, and still fails
+  closed on two objects or trailing prose; and the Review prompt now states
+  the report contract (one bare JSON object, severity and confidence limited
+  to low, medium, or high). v0.12.0 concentrated Task Run Evidence, journal
   inventory, Phase transitions, repository custody, Verification Gate
   execution, Phase dispatch, and configuration projection in deep internal
   modules while preserving the version-1 persistence and CLI contracts. The
