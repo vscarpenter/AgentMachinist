@@ -558,12 +558,31 @@ class Workspace:
             )
         return candidate
 
-    def resume(self, path: Path, *, branch: str, expected_sha: str) -> Path:
-        """Validate and return an existing Workshop without mutating it."""
+    def resume(
+        self,
+        path: Path,
+        *,
+        branch: str,
+        expected_sha: str,
+        git_custody: Mapping[str, object] | None = None,
+    ) -> Path:
+        """Validate and return an existing Workshop without mutating it.
+
+        ``git_custody`` is the token checkpointed when the Workshop was
+        provisioned. A fresh process passes it back so the raw metadata
+        comparison runs before the first Git subprocess; an in-process caller
+        may omit it and reuse the token bound by ``provision``. Without either
+        there is nothing to trust, so the retained checkout is refused.
+        """
         target = self.managed_path(path)
         if not target.exists() or not target.is_dir():
             raise WorkspaceError(f"workspace {target} does not exist")
-        self._assert_bound_custody(target)
+        token = git_custody if git_custody is not None else self._custody.get(target)
+        if token is None:
+            raise WorkspaceError(
+                f"workspace {target} has no Git-custody checkpoint; start a fresh retry"
+            )
+        self.assert_git_custody(target, token)
         self._assert_owned_checkout(target)
         self.assert_branch(target, branch)
         self.assert_head(target, expected_sha)
@@ -1093,6 +1112,11 @@ class Workspace:
             )
         self._origin_url = actual_origin
         self._custody[target] = token
+
+    def git_custody(self, path: Path) -> dict[str, object] | None:
+        """The custody token bound to a Workshop this process provisioned or resumed."""
+        token = self._custody.get(Path(path).resolve())
+        return dict(token) if token is not None else None
 
     def _assert_bound_custody(self, path: Path) -> None:
         token = self._custody.get(Path(path).resolve())
@@ -1652,13 +1676,12 @@ class Workspace:
             return True
         return self.remote_sha(path, target_branch) != head
 
-    def _common_git_dir(self, path: Path) -> Path:
-        raw = Path(self._git(path, "rev-parse", "--git-common-dir").strip())
-        return raw.resolve() if raw.is_absolute() else (path / raw).resolve()
-
     def _assert_owned_checkout(self, path: Path) -> None:
         if self.config.strategy is WorkspaceStrategy.WORKTREE:
-            if self._common_git_dir(path) != self._common_git_dir(self.repo_root):
+            # Raw layout comparison: no Git subprocess before ownership is known.
+            common_dir = self._resolve_git_layout_raw(path)[1]
+            controller_common = self._resolve_git_layout_raw(self.repo_root)[1]
+            if common_dir != controller_common:
                 raise WorkspaceError(
                     f"workspace {path} is not a worktree of {self.repo_root}"
                 )

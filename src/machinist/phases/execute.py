@@ -264,7 +264,7 @@ def run_execute_phase(
 
     if recovery == "resume":
         report_progress(claim, "resume Workshop", branch)
-        path, resume_stage, git_custody = _resume_workspace(
+        path, resume_stage = _resume_workspace(
             workspace,
             claim,
             previous,
@@ -273,7 +273,7 @@ def run_execute_phase(
         )
     else:
         report_progress(claim, "provision Workshop", branch)
-        path, git_custody = _provision_fresh_workspace(
+        path = _provision_fresh_workspace(
             workspace,
             claim,
             previous,
@@ -297,7 +297,6 @@ def run_execute_phase(
                 approval_sha=approval_sha,
                 implementation_sha=implementation_sha,
                 claim=claim,
-                git_custody=git_custody,
                 cancel_check=cancel_check,
             )
             _complete_delivery(
@@ -320,13 +319,7 @@ def run_execute_phase(
                 review_enabled=config.review.enabled,
             )
         else:
-            _assert_approved_head(
-                workspace,
-                path,
-                branch=branch,
-                approved_sha=approval_sha,
-                git_custody=git_custody,
-            )
+            _assert_head(workspace, path, branch=branch, expected_sha=approval_sha)
             instructions = ""
             if resume_stage != "post_harness":
                 instructions = config.resolve_instructions("execute", path)
@@ -387,13 +380,12 @@ def run_execute_phase(
                     claim,
                     harness_report,
                 )
-                _assert_git_custody(
+                _assert_head(
                     workspace,
                     path,
                     branch=branch,
                     expected_sha=approval_sha,
                     actor=harness.name,
-                    git_custody=git_custody,
                 )
             else:
                 harness_details = previous.harness or _harness_details(harness)
@@ -426,23 +418,21 @@ def run_execute_phase(
                     cancel_check=cancel_check,
                 )
             except ExecutePhaseError:
-                _assert_git_custody(
+                _assert_head(
                     workspace,
                     path,
                     branch=branch,
                     expected_sha=approval_sha,
                     actor="verification gate",
-                    git_custody=git_custody,
                 )
                 raise
 
-            _assert_git_custody(
+            _assert_head(
                 workspace,
                 path,
                 branch=branch,
                 expected_sha=approval_sha,
                 actor="verification gate",
-                git_custody=git_custody,
             )
             if not workspace.has_changes(path):
                 raise ExecutePhaseError(
@@ -470,12 +460,6 @@ def run_execute_phase(
                     "refusing to push a partially captured implementation"
                 )
             implementation_sha = workspace.head_sha(path)
-            _assert_workspace_metadata_custody(
-                workspace,
-                path,
-                git_custody=git_custody,
-                actor="controller commit",
-            )
             _checkpoint(
                 claim,
                 approved_sha=approval_sha,
@@ -533,20 +517,14 @@ def _provision_fresh_workspace(
     branch: str,
     base_ref: str,
     approval_sha: str,
-) -> tuple[Path, dict[str, object] | None]:
+) -> Path:
     claim_attempt = getattr(claim, "attempt", None)
     attempt = (
         claim_attempt if isinstance(claim_attempt, int) and claim_attempt > 1 else None
     )
-    if attempt is None:
-        path = workspace.provision(f"issue-{issue_number}", branch, base_ref)
-    else:
-        path = workspace.provision(
-            f"issue-{issue_number}",
-            branch,
-            base_ref,
-            attempt=attempt,
-        )
+    path = workspace.provision(
+        f"issue-{issue_number}", branch, base_ref, attempt=attempt
+    )
 
     prior_paths = previous.prior_workspace_paths
     previous_path = previous.workspace_path
@@ -556,15 +534,16 @@ def _provision_fresh_workspace(
         and previous_path not in prior_paths
     ):
         prior_paths.append(previous_path)
-    git_custody = _capture_workspace_custody(workspace, path)
+    # The Workshop captured its custody token during provision; persist it so
+    # a fresh process can hand it back on resume.
     _checkpoint(
         claim,
         approved_sha=approval_sha,
         workspace_path=str(path),
         prior_workspace_paths=prior_paths,
-        git_custody=git_custody,
+        git_custody=workspace.git_custody(path),
     )
-    return path, git_custody
+    return path
 
 
 def _reset_fresh_execution_evidence(claim) -> None:
@@ -590,7 +569,7 @@ def _resume_workspace(
     *,
     branch: str,
     approval_sha: str,
-) -> tuple[Path, str, dict[str, object] | None]:
+) -> tuple[Path, str]:
     if claim is None:
         raise ExecutePhaseError("--resume requires a claimed Task Run")
     resume_blocker = _verification_resume_blocker(previous.verification_report or {})
@@ -610,12 +589,6 @@ def _resume_workspace(
             "previous Task Run has no retained workspace checkpoint to resume"
         )
 
-    git_custody = _resume_workspace_custody(
-        workspace,
-        Path(raw_path),
-        previous.git_custody,
-    )
-
     intended_sha = previous.intended_push_sha
     implementation_sha = previous.implementation_sha
     if intended_sha is not None and intended_sha == implementation_sha:
@@ -633,6 +606,7 @@ def _resume_workspace(
             Path(raw_path),
             branch=branch,
             expected_sha=expected_sha,
+            git_custody=previous.git_custody,
         )
     except Exception as exc:
         raise ExecutePhaseError(
@@ -642,7 +616,7 @@ def _resume_workspace(
         claim,
         workspace_path=str(path),
     )
-    return path, stage, git_custody
+    return path, stage
 
 
 def _retry_intended_push(
@@ -653,15 +627,8 @@ def _retry_intended_push(
     approval_sha: str,
     implementation_sha: str,
     claim,
-    git_custody: dict[str, object] | None,
     cancel_check,
 ) -> None:
-    _assert_workspace_metadata_custody(
-        workspace,
-        path,
-        git_custody=git_custody,
-        actor="retained workspace",
-    )
     remote_sha = workspace.remote_sha(path, branch)
     if remote_sha == implementation_sha:
         _checkpoint(claim, push_observed_sha=implementation_sha)
@@ -689,120 +656,38 @@ def _retry_intended_push(
     _checkpoint(claim, push_observed_sha=implementation_sha)
 
 
-def _assert_approved_head(
-    workspace,
-    path: Path,
-    *,
-    branch: str,
-    approved_sha: str,
-    git_custody: dict[str, object] | None,
-) -> None:
-    _assert_workspace_metadata_custody(
-        workspace,
-        path,
-        git_custody=git_custody,
-        actor="provisioned workspace",
-    )
-    actual_sha = workspace.head_sha(path)
-    if actual_sha != approved_sha:
-        raise ExecutePhaseError(
-            "provisioned Workshop HEAD no longer matches the approved SHA "
-            f"({actual_sha} != {approved_sha}); approve the current branch head again"
-        )
-    remote_sha = workspace.remote_sha(path, branch)
-    if remote_sha != approved_sha:
-        raise ExecutePhaseError(
-            "remote Task branch no longer matches the approved SHA "
-            f"({remote_sha or 'missing'} != {approved_sha}); approve the current head again"
-        )
-
-
-def _assert_git_custody(
+def _assert_head(
     workspace,
     path: Path,
     *,
     branch: str,
     expected_sha: str,
-    actor: str,
-    git_custody: dict[str, object] | None,
+    actor: str | None = None,
 ) -> None:
-    _assert_workspace_metadata_custody(
-        workspace,
-        path,
-        git_custody=git_custody,
-        actor=actor,
-    )
+    """Prove the Workshop and remote heads are exactly ``expected_sha``.
+
+    Every Workshop Git call re-asserts controller custody of the metadata
+    itself; this helper only owns the head comparisons. ``actor`` names who
+    ran between the checks; without it the message asks for fresh Approval.
+    """
     actual_head = workspace.head_sha(path)
     if actual_head != expected_sha:
         raise ExecutePhaseError(
             f"{actor} created or changed a git commit; Git custody belongs to "
             "AgentMachinist"
+            if actor
+            else "provisioned Workshop HEAD no longer matches the approved SHA "
+            f"({actual_head} != {expected_sha}); approve the current branch head again"
         )
     actual_remote = workspace.remote_sha(path, branch)
     if actual_remote != expected_sha:
         raise ExecutePhaseError(
             f"{actor} harness/gate changed the remote branch; refusing to continue "
             "after an uncontrolled push"
+            if actor
+            else "remote Task branch no longer matches the approved SHA "
+            f"({actual_remote or 'missing'} != {expected_sha}); approve the current head again"
         )
-
-
-def _capture_workspace_custody(workspace, path: Path) -> dict[str, object] | None:
-    capture = getattr(workspace, "capture_git_custody", None)
-    if not callable(capture):
-        return None
-    try:
-        token = capture(path)
-    except Exception as exc:
-        raise ExecutePhaseError(
-            f"could not bind controller Git metadata custody: {exc}"
-        ) from exc
-    if not isinstance(token, Mapping):
-        raise ExecutePhaseError("workspace returned an invalid Git-custody checkpoint")
-    return dict(token)
-
-
-def _resume_workspace_custody(
-    workspace,
-    path: Path,
-    raw_token: object,
-) -> dict[str, object] | None:
-    assertion = getattr(workspace, "assert_git_custody", None)
-    if not callable(assertion):
-        return dict(raw_token) if isinstance(raw_token, Mapping) else None
-    if not isinstance(raw_token, Mapping):
-        raise ExecutePhaseError(
-            "retained workspace has no Git-custody checkpoint; start a fresh retry"
-        )
-    token = dict(raw_token)
-    try:
-        assertion(path, token)
-    except Exception as exc:
-        raise ExecutePhaseError(
-            f"retained workspace failed Git metadata custody validation: {exc}"
-        ) from exc
-    return token
-
-
-def _assert_workspace_metadata_custody(
-    workspace,
-    path: Path,
-    *,
-    git_custody: dict[str, object] | None,
-    actor: str,
-) -> None:
-    assertion = getattr(workspace, "assert_git_custody", None)
-    if not callable(assertion):
-        return
-    if git_custody is None:
-        raise ExecutePhaseError(
-            f"{actor} cannot be trusted because no Git-custody checkpoint exists"
-        )
-    try:
-        assertion(path, git_custody)
-    except Exception as exc:
-        raise ExecutePhaseError(
-            f"{actor} changed controller-owned Git metadata; refusing to continue: {exc}"
-        ) from exc
 
 
 def _raise_if_cancelled(cancel_check, stage: str) -> None:

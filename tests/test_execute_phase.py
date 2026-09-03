@@ -17,7 +17,7 @@ from machinist.phases.execute import (
     run_execute_phase,
 )
 from machinist.process import ProcessCancelledError, ProcessStragglerError
-from machinist.workspace import Workspace
+from machinist.workspace import Workspace, WorkspaceError
 
 
 def make_pr(*, draft=True, labels=("machinist:approved",), base="main"):
@@ -126,8 +126,8 @@ class FakeWorkspace:
         self._prepare_path(self.path)
         return self.path
 
-    def resume(self, path, *, branch, expected_sha):
-        self.calls.append(("resume", Path(path), branch, expected_sha))
+    def resume(self, path, *, branch, expected_sha, git_custody=None):
+        self.calls.append(("resume", Path(path), branch, expected_sha, git_custody))
         self.path = Path(path)
         self._prepare_path(self.path)
         actual = self.head_sha(self.path)
@@ -167,6 +167,9 @@ class FakeWorkspace:
         if self.push_error:
             raise self.push_error
         self._remote_sha = self.head_sha(path)
+
+    def git_custody(self, path):
+        return None
 
     def head_sha(self, path):
         return self._head_override or ("c" * 40 if self._committed else "a" * 40)
@@ -752,7 +755,7 @@ def test_explicit_resume_reuses_completed_harness_changes_without_rerunning_it(
         recovery="resume",
     )
 
-    assert ("resume", retained, "agent/issue-42", "a" * 40) in workspace.calls
+    assert ("resume", retained, "agent/issue-42", "a" * 40, None) in workspace.calls
     assert not any(call[0] == "provision" for call in workspace.calls)
     assert harness.prompts == []
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
@@ -1090,7 +1093,8 @@ def test_real_execute_harness_cannot_seize_git_authority_or_leak_token(
         else:
             real_git(cwd, "remote", "set-url", "origin", str(attacker))
 
-    with pytest.raises(ExecutePhaseError, match="controller-owned Git metadata"):
+    # The Workshop's own custody comparison refuses before any further Git call.
+    with pytest.raises(WorkspaceError, match="untrusted phase|origin"):
         run_execute_phase(
             42,
             config,
@@ -1763,7 +1767,7 @@ def test_resume_after_unobserved_push_reuses_committed_workspace(tmp_path):
         recovery="resume",
     )
 
-    assert ("resume", retained, "agent/issue-42", "c" * 40) in workspace.calls
+    assert ("resume", retained, "agent/issue-42", "c" * 40, None) in workspace.calls
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
     assert harness.prompts == []
 
@@ -1851,3 +1855,46 @@ def test_execute_persists_only_evidence_that_recovery_or_reports_read(tmp_path):
         "workspace_path",
     ):
         assert key in claim.evidence
+
+
+def test_execute_has_no_parallel_custody_layer():
+    import machinist.phases.execute as execute_module
+
+    for name in (
+        "_capture_workspace_custody",
+        "_resume_workspace_custody",
+        "_assert_workspace_metadata_custody",
+        "_assert_approved_head",
+        "_assert_git_custody",
+    ):
+        assert not hasattr(execute_module, name), name
+
+
+def test_resume_hands_the_checkpointed_custody_token_to_the_workshop(tmp_path):
+    retained = tmp_path / "retained"
+    workspace = FakeWorkspace(tmp_path)
+    workspace._prepare_path(retained)
+    workspace._dirty = True
+    token = {"version": 2, "origin": "sha256:abc"}
+    claim = FakeClaim(
+        tmp_path,
+        attempt=2,
+        previous_evidence={
+            "approved_sha": "a" * 40,
+            "workspace_path": str(retained),
+            "git_custody": token,
+        },
+    )
+
+    run_execute_phase(
+        42,
+        MachinistConfig(),
+        github=FakeGitHub(prs=[make_pr()]),
+        harness=FakeHarness(on_implement=touch_file(workspace)),
+        workspace=workspace,
+        test_runner=passing_tests,
+        claim=claim,
+        recovery="resume",
+    )
+
+    assert ("resume", retained, "agent/issue-42", "a" * 40, token) in workspace.calls

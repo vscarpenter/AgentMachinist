@@ -1385,3 +1385,48 @@ def test_provision_preview_refuses_existing_target(repo, tmp_path):
             "agent/issue-7",
             "origin/main",
         )
+
+
+def test_resume_asserts_the_custody_token_before_any_git_subprocess(repo, tmp_path):
+    provisioner = make_workspace(repo, tmp_path)
+    path = provisioner.provision("issue-7", "agent/issue-7", "origin/main", attempt=2)
+    expected_sha = provisioner.head_sha(path)
+    token = provisioner.git_custody(path)
+    assert token is not None
+    common = Path(git(path, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (path / common).resolve()
+    hook = common / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho planted\n")
+    hook.chmod(0o755)
+
+    git_calls: list[list[str]] = []
+
+    def recording_runner(command, **_kwargs):
+        git_calls.append(list(command))
+        raise AssertionError("git ran before the raw custody comparison")
+
+    # A fresh process holds nothing but the persisted token.
+    resumer = Workspace(
+        repo_root=repo,
+        config=WorkspaceConfig(root=tmp_path / "ws"),
+        runner=recording_runner,
+    )
+    with pytest.raises(WorkspaceError, match="untrusted phase"):
+        resumer.resume(
+            path, branch="agent/issue-7", expected_sha=expected_sha, git_custody=token
+        )
+
+    assert git_calls == []
+
+
+def test_resume_without_a_custody_token_refuses_a_fresh_retry(repo, tmp_path):
+    provisioner = make_workspace(repo, tmp_path)
+    path = provisioner.provision("issue-7", "agent/issue-7", "origin/main", attempt=2)
+    expected_sha = provisioner.head_sha(path)
+
+    resumer = make_workspace(repo, tmp_path)
+    with pytest.raises(WorkspaceError, match="fresh retry"):
+        resumer.resume(
+            path, branch="agent/issue-7", expected_sha=expected_sha, git_custody=None
+        )
