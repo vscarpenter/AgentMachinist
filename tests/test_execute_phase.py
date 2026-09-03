@@ -1210,9 +1210,9 @@ def test_advisory_forbidden_mutation_is_checkpointed_and_never_committed(tmp_pat
     assert report["required_failures"] == []
     assert report["advisory_failures"] == ["advisory audit"]
     assert report["gates"][0]["blocking"] is True
-    assert claim.evidence["resume_forbidden_reason"] == (
-        "mutation-forbidden gate 'advisory audit' changed it"
-    )
+    assert report["gates"][0]["status"] == "mutation_detected"
+    # The report is the single source; no derived key is persisted beside it.
+    assert "resume_forbidden_reason" not in claim.evidence
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
     assert not any(call[0] == "mark_ready" for call in github.calls)
     assert ("cleanup", False) in workspace.calls
@@ -1232,9 +1232,16 @@ def test_resume_refuses_workspace_changed_by_mutation_forbidden_gate(tmp_path):
             "workspace_path": str(retained),
             "workspace_head": "a" * 40,
             "harness_completed": True,
-            "resume_forbidden_reason": (
-                "mutation-forbidden gate 'formatter' changed it"
-            ),
+            "verification_report": {
+                "success": False,
+                "gates": [
+                    {
+                        "name": "formatter",
+                        "status": "mutation_detected",
+                        "blocking": True,
+                    }
+                ],
+            },
         },
     )
 
@@ -1765,3 +1772,46 @@ def test_resume_after_unobserved_push_reuses_committed_workspace(tmp_path):
     assert ("resume", retained, "agent/issue-42", "c" * 40) in workspace.calls
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
     assert harness.prompts == []
+
+
+def test_gate_failure_surfaces_the_verification_engine_message(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+
+    with pytest.raises(ExecutePhaseError) as excinfo:
+        run_execute_phase(
+            42,
+            config_with_tests(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=FakeHarness(on_implement=touch_file(workspace)),
+            workspace=workspace,
+            test_runner=failing_tests,
+            claim=FakeClaim(tmp_path),
+        )
+
+    # One renderer: the Verification Gate's own message, not a second copy.
+    assert str(excinfo.value) == str(excinfo.value.__cause__)
+
+
+def test_execute_has_no_private_change_summary_type():
+    import machinist.phases.execute as execute_module
+
+    assert not hasattr(execute_module, "_ChangeSummary")
+
+
+def test_delivery_reads_the_pr_once_per_external_transition(tmp_path):
+    github = FakeGitHub(prs=[make_pr()])
+    workspace = FakeWorkspace(tmp_path)
+
+    run_execute_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=FakeHarness(on_implement=touch_file(workspace)),
+        workspace=workspace,
+        test_runner=passing_tests,
+        claim=FakeClaim(tmp_path),
+    )
+
+    # before the completion comment, before mark_ready, after mark_ready
+    reads = [call for call in github.calls if call[0] == "pr_for_branch"]
+    assert len(reads) == 3

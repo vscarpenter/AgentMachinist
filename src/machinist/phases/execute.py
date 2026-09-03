@@ -16,7 +16,6 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from string import Template
@@ -39,8 +38,10 @@ from machinist.repository_custody import (
 )
 from machinist.runtime_paths import RuntimePathError, write_text_file
 from machinist.verification import (
+    GateStatus,
     VerificationError,
     VerificationFailed,
+    VerificationReport,
     run_verification_gates,
 )
 
@@ -60,23 +61,6 @@ class ExecutePhaseCancelled(ExecutePhaseError):
     """Execute stopped cooperatively during verification."""
 
     cancelled = True
-
-
-@dataclass(frozen=True)
-class _ChangeSummary:
-    files: tuple[str, ...]
-    changed_bytes: int
-    binary_files: tuple[str, ...] = ()
-    deleted_files: tuple[str, ...] = ()
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "files": list(self.files),
-            "file_count": len(self.files),
-            "bytes": self.changed_bytes,
-            "binary_files": list(self.binary_files),
-            "deleted_files": list(self.deleted_files),
-        }
 
 
 # Deterministic heuristics for "this path is a test". Renames appear as a
@@ -439,7 +423,7 @@ def run_execute_phase(
                 claim,
                 harness_completed=True,
                 workspace_head=approval_sha,
-                change_summary=change_summary.as_dict(),
+                change_summary=change_summary,
             )
 
             try:
@@ -483,7 +467,7 @@ def run_execute_phase(
                 workspace=workspace,
                 config=config,
             )
-            _checkpoint(claim, change_summary=change_summary.as_dict())
+            _checkpoint(claim, change_summary=change_summary)
 
             _raise_if_cancelled(cancel_check, "before commit")
             report_progress(claim, "commit implementation", branch)
@@ -527,7 +511,7 @@ def run_execute_phase(
                 github=github,
                 claim=claim,
                 implementation_sha=implementation_sha,
-                change_summary=change_summary.as_dict(),
+                change_summary=change_summary,
                 verification_report=verification_report,
                 comment_id=comment_id,
                 recovered=False,
@@ -614,7 +598,6 @@ def _reset_fresh_execution_evidence(claim) -> None:
         completion_comment_observed_sha=None,
         ready_intended_sha=None,
         ready_observed_sha=None,
-        resume_forbidden_reason=None,
     )
 
 
@@ -628,7 +611,7 @@ def _resume_workspace(
 ) -> tuple[Path, str, dict[str, object] | None]:
     if claim is None:
         raise ExecutePhaseError("--resume requires a claimed Task Run")
-    resume_blocker = previous.resume_forbidden_reason
+    resume_blocker = _verification_resume_blocker(previous.verification_report or {})
     if resume_blocker:
         raise ExecutePhaseError(
             "retained workspace is not eligible for --resume because "
@@ -872,7 +855,7 @@ def _enforce_change_limits(
     *,
     workspace,
     config: MachinistConfig,
-) -> _ChangeSummary:
+) -> dict[str, Any]:
     changed_files = tuple(sorted(set(workspace.changed_files(path))))
     if len(changed_files) > config.limits.max_changed_files:
         raise ExecutePhaseError(
@@ -968,12 +951,13 @@ def _enforce_change_limits(
                 f"implementation deleted test file(s): {joined}; if the approved "
                 "Spec requires this, set limits.allow_test_deletions true"
             )
-    return _ChangeSummary(
-        changed_files,
-        changed_bytes,
-        tuple(binary_files),
-        tuple(deleted_files),
-    )
+    return {
+        "files": list(changed_files),
+        "file_count": len(changed_files),
+        "bytes": changed_bytes,
+        "binary_files": list(binary_files),
+        "deleted_files": list(deleted_files),
+    }
 
 
 def _run_verification(
@@ -987,14 +971,7 @@ def _run_verification(
 ) -> dict[str, Any]:
     gates = config.resolved_verification_gates()
     if not gates:
-        report = {
-            "success": True,
-            "duration_seconds": 0.0,
-            "blocking_failures": [],
-            "required_failures": [],
-            "advisory_failures": [],
-            "gates": [],
-        }
+        report = VerificationReport(gates=(), duration_seconds=0.0).as_dict()
         _checkpoint(claim, verification_report=report)
         return report
 
@@ -1049,19 +1026,12 @@ def _invoke_verification_engine(
             ),
         )
     except VerificationFailed as exc:
-        evidence = exc.report.as_dict()
-        checkpoint: dict[str, Any] = {"verification_report": evidence}
-        resume_blocker = _verification_resume_blocker(evidence)
-        if resume_blocker is not None:
-            checkpoint["resume_forbidden_reason"] = resume_blocker
-        _checkpoint(claim, **checkpoint)
-        message = _verification_failure_message(evidence)
-        if any(
-            isinstance(gate, dict) and gate.get("status") == "cancelled"
-            for gate in evidence.get("gates", [])
-        ):
-            raise ExecutePhaseCancelled(message) from exc
-        raise ExecutePhaseError(message) from exc
+        # The engine owns the report shape and the blocked message; Execute
+        # only persists the Evidence and types the failure.
+        _checkpoint(claim, verification_report=exc.report.as_dict())
+        if any(gate.status is GateStatus.CANCELLED for gate in exc.report.gates):
+            raise ExecutePhaseCancelled(str(exc)) from exc
+        raise ExecutePhaseError(str(exc)) from exc
     except VerificationError as exc:
         raise ExecutePhaseError(f"verification could not run safely: {exc}") from exc
     evidence = report.as_dict()
@@ -1080,23 +1050,6 @@ def _verification_resume_blocker(evidence: Mapping[str, Any]) -> str | None:
         gate_name = name if isinstance(name, str) and name else "a verification gate"
         return f"mutation-forbidden gate {gate_name!r} changed it"
     return None
-
-
-def _verification_failure_message(report: dict[str, Any]) -> str:
-    details: list[str] = []
-    for gate in report.get("gates", []):
-        if not isinstance(gate, dict) or not gate.get("blocking"):
-            continue
-        output = (
-            gate.get("stderr_excerpt")
-            or gate.get("stdout_excerpt")
-            or gate.get("error")
-        )
-        suffix = f": {str(output).strip()[-2000:]}" if output else ""
-        details.append(
-            f"{gate.get('name', 'gate')} ({gate.get('status', 'failed')}){suffix}"
-        )
-    return "verification gates blocked: " + "; ".join(details)
 
 
 def _complete_delivery(
@@ -1123,13 +1076,6 @@ def _complete_delivery(
         "deliver for independent review" if review_enabled else "deliver ready PR"
     )
     report_progress(claim, delivery, f"PR #{pr.number}")
-    current_pr = _delivery_pr_at_sha(
-        github,
-        original=pr,
-        branch=branch,
-        expected_base=expected_base,
-        implementation_sha=implementation_sha,
-    )
     _raise_if_cancelled(cancel_check, "before completion delivery")
     body = _completion_comment(
         issue_number,
@@ -1150,7 +1096,7 @@ def _complete_delivery(
     )
     current_pr = _delivery_pr_at_sha(
         github,
-        original=current_pr,
+        original=pr,
         branch=branch,
         expected_base=expected_base,
         implementation_sha=implementation_sha,

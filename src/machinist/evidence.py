@@ -145,10 +145,6 @@ class TaskEvidence:
         return [item for item in value if isinstance(item, str)]
 
     @property
-    def resume_forbidden_reason(self) -> str | None:
-        return self._string("resume_forbidden_reason")
-
-    @property
     def verification_report(self) -> dict[str, EvidenceValue] | None:
         return self._mapping("verification_report")
 
