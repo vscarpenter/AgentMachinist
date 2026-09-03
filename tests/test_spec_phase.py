@@ -720,7 +720,7 @@ def test_pr_created_crash_is_reconciled_by_checkpointed_retry(tmp_path):
     assert len([call for call in github.calls if call[0] == "create_draft_pr"]) == 1
     assert any(call[0] == "update_pr" for call in github.calls)
     assert not any(call[0] in {"commit_all", "push"} for call in retry_workspace.calls)
-    assert retry_claim.evidence["spec_recovery"] == "delivery-only"
+    assert "spec_recovery" not in retry_claim.evidence
 
 
 def test_label_failure_after_push_retries_as_delivery_only_and_creates_pr(tmp_path):
@@ -769,7 +769,7 @@ def test_label_failure_after_push_retries_as_delivery_only_and_creates_pr(tmp_pa
     assert result.number == 57
     assert len([call for call in github.calls if call[0] == "create_draft_pr"]) == 1
     assert not any(call[0] in {"commit_all", "push"} for call in retry_workspace.calls)
-    assert retry_claim.evidence["spec_recovery"] == "delivery-only"
+    assert "spec_recovery" not in retry_claim.evidence
 
 
 def test_remote_push_is_observed_before_checkpoint(tmp_path):
@@ -898,4 +898,22 @@ def test_spec_instructions_come_from_provisioned_task_head_and_are_checkpointed(
         == hashlib.sha256(b"rules from the provisioned task head").hexdigest()
     )
     assert claim.evidence["instruction_paths"] == ["AGENTS.md"]
-    assert claim.evidence["instruction_source"] == "task-workspace"
+    assert claim.evidence["instruction_append"] is False
+    assert "instruction_source" not in claim.evidence
+
+
+def test_spec_delivery_persists_no_observed_pr_copies(tmp_path):
+    claim = FakeClaim()
+
+    run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=FakeGitHub(),
+        harness=FakeHarness(),
+        workspace=FakeWorkspace(tmp_path),
+        claim=claim,
+    )
+
+    assert claim.evidence["pr_number"] == 57
+    for key in ("pr_observed_number", "pr_observed_base", "pr_observed_sha"):
+        assert key not in claim.evidence

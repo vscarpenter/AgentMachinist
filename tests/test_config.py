@@ -900,3 +900,20 @@ def test_json_schema_is_generated_from_the_runtime_model():
         "limits",
     ):
         assert section in schema["properties"]
+
+
+def test_instructions_config_projects_one_evidence_vocabulary():
+    import hashlib
+
+    from machinist.config import InstructionsConfig
+
+    config = InstructionsConfig.model_validate(
+        {"execute": {"paths": ["AGENTS.md"], "append": "be brief"}}
+    )
+
+    assert config.evidence("execute", "rules\n") == {
+        "instructions_sha256": hashlib.sha256(b"rules\n").hexdigest(),
+        "instruction_paths": ["AGENTS.md"],
+        "instruction_append": True,
+    }
+    assert config.evidence("spec", "")["instruction_paths"] == []

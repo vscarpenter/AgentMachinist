@@ -57,3 +57,16 @@ def test_pr_base_rejects_unsafe_loaded_value_when_interpreted():
 
     with pytest.raises(EvidenceError, match="invalid PR base"):
         evidence.pr_base()
+
+
+def test_removed_keys_in_historical_records_stay_readable():
+    from machinist.evidence import TaskEvidence
+
+    legacy = {
+        "ready_intended_sha": "c" * 40,
+        "ready_observed_sha": "c" * 40,
+        "spec_recovery": "delivery-only",
+        "spec_sha": "d" * 40,
+    }
+
+    assert TaskEvidence.load(legacy).spec_sha == "d" * 40

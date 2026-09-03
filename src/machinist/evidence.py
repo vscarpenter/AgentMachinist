@@ -22,7 +22,6 @@ _FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 _PHASES = frozenset({"spec", "execute", "review"})
 _PHASE_FIELDS = {
     "spec_sha": frozenset({"spec"}),
-    "spec_recovery": frozenset({"spec"}),
     "approved_sha": frozenset({"execute"}),
     "implementation_sha": frozenset({"execute"}),
     "harness_completed": frozenset({"execute"}),
@@ -30,9 +29,6 @@ _PHASE_FIELDS = {
     "feedback_characters": frozenset({"execute"}),
     "change_summary": frozenset({"execute"}),
     "verification_report": frozenset({"execute"}),
-    "verification_log_dir": frozenset({"execute"}),
-    "review_required_sha": frozenset({"execute"}),
-    "ready_intended_sha": frozenset({"execute"}),
     "reviewed_sha": frozenset({"review"}),
     "review_report": frozenset({"review"}),
     "review_comment_id": frozenset({"review"}),
@@ -44,10 +40,7 @@ _SHA_FIELDS = frozenset(
         "implementation_sha",
         "push_intended_sha",
         "push_observed_sha",
-        "review_required_sha",
         "reviewed_sha",
-        "ready_intended_sha",
-        "ready_observed_sha",
     }
 )
 _POSITIVE_INTEGER_FIELDS = frozenset(
@@ -291,12 +284,7 @@ def _validate_relationships(
     if phase == "spec":
         relationships.append(("spec_sha", "push_intended_sha"))
     if phase == "execute":
-        relationships.extend(
-            [
-                ("implementation_sha", "push_intended_sha"),
-                ("ready_intended_sha", "ready_observed_sha"),
-            ]
-        )
+        relationships.append(("implementation_sha", "push_intended_sha"))
     for left_key, right_key in relationships:
         if not updated.intersection({left_key, right_key}):
             continue

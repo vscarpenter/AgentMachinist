@@ -7,7 +7,6 @@ spec file, commits, pushes, and opens the draft PR.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
 from importlib.resources import files
 from pathlib import Path
@@ -152,7 +151,6 @@ def run_spec_phase(
                 )
             if claim is not None:
                 claim.checkpoint(
-                    spec_recovery="delivery-only",
                     spec_sha=spec_sha,
                     push_intended_sha=spec_sha,
                     push_observed_sha=observed_sha,
@@ -160,16 +158,7 @@ def run_spec_phase(
         else:
             instructions = config.resolve_instructions("spec", path)
             if claim is not None:
-                profile = config.instructions.spec
-                claim.checkpoint(
-                    spec_recovery="generated",
-                    instructions_sha256=hashlib.sha256(
-                        instructions.encode()
-                    ).hexdigest(),
-                    instruction_paths=list(profile.paths),
-                    instruction_append=profile.append is not None,
-                    instruction_source="task-workspace",
-                )
+                claim.checkpoint(**config.instructions.evidence("spec", instructions))
             _raise_if_cancelled(cancel_check, issue.number)
             report_progress(claim, "generate Spec", harness.name)
             bind_harness_progress(harness, claim, stage="generate Spec")
@@ -264,12 +253,6 @@ def run_spec_phase(
             spec_sha=spec_sha,
             expected_repository=repository_identity,
         )
-        if claim is not None:
-            claim.checkpoint(
-                pr_observed_number=observed_pr.number,
-                pr_observed_base=observed_pr.base or base,
-                pr_observed_sha=observed_pr.head_sha,
-            )
     except BaseException as exc:
         cleanup_warning = finish_workshop_cleanup(
             workspace, path, success=False, claim=claim

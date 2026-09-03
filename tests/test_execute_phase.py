@@ -602,10 +602,11 @@ def test_execute_resolves_instructions_from_approved_workspace_not_controller_tr
     assert "controller-only instructions" not in harness.prompts[0]
     expected = "approved branch instructions\n"
     assert (
-        claim.evidence["instruction_sha256"]
+        claim.evidence["instructions_sha256"]
         == hashlib.sha256(expected.encode()).hexdigest()
     )
-    assert claim.evidence["instruction_sources"] == ["AGENTS.md"]
+    assert claim.evidence["instruction_paths"] == ["AGENTS.md"]
+    assert claim.evidence["instruction_append"] is False
 
 
 def test_claimed_run_uses_fresh_attempt_path_and_captures_harness_report(tmp_path):
@@ -687,7 +688,6 @@ def test_real_task_claim_persists_execute_checkpoints_and_logs(tmp_path):
     assert record.status is RunStatus.SUCCEEDED
     assert record.evidence["push_intended_sha"] == "c" * 40
     assert record.evidence["push_observed_sha"] == "c" * 40
-    assert record.evidence["ready_observed_sha"] == "c" * 40
     assert record.evidence["verification_report"]["success"] is True
     assert Path(record.evidence["harness_report_path"]).read_text() == (
         "durable harness report\n"
@@ -736,7 +736,6 @@ def test_explicit_resume_reuses_completed_harness_changes_without_rerunning_it(
         previous_evidence={
             "approved_sha": "a" * 40,
             "workspace_path": str(retained),
-            "workspace_head": "a" * 40,
             "harness_completed": True,
         },
     )
@@ -1230,7 +1229,6 @@ def test_resume_refuses_workspace_changed_by_mutation_forbidden_gate(tmp_path):
         previous_evidence={
             "approved_sha": "a" * 40,
             "workspace_path": str(retained),
-            "workspace_head": "a" * 40,
             "harness_completed": True,
             "verification_report": {
                 "success": False,
@@ -1483,7 +1481,6 @@ def test_cleanup_failure_after_ready_pr_is_a_success_warning(tmp_path):
     record = lifecycle.record(42, Phase.EXECUTE)
     assert pr.number == 57
     assert record.status is RunStatus.SUCCEEDED
-    assert record.evidence["ready_observed_sha"] == "c" * 40
     assert record.evidence["cleanup_succeeded"] is False
     assert "Workshop is busy" in record.evidence["cleanup_warning"]
 
@@ -1700,7 +1697,6 @@ def test_delivery_refuses_to_checkpoint_when_mark_ready_is_not_observed(tmp_path
         )
 
     assert ("mark_ready", 57) in github.calls
-    assert claim.evidence["ready_observed_sha"] is None
     assert ("cleanup", False) in workspace.calls
 
 
@@ -1731,7 +1727,6 @@ def test_observed_ready_delivery_wins_over_cancel_racing_with_mark_ready(tmp_pat
 
     assert pr.number == 57
     assert ("mark_ready", 57) in github.calls
-    assert claim.evidence["ready_observed_sha"] == "c" * 40
     assert ("cleanup", True) in workspace.calls
 
 
@@ -1748,7 +1743,6 @@ def test_resume_after_unobserved_push_reuses_committed_workspace(tmp_path):
             "implementation_sha": "c" * 40,
             "push_intended_sha": "c" * 40,
             "workspace_path": str(retained),
-            "workspace_head": "c" * 40,
             "harness_completed": True,
             "change_summary": {"files": ["impl.py"], "file_count": 1, "bytes": 5},
             "verification_report": {"success": True, "gates": []},
@@ -1815,3 +1809,45 @@ def test_delivery_reads_the_pr_once_per_external_transition(tmp_path):
     # before the completion comment, before mark_ready, after mark_ready
     reads = [call for call in github.calls if call[0] == "pr_for_branch"]
     assert len(reads) == 3
+
+
+UNREAD_EVIDENCE_KEYS = {
+    "ready_intended_sha",
+    "ready_observed_sha",
+    "review_required_sha",
+    "completion_comment_intended_sha",
+    "completion_comment_observed_sha",
+    "workspace_head",
+    "recovery_mode",
+    "pr_observed_base",
+    "verification_log_dir",
+    "completion_duration_seconds",
+    "resume_forbidden_reason",
+}
+
+
+def test_execute_persists_only_evidence_that_recovery_or_reports_read(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    claim = FakeClaim(tmp_path)
+
+    run_execute_phase(
+        42,
+        MachinistConfig(),
+        github=FakeGitHub(prs=[make_pr()]),
+        harness=FakeHarness(on_implement=touch_file(workspace)),
+        workspace=workspace,
+        test_runner=passing_tests,
+        claim=claim,
+    )
+
+    assert set(claim.evidence) & UNREAD_EVIDENCE_KEYS == set()
+    # The keys partial-push reconciliation and resume actually consult stay.
+    for key in (
+        "approved_sha",
+        "implementation_sha",
+        "push_intended_sha",
+        "push_observed_sha",
+        "harness_completed",
+        "workspace_path",
+    ):
+        assert key in claim.evidence

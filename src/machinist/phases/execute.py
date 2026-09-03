@@ -9,7 +9,6 @@ successful push without rerunning the harness.
 from __future__ import annotations
 
 import fnmatch
-import hashlib
 import os
 import stat
 import subprocess
@@ -196,7 +195,7 @@ def run_execute_phase(
             f"PR #{pr.number} targets base {pr.base!r}; expected {base!r}; "
             "approve a PR targeting the bound base branch"
         )
-    _checkpoint(claim, pr_base=base, pr_observed_base=pr.base or base)
+    _checkpoint(claim, pr_base=base)
     approved_label = config.github.labels.approved
     if approved_label not in pr.labels:
         raise ExecutePhaseError(
@@ -331,17 +330,8 @@ def run_execute_phase(
             instructions = ""
             if resume_stage != "post_harness":
                 instructions = config.resolve_instructions("execute", path)
-                instruction_sources = list(config.instructions.execute.paths)
-                if config.instructions.execute.append is not None:
-                    instruction_sources.append("<inline append>")
                 _checkpoint(
-                    claim,
-                    instructions_supplied=bool(instructions),
-                    instruction_characters=len(instructions),
-                    instruction_sha256=hashlib.sha256(
-                        instructions.encode("utf-8")
-                    ).hexdigest(),
-                    instruction_sources=instruction_sources,
+                    claim, **config.instructions.evidence("execute", instructions)
                 )
             if recovery == "fresh":
                 _reset_fresh_execution_evidence(claim)
@@ -422,7 +412,6 @@ def run_execute_phase(
             _checkpoint(
                 claim,
                 harness_completed=True,
-                workspace_head=approval_sha,
                 change_summary=change_summary,
             )
 
@@ -493,7 +482,6 @@ def run_execute_phase(
                 implementation_sha=implementation_sha,
                 push_intended_sha=implementation_sha,
                 push_observed_sha=None,
-                workspace_head=implementation_sha,
             )
             _raise_if_cancelled(cancel_check, "before push")
             report_progress(claim, "push implementation", branch)
@@ -572,9 +560,7 @@ def _provision_fresh_workspace(
     _checkpoint(
         claim,
         approved_sha=approval_sha,
-        recovery_mode="fresh",
         workspace_path=str(path),
-        workspace_head=workspace.head_sha(path),
         prior_workspace_paths=prior_paths,
         git_custody=git_custody,
     )
@@ -594,10 +580,6 @@ def _reset_fresh_execution_evidence(claim) -> None:
         implementation_sha=None,
         push_intended_sha=None,
         push_observed_sha=None,
-        completion_comment_intended_sha=None,
-        completion_comment_observed_sha=None,
-        ready_intended_sha=None,
-        ready_observed_sha=None,
     )
 
 
@@ -658,9 +640,7 @@ def _resume_workspace(
         ) from exc
     _checkpoint(
         claim,
-        recovery_mode="resume",
         workspace_path=str(path),
-        workspace_head=expected_sha,
     )
     return path, stage, git_custody
 
@@ -1010,7 +990,6 @@ def _invoke_verification_engine(
     test_runner,
     cancel_check,
 ) -> dict[str, Any]:
-    _checkpoint(claim, verification_log_dir=str(log_dir))
     try:
         report = run_verification_gates(
             path,
@@ -1089,11 +1068,6 @@ def _complete_delivery(
         duration_seconds=duration_seconds,
         review_enabled=review_enabled,
     )
-    _checkpoint(
-        claim,
-        completion_comment_intended_sha=implementation_sha,
-        completion_duration_seconds=duration_seconds,
-    )
     current_pr = _delivery_pr_at_sha(
         github,
         original=pr,
@@ -1107,20 +1081,14 @@ def _complete_delivery(
         body,
         comment_id=comment_id,
     )
-    _checkpoint(
-        claim,
-        completion_comment_id=saved_comment_id,
-        completion_comment_observed_sha=implementation_sha,
-    )
+    _checkpoint(claim, completion_comment_id=saved_comment_id)
     if review_enabled:
         if not current_pr.is_draft:
             raise ExecutePhaseError(
                 f"GitHub PR #{current_pr.number} is already ready; independent Review "
                 "requires the implementation to remain draft"
             )
-        _checkpoint(claim, review_required_sha=implementation_sha)
         return
-    _checkpoint(claim, ready_intended_sha=implementation_sha)
     current_pr = _delivery_pr_at_sha(
         github,
         original=current_pr,
@@ -1144,9 +1112,6 @@ def _complete_delivery(
             f"GitHub PR #{observed_pr.number} remained a draft after mark-ready; "
             "refusing to checkpoint completion"
         )
-    # Once GitHub has observed the exact PR as ready, delivery is irreversible
-    # and completion must win over a cancellation racing with mark_ready().
-    _checkpoint(claim, ready_observed_sha=implementation_sha)
 
 
 def _delivery_pr_at_sha(

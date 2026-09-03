@@ -267,7 +267,6 @@ def _deliver_review(
     observed = _exact_pr(github, pr, branch, expected_sha)
     if observed.is_draft:
         raise ReviewPhaseError(f"GitHub PR #{pr.number} remained draft after Review")
-    _checkpoint(claim, ready_observed_sha=expected_sha)
 
 
 def _find_pr(github, config: MachinistConfig, branch: str) -> PullRequest:
