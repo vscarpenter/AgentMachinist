@@ -1353,3 +1353,35 @@ def test_clone_custody_rejection_omits_the_worktree_remedy(repo, tmp_path):
     with pytest.raises(WorkspaceError) as excinfo:
         workspace.assert_git_custody(path, token)
     assert "workspace.strategy: clone" not in str(excinfo.value)
+
+
+def test_provision_preview_creates_no_sidecar_file(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+
+    path = workspace.provision_preview(
+        "preview-issue-7-deadbeef",
+        "agent/issue-7",
+        "origin/main",
+    )
+
+    hidden = sorted(
+        entry.name
+        for entry in path.parent.iterdir()
+        if entry.name.startswith(".agentmachinist-preview")
+    )
+    assert hidden == []
+    workspace.cleanup_preview(path)
+    assert not path.exists()
+
+
+def test_provision_preview_refuses_existing_target(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+    existing = tmp_path / "ws" / f"{repo.name}-preview-issue-7-deadbeef"
+    existing.mkdir(parents=True)
+
+    with pytest.raises(WorkspaceError, match="already exists"):
+        workspace.provision_preview(
+            "preview-issue-7-deadbeef",
+            "agent/issue-7",
+            "origin/main",
+        )
