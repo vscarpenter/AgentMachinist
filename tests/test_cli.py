@@ -1736,8 +1736,11 @@ def test_spec_wires_config_and_reports_pr_url(monkeypatch):
         seen["revise"] = revise
         seen["attempt"] = attempt
         seen["cancel_check"] = callable(cancel_check)
-        claim.checkpoint(spec_sha="a" * 40)
-        return DraftPR(number=57, url="https://github.com/vscarpenter/demo/pull/57")
+        return DraftPR(
+            number=57,
+            url="https://github.com/vscarpenter/demo/pull/57",
+            head_sha="a" * 40,
+        )
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
     monkeypatch.setenv("GH_REPO", "attacker/other")
@@ -2451,10 +2454,66 @@ def test_run_with_retry_flag(monkeypatch):
         except RuntimeError:
             pass
 
-        result = runner.invoke(main, ["run", "42", "--retry"])
+        result = runner.invoke(main, ["retry", "42", "--phase", "execute", "--run"])
         assert result.exit_code == 0, result.output
         assert "PR #18 implemented" in result.output
         assert executed == [(42, False)]
+
+
+def test_run_no_longer_offers_its_own_retry_flags():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        for flag in ("--retry", "--resume", "--fresh"):
+            result = runner.invoke(main, ["run", "42", flag])
+            assert result.exit_code == 2, result.output
+            assert "No such option" in result.output
+
+
+def test_retry_run_execute_reports_review_pending_without_a_ready_notification(
+    monkeypatch,
+):
+    from machinist.github import PullRequest
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    notifications = []
+
+    def fake_notify(config, event, title, message, **kwargs):
+        notifications.append(event)
+
+    def fake_run_execute_phase(*args, **kwargs):
+        # Review is enabled by the starter config, so Execute leaves the PR draft.
+        return PullRequest(
+            number=18,
+            title="Spec: Task (#42)",
+            url="https://github.com/x/y/pull/18",
+            branch="agent/issue-42",
+            is_draft=True,
+        )
+
+    monkeypatch.setattr("machinist.cli.notify_event", fake_notify)
+    monkeypatch.setattr("machinist.cli.run_execute_phase", fake_run_execute_phase)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        try:
+            lifecycle.run(
+                42,
+                Phase.EXECUTE,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("fail")),
+            )
+        except RuntimeError:
+            pass
+
+        result = runner.invoke(main, ["retry", "42", "--phase", "execute", "--run"])
+
+        assert result.exit_code == 0, result.output
+        assert "PR #18 implemented" in result.output
+        assert "independent review is pending" in result.output.lower()
+        assert "machinist review 42" in result.output
+        assert "marked ready" not in result.output
+        assert notifications == []
 
 
 def test_retry_resume_wires_retained_workspace_mode(monkeypatch):
