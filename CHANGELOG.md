@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+- Trust an approval marker only when the managed approve workflow authored it
+  (`github-actions[bot]`). A marker typed by a human is no longer Approval,
+  whatever their repository association: only the workflow checks write
+  access before minting Evidence. A repository that runs its own approve
+  workflow must post the marker as the bot. Invariant 2 in `CLAUDE.md` and
+  the architecture notes say so.
+- Remove `run --retry`, `run --resume`, and `run --fresh`. The one recovery
+  entry is `retry <n> --phase execute --run [--resume|--fresh]`, which, unlike
+  the removed flags, also recovers an interrupted run.
+- Fix `retry --run` on an Execute Task reporting "marked ready for review" and
+  sending the PR-ready notification while independent Review was enabled and
+  the PR was still draft. It now prints the Review next action, as `run` does.
+- Fix two operator instructions: Execute's approval refusal names the full
+  `/machinist-execute <sha>` form the workflow requires, and the Spec PR body
+  no longer claims that AgentMachinist only watches the label.
+- Stop writing Task Run Evidence that no recovery path or report reads
+  (`ready_intended_sha`, `ready_observed_sha`, `review_required_sha`,
+  `completion_comment_intended_sha`, `completion_comment_observed_sha`,
+  `workspace_head`, `recovery_mode`, `pr_observed_base`,
+  `pr_observed_number`, `pr_observed_sha`, `verification_log_dir`,
+  `completion_duration_seconds`, `spec_recovery`, `resume_forbidden_reason`)
+  and record the instruction overlay under one vocabulary
+  (`instructions_sha256`, `instruction_paths`, `instruction_append`) for Spec
+  and Execute. Existing records keep the old keys as readable unknowns.
+- The Workshop owns Git-custody invocation. `Workspace.git_custody()` exposes
+  the token `provision` captured and `Workspace.resume(..., git_custody=)`
+  asserts it before any Git subprocess, refusing with "start a fresh retry"
+  when the checkpoint has none; Execute's parallel custody layer is gone. A
+  custody violation detected after the Harness surfaces as a `WorkspaceError`
+  with the Workshop's message.
+- Verification Gate failures carry the engine's own message and report shape
+  in Task Run errors instead of a second renderer with a different separator
+  and excerpt length.
+- Internal simplifications with no operator-visible change: Harness adapters
+  splice `Harness._passthrough_argv()` for `model` and `extra_args`; preview
+  clones no longer write an ownership sidecar file; every Phase requires a
+  Claim and takes plain boolean options; Spec decides existing-PR identity
+  through repository custody and previews through the dispatcher; approved
+  label metadata lives once in `github.py`; `RunDisposition` and
+  `WatchResult` lose fields nothing read.
+- Correct invariant 7 in `CLAUDE.md`: a crash after push is reconciled without
+  rerunning the Harness or the verification gates; gates rerun only when the
+  crash happened before the implementation commit.
+
 ## 0.12.1 — 2026-09-03
 
 - Fix independent Review failing at "provision Review preview" with a misleading

@@ -106,8 +106,8 @@ dispatcher actually sends.
    used by `spec`, `run`, `retry`, `amend`, and the watch closures (notify
    only); `amend` delegates to `_execute_command(issue, *, force=True,
    feedback)`; commands build the dispatcher first and read its stores;
-   `DraftPR.head_sha`; `watch --dry-run` reuses `watch_once(dispatch=False)`
-   with deferral reasons on `WatchResult`.
+   `DraftPR.head_sha`. (The `watch --dry-run` fold through
+   `watch_once(dispatch=False)` is deferred; see Out of scope.)
 10. **Transitions and watch (card 11, D-2/D-3).** `RunDisposition` keeps
     `display` and `next_action`; `WatchResult` is a plain dataclass with
     `events`, `deferred`, `attempted`, `failures`, and the CLI reads them.
@@ -135,6 +135,10 @@ dispatcher actually sends.
 
 - Card 7 (resume-push restructure), card 11 beyond D-2/D-3, card 12, card 13,
   card 14, the speculative tail, and F-11.
+- F-5 (`watch --dry-run` through `watch_once(dispatch=False)`): deferred to
+  its own change. Its verifier confirmed the duplication, but the dry-run path
+  carries a virtual-admission counter the live path does not, which needs a
+  separate decision.
 - Renaming `Workspace` to Workshop; version or release changes; push, PR,
   merge.
 

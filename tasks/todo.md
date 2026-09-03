@@ -1,3 +1,38 @@
+# Spec → Execute simplification pass (VERIFYING)
+
+Spec: `tasks/spec.md` (approved 2026-09-03). Plan:
+`docs/superpowers/plans/2026-09-03-spec-to-execute-simplification.md`.
+Branch: `refactor/spec-to-execute-simplification` from `9d27cfe`.
+
+- [x] Task 1: Gate 1 trusts only workflow-authored markers (B-1, B-4)
+- [x] Task 2: one Harness pass-through helper (E-3)
+- [x] Task 3: delete the preview-ownership sidecar (E-5)
+- [x] Task 4: Verification Gate owns its Evidence and messages (E-2, C-7, C-8, C-11)
+- [x] Task 5: stop writing unread Evidence (D-1, C-9, A-3)
+- [x] Task 6: collapse Execute's custody layer into the Workshop (C-1, E-1, C-4, C-10, E-7)
+- [x] Task 7: delete the test-double-shaped Phase interface (C-2, D-4, A-4, D-5, B-5, A-6, C-6)
+- [x] Task 8: Spec custody handoff (A-1, A-2, A-7, A-8, A-9)
+- [x] Task 9: transitions and watch results (D-2, D-3)
+- [x] Task 10: one recovery entry and one renderer at the CLI seam (F-1, F-2, F-5, F-6, F-7, F-9)
+- [ ] Task 11: docs, changelog, invariant 2/7 wording, `scripts/verify.sh`
+
+### Resuming From Here
+
+Done: Tasks 1–10 committed on `refactor/spec-to-execute-simplification`
+(b093a32 … e7a878f), each red → green with the full suite passing. Task 11
+docs written (CHANGELOG Unreleased, CLAUDE.md invariants 2 and 7, module map,
+Current state); spec updated to defer F-5.
+
+Next: `bash scripts/verify.sh`, commit the docs, independent whole-branch
+code review by a subagent, address findings, then hand off for push/PR.
+
+Blockers: none.
+
+Assumptions: inline execution (tasks share `execute.py`, `spec.py`,
+`cli.py`); card 13, F-5, and the Worth-exploring cards stay out of scope.
+Review keeps `getattr(github, "repo", None)` because it never binds the
+client itself.
+
 # AgentMachinist 0.12.1 release preparation (CANDIDATE READY)
 
 - [x] Confirm 0.12.0 is already published: PyPI lists 0.12.0, release run

@@ -68,8 +68,11 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `harness.extra_args` (list[str]) are optional pass-throughs into adapter
   argv — the controller never interprets them.
 - `dispatch.py` — the only constructor for claimed Spec, Execute, and Review
-  Task Runs. It wires Claims, Harnesses, Workshops, cancellation, verification,
-  and Phase functions; commands and watcher callbacks consume this interface.
+  Task Runs, and for the unclaimed read-only Spec preview (`preview_spec`). It
+  wires Claims, Harnesses, Workshops (including their `cancel_check`),
+  cancellation, verification, and Phase functions; commands and watcher
+  callbacks consume this interface. Phases require a `claim` and take plain
+  boolean options (`revise`, `force`, `resume`).
 - `evidence.py` — typed reads and Phase-aware validation for known Task Run
   Evidence. Persistence remains an open JSON mapping so historical and future
   unknown keys remain readable.
@@ -86,6 +89,10 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `remove_workspace` encode that convention and back `machinist clean`.
   `remove_workspace` prefers `git worktree remove [--force]` + `prune` and
   only falls back to `rmtree` when that fails or the strategy is `clone`.
+  The Workshop owns Git-custody invocation: `provision` captures the token,
+  `git_custody(path)` exposes it for the Task Run checkpoint, every Git method
+  re-asserts it, and `resume(..., git_custody=)` rebinds a persisted token and
+  runs the raw metadata comparison before the first Git subprocess.
 - `lifecycle.py` — durable Task Run records at
   `.machinist/runs/issue-<n>-<phase>.json` (atomic tmp+fsync+rename writes),
   `flock`-based local claims, explicit retry, checkpoints for crash recovery,
@@ -111,7 +118,8 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   branch → push → draft PR ("Closes #n"). Rejects empty specs and any
   working-tree change made by the harness.
 - `phases/execute.py` — Phase 3: approval guards (label + SHA marker match +
-  draft-ness), harness with edit permissions, git-custody postconditions,
+  draft-ness), harness with edit permissions, head/remote postconditions (the
+  Workshop asserts metadata custody itself on every Git call),
   test-deletion guard (`limits.allow_test_deletions` opts out), test gate,
   commit, leased push, mark PR ready. The implement prompt lists the gate
   commands and asks the harness to iterate until they pass
@@ -186,7 +194,8 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    never hand-edited (the next sync intentionally replaces drift).
 7. **Explicit retry only**: a failed Task Run blocks re-runs until
    `machinist retry`; a crash after push is reconciled from checkpoints
-   (tests rerun, harness does not).
+   (neither the harness nor the verification gates rerun; only a crash
+   before the implementation commit reruns the gates).
 8. **Security wording**: never claim a harness "has no Git access" — the
    trust model (docs/trust-model.md, SECURITY.md) is credential *reduction*
    and detection, not OS-level isolation. `pull_request_target` automation
@@ -244,6 +253,17 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-09-03)
 
+- Unreleased on `main` after 0.12.1: the Spec → Execute simplification pass
+  (`tasks/spec.md`, `docs/superpowers/plans/2026-09-03-spec-to-execute-simplification.md`)
+  from the adversarial review of that path. Gate 1 trusts only
+  workflow-authored markers; `run` lost its retry flags in favour of
+  `retry --run`; the Workshop owns custody invocation on provision and
+  resume; Phases require a Claim and plain option types; Evidence no longer
+  carries keys nothing reads; Spec identity checks and previews go through
+  repository custody and the dispatcher. Deferred from that review: the
+  resume-push restructure (card 7), the `watch --dry-run` fold (F-5), the
+  exception-wrapper deletion (card 13, contradicts the 0.12.0 spec item 2),
+  and the Worth-exploring cards.
 - v0.12.1 is the current release. It fixes three independent Review defects
   found while dogfooding: Review named its ephemeral preview clone in a shape
   `Workspace` rejects (it now uses `preview-review-issue-<n>-<hex>`, matching
