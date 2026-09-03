@@ -1430,11 +1430,7 @@ def approve(
             raise click.ClickException(
                 f"open machinist draft PR for #{requested} was not found"
             )
-        github.approve_pr(
-            pr.number,
-            label=config.github.labels.approved,
-            head_sha=pr.head_sha,
-        )
+        github.approve_pr(pr.number, head_sha=pr.head_sha)
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(

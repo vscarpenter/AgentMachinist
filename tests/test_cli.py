@@ -2201,8 +2201,8 @@ def test_approve_resolves_issue_number(monkeypatch):
         def pr_for_branch(self, branch):
             return self.open_machinist_prs("agent/")[0]
 
-        def approve_pr(self, number, *, label, head_sha):
-            approved_prs.append((number, label, head_sha))
+        def approve_pr(self, number, *, head_sha):
+            approved_prs.append((number, head_sha))
 
     monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
 
@@ -2214,9 +2214,7 @@ def test_approve_resolves_issue_number(monkeypatch):
         assert result.exit_code == 0, result.output
         assert "Requested approval for PR #18" in result.output
         assert "workflow will verify the current head" in result.output
-        assert approved_prs == [
-            (18, "machinist:approved", "0123456789abcdef0123456789abcdef01234567")
-        ]
+        assert approved_prs == [(18, "0123456789abcdef0123456789abcdef01234567")]
 
 
 def test_approve_refuses_ambiguous_target_and_supports_explicit_issue_or_pr(
@@ -2250,7 +2248,7 @@ def test_approve_refuses_ambiguous_target_and_supports_explicit_issue_or_pr(
                 ),
             ]
 
-        def approve_pr(self, number, *, label, head_sha):
+        def approve_pr(self, number, *, head_sha):
             approved_prs.append((number, head_sha))
 
     monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)

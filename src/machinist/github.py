@@ -281,29 +281,25 @@ class GitHubClient:
             r"<!--\s*agentmachinist:approval\s+sha=([0-9a-fA-F]{40})\s*-->"
         )
         for comment in reversed(data.get("comments", [])):
-            association = comment.get("authorAssociation")
+            # Only the managed approve workflow mints Evidence, after checking
+            # the actor's write access. A marker typed by a human is not
+            # Approval, whatever their repository association.
             login = (comment.get("author") or {}).get("login")
-            trusted_author = association in {"OWNER", "MEMBER", "COLLABORATOR"}
-            trusted_workflow = login in {"github-actions", "github-actions[bot]"}
-            if not (trusted_author or trusted_workflow):
+            if login not in {"github-actions", "github-actions[bot]"}:
                 continue
             match = marker.search(comment.get("body") or "")
             if match:
                 return match.group(1).lower()
         return None
 
-    def approve_pr(self, number: int, *, label: str, head_sha: str) -> None:
+    def approve_pr(self, number: int, *, head_sha: str) -> None:
         """Request server-side Approval for exactly one observed PR head.
 
         The managed workflow re-reads the current PR head before it records
         Evidence or adds the approval label. Keeping both mutations in that
         server-side transaction prevents a branch update between a local
         comment and a local label write from authorizing the wrong commit.
-
-        ``label`` remains in the interface for compatibility with callers and
-        third-party adapters; the managed workflow owns the label mutation.
         """
-        del label
         self._gh(
             "pr",
             "comment",

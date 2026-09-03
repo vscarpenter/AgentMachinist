@@ -166,9 +166,10 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    edits abort the run). Spec phase rejects any dirty tree.
 2. **SHA-bound approval**: execution requires the approval label AND a
    trusted comment marker `<!-- agentmachinist:approval sha=<head-sha> -->`
-   matching the current PR head. Marker authors must be
-   OWNER/MEMBER/COLLABORATOR or github-actions. GitHub's review Approve
-   button is *not* the mechanism. The managed approve workflow gates both
+   matching the current PR head. The controller trusts a marker only when
+   the managed workflow authored it (`github-actions[bot]`); a marker typed
+   by a human is not Approval, whatever their association. GitHub's review
+   Approve button is *not* the mechanism. The managed approve workflow gates both
    paths on the actor before minting evidence: a `/machinist-execute` comment
    needs OWNER/MEMBER/COLLABORATOR, and the label path needs write or admin
    access, because GitHub grants label permission at triage level. The
