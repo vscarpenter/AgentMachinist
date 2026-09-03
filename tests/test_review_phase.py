@@ -153,6 +153,11 @@ def test_review_parses_structured_findings_and_marks_exact_pr_ready(tmp_path):
     assert "Approved spec" in harness.prompts[0]
     assert "Clear next action" in harness.prompts[0]
     assert "diff --git" in harness.prompts[0]
+    assert (
+        "severity and confidence must each be low, medium, or high"
+        in harness.prompts[0]
+    )
+    assert "Output exactly one JSON object and nothing else" in harness.prompts[0]
     comment = next(call for call in github.calls if call[0] == "upsert_pr_comment")
     assert "Independent review" in comment[2]
     assert "Recovery copy can be more specific" in comment[2]

@@ -11,6 +11,10 @@
   with a sentence, as long as it contains exactly one JSON object followed by
   nothing but whitespace or the closing fence. Two objects, trailing prose, or
   no object still fail closed with "review report must be valid JSON".
+- State the Review report contract in the prompt: exactly one JSON object with
+  no fence or prose, and severity and confidence limited to low, medium, or
+  high. A harness previously had to guess the allowed levels and could emit
+  values such as "critical" that the parser rejects.
 
 ## 0.12.0 — 2026-09-02
 

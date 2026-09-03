@@ -226,10 +226,12 @@ def _read_spec(path: Path, issue: int, config: MachinistConfig) -> str:
 
 def _prompt_sections(issue: int, task, spec: str, evidence: str, diff: str) -> str:
     return (
-        "Review this implementation independently and read-only. Return only "
-        "version-1 JSON with summary and findings. Findings require severity, "
-        "confidence, repository-relative file, positive line, requirement, "
-        "message, and remediation. Do not edit files.\n\n"
+        "Review this implementation independently and read-only. Output exactly "
+        "one JSON object and nothing else: no prose before or after it and no "
+        "Markdown fence. The object is version-1 JSON with summary and findings. "
+        "Each finding requires severity, confidence, repository-relative file, "
+        "positive line, requirement, message, and remediation; severity and "
+        "confidence must each be low, medium, or high. Do not edit files.\n\n"
         f"## Task #{issue}: {task.title}\n\n{task.body}\n\n"
         f"## Approved Spec\n\n{spec}\n\n"
         f"## Execute evidence\n\n```json\n{evidence}\n```\n\n"
