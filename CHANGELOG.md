@@ -7,6 +7,10 @@
   `review-issue-<n>`, but `Workspace` only accepts preview clones named
   `<repo>-preview-*`; Review now uses `preview-review-issue-<n>-<hex>`, matching
   Spec. A regression test drives `run_review_phase` through a real `Workspace`.
+- Accept a Review report that a harness wraps in a Markdown fence or prefixes
+  with a sentence, as long as it contains exactly one JSON object followed by
+  nothing but whitespace or the closing fence. Two objects, trailing prose, or
+  no object still fail closed with "review report must be valid JSON".
 
 ## 0.12.0 — 2026-09-02
 

@@ -49,12 +49,17 @@ class ReviewReport:
 
 
 def parse_review_report(payload: str) -> ReviewReport:
-    """Parse bounded version-1 JSON and reject ambiguous output."""
+    """Parse bounded version-1 JSON and reject ambiguous output.
+
+    Harnesses routinely wrap the object in a Markdown fence or lead with a
+    sentence, so one JSON object with that chrome is accepted. Anything after
+    the object other than whitespace or a closing fence still fails closed.
+    """
     if len(payload) > _MAX_REPORT_CHARS:
         raise ReviewPhaseError("review report exceeds 100000 characters")
     try:
-        raw = json.loads(payload)
-    except (json.JSONDecodeError, TypeError) as exc:
+        raw = _single_json_object(payload)
+    except (ValueError, TypeError) as exc:
         raise ReviewPhaseError("review report must be valid JSON") from exc
     if not isinstance(raw, dict) or raw.get("version") != 1:
         raise ReviewPhaseError("review report version must be 1")
@@ -347,6 +352,21 @@ def _repository_path(value: object) -> str:
     if path.is_absolute() or ".." in path.parts or path.as_posix() != text:
         raise ReviewPhaseError("review finding file must be repository-relative")
     return text
+
+
+def _single_json_object(payload: str) -> Any:
+    """Return the one JSON object in the payload, or raise ValueError."""
+    text = payload.strip()
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("review report contains no JSON object")
+    value, end = json.JSONDecoder().raw_decode(text, start)
+    trailer = text[end:].strip()
+    if trailer.startswith("```"):
+        trailer = trailer[3:].strip()
+    if trailer:
+        raise ValueError("review report has content after the JSON object")
+    return value
 
 
 def _text(value: object, field: str) -> str:

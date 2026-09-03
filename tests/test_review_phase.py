@@ -246,6 +246,56 @@ def test_review_report_contract_fails_closed(payload, message):
         parse_review_report(payload)
 
 
+_REPORT = (
+    '{"version":1,"summary":"Meets the approved spec","findings":['
+    '{"severity":"low","confidence":"high","file":"cli.py",'
+    '"line":12,"requirement":"Clear next action","message":"Tighten copy",'
+    '"remediation":"Name the retry command"}]}'
+)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _REPORT,
+        f"```json\n{_REPORT}\n```",
+        f"```\n{_REPORT}\n```",
+        f"  \n```json\n{_REPORT}\n```\n\n",
+        f"Here is the independent review.\n\n```json\n{_REPORT}\n```",
+        f"Review complete:\n{_REPORT}\n",
+    ],
+    ids=[
+        "bare",
+        "json-fence",
+        "plain-fence",
+        "padded-fence",
+        "prose-then-fence",
+        "prose-then-bare",
+    ],
+)
+def test_review_report_accepts_one_json_object_with_harness_chrome(payload):
+    report = parse_review_report(payload)
+
+    assert report.summary == "Meets the approved spec"
+    assert len(report.findings) == 1
+    assert report.findings[0].file == "cli.py"
+
+
+@pytest.mark.parametrize(
+    "payload, message",
+    [
+        (f"{_REPORT}\n{_REPORT}", "valid JSON"),
+        (f"{_REPORT}\nAnything else you need?", "valid JSON"),
+        (f"```json\n{_REPORT}\n```\nSecond thoughts: none.", "valid JSON"),
+        ("No JSON here, only prose.", "valid JSON"),
+    ],
+    ids=["two-objects", "trailing-prose", "prose-after-fence", "no-object"],
+)
+def test_review_report_rejects_ambiguous_output(payload, message):
+    with pytest.raises(ReviewPhaseError, match=message):
+        parse_review_report(payload)
+
+
 def test_review_rejects_changed_head_before_invoking_harness(tmp_path):
     github = FakeGitHub(make_pr(head_sha="d" * 40))
     harness = FakeHarness()
