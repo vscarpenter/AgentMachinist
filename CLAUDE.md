@@ -52,8 +52,9 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `init` auto-detects the test gate from the project manifest
   (`_detect_test_command`: pyproject/uv.lock → `uv run pytest`, package.json
   → `npm test`, Cargo.toml → `cargo test`, go.mod → `go test ./...`);
-  `approve <n>` accepts a PR number *or* an issue number (falling back to the
-  `<branch_prefix>issue-<n>` branch); `retry <n> --phase execute --run
+  `approve` takes exactly one of `--issue <n>` (resolved through the
+  `<branch_prefix>issue-<n>` branch) or `--pr <n>`, with no positional
+  target; `retry <n> --phase execute --run
   [--resume|--fresh]` is the one recovery entry (`run` carries no retry
   flags); `inspect <issue>` prints issue, PR,
   approval SHA, workspace path, and all Task Run records in one pass. Click

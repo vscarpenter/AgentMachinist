@@ -218,9 +218,9 @@ machinist approve --pr 8
 # or: machinist approve --issue 7
 ```
 
-The positional form remains available when a number identifies only one Task.
-Use `--pr` or `--issue` when an issue and pull request have the same number;
-AgentMachinist refuses an ambiguous positional target.
+`approve` takes exactly one of `--pr` or `--issue`. There is no positional
+form, so an issue and a pull request that share a number can never be
+confused.
 
 Or post the exact PR comment:
 

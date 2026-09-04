@@ -13,7 +13,7 @@ import os
 import stat
 import subprocess
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from string import Template
@@ -200,6 +200,7 @@ def run_execute_phase(
         previous,
         approval_sha,
         pr,
+        read_remote_sha=lambda: workspace.remote_sha(workspace.repo_root, branch),
         force=force or bool(feedback),
     )
     if reconciled_sha is not None:
@@ -277,37 +278,16 @@ def run_execute_phase(
     comment_id = previous.completion_comment_id
     try:
         if resume_stage == "push":
+            # A crash after the implementation commit: resume asserted that the
+            # Workshop HEAD is the checkpointed implementation, so re-enter the
+            # shared push step below without the Harness, gates, or commit.
             report_progress(claim, "resume push", branch)
             implementation_sha = previous.intended_push_sha
             assert implementation_sha is not None
-            _retry_intended_push(
-                workspace,
-                path,
-                branch=branch,
-                approval_sha=approval_sha,
-                implementation_sha=implementation_sha,
-                claim=claim,
-                cancel_check=cancel_check,
-            )
-            _complete_delivery(
-                issue_number,
-                pr,
-                github=github,
-                claim=claim,
-                implementation_sha=implementation_sha,
-                change_summary=previous.change_summary,
-                verification_report=previous.verification_report,
-                comment_id=comment_id,
-                recovered=True,
-                harness_details=previous.harness,
-                harness_report_excerpt=previous.harness_report_excerpt,
-                attempt=claim.attempt,
-                duration_seconds=_duration(started_at),
-                branch=branch,
-                expected_base=base,
-                cancel_check=cancel_check,
-                review_enabled=config.review.enabled,
-            )
+            change_summary = previous.change_summary
+            verification_report = previous.verification_report
+            harness_details = previous.harness
+            harness_report_excerpt = previous.harness_report_excerpt
         else:
             _assert_head(workspace, path, branch=branch, expected_sha=approval_sha)
             instructions = ""
@@ -454,35 +434,37 @@ def run_execute_phase(
                 push_intended_sha=implementation_sha,
                 push_observed_sha=None,
             )
-            _raise_if_cancelled(cancel_check, "before push")
-            report_progress(claim, "push implementation", branch)
-            workspace.push(path, branch, expected_sha=approval_sha)
-            observed_sha = workspace.remote_sha(path, branch)
-            if observed_sha != implementation_sha:
-                raise ExecutePhaseError(
-                    "push returned without publishing the intended implementation "
-                    f"({observed_sha or 'missing'} != {implementation_sha})"
-                )
-            claim.checkpoint(push_observed_sha=implementation_sha)
-            _complete_delivery(
-                issue_number,
-                pr,
-                github=github,
-                claim=claim,
-                implementation_sha=implementation_sha,
-                change_summary=change_summary,
-                verification_report=verification_report,
-                comment_id=comment_id,
-                recovered=False,
-                harness_details=harness_details,
-                harness_report_excerpt=harness_report_excerpt,
-                attempt=claim.attempt,
-                duration_seconds=_duration(started_at),
-                branch=branch,
-                expected_base=base,
-                cancel_check=cancel_check,
-                review_enabled=config.review.enabled,
+        # One leased push for fresh and resumed runs: a remote already at the
+        # implementation is a no-op, one that moved elsewhere fails the lease.
+        _raise_if_cancelled(cancel_check, "before push")
+        report_progress(claim, "push implementation", branch)
+        workspace.push(path, branch, expected_sha=approval_sha)
+        observed_sha = workspace.remote_sha(path, branch)
+        if observed_sha != implementation_sha:
+            raise ExecutePhaseError(
+                "push returned without publishing the intended implementation "
+                f"({observed_sha or 'missing'} != {implementation_sha})"
             )
+        claim.checkpoint(push_observed_sha=implementation_sha)
+        _complete_delivery(
+            issue_number,
+            pr,
+            github=github,
+            claim=claim,
+            implementation_sha=implementation_sha,
+            change_summary=change_summary,
+            verification_report=verification_report,
+            comment_id=comment_id,
+            recovered=resume_stage == "push",
+            harness_details=harness_details,
+            harness_report_excerpt=harness_report_excerpt,
+            attempt=claim.attempt,
+            duration_seconds=_duration(started_at),
+            branch=branch,
+            expected_base=base,
+            cancel_check=cancel_check,
+            review_enabled=config.review.enabled,
+        )
     except BaseException as exc:
         cleanup_warning = finish_workshop_cleanup(
             workspace, path, success=False, claim=claim
@@ -598,42 +580,6 @@ def _resume_workspace(
     return path, stage
 
 
-def _retry_intended_push(
-    workspace,
-    path: Path,
-    *,
-    branch: str,
-    approval_sha: str,
-    implementation_sha: str,
-    claim,
-    cancel_check,
-) -> None:
-    remote_sha = workspace.remote_sha(path, branch)
-    if remote_sha == implementation_sha:
-        claim.checkpoint(push_observed_sha=implementation_sha)
-        return
-    if remote_sha != approval_sha:
-        raise ExecutePhaseError(
-            "cannot resume the intended push because the remote branch moved "
-            f"to {remote_sha or 'missing'}"
-        )
-    claim.checkpoint(
-        approved_sha=approval_sha,
-        implementation_sha=implementation_sha,
-        push_intended_sha=implementation_sha,
-        push_observed_sha=None,
-    )
-    _raise_if_cancelled(cancel_check, "before resumed push")
-    workspace.push(path, branch, expected_sha=approval_sha)
-    observed_sha = workspace.remote_sha(path, branch)
-    if observed_sha != implementation_sha:
-        raise ExecutePhaseError(
-            "push returned without publishing the checkpointed implementation "
-            f"({observed_sha or 'missing'} != {implementation_sha})"
-        )
-    claim.checkpoint(push_observed_sha=implementation_sha)
-
-
 def _assert_head(
     workspace,
     path: Path,
@@ -655,7 +601,9 @@ def _assert_head(
             "AgentMachinist"
             if actor
             else "provisioned Workshop HEAD no longer matches the approved SHA "
-            f"({actual_head} != {expected_sha}); approve the current branch head again"
+            f"({actual_head} != {expected_sha}); the remote Task branch moved after "
+            "Approval. Run 'machinist inspect' and confirm the branch before "
+            "approving a new head"
         )
     actual_remote = workspace.remote_sha(path, branch)
     if actual_remote != expected_sha:
@@ -664,7 +612,9 @@ def _assert_head(
             "after an uncontrolled push"
             if actor
             else "remote Task branch no longer matches the approved SHA "
-            f"({actual_remote or 'missing'} != {expected_sha}); approve the current head again"
+            f"({actual_remote or 'missing'} != {expected_sha}); it moved after "
+            "Approval. Run 'machinist inspect' and confirm the branch before "
+            "approving a new head"
         )
 
 
@@ -1085,18 +1035,30 @@ def _reconciled_push(
     approval_sha: str | None,
     pr: PullRequest,
     *,
+    read_remote_sha: Callable[[], str | None],
     force: bool,
 ) -> str | None:
+    """Return the intended implementation SHA when a prior push already landed.
+
+    GitHub's PR listing can lag a push the controller made just before it
+    crashed, so the remote branch is consulted too; it is read only when a
+    prior push intent exists, so first attempts pay no extra round trip.
+    """
     if force or approval_sha is None or previous.approved_sha != approval_sha:
         return None
     intended = previous.intended_push_sha or previous.implementation_sha
-    if intended is not None and intended == pr.head_sha:
+    if intended is None:
+        return None
+    if intended == pr.head_sha:
+        return intended
+    remote = read_remote_sha()
+    if intended == remote:
         return intended
     observed = previous.pushed_sha
-    if observed is not None and observed != pr.head_sha:
+    if observed is not None and observed not in (pr.head_sha, remote):
         raise ExecutePhaseError(
-            "the previously observed implementation push no longer matches the PR head; "
-            "inspect the remote branch before retrying"
+            "the previously observed implementation push no longer matches the PR "
+            "head or the remote branch; inspect the remote branch before retrying"
         )
     return None
 

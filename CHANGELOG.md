@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Reconcile a crashed Execute push from the remote Task branch as well as
+  GitHub's PR listing. When the listing lagged a push the controller had just
+  made, a fresh run failed its approved-head check and advised approving the
+  current head again, which could rerun the Harness on already-verified code.
+  That window now delivers the pushed implementation; the head-mismatch
+  messages say the remote branch moved after Approval and point at
+  `machinist inspect`.
+- One push step for fresh and resumed Execute runs. A retry after the
+  implementation commit re-enters the same leased push, observation, and
+  delivery instead of a separate resume-push path; a remote already at the
+  implementation is a no-op, one that moved elsewhere fails the lease.
+- `machinist approve` takes exactly one of `--issue <n>` or `--pr <n>`. The
+  positional target, which resolved issue-versus-PR ambiguity with its own
+  error, is removed; every documented example already used the flags.
+
 ## 0.13.0 — 2026-09-03
 
 - Trust an approval marker only when the managed approve workflow authored it

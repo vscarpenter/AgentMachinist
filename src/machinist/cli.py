@@ -1364,70 +1364,26 @@ def config_set(key: str, value: str, path: Path) -> None:
 
 
 @main.command()
-@click.argument("target", type=int, required=False)
 @click.option(
     "--issue", "issue_target", type=int, help="Approve by source issue number."
 )
 @click.option("--pr", "pr_target", type=int, help="Approve by pull request number.")
-def approve(
-    target: int | None, issue_target: int | None, pr_target: int | None
-) -> None:
-    """Approve the exact current head of a draft PR.
-
-    TARGET remains accepted when it identifies only one Task. Use --issue or
-    --pr when GitHub issue and pull-request numbers overlap.
-    """
-    explicit = [value is not None for value in (issue_target, pr_target)]
-    if target is not None and any(explicit):
-        raise click.UsageError("use TARGET, --issue NUMBER, or --pr NUMBER; not both")
-    if target is None and sum(explicit) != 1:
-        raise click.UsageError("provide TARGET, --issue NUMBER, or --pr NUMBER")
+def approve(issue_target: int | None, pr_target: int | None) -> None:
+    """Approve the exact current head of a draft PR by --issue or --pr."""
+    if (issue_target is None) == (pr_target is None):
+        raise click.UsageError("provide exactly one of --issue NUMBER or --pr NUMBER")
     try:
         config = load_config()
         github = _bound_github_client(config)
         open_prs = github.open_machinist_prs(config.workspace.branch_prefix)
-        lookup_issue = issue_target if issue_target is not None else target
-        lookup_pr = pr_target if pr_target is not None else target
-        by_pr = (
-            next(
-                (candidate for candidate in open_prs if candidate.number == lookup_pr),
-                None,
-            )
-            if issue_target is None
-            else None
-        )
-        issue_branch = (
-            f"{config.workspace.branch_prefix}issue-{lookup_issue}"
-            if lookup_issue is not None and pr_target is None
-            else None
-        )
-        by_issue = (
-            next(
-                (
-                    candidate
-                    for candidate in open_prs
-                    if candidate.branch == issue_branch
-                ),
-                None,
-            )
-            if issue_branch is not None
-            else None
-        )
-        if (
-            target is not None
-            and by_pr is not None
-            and by_issue is not None
-            and by_pr.number != by_issue.number
-        ):
-            raise click.ClickException(
-                f"target #{target} is ambiguous: it names PR #{by_pr.number} and issue "
-                f"#{target}'s PR #{by_issue.number}; use '--pr {target}' or '--issue {target}'"
-            )
-        pr = by_issue if issue_target is not None else by_pr or by_issue
+        if pr_target is not None:
+            requested = pr_target
+            pr = next((c for c in open_prs if c.number == pr_target), None)
+        else:
+            requested = issue_target
+            branch = f"{config.workspace.branch_prefix}issue-{issue_target}"
+            pr = next((c for c in open_prs if c.branch == branch), None)
         if pr is None:
-            requested = (
-                issue_target if issue_target is not None else pr_target or target
-            )
             raise click.ClickException(
                 f"open machinist draft PR for #{requested} was not found"
             )
