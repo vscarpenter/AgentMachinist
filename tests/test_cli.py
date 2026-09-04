@@ -2229,17 +2229,15 @@ def test_approve_resolves_issue_number(monkeypatch):
     runner = CliRunner()
     with runner.isolated_filesystem():
         runner.invoke(main, ["init", "--no-workflows"])
-        # Approve using the issue number 42 rather than PR number 18
-        result = runner.invoke(main, ["approve", "42"])
+        # Approve by the issue number 42 rather than PR number 18
+        result = runner.invoke(main, ["approve", "--issue", "42"])
         assert result.exit_code == 0, result.output
         assert "Requested approval for PR #18" in result.output
         assert "workflow will verify the current head" in result.output
         assert approved_prs == [(18, "0123456789abcdef0123456789abcdef01234567")]
 
 
-def test_approve_refuses_ambiguous_target_and_supports_explicit_issue_or_pr(
-    monkeypatch,
-):
+def test_approve_takes_exactly_one_of_issue_or_pr(monkeypatch):
     from machinist.github import PullRequest
 
     approved_prs = []
@@ -2277,15 +2275,21 @@ def test_approve_refuses_ambiguous_target_and_supports_explicit_issue_or_pr(
     with runner.isolated_filesystem():
         runner.invoke(main, ["init", "--no-workflows"])
 
-        ambiguous = runner.invoke(main, ["approve", "42"])
-        by_issue = runner.invoke(main, ["approve", "--issue", "42"])
-        by_pr = runner.invoke(main, ["approve", "--pr", "42"])
+        positional = runner.invoke(main, ["approve", "42"])
+        assert positional.exit_code == 2, positional.output
+        assert approved_prs == []
 
-        assert ambiguous.exit_code != 0
-        assert "ambiguous" in ambiguous.output.lower()
-        assert by_issue.exit_code == 0, by_issue.output
+        neither = runner.invoke(main, ["approve"])
+        assert neither.exit_code == 2, neither.output
+        both = runner.invoke(main, ["approve", "--issue", "42", "--pr", "42"])
+        assert both.exit_code == 2, both.output
+        assert approved_prs == []
+
+        by_pr = runner.invoke(main, ["approve", "--pr", "42"])
         assert by_pr.exit_code == 0, by_pr.output
-        assert approved_prs == [(57, "2" * 40), (42, "1" * 40)]
+        by_issue = runner.invoke(main, ["approve", "--issue", "42"])
+        assert by_issue.exit_code == 0, by_issue.output
+        assert approved_prs == [(42, "1" * 40), (57, "2" * 40)]
 
 
 def test_retry_with_run_flag(monkeypatch):

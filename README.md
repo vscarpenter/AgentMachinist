@@ -105,8 +105,8 @@ machinist approve --issue 57
 # /machinist-execute <full-spec-commit-sha>
 ```
 
-The positional target remains available when that number identifies only one
-Task; use `--issue` or `--pr` when GitHub numbers overlap.
+`approve` takes exactly one of `--issue` or `--pr`; there is no positional
+form, so an issue and a pull request that share a number cannot be confused.
 
 Editing the spec after approval makes that approval stale and blocks execution
 until the new head is approved.
