@@ -16,7 +16,7 @@ issue + trigger label → spec commit → draft PR → SHA-bound approval
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.12.1).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.13.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -253,7 +253,7 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-09-03)
 
-- Unreleased on `main` after 0.12.1: the Spec → Execute simplification pass
+- v0.13.0 is the current release: the Spec → Execute simplification pass
   (`tasks/spec.md`, `docs/superpowers/plans/2026-09-03-spec-to-execute-simplification.md`)
   from the adversarial review of that path. Gate 1 trusts only
   workflow-authored markers; `run` lost its retry flags in favour of
@@ -264,7 +264,7 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
   resume-push restructure (card 7), the `watch --dry-run` fold (F-5), the
   exception-wrapper deletion (card 13, contradicts the 0.12.0 spec item 2),
   and the Worth-exploring cards.
-- v0.12.1 is the current release. It fixes three independent Review defects
+- v0.12.1 fixed three independent Review defects
   found while dogfooding: Review named its ephemeral preview clone in a shape
   `Workspace` rejects (it now uses `preview-review-issue-<n>-<hex>`, matching
   Spec); the report parser accepts exactly one JSON object even when the

@@ -1,3 +1,33 @@
+# AgentMachinist 0.13.0 release (IN PROGRESS)
+
+- [x] Confirm 0.12.1 is the latest on PyPI, `main` CI is green at `b5aebad`,
+      and no `v0.13.0` tag or release exists.
+- [x] Minor bump: PR #38 removed public `run` flags and tightened Gate 1 trust.
+- [x] Align package metadata, changelog, current-release documentation, and
+      rendered guides (including the 0.13 field-guide strings) to 0.13.0.
+- [x] Refresh the lockfile; managed workflows unchanged.
+- [x] Run `bash scripts/verify.sh` from the release candidate.
+- [ ] Push `release/0.13.0`, open the PR, merge, publish GitHub Release
+      `v0.13.0`, and verify PyPI.
+
+### Resuming From Here
+
+Done: the release target is 0.13.0 on branch `release/0.13.0` (from `main`
+`b5aebad` plus the 0.12.1 ledger fix). The candidate passed the release-grade
+gate: 1039 passed at 86.37% coverage, ruff format
+and lint clean, mypy clean, managed workflows match, both distributions built,
+and isolated wheel and sdist smoke installs reported 0.13.0.
+
+Next: push the branch, open the PR against `main`, merge, then
+`gh release create v0.13.0` with the CHANGELOG 0.13.0 bullets as the body.
+
+Blockers: none.
+
+Assumptions: the removed `run` flags and the marker-trust change are
+operator-visible, so this is a minor release rather than a patch.
+
+Prepared 2026-09-03.
+
 # Spec → Execute simplification pass (COMPLETE, awaiting push/PR)
 
 Spec: `tasks/spec.md` (approved 2026-09-03). Plan:
