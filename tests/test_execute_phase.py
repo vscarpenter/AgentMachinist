@@ -98,6 +98,7 @@ class FakeHarness:
 class FakeWorkspace:
     def __init__(self, tmp_path, spec_text="## Spec\nDo the thing.\n"):
         self.path = tmp_path / "ws"
+        self.repo_root = tmp_path
         self._tmp_path = tmp_path
         self.calls = []
         self._dirty = False
@@ -1590,11 +1591,14 @@ def test_partial_push_retry_marks_ready_without_rerunning_harness(tmp_path):
     assert ("mark_ready", 57) in github.calls
 
 
-def test_stale_pr_read_does_not_erase_unobserved_push_intent(tmp_path):
+def test_lagging_pr_head_reconciles_from_the_remote_branch(tmp_path):
     workspace = FakeWorkspace(tmp_path)
-    # GitHub's PR list still reports the approved head, while the remote read
-    # already observes the implementation pushed by the interrupted attempt.
+    # GitHub's PR list still reports the approved head, while the remote branch
+    # already holds the implementation pushed by the interrupted attempt. The
+    # remote is the authority on whether the controller's push landed.
     workspace._remote_sha = "c" * 40
+    github = FakeGitHub(prs=[make_pr()])
+    harness = FakeHarness(error=AssertionError("harness must not rerun"))
     claim = FakeClaim(
         tmp_path,
         attempt=2,
@@ -1606,20 +1610,46 @@ def test_stale_pr_read_does_not_erase_unobserved_push_intent(tmp_path):
         },
     )
 
-    with pytest.raises(ExecutePhaseError, match="remote.*approved SHA"):
+    pr = run_execute_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+        claim=claim,
+    )
+
+    assert pr.number == 57
+    assert harness.prompts == []
+    assert not any(call[0] in {"provision", "push"} for call in workspace.calls)
+    assert claim.evidence["push_observed_sha"] == "c" * 40
+    assert ("mark_ready", 57) in github.calls
+
+
+def test_execute_has_one_push_step():
+    import machinist.phases.execute as execute_module
+
+    assert not hasattr(execute_module, "_retry_intended_push")
+
+
+def test_moved_remote_advice_says_inspect_not_reapprove(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = "d" * 40  # someone pushed after Approval
+
+    with pytest.raises(ExecutePhaseError, match="approved SHA") as excinfo:
         run_execute_phase(
             42,
             MachinistConfig(),
             github=FakeGitHub(prs=[make_pr()]),
-            harness=FakeHarness(on_implement=touch_file(workspace)),
+            harness=FakeHarness(),
             workspace=workspace,
             test_runner=passing_tests,
-            claim=claim,
+            claim=FakeClaim(tmp_path),
         )
 
-    assert claim.evidence["push_intended_sha"] == "c" * 40
-    assert claim.evidence["implementation_sha"] == "c" * 40
-    assert claim.evidence["workspace_path"] == str(workspace.path)
+    assert "approve the current" not in str(excinfo.value)
+    assert "inspect" in str(excinfo.value)
 
 
 def test_push_intent_is_durable_before_push_and_observation_follows(tmp_path):
