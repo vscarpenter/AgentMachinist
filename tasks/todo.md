@@ -1,4 +1,4 @@
-# AgentMachinist 0.13.0 release (IN PROGRESS)
+# AgentMachinist 0.13.0 release (COMPLETE)
 
 - [x] Confirm 0.12.1 is the latest on PyPI, `main` CI is green at `b5aebad`,
       and no `v0.13.0` tag or release exists.
@@ -7,64 +7,28 @@
       rendered guides (including the 0.13 field-guide strings) to 0.13.0.
 - [x] Refresh the lockfile; managed workflows unchanged.
 - [x] Run `bash scripts/verify.sh` from the release candidate.
-- [ ] Push `release/0.13.0`, open the PR, merge, publish GitHub Release
+- [x] Push `release/0.13.0`, open PR #39, merge, publish GitHub Release
       `v0.13.0`, and verify PyPI.
 
 ### Resuming From Here
 
-Done: the release target is 0.13.0 on branch `release/0.13.0` (from `main`
-`b5aebad` plus the 0.12.1 ledger fix). The candidate passed the release-grade
-gate: 1039 passed at 86.37% coverage, ruff format
-and lint clean, mypy clean, managed workflows match, both distributions built,
-and isolated wheel and sdist smoke installs reported 0.13.0.
+Done: 0.13.0 is released. Candidate `d30ea2f` passed the release-grade gate
+(1039 tests at 86.37% coverage, ruff format and lint, mypy, managed workflow
+projection, and isolated wheel and sdist smoke installs). PR #39 merged as
+`1c203c7`, GitHub Release `v0.13.0` targets that commit, release run
+33829790337 (build, publish, verify-published, release-assets) succeeded, and
+PyPI serves 0.13.0 as the latest version with the wheel and sdist attached to
+the release.
 
-Next: push the branch, open the PR against `main`, merge, then
-`gh release create v0.13.0` with the CHANGELOG 0.13.0 bullets as the body.
+Next: nothing for this release. The next change opens a fresh `## Unreleased`
+section in `CHANGELOG.md`; carry this ledger update in that PR.
 
 Blockers: none.
 
 Assumptions: the removed `run` flags and the marker-trust change are
-operator-visible, so this is a minor release rather than a patch.
+operator-visible, so this was a minor release rather than a patch.
 
-Prepared 2026-09-03.
-
-# Spec → Execute simplification pass (COMPLETE, awaiting push/PR)
-
-Spec: `tasks/spec.md` (approved 2026-09-03). Plan:
-`docs/superpowers/plans/2026-09-03-spec-to-execute-simplification.md`.
-Branch: `refactor/spec-to-execute-simplification` from `9d27cfe`.
-
-- [x] Task 1: Gate 1 trusts only workflow-authored markers (B-1, B-4)
-- [x] Task 2: one Harness pass-through helper (E-3)
-- [x] Task 3: delete the preview-ownership sidecar (E-5)
-- [x] Task 4: Verification Gate owns its Evidence and messages (E-2, C-7, C-8, C-11)
-- [x] Task 5: stop writing unread Evidence (D-1, C-9, A-3)
-- [x] Task 6: collapse Execute's custody layer into the Workshop (C-1, E-1, C-4, C-10, E-7)
-- [x] Task 7: delete the test-double-shaped Phase interface (C-2, D-4, A-4, D-5, B-5, A-6, C-6)
-- [x] Task 8: Spec custody handoff (A-1, A-2, A-7, A-8, A-9)
-- [x] Task 9: transitions and watch results (D-2, D-3)
-- [x] Task 10: one recovery entry and one renderer at the CLI seam (F-1, F-2, F-5, F-6, F-7, F-9)
-- [x] Task 11: docs, changelog, invariant 2/7 wording, `scripts/verify.sh`
-
-### Resuming From Here
-
-Done: Tasks 1–10 committed on `refactor/spec-to-execute-simplification`
-(b093a32 … e7a878f), each red → green with the full suite passing. Task 11
-docs written (CHANGELOG Unreleased, CLAUDE.md invariants 2 and 7, module map,
-Current state); spec updated to defer F-5.
-
-Next: push the branch and open the PR (needs the operator's go-ahead).
-Whole-branch review verdict: "ready with fixes"; the three Important findings
-(two operator-message strings, the dispatcher's real Workshop cancellation
-test, the retry-Review notification note) and the minors are fixed in the
-final commit.
-
-Blockers: none.
-
-Assumptions: inline execution (tasks share `execute.py`, `spec.py`,
-`cli.py`); card 13, F-5, and the Worth-exploring cards stay out of scope.
-Review keeps `getattr(github, "repo", None)` because it never binds the
-client itself.
+Completed 2026-09-03.
 
 # AgentMachinist 0.12.1 release (COMPLETE)
 
