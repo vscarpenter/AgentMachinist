@@ -1,3 +1,29 @@
+# Cards 7 and 14: resume-push fold and flags-only approve (IN PR)
+
+Spec: `tasks/spec.md`. Plan:
+`docs/superpowers/plans/2026-09-03-resume-push-and-approve-flags.md`.
+Branch: `refactor/resume-push-and-approve-flags` (PR #40).
+
+- [x] Card 7: `_reconciled_push` reads the remote branch lazily; the `push`
+      resume stage re-enters the shared push step; `_retry_intended_push`
+      deleted; head-mismatch messages point at `machinist inspect`.
+- [x] Card 14: `approve` takes exactly one of `--issue`/`--pr`; docs updated.
+- [x] Changelog Unreleased; `bash scripts/verify.sh` green (1041 tests,
+      86.44% coverage).
+- [ ] Merge PR #40 (operator).
+
+### Resuming From Here
+
+Done: both cards implemented red → green in three commits plus the
+changelog; PR #40 open against `main`.
+
+Next: after merge, the remaining review items are F-5 (`watch --dry-run`
+fold), card 12 (runner sentinel, Workshop surface, double fetch), card 11's
+lifecycle/watch internals, card 13 (needs an ADR decision), and the
+speculative tail.
+
+Blockers: none.
+
 # AgentMachinist 0.13.0 release (COMPLETE)
 
 - [x] Confirm 0.12.1 is the latest on PyPI, `main` CI is green at `b5aebad`,
