@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 — 2026-09-03
 
 - Trust an approval marker only when the managed approve workflow authored it
   (`github-actions[bot]`). A marker typed by a human is no longer Approval,
