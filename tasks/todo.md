@@ -1,4 +1,4 @@
-# Spec → Execute simplification pass (VERIFYING)
+# Spec → Execute simplification pass (COMPLETE, awaiting push/PR)
 
 Spec: `tasks/spec.md` (approved 2026-09-03). Plan:
 `docs/superpowers/plans/2026-09-03-spec-to-execute-simplification.md`.
@@ -14,7 +14,7 @@ Branch: `refactor/spec-to-execute-simplification` from `9d27cfe`.
 - [x] Task 8: Spec custody handoff (A-1, A-2, A-7, A-8, A-9)
 - [x] Task 9: transitions and watch results (D-2, D-3)
 - [x] Task 10: one recovery entry and one renderer at the CLI seam (F-1, F-2, F-5, F-6, F-7, F-9)
-- [ ] Task 11: docs, changelog, invariant 2/7 wording, `scripts/verify.sh`
+- [x] Task 11: docs, changelog, invariant 2/7 wording, `scripts/verify.sh`
 
 ### Resuming From Here
 
@@ -23,8 +23,11 @@ Done: Tasks 1–10 committed on `refactor/spec-to-execute-simplification`
 docs written (CHANGELOG Unreleased, CLAUDE.md invariants 2 and 7, module map,
 Current state); spec updated to defer F-5.
 
-Next: `bash scripts/verify.sh`, commit the docs, independent whole-branch
-code review by a subagent, address findings, then hand off for push/PR.
+Next: push the branch and open the PR (needs the operator's go-ahead).
+Whole-branch review verdict: "ready with fixes"; the three Important findings
+(two operator-message strings, the dispatcher's real Workshop cancellation
+test, the retry-Review notification note) and the minors are fixed in the
+final commit.
 
 Blockers: none.
 

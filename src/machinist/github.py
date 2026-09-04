@@ -52,7 +52,6 @@ APPROVED_LABEL_DESCRIPTION = "Machinist: spec approved for implementation"
 class DraftPR:
     number: int
     url: str
-    head_sha: str | None = None
 
 
 @dataclass(frozen=True)

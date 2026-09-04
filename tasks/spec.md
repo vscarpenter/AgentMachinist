@@ -77,9 +77,10 @@ dispatcher actually sends.
    pre-gate `change_summary` checkpoint.
 6. **Custody layer (card 1, top recommendation).** `Workspace` exposes the
    custody token it captured in `provision` (`git_custody(path)`);
-   `resume(path, *, branch, expected_sha, git_custody)` rebinds the token and
-   asserts it before any Git subprocess, raising the existing "start a fresh
-   retry" error when the token is `None`. Execute deletes
+   `resume(path, *, branch, expected_sha, git_custody=None)` rebinds a passed
+   token (or falls back to the one `provision` bound in this process) and
+   asserts it before any Git subprocess, refusing with "start a fresh retry"
+   when neither exists. Execute deletes
    `_capture_workspace_custody`, `_resume_workspace_custody`,
    `_assert_workspace_metadata_custody`, the `git_custody` parameter
    threading, and merges `_assert_approved_head`/`_assert_git_custody` into
@@ -106,8 +107,9 @@ dispatcher actually sends.
    used by `spec`, `run`, `retry`, `amend`, and the watch closures (notify
    only); `amend` delegates to `_execute_command(issue, *, force=True,
    feedback)`; commands build the dispatcher first and read its stores;
-   `DraftPR.head_sha`. (The `watch --dry-run` fold through
-   `watch_once(dispatch=False)` is deferred; see Out of scope.)
+   the `spec` hint takes the SHA from the returned `PullRequest`. (The
+   `watch --dry-run` fold through `watch_once(dispatch=False)` is deferred;
+   see Out of scope.)
 10. **Transitions and watch (card 11, D-2/D-3).** `RunDisposition` keeps
     `display` and `next_action`; `WatchResult` is a plain dataclass with
     `events`, `deferred`, `attempted`, `failures`, and the CLI reads them.

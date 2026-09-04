@@ -14,6 +14,9 @@
 - Fix `retry --run` on an Execute Task reporting "marked ready for review" and
   sending the PR-ready notification while independent Review was enabled and
   the PR was still draft. It now prints the Review next action, as `run` does.
+  The same renderer serves every command, so `retry --phase review --run`
+  now sends the PR-ready notification exactly as `review` does, and `amend`'s
+  cancellation refusal uses `run`'s wording with the `--clear` hint.
 - Fix two operator instructions: Execute's approval refusal names the full
   `/machinist-execute <sha>` form the workflow requires, and the Spec PR body
   no longer claims that AgentMachinist only watches the label.

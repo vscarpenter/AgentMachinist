@@ -1,9 +1,8 @@
 """Plan and execute one isolated watch-daemon dispatch pass.
 
 ``pipeline_status`` is the source of truth: ``approved`` rows get Execute
-before ``awaiting spec`` rows get Spec.  A pass returns structured attempts,
-failures, and deferred tasks while remaining iterable over human-readable
-events for compatibility with the original CLI.
+before ``awaiting spec`` rows get Spec.  A pass returns the human-readable
+events plus the structured attempts, failures, and deferred tasks behind them.
 
 Task lifecycle state, not this process-local object, owns retry eligibility.
 Durable active and terminal records stay out of the dispatch plan, while an

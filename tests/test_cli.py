@@ -18,6 +18,7 @@ from machinist.cli import (
     main,
 )
 from machinist.config import HarnessName, MachinistConfig, load_config
+from machinist.github import PullRequest
 from machinist.phases.watch import WatchFailure, WatchResult
 from machinist.workflows import WorkflowDriftError
 
@@ -1712,7 +1713,6 @@ def test_spec_without_config_points_at_init():
 
 
 def test_spec_wires_config_and_reports_pr_url(monkeypatch):
-    from machinist.github import DraftPR
 
     seen = {}
 
@@ -1736,9 +1736,12 @@ def test_spec_wires_config_and_reports_pr_url(monkeypatch):
         seen["revise"] = revise
         seen["attempt"] = attempt
         seen["cancel_check"] = callable(cancel_check)
-        return DraftPR(
+        return PullRequest(
             number=57,
+            title="Spec: Add dark mode (#42)",
             url="https://github.com/vscarpenter/demo/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
             head_sha="a" * 40,
         )
 
@@ -1812,7 +1815,14 @@ def test_spec_revise_repeats_successful_attempt_on_existing_pr(monkeypatch):
         seen.append(
             (issue_number, revise, claim.attempt, attempt, callable(cancel_check))
         )
-        return DraftPR(number=57, url="https://github.com/x/y/pull/57")
+        return PullRequest(
+            number=57,
+            title="Spec: Add dark mode (#42)",
+            url="https://github.com/x/y/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            head_sha="a" * 40,
+        )
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
 
@@ -2361,14 +2371,20 @@ def test_retry_run_does_not_claim_retryable_after_dispatch_failure(monkeypatch):
 
 
 def test_retry_spec_run_wires_cancellation_and_prior_delivery_evidence(monkeypatch):
-    from machinist.github import DraftPR
     from machinist.lifecycle import Phase, TaskLifecycle
 
     seen = []
 
     def fake_run_spec_phase(*args, claim, cancel_check, **kwargs):
         seen.append((callable(cancel_check), dict(claim.previous_evidence)))
-        return DraftPR(number=57, url="https://github.com/x/y/pull/57")
+        return PullRequest(
+            number=57,
+            title="Spec: Add dark mode (#42)",
+            url="https://github.com/x/y/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            head_sha="a" * 40,
+        )
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
 
@@ -2475,11 +2491,15 @@ def test_retry_run_execute_reports_review_pending_without_a_ready_notification(
 ):
     from machinist.github import PullRequest
     from machinist.lifecycle import Phase, TaskLifecycle
+    from machinist.notify import NotificationResult, NotificationStatus
 
     notifications = []
 
     def fake_notify(config, event, title, message, **kwargs):
-        notifications.append(event)
+        notifications.append(event.value)
+        return NotificationResult(
+            NotificationStatus.DELIVERED, "desktop", event.value, "test-key"
+        )
 
     def fake_run_execute_phase(*args, **kwargs):
         # Review is enabled by the starter config, so Execute leaves the PR draft.
@@ -3129,3 +3149,47 @@ def test_doctor_prints_the_exact_fix_for_each_failing_check():
         assert result.exit_code == 1
         assert "→ fix (task template): machinist task template --write" in result.output
         assert "see 'machinist doctor" not in result.output
+
+
+def test_retry_run_review_reports_ready_and_notifies_like_review(monkeypatch):
+    from machinist.lifecycle import Phase, TaskLifecycle
+    from machinist.notify import NotificationResult, NotificationStatus
+
+    notifications = []
+
+    def fake_notify(config, event, title, message, **kwargs):
+        notifications.append(event.value)
+        return NotificationResult(
+            NotificationStatus.DELIVERED, "desktop", event.value, "test-key"
+        )
+
+    def fake_run_review_phase(*args, **kwargs):
+        return PullRequest(
+            number=18,
+            title="Spec: Task (#42)",
+            url="https://github.com/x/y/pull/18",
+            branch="agent/issue-42",
+            is_draft=False,
+        )
+
+    monkeypatch.setattr("machinist.cli.notify_event", fake_notify)
+    monkeypatch.setattr("machinist.cli.run_review_phase", fake_run_review_phase)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        lifecycle.run(42, Phase.EXECUTE, lambda claim: object())
+        try:
+            lifecycle.run(
+                42,
+                Phase.REVIEW,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("fail")),
+            )
+        except RuntimeError:
+            pass
+
+        result = runner.invoke(main, ["retry", "42", "--phase", "review", "--run"])
+
+        assert result.exit_code == 0, (result.output, result.exception)
+        assert "passed independent review and is ready" in result.output
+        assert len(notifications) == 1

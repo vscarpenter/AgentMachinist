@@ -795,7 +795,10 @@ def test_no_open_pr_for_branch_refuses(tmp_path):
 def test_unapproved_pr_refuses_and_names_the_label(tmp_path):
     github = FakeGitHub(prs=[make_pr(labels=())])
 
-    with pytest.raises(ExecutePhaseError, match="machinist:approved"):
+    # The refusal must name both mechanisms in the form the workflow accepts.
+    with pytest.raises(
+        ExecutePhaseError, match=rf"machinist:approved.*/machinist-execute {'a' * 40}"
+    ):
         run_execute_phase(
             42,
             MachinistConfig(),

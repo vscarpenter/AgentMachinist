@@ -35,7 +35,6 @@ from machinist.repository_custody import (
     verify_pull_request,
 )
 
-_APPROVED_LABEL_COLOR = "0e8a16"
 _SPEC_PROMPT = files("machinist") / "templates" / "spec-prompt.md"
 _MAX_ISSUE_TITLE_CHARS = 500
 
@@ -450,8 +449,8 @@ def _pr_body(issue: Issue, config: MachinistConfig, spec_sha: str) -> str:
         "\n"
         f"**To approve:** apply the `{approved}` label, or comment "
         f"`/machinist-execute {spec_sha}`.\n"
-        "(GitHub's review **Approve button** is *not* the mechanism — GitHub blocks it\n"
-        "on your own PRs, and machinist only watches the label.)\n"
+        "(GitHub's review **Approve button** is *not* the mechanism; AgentMachinist\n"
+        "acts on the label plus the SHA-bound marker the approve workflow records.)\n"
         "Once approved, the machinist daemon implements the spec on this branch,\n"
         "runs the test gate, and marks this PR ready for review.\n"
         "Please leave this PR as a draft — machinist flips it to ready itself\n"

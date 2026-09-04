@@ -192,7 +192,7 @@ def run_execute_phase(
     if approved_label not in pr.labels:
         raise ExecutePhaseError(
             f"PR #{pr.number} is not approved; apply the '{approved_label}' label "
-            "(or comment /machinist-execute on it) first"
+            f"or comment '/machinist-execute {pr.head_sha}' on it first"
         )
 
     approval_sha = github.approval_sha(pr.number)
@@ -229,7 +229,7 @@ def run_execute_phase(
     if approval_sha is None:
         raise ExecutePhaseError(
             f"PR #{pr.number} has the approval label but no SHA-bound approval evidence; "
-            "approve the current spec again"
+            f"re-apply the label or comment '/machinist-execute {pr.head_sha}'"
         )
     if approval_sha != pr.head_sha:
         raise ExecutePhaseError(

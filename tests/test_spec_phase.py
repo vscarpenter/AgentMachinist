@@ -233,6 +233,7 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     assert "machinist:approved" in body
     assert "/machinist-execute" in body
     assert f"/machinist-execute {'b' * 40}" in body
+    assert "only watches the label" not in body
     # Dogfood UX finding: solo devs reach for GitHub's review Approve button,
     # which GitHub blocks on their own PRs. The body must head that off.
     assert "Approve button" in body

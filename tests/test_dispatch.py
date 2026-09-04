@@ -232,3 +232,28 @@ def test_preview_spec_builds_dependencies_without_a_task_run(tmp_path):
     assert kwargs["workspace"] == "workspace"
     assert callable(kwargs["cancel_check"])
     assert lifecycle.calls == []
+
+
+def test_real_workshop_construction_wires_task_cancellation(tmp_path):
+    from machinist.workspace import Workspace
+
+    lifecycle = FakeLifecycle()
+    calls = []
+
+    def spec_runner(issue, config, **kwargs):
+        calls.append(kwargs)
+        return pull_request()
+
+    TaskDispatcher(
+        MachinistConfig(),
+        repo_root=tmp_path,
+        lifecycle=lifecycle,
+        cancellation=FakeCancellation(),
+        github=object(),
+        harness_factory=lambda phase, issue: ("harness", phase, issue),
+        spec_runner=spec_runner,
+    ).run_spec(42)
+
+    workspace = calls[0]["workspace"]
+    assert isinstance(workspace, Workspace)
+    assert callable(workspace.cancel_check)

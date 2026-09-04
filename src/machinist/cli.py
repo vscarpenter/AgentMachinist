@@ -59,6 +59,7 @@ from machinist.github import (
     TRIGGER_LABEL_COLOR,
     GitHubClient,
     GitHubError,
+    PullRequest,
 )
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
@@ -1969,7 +1970,7 @@ def _report_phase_outcome(
     config: MachinistConfig,
     phase: Phase,
     issue: int,
-    pr,
+    pr: PullRequest,
     *,
     verb: str = "implemented",
     notify_only: bool = False,
