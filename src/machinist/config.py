@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime, time, timedelta
 from enum import Enum
@@ -520,6 +521,19 @@ class InstructionsConfig(StrictModel):
         if resolved_phase is HarnessPhase.REVIEW:
             return self.review
         return self.execute
+
+    def evidence(self, phase: HarnessPhase | str, text: str) -> dict[str, Any]:
+        """Checkpoint-ready audit facts about one Phase's resolved overlay.
+
+        Spec and Execute persist exactly this mapping; nothing reads it back,
+        so one vocabulary serves both Phases.
+        """
+        profile = self.for_phase(phase)
+        return {
+            "instructions_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "instruction_paths": list(profile.paths),
+            "instruction_append": profile.append is not None,
+        }
 
     def resolve(self, phase: HarnessPhase | str, repo_root: str | Path) -> str:
         """Read and combine one Phase's safe repository-local instructions."""

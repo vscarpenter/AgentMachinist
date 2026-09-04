@@ -1353,3 +1353,80 @@ def test_clone_custody_rejection_omits_the_worktree_remedy(repo, tmp_path):
     with pytest.raises(WorkspaceError) as excinfo:
         workspace.assert_git_custody(path, token)
     assert "workspace.strategy: clone" not in str(excinfo.value)
+
+
+def test_provision_preview_creates_no_sidecar_file(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+
+    path = workspace.provision_preview(
+        "preview-issue-7-deadbeef",
+        "agent/issue-7",
+        "origin/main",
+    )
+
+    hidden = sorted(
+        entry.name
+        for entry in path.parent.iterdir()
+        if entry.name.startswith(".agentmachinist-preview")
+    )
+    assert hidden == []
+    workspace.cleanup_preview(path)
+    assert not path.exists()
+
+
+def test_provision_preview_refuses_existing_target(repo, tmp_path):
+    workspace = make_workspace(repo, tmp_path)
+    existing = tmp_path / "ws" / f"{repo.name}-preview-issue-7-deadbeef"
+    existing.mkdir(parents=True)
+
+    with pytest.raises(WorkspaceError, match="already exists"):
+        workspace.provision_preview(
+            "preview-issue-7-deadbeef",
+            "agent/issue-7",
+            "origin/main",
+        )
+
+
+def test_resume_asserts_the_custody_token_before_any_git_subprocess(repo, tmp_path):
+    provisioner = make_workspace(repo, tmp_path)
+    path = provisioner.provision("issue-7", "agent/issue-7", "origin/main", attempt=2)
+    expected_sha = provisioner.head_sha(path)
+    token = provisioner.git_custody(path)
+    assert token is not None
+    common = Path(git(path, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = (path / common).resolve()
+    hook = common / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho planted\n")
+    hook.chmod(0o755)
+
+    git_calls: list[list[str]] = []
+
+    def recording_runner(command, **_kwargs):
+        git_calls.append(list(command))
+        raise AssertionError("git ran before the raw custody comparison")
+
+    # A fresh process holds nothing but the persisted token.
+    resumer = Workspace(
+        repo_root=repo,
+        config=WorkspaceConfig(root=tmp_path / "ws"),
+        runner=recording_runner,
+    )
+    with pytest.raises(WorkspaceError, match="untrusted phase"):
+        resumer.resume(
+            path, branch="agent/issue-7", expected_sha=expected_sha, git_custody=token
+        )
+
+    assert git_calls == []
+
+
+def test_resume_without_a_custody_token_refuses_a_fresh_retry(repo, tmp_path):
+    provisioner = make_workspace(repo, tmp_path)
+    path = provisioner.provision("issue-7", "agent/issue-7", "origin/main", attempt=2)
+    expected_sha = provisioner.head_sha(path)
+
+    resumer = make_workspace(repo, tmp_path)
+    with pytest.raises(WorkspaceError, match="fresh retry"):
+        resumer.resume(
+            path, branch="agent/issue-7", expected_sha=expected_sha, git_custody=None
+        )

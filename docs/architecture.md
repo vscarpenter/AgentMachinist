@@ -93,9 +93,10 @@ login is recorded alongside the marker, so the comment reads:
 Approved by @<login> for `<40-hex-head-sha>`. <!-- agentmachinist:approval sha=<40-hex-head-sha> -->
 ```
 
-The controller matches the marker anywhere in a trusted comment, so the
-recorded approver is human-readable context rather than part of the parsed
-contract.
+The controller matches the marker anywhere in a comment authored by the
+workflow (`github-actions[bot]`). A marker typed by a human is ignored whatever
+their association, so the recorded approver is human-readable context rather
+than part of the parsed contract.
 
 ## Claims, Task Runs, and recovery
 

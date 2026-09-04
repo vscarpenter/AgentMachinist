@@ -8,7 +8,7 @@ from typing import Protocol, TypeVar
 
 from machinist.cancellation import CancellationStore
 from machinist.config import MachinistConfig
-from machinist.github import DraftPR, GitHubClient, PullRequest
+from machinist.github import GitHubClient, PullRequest
 from machinist.harness import get_harness
 from machinist.lifecycle import (
     LifecycleError,
@@ -20,13 +20,14 @@ from machinist.lifecycle import (
 )
 from machinist.phases.execute import run_execute_phase
 from machinist.phases.review import run_review_phase
-from machinist.phases.spec import run_spec_phase
+from machinist.phases.spec import preview_spec_phase, run_spec_phase
 from machinist.process import run_supervised
 from machinist.repository_custody import bind_repository
 from machinist.workspace import Workspace
 
 _Result = TypeVar("_Result")
-SpecRunner = Callable[..., DraftPR]
+SpecRunner = Callable[..., PullRequest]
+PreviewRunner = Callable[..., str]
 ExecuteRunner = Callable[..., PullRequest]
 ReviewRunner = Callable[..., PullRequest]
 
@@ -71,6 +72,7 @@ class TaskDispatcher:
         workspace_factory: Callable[[], object] | None = None,
         progress: Callable[[str], None] | None = None,
         spec_runner: SpecRunner = run_spec_phase,
+        preview_runner: PreviewRunner = preview_spec_phase,
         execute_runner: ExecuteRunner = run_execute_phase,
         review_runner: ReviewRunner = run_review_phase,
         test_runner: Callable[..., object] = run_supervised,
@@ -94,70 +96,75 @@ class TaskDispatcher:
         self._workspace_factory = workspace_factory
         self._progress = progress
         self._spec_runner = spec_runner
+        self._preview_runner = preview_runner
         self._execute_runner = execute_runner
         self._review_runner = review_runner
         self._test_runner = test_runner
 
-    def run_spec(self, issue: int, *, revise: bool | None = None) -> DraftPR:
+    def preview_spec(self, issue: int) -> str:
+        """Generate a read-only Spec preview with the same wiring, outside any Task Run."""
+        return self._preview_runner(
+            issue,
+            self.config,
+            github=self._github_client(),
+            harness=self._harness(Phase.SPEC, issue),
+            workspace=self._workspace(issue),
+            cancel_check=self.cancellation.check(issue),
+        )
+
+    def run_spec(self, issue: int, *, revise: bool = False) -> PullRequest:
         """Enter one claimed Spec Task Run."""
 
-        def invoke(claim: TaskClaim) -> DraftPR:
-            options: dict[str, object] = {}
-            if revise is not None:
-                options["revise"] = revise
+        def invoke(claim: TaskClaim) -> PullRequest:
             return self._spec_runner(
                 issue,
                 self.config,
                 github=self._github_client(),
                 harness=self._harness(Phase.SPEC, issue),
-                workspace=self._workspace(),
+                workspace=self._workspace(issue),
                 claim=claim,
                 attempt=self._fresh_attempt(claim),
                 cancel_check=self.cancellation.check(issue),
-                **options,
+                revise=revise,
             )
 
         return self.lifecycle.run(
             issue,
             Phase.SPEC,
             invoke,
-            repeat_succeeded=revise is True,
+            repeat_succeeded=revise,
         )
 
     def run_execute(
         self,
         issue: int,
         *,
-        force: bool | None = None,
-        recovery: str = "fresh",
+        force: bool = False,
+        resume: bool = False,
         feedback: str | None = None,
     ) -> PullRequest:
         """Enter one claimed Execute Task Run, including amendment runs."""
 
         def invoke(claim: TaskClaim) -> PullRequest:
-            options: dict[str, object] = {}
-            if force is not None:
-                options["force"] = force
-            if feedback is not None:
-                options["feedback"] = feedback
             return self._execute_runner(
                 issue,
                 self.config,
                 github=self._github_client(),
                 harness=self._harness(Phase.EXECUTE, issue),
-                workspace=self._workspace(),
+                workspace=self._workspace(issue),
                 test_runner=self._test_runner,
                 claim=claim,
-                recovery=recovery,
+                force=force,
+                resume=resume,
+                feedback=feedback,
                 cancel_check=self.cancellation.check(issue),
-                **options,
             )
 
         return self.lifecycle.run(
             issue,
             Phase.EXECUTE,
             invoke,
-            repeat_succeeded=force is True,
+            repeat_succeeded=force,
         )
 
     def run_review(self, issue: int) -> PullRequest:
@@ -175,7 +182,7 @@ class TaskDispatcher:
                 self.config,
                 github=self._github_client(),
                 harness=self._harness(Phase.REVIEW, issue),
-                workspace=self._workspace(),
+                workspace=self._workspace(issue),
                 execute_evidence=dict(execute.evidence),
                 claim=claim,
                 cancel_check=self.cancellation.check(issue),
@@ -187,13 +194,13 @@ class TaskDispatcher:
         issue: int,
         phase: Phase,
         *,
-        recovery: str = "fresh",
-    ) -> DraftPR | PullRequest:
+        resume: bool = False,
+    ) -> PullRequest:
         """Dispatch the Phase selected by an explicit retry-now transition."""
         if phase is Phase.SPEC:
             return self.run_spec(issue)
         if phase is Phase.EXECUTE:
-            return self.run_execute(issue, recovery=recovery)
+            return self.run_execute(issue, resume=resume)
         return self.run_review(issue)
 
     def _github_client(self) -> object:
@@ -215,10 +222,13 @@ class TaskDispatcher:
         harness.cancel_check = self.cancellation.check(issue)
         return harness
 
-    def _workspace(self) -> object:
+    def _workspace(self, issue: int) -> object:
         if self._workspace_factory is not None:
             return self._workspace_factory()
-        return Workspace(repo_root=self.repo_root, config=self.config.workspace)
+        workspace = Workspace(repo_root=self.repo_root, config=self.config.workspace)
+        # Git subprocesses honour the same cancellation as the Harness.
+        workspace.cancel_check = self.cancellation.check(issue)
+        return workspace
 
     @staticmethod
     def _fresh_attempt(claim: TaskClaim) -> int | None:

@@ -64,18 +64,12 @@ class Pi(Harness):
             "--no-prompt-templates",
             "--no-session",
         ]
-        if self.config.model:
-            argv.extend(["--model", self.config.model])
-        if self.config.extra_args:
-            argv.extend(self.config.extra_args)
+        argv.extend(self._passthrough_argv())
         argv.append(prompt)
         return argv
 
     def implement_argv(self, prompt: str) -> list[str]:
         argv = [self.command, "-p", "--no-session"]
-        if self.config.model:
-            argv.extend(["--model", self.config.model])
-        if self.config.extra_args:
-            argv.extend(self.config.extra_args)
+        argv.extend(self._passthrough_argv())
         argv.append(prompt)
         return argv

@@ -54,10 +54,7 @@ class ClaudeCode(Harness):
             "Read,Grep,Glob",
             "--no-session-persistence",
         ]
-        if self.config.model:
-            argv.extend(["--model", self.config.model])
-        if self.config.extra_args:
-            argv.extend(self.config.extra_args)
+        argv.extend(self._passthrough_argv())
         return argv
 
     def implement_argv(self, prompt: str) -> list[str]:
@@ -78,8 +75,5 @@ class ClaudeCode(Harness):
             argv.append("--allowedTools")
             for command in self.allowed_commands:
                 argv.extend([f"Bash({command})", f"Bash({command}:*)"])
-        if self.config.model:
-            argv.extend(["--model", self.config.model])
-        if self.config.extra_args:
-            argv.extend(self.config.extra_args)
+        argv.extend(self._passthrough_argv())
         return argv

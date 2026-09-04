@@ -4,14 +4,11 @@ from __future__ import annotations
 
 
 def report_progress(claim, stage: str, detail: str | None = None) -> None:
-    if claim is not None and hasattr(claim, "progress"):
-        claim.progress(stage, detail)
+    claim.progress(stage, detail)
 
 
 def bind_harness_progress(harness, claim, *, stage: str) -> None:
     """Keep the CLI heartbeat while also projecting it into Task Run Evidence."""
-    if claim is None or not hasattr(claim, "progress"):
-        return
     previous = getattr(harness, "on_progress", None)
 
     def on_progress(message: str) -> None:

@@ -45,7 +45,7 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
 ### Module map (`src/machinist/`)
 
 - `cli.py` — Click entrypoints: `init [--harness --test-cmd]`, `doctor`,
-  `sync-workflows [--check]`, `spec`, `approve`, `run [--force --retry]`,
+  `sync-workflows [--check]`, `spec`, `approve`, `run [--force]`,
   `review`, `amend`, `watch [--once -v --interval]`,
   `retry [--phase --run]`, `status [-v]`, `update-check [--json --timeout]`,
   `clean [--issue --all --force]`, `inspect`. Ergonomics worth knowing:
@@ -53,8 +53,9 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   (`_detect_test_command`: pyproject/uv.lock → `uv run pytest`, package.json
   → `npm test`, Cargo.toml → `cargo test`, go.mod → `go test ./...`);
   `approve <n>` accepts a PR number *or* an issue number (falling back to the
-  `<branch_prefix>issue-<n>` branch); `retry --run` and `run --retry` are the
-  same recovery in either direction; `inspect <issue>` prints issue, PR,
+  `<branch_prefix>issue-<n>` branch); `retry <n> --phase execute --run
+  [--resume|--fresh]` is the one recovery entry (`run` carries no retry
+  flags); `inspect <issue>` prints issue, PR,
   approval SHA, workspace path, and all Task Run records in one pass. Click
   owns validation, rendering, notifications, and the daemon loop; it delegates
   claimed Phase construction to `dispatch.py`.
@@ -67,8 +68,11 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `harness.extra_args` (list[str]) are optional pass-throughs into adapter
   argv — the controller never interprets them.
 - `dispatch.py` — the only constructor for claimed Spec, Execute, and Review
-  Task Runs. It wires Claims, Harnesses, Workshops, cancellation, verification,
-  and Phase functions; commands and watcher callbacks consume this interface.
+  Task Runs, and for the unclaimed read-only Spec preview (`preview_spec`). It
+  wires Claims, Harnesses, Workshops (including their `cancel_check`),
+  cancellation, verification, and Phase functions; commands and watcher
+  callbacks consume this interface. Phases require a `claim` and take plain
+  boolean options (`revise`, `force`, `resume`).
 - `evidence.py` — typed reads and Phase-aware validation for known Task Run
   Evidence. Persistence remains an open JSON mapping so historical and future
   unknown keys remain readable.
@@ -85,6 +89,10 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   `remove_workspace` encode that convention and back `machinist clean`.
   `remove_workspace` prefers `git worktree remove [--force]` + `prune` and
   only falls back to `rmtree` when that fails or the strategy is `clone`.
+  The Workshop owns Git-custody invocation: `provision` captures the token,
+  `git_custody(path)` exposes it for the Task Run checkpoint, every Git method
+  re-asserts it, and `resume(..., git_custody=)` rebinds a persisted token and
+  runs the raw metadata comparison before the first Git subprocess.
 - `lifecycle.py` — durable Task Run records at
   `.machinist/runs/issue-<n>-<phase>.json` (atomic tmp+fsync+rename writes),
   `flock`-based local claims, explicit retry, checkpoints for crash recovery,
@@ -101,17 +109,17 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
   (`claude_code`, `codex`, `pi`, `opencode`) build a read-only argv profile
   (shared by Spec and Review) and an Execute edit profile, and stay one screen
-  long. Registry in `__init__.py`. Every adapter
-  threads `harness.model` (as `--model <value>`) and `harness.extra_args`
-  into both `spec_argv` and `implement_argv`. **Order matters**: `claude-code`
-  passes the prompt via `-p <prompt>`, so the new args append at the end;
-  `codex`, `opencode`, and `pi` take the prompt as the final positional, so
-  model/extra_args are inserted *before* the prompt is appended.
+  long. Registry in `__init__.py`. Every adapter splices
+  `Harness._passthrough_argv()` (`--model <value>` plus `harness.extra_args`)
+  into both `spec_argv` and `implement_argv` at its own prompt-relative
+  position: `claude-code` after `-p <prompt>`, `codex`, `opencode`, and `pi`
+  before the final positional prompt.
 - `phases/spec.py` — Phase 1: issue → harness in read-only mode → spec file →
   branch → push → draft PR ("Closes #n"). Rejects empty specs and any
   working-tree change made by the harness.
 - `phases/execute.py` — Phase 3: approval guards (label + SHA marker match +
-  draft-ness), harness with edit permissions, git-custody postconditions,
+  draft-ness), harness with edit permissions, head/remote postconditions (the
+  Workshop asserts metadata custody itself on every Git call),
   test-deletion guard (`limits.allow_test_deletions` opts out), test gate,
   commit, leased push, mark PR ready. The implement prompt lists the gate
   commands and asks the harness to iterate until they pass
@@ -166,9 +174,10 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    edits abort the run). Spec phase rejects any dirty tree.
 2. **SHA-bound approval**: execution requires the approval label AND a
    trusted comment marker `<!-- agentmachinist:approval sha=<head-sha> -->`
-   matching the current PR head. Marker authors must be
-   OWNER/MEMBER/COLLABORATOR or github-actions. GitHub's review Approve
-   button is *not* the mechanism. The managed approve workflow gates both
+   matching the current PR head. The controller trusts a marker only when
+   the managed workflow authored it (`github-actions[bot]`); a marker typed
+   by a human is not Approval, whatever their association. GitHub's review
+   Approve button is *not* the mechanism. The managed approve workflow gates both
    paths on the actor before minting evidence: a `/machinist-execute` comment
    needs OWNER/MEMBER/COLLABORATOR, and the label path needs write or admin
    access, because GitHub grants label permission at triage level. The
@@ -185,7 +194,8 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    never hand-edited (the next sync intentionally replaces drift).
 7. **Explicit retry only**: a failed Task Run blocks re-runs until
    `machinist retry`; a crash after push is reconciled from checkpoints
-   (tests rerun, harness does not).
+   (neither the harness nor the verification gates rerun; only a crash
+   before the implementation commit reruns the gates).
 8. **Security wording**: never claim a harness "has no Git access" — the
    trust model (docs/trust-model.md, SECURITY.md) is credential *reduction*
    and detection, not OS-level isolation. `pull_request_target` automation
@@ -206,9 +216,9 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   states, update README/docs in the same change or the suite fails.
 - Harness adapters have exact-argv tests (`tests/test_harness.py`). Changing
   an adapter means updating its argv test, `docs/harnesses.md`, and the
-  changelog together. New pass-through options must be added to both
-  `spec_argv` and `implement_argv` on all four adapters, respecting each
-  one's prompt position.
+  changelog together. New pass-through options go in
+  `Harness._passthrough_argv()` on the base class; every adapter already
+  splices it into both profiles.
 - When config affects GitHub Actions: edit the template under
   `src/machinist/templates/github/`, update projection tests, then run
   `uv run machinist sync-workflows` and commit the reviewed projection.
@@ -243,6 +253,17 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current state (2026-09-03)
 
+- Unreleased on `main` after 0.12.1: the Spec → Execute simplification pass
+  (`tasks/spec.md`, `docs/superpowers/plans/2026-09-03-spec-to-execute-simplification.md`)
+  from the adversarial review of that path. Gate 1 trusts only
+  workflow-authored markers; `run` lost its retry flags in favour of
+  `retry --run`; the Workshop owns custody invocation on provision and
+  resume; Phases require a Claim and plain option types; Evidence no longer
+  carries keys nothing reads; Spec identity checks and previews go through
+  repository custody and the dispatcher. Deferred from that review: the
+  resume-push restructure (card 7), the `watch --dry-run` fold (F-5), the
+  exception-wrapper deletion (card 13, contradicts the 0.12.0 spec item 2),
+  and the Worth-exploring cards.
 - v0.12.1 is the current release. It fixes three independent Review defects
   found while dogfooding: Review named its ephemeral preview clone in a shape
   `Workspace` rejects (it now uses `preview-review-issue-<n>-<hex>`, matching

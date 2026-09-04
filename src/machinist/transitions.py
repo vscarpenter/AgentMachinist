@@ -53,10 +53,6 @@ class RunDisposition:
     """Canonical operator-facing meaning of a Task Run projection."""
 
     display: str
-    owner: str
-    severity: str
-    dispatchable: bool
-    active: bool | None
     next_action: str | None
 
 
@@ -199,29 +195,12 @@ def describe_run(
     decision = classify_run(record, claim_held=claim_held)
     if record.status is RunStatus.RUNNING and claim_held is not False:
         return _running_disposition(record, decision, claim_held)
-    severity = (
-        "error"
-        if record.status is RunStatus.FAILED or record.status is RunStatus.RUNNING
-        else "warning"
-    )
-    return RunDisposition(
-        decision.state.value,
-        "operator",
-        severity,
-        False,
-        False,
-        decision.next_action,
-    )
+    return RunDisposition(decision.state.value, decision.next_action)
 
 
 def _retryable_disposition(record: RunRecord) -> RunDisposition:
     return RunDisposition(
-        f"{record.phase.value} retryable",
-        "watcher",
-        "info",
-        True,
-        False,
-        "machinist watch --once -v",
+        f"{record.phase.value} retryable", "machinist watch --once -v"
     )
 
 
@@ -231,14 +210,7 @@ def _succeeded_disposition(record: RunRecord) -> RunDisposition:
         if record.phase is Phase.SPEC
         else None
     )
-    return RunDisposition(
-        f"{record.phase.value} succeeded",
-        "operator",
-        "success",
-        False,
-        False,
-        action,
-    )
+    return RunDisposition(f"{record.phase.value} succeeded", action)
 
 
 def _running_disposition(
@@ -246,14 +218,7 @@ def _running_disposition(
     decision: TransitionDecision,
     claim_held: bool | None,
 ) -> RunDisposition:
-    return RunDisposition(
-        decision.state.value,
-        "machinist",
-        "info",
-        False,
-        claim_held,
-        f"machinist cancel {record.issue}",
-    )
+    return RunDisposition(decision.state.value, f"machinist cancel {record.issue}")
 
 
 def _remote_pr_state(

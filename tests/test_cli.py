@@ -18,6 +18,8 @@ from machinist.cli import (
     main,
 )
 from machinist.config import HarnessName, MachinistConfig, load_config
+from machinist.github import PullRequest
+from machinist.phases.watch import WatchFailure, WatchResult
 from machinist.workflows import WorkflowDriftError
 
 _BaseCliRunner = CliRunner
@@ -710,10 +712,13 @@ def test_watch_without_config_points_at_init():
 
 
 def test_watch_once_prints_dispatch_events(monkeypatch):
-    events = [
-        "spec: issue #7 → draft PR #97 (https://github.com/x/y/pull/97)",
-        "error: execute for issue #8 failed: boom",
-    ]
+    events = WatchResult(
+        events=(
+            "spec: issue #7 → draft PR #97 (https://github.com/x/y/pull/97)",
+            "error: execute for issue #8 failed: boom",
+        ),
+        failures=(WatchFailure("execute", 8, "execute for issue #8 failed: boom"),),
+    )
     monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: events)
 
     runner = CliRunner()
@@ -759,7 +764,7 @@ def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
     ):
         assert lifecycle.runs_dir == Path.cwd() / ".machinist/runs"
         notify("spec for issue #7 failed: boom")
-        return []
+        return WatchResult()
 
     monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
 
@@ -807,7 +812,7 @@ def test_two_fresh_watch_invocations_dedupe_the_same_stale_approval(monkeypatch)
         lifecycle,
     ):
         notify_stale(42, "PR #57 approval is stale")
-        return []
+        return WatchResult()
 
     monkeypatch.setattr("machinist.cli.notify_event", fake_notify)
     monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
@@ -829,7 +834,9 @@ def test_two_fresh_watch_invocations_dedupe_the_same_stale_approval(monkeypatch)
 
 
 def test_watch_once_with_empty_pipeline_says_so(monkeypatch):
-    monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "machinist.cli.watch_once", lambda *args, **kwargs: WatchResult()
+    )
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -895,7 +902,7 @@ def test_watch_spec_dispatch_wires_durable_cancellation_check(monkeypatch):
 
     def fake_watch_once(*args, run_spec, **kwargs):
         run_spec(42)
-        return ["spec dispatched"]
+        return WatchResult(events=("spec dispatched",))
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
     monkeypatch.setattr("machinist.cli.watch_once", fake_watch_once)
@@ -1143,13 +1150,14 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
         test_runner,
         force,
         claim,
-        recovery,
+        resume,
+        feedback,
         cancel_check,
     ):
         seen["issue"] = issue_number
         seen["harness"] = harness.name
         seen["force"] = force
-        seen["recovery"] = recovery
+        seen["resume"] = resume
         assert callable(cancel_check)
         return PullRequest(
             number=57,
@@ -1172,7 +1180,7 @@ def test_run_wires_config_and_reports_ready_pr(monkeypatch):
             "issue": 42,
             "harness": "claude-code",
             "force": False,
-            "recovery": "fresh",
+            "resume": False,
         }
         assert "pull/57" in result.output
         assert "independent review is pending" in result.output.lower()
@@ -1207,7 +1215,7 @@ def test_amend_repeats_successful_execute_with_explicit_feedback(monkeypatch):
         seen.update(
             issue=issue_number,
             force=kwargs["force"],
-            recovery=kwargs["recovery"],
+            resume=kwargs["resume"],
             feedback=kwargs["feedback"],
             attempt=kwargs["claim"].attempt,
         )
@@ -1244,7 +1252,7 @@ def test_amend_repeats_successful_execute_with_explicit_feedback(monkeypatch):
         assert seen == {
             "issue": 42,
             "force": True,
-            "recovery": "fresh",
+            "resume": False,
             "feedback": "Keep the public API stable.",
             "attempt": 2,
         }
@@ -1705,7 +1713,6 @@ def test_spec_without_config_points_at_init():
 
 
 def test_spec_wires_config_and_reports_pr_url(monkeypatch):
-    from machinist.github import DraftPR
 
     seen = {}
 
@@ -1729,8 +1736,14 @@ def test_spec_wires_config_and_reports_pr_url(monkeypatch):
         seen["revise"] = revise
         seen["attempt"] = attempt
         seen["cancel_check"] = callable(cancel_check)
-        claim.checkpoint(spec_sha="a" * 40)
-        return DraftPR(number=57, url="https://github.com/vscarpenter/demo/pull/57")
+        return PullRequest(
+            number=57,
+            title="Spec: Add dark mode (#42)",
+            url="https://github.com/vscarpenter/demo/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            head_sha="a" * 40,
+        )
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
     monkeypatch.setenv("GH_REPO", "attacker/other")
@@ -1802,7 +1815,14 @@ def test_spec_revise_repeats_successful_attempt_on_existing_pr(monkeypatch):
         seen.append(
             (issue_number, revise, claim.attempt, attempt, callable(cancel_check))
         )
-        return DraftPR(number=57, url="https://github.com/x/y/pull/57")
+        return PullRequest(
+            number=57,
+            title="Spec: Add dark mode (#42)",
+            url="https://github.com/x/y/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            head_sha="a" * 40,
+        )
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
 
@@ -2201,8 +2221,8 @@ def test_approve_resolves_issue_number(monkeypatch):
         def pr_for_branch(self, branch):
             return self.open_machinist_prs("agent/")[0]
 
-        def approve_pr(self, number, *, label, head_sha):
-            approved_prs.append((number, label, head_sha))
+        def approve_pr(self, number, *, head_sha):
+            approved_prs.append((number, head_sha))
 
     monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
 
@@ -2214,9 +2234,7 @@ def test_approve_resolves_issue_number(monkeypatch):
         assert result.exit_code == 0, result.output
         assert "Requested approval for PR #18" in result.output
         assert "workflow will verify the current head" in result.output
-        assert approved_prs == [
-            (18, "machinist:approved", "0123456789abcdef0123456789abcdef01234567")
-        ]
+        assert approved_prs == [(18, "0123456789abcdef0123456789abcdef01234567")]
 
 
 def test_approve_refuses_ambiguous_target_and_supports_explicit_issue_or_pr(
@@ -2250,7 +2268,7 @@ def test_approve_refuses_ambiguous_target_and_supports_explicit_issue_or_pr(
                 ),
             ]
 
-        def approve_pr(self, number, *, label, head_sha):
+        def approve_pr(self, number, *, head_sha):
             approved_prs.append((number, head_sha))
 
     monkeypatch.setattr("machinist.cli.GitHubClient", FakeGitHub)
@@ -2284,11 +2302,13 @@ def test_retry_with_run_flag(monkeypatch):
         harness,
         workspace,
         test_runner,
+        force,
         claim,
-        recovery,
+        resume,
+        feedback,
         cancel_check,
     ):
-        executed.append((issue_number, recovery))
+        executed.append((issue_number, resume))
         return PullRequest(
             number=18,
             title="Spec: Task (#42)",
@@ -2319,7 +2339,7 @@ def test_retry_with_run_flag(monkeypatch):
         assert "Retrying issue #42 execute after attempt 1" in result.output
         assert "is retryable" not in result.output
         assert "PR #18 implemented" in result.output
-        assert executed == [(42, "fresh")]
+        assert executed == [(42, False)]
 
 
 def test_retry_run_does_not_claim_retryable_after_dispatch_failure(monkeypatch):
@@ -2351,14 +2371,20 @@ def test_retry_run_does_not_claim_retryable_after_dispatch_failure(monkeypatch):
 
 
 def test_retry_spec_run_wires_cancellation_and_prior_delivery_evidence(monkeypatch):
-    from machinist.github import DraftPR
     from machinist.lifecycle import Phase, TaskLifecycle
 
     seen = []
 
     def fake_run_spec_phase(*args, claim, cancel_check, **kwargs):
         seen.append((callable(cancel_check), dict(claim.previous_evidence)))
-        return DraftPR(number=57, url="https://github.com/x/y/pull/57")
+        return PullRequest(
+            number=57,
+            title="Spec: Add dark mode (#42)",
+            url="https://github.com/x/y/pull/57",
+            branch="agent/issue-42",
+            is_draft=True,
+            head_sha="a" * 40,
+        )
 
     monkeypatch.setattr("machinist.cli.run_spec_phase", fake_run_spec_phase)
 
@@ -2414,10 +2440,11 @@ def test_run_with_retry_flag(monkeypatch):
         test_runner,
         force,
         claim,
-        recovery,
+        resume,
+        feedback,
         cancel_check,
     ):
-        executed.append((issue_number, recovery))
+        executed.append((issue_number, resume))
         return PullRequest(
             number=18,
             title="Spec: Task (#42)",
@@ -2443,10 +2470,70 @@ def test_run_with_retry_flag(monkeypatch):
         except RuntimeError:
             pass
 
-        result = runner.invoke(main, ["run", "42", "--retry"])
+        result = runner.invoke(main, ["retry", "42", "--phase", "execute", "--run"])
         assert result.exit_code == 0, result.output
         assert "PR #18 implemented" in result.output
-        assert executed == [(42, "fresh")]
+        assert executed == [(42, False)]
+
+
+def test_run_no_longer_offers_its_own_retry_flags():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        for flag in ("--retry", "--resume", "--fresh"):
+            result = runner.invoke(main, ["run", "42", flag])
+            assert result.exit_code == 2, result.output
+            assert "No such option" in result.output
+
+
+def test_retry_run_execute_reports_review_pending_without_a_ready_notification(
+    monkeypatch,
+):
+    from machinist.github import PullRequest
+    from machinist.lifecycle import Phase, TaskLifecycle
+    from machinist.notify import NotificationResult, NotificationStatus
+
+    notifications = []
+
+    def fake_notify(config, event, title, message, **kwargs):
+        notifications.append(event.value)
+        return NotificationResult(
+            NotificationStatus.DELIVERED, "desktop", event.value, "test-key"
+        )
+
+    def fake_run_execute_phase(*args, **kwargs):
+        # Review is enabled by the starter config, so Execute leaves the PR draft.
+        return PullRequest(
+            number=18,
+            title="Spec: Task (#42)",
+            url="https://github.com/x/y/pull/18",
+            branch="agent/issue-42",
+            is_draft=True,
+        )
+
+    monkeypatch.setattr("machinist.cli.notify_event", fake_notify)
+    monkeypatch.setattr("machinist.cli.run_execute_phase", fake_run_execute_phase)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        try:
+            lifecycle.run(
+                42,
+                Phase.EXECUTE,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("fail")),
+            )
+        except RuntimeError:
+            pass
+
+        result = runner.invoke(main, ["retry", "42", "--phase", "execute", "--run"])
+
+        assert result.exit_code == 0, result.output
+        assert "PR #18 implemented" in result.output
+        assert "independent review is pending" in result.output.lower()
+        assert "machinist review 42" in result.output
+        assert "marked ready" not in result.output
+        assert notifications == []
 
 
 def test_retry_resume_wires_retained_workspace_mode(monkeypatch):
@@ -2455,8 +2542,8 @@ def test_retry_resume_wires_retained_workspace_mode(monkeypatch):
 
     recoveries = []
 
-    def fake_run_execute_phase(*args, recovery, **kwargs):
-        recoveries.append(recovery)
+    def fake_run_execute_phase(*args, resume, **kwargs):
+        recoveries.append(resume)
         return PullRequest(
             number=18,
             title="Spec: Task (#42)",
@@ -2485,7 +2572,7 @@ def test_retry_resume_wires_retained_workspace_mode(monkeypatch):
         )
 
         assert result.exit_code == 0, result.output
-        assert recoveries == ["resume"]
+        assert recoveries == [True]
 
 
 def test_retry_recovery_flags_are_safe_and_explicit():
@@ -2945,7 +3032,9 @@ def test_workflow_drift_notice_is_advisory_and_never_raises(monkeypatch):
 
 
 def test_watch_warns_when_managed_workflows_drift(monkeypatch):
-    monkeypatch.setattr("machinist.cli.watch_once", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "machinist.cli.watch_once", lambda *args, **kwargs: WatchResult()
+    )
     monkeypatch.setattr("machinist.cli.project_workflows", _raise_drift)
 
     runner = CliRunner()
@@ -3060,3 +3149,47 @@ def test_doctor_prints_the_exact_fix_for_each_failing_check():
         assert result.exit_code == 1
         assert "→ fix (task template): machinist task template --write" in result.output
         assert "see 'machinist doctor" not in result.output
+
+
+def test_retry_run_review_reports_ready_and_notifies_like_review(monkeypatch):
+    from machinist.lifecycle import Phase, TaskLifecycle
+    from machinist.notify import NotificationResult, NotificationStatus
+
+    notifications = []
+
+    def fake_notify(config, event, title, message, **kwargs):
+        notifications.append(event.value)
+        return NotificationResult(
+            NotificationStatus.DELIVERED, "desktop", event.value, "test-key"
+        )
+
+    def fake_run_review_phase(*args, **kwargs):
+        return PullRequest(
+            number=18,
+            title="Spec: Task (#42)",
+            url="https://github.com/x/y/pull/18",
+            branch="agent/issue-42",
+            is_draft=False,
+        )
+
+    monkeypatch.setattr("machinist.cli.notify_event", fake_notify)
+    monkeypatch.setattr("machinist.cli.run_review_phase", fake_run_review_phase)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        lifecycle = TaskLifecycle(Path(".machinist/runs"))
+        lifecycle.run(42, Phase.EXECUTE, lambda claim: object())
+        try:
+            lifecycle.run(
+                42,
+                Phase.REVIEW,
+                lambda claim: (_ for _ in ()).throw(RuntimeError("fail")),
+            )
+        except RuntimeError:
+            pass
+
+        result = runner.invoke(main, ["retry", "42", "--phase", "review", "--run"])
+
+        assert result.exit_code == 0, (result.output, result.exception)
+        assert "passed independent review and is ready" in result.output
+        assert len(notifications) == 1

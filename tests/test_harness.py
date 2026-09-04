@@ -381,3 +381,20 @@ def test_harness_model_and_extra_args_in_argv():
         assert "--model" in impl_argv and "custom-model" in impl_argv
         assert "--verbose" in spec_argv and "--flag" in spec_argv
         assert "--verbose" in impl_argv and "--flag" in impl_argv
+
+
+def test_passthrough_argv_threads_model_then_extra_args():
+    config = HarnessConfig(
+        name=HarnessName.CLAUDE_CODE, model="custom-model", extra_args=["--x", "1"]
+    )
+
+    assert get_harness(config)._passthrough_argv() == [
+        "--model",
+        "custom-model",
+        "--x",
+        "1",
+    ]
+
+
+def test_passthrough_argv_is_empty_without_model_or_extra_args():
+    assert get_harness(HarnessConfig(name=HarnessName.CODEX))._passthrough_argv() == []

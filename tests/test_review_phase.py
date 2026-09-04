@@ -114,7 +114,12 @@ class FakeClaim:
     attempt = 1
 
     def __init__(self):
+        self.previous_evidence = {}
         self.evidence = {}
+        self.progress_calls = []
+
+    def progress(self, stage, detail=None):
+        self.progress_calls.append((stage, detail))
 
     def checkpoint(self, **evidence):
         self.evidence.update(evidence)
@@ -313,6 +318,7 @@ def test_review_rejects_changed_head_before_invoking_harness(tmp_path):
             harness=harness,
             workspace=FakeWorkspace(tmp_path),
             execute_evidence=execute_evidence(),
+            claim=FakeClaim(),
         )
 
     assert harness.prompts == []
@@ -332,7 +338,20 @@ def test_review_rejects_harness_writes_and_always_cleans_preview(tmp_path):
             harness=harness,
             workspace=workspace,
             execute_evidence=execute_evidence(),
+            claim=FakeClaim(),
         )
 
     assert not any(call[0] == "mark_ready" for call in github.calls)
     assert any(call[0] == "cleanup_preview" for call in workspace.calls)
+
+
+def test_review_requires_a_claim(tmp_path):
+    with pytest.raises(TypeError, match="claim"):
+        run_review_phase(
+            42,
+            config(),
+            github=FakeGitHub(),
+            harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path),
+            execute_evidence=execute_evidence(),
+        )

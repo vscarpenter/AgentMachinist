@@ -53,7 +53,14 @@ from machinist.doctor import (
 )
 from machinist.evidence import TaskEvidence
 from machinist.explain import TaskExplanation, explain_task
-from machinist.github import GitHubClient, GitHubError
+from machinist.github import (
+    APPROVED_LABEL_COLOR,
+    APPROVED_LABEL_DESCRIPTION,
+    TRIGGER_LABEL_COLOR,
+    GitHubClient,
+    GitHubError,
+    PullRequest,
+)
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import InitAnswers, run_init_wizard
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
@@ -81,7 +88,7 @@ from machinist.phases.execute import (
 from machinist.phases.review import ReviewPhaseError, run_review_phase
 from machinist.phases.spec import SpecPhaseError, preview_spec_phase, run_spec_phase
 from machinist.phases.status import StatusRow, next_action_for_status, pipeline_status
-from machinist.phases.watch import WatchState, plan_watch_tasks, watch_once
+from machinist.phases.watch import WatchResult, WatchState, plan_watch_tasks, watch_once
 from machinist.portfolio import (
     DEFAULT_REGISTRY_PATH,
     PortfolioError,
@@ -135,7 +142,6 @@ from machinist.workflows import (
 from machinist.workflows import sync_workflows as project_workflows
 from machinist.workspace import Workspace, WorkspaceError
 
-_LABEL_COLORS = {"trigger": "1d76db", "approved": "0e8a16"}
 _RUNTIME_IGNORE = "/.machinist/runs/"
 _SUBPROCESS_TIMEOUT_SECONDS = 30
 _MAX_GITIGNORE_BYTES = 1024 * 1024
@@ -144,12 +150,6 @@ _MAX_GITIGNORE_BYTES = 1024 * 1024
 def _make_harness(config, phase: Phase):
     harness = get_harness(config.harness_for(phase.value))
     harness.on_progress = lambda message: click.echo(f"  … {message}")
-    return harness
-
-
-def _preview_harness(config, phase: Phase, issue_number: int, runs_dir: Path):
-    harness = _make_harness(config, phase)
-    harness.cancel_check = CancellationStore(runs_dir).check(issue_number)
     return harness
 
 
@@ -171,6 +171,7 @@ def _task_dispatcher(
         github_factory=lambda: _bound_github_client(config, repo_root=repo_root),
         progress=lambda message: click.echo(f"  … {message}"),
         spec_runner=run_spec_phase,
+        preview_runner=preview_spec_phase,
         execute_runner=run_execute_phase,
         review_runner=run_review_phase,
         test_runner=run_supervised,
@@ -728,13 +729,13 @@ def init(
         github = _bound_github_client(config, repo_root=repo_root)
         github.ensure_label(
             config.github.labels.trigger,
-            color=_LABEL_COLORS["trigger"],
+            color=TRIGGER_LABEL_COLOR,
             description="Machinist: run the pipeline on this issue",
         )
         github.ensure_label(
             config.github.labels.approved,
-            color=_LABEL_COLORS["approved"],
-            description="Machinist: spec approved for implementation",
+            color=APPROVED_LABEL_COLOR,
+            description=APPROVED_LABEL_DESCRIPTION,
         )
         click.echo(
             f"ensured GitHub labels '{config.github.labels.trigger}' "
@@ -1199,12 +1200,12 @@ def sync_labels_command(ctx: click.Context, check: bool, apply: bool) -> None:
         github = _bound_github_client(config)
         required = {
             config.github.labels.trigger: (
-                _LABEL_COLORS["trigger"],
+                TRIGGER_LABEL_COLOR,
                 "Machinist: run the pipeline on this issue",
             ),
             config.github.labels.approved: (
-                _LABEL_COLORS["approved"],
-                "Machinist: spec approved for implementation",
+                APPROVED_LABEL_COLOR,
+                APPROVED_LABEL_DESCRIPTION,
             ),
         }
         if apply:
@@ -1430,11 +1431,7 @@ def approve(
             raise click.ClickException(
                 f"open machinist draft PR for #{requested} was not found"
             )
-        github.approve_pr(
-            pr.number,
-            label=config.github.labels.approved,
-            head_sha=pr.head_sha,
-        )
+        github.approve_pr(pr.number, head_sha=pr.head_sha)
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -1504,34 +1501,9 @@ def retry(
             pr = dispatcher.run_phase(
                 issue_number,
                 record.phase,
-                recovery="resume" if resume else "fresh",
+                resume=resume,
             )
-            if record.phase is Phase.SPEC:
-                click.echo(f"Draft PR #{pr.number}: {pr.url}")
-                _deliver_notification(
-                    config,
-                    NotificationEvent.SPEC_READY,
-                    "Machinist Spec ready",
-                    f"Issue #{issue_number} has draft PR #{pr.number}",
-                    issue=issue_number,
-                    pr=pr.number,
-                )
-            elif record.phase is Phase.EXECUTE:
-                click.echo(
-                    f"PR #{pr.number} implemented and marked ready for review: {pr.url}"
-                )
-                _deliver_notification(
-                    config,
-                    NotificationEvent.PR_READY,
-                    "Machinist PR ready",
-                    f"Issue #{issue_number} implementation is ready in PR #{pr.number}",
-                    issue=issue_number,
-                    pr=pr.number,
-                )
-            else:
-                click.echo(
-                    f"PR #{pr.number} passed independent review and is ready: {pr.url}"
-                )
+            _report_phase_outcome(config, record.phase, issue_number, pr)
         else:
             click.echo(
                 f"Issue #{issue_number} {record.phase.value} is retryable "
@@ -1584,19 +1556,13 @@ def spec(
         github = _bound_github_client(config)
         branch = f"{config.workspace.branch_prefix}issue-{issue_number}"
         if dry_run:
-            preview = preview_spec_phase(
-                issue_number,
+            preview = _task_dispatcher(
                 config,
+                repo_root=Path.cwd(),
+                lifecycle=lifecycle,
+                cancellation=cancellations,
                 github=github,
-                harness=_preview_harness(
-                    config,
-                    Phase.SPEC,
-                    issue_number,
-                    Path(".machinist/runs"),
-                ),
-                workspace=Workspace(repo_root=Path.cwd(), config=config.workspace),
-                cancel_check=cancellations.check(issue_number),
-            )
+            ).preview_spec(issue_number)
             click.echo(preview)
             return
         if abandon:
@@ -1636,10 +1602,7 @@ def spec(
         raise click.ClickException(str(exc)) from exc
     prefix = "Revised draft" if revise else "Draft"
     click.echo(f"{prefix} PR #{pr.number}: {pr.url}")
-    record = lifecycle.record(issue_number, Phase.SPEC)
-    spec_sha = (
-        TaskEvidence.load(record.evidence).spec_sha if record is not None else None
-    )
+    spec_sha = pr.head_sha
     approval_hint = (
         "Review the spec, then approve with "
         f"'machinist approve --issue {issue_number}' or the "
@@ -1648,14 +1611,7 @@ def spec(
     if isinstance(spec_sha, str):
         approval_hint += f", or comment '/machinist-execute {spec_sha}'"
     click.echo(f"{approval_hint}.")
-    _deliver_notification(
-        config,
-        NotificationEvent.SPEC_READY,
-        "Machinist Spec ready",
-        f"Issue #{issue_number} has draft PR #{pr.number}",
-        issue=issue_number,
-        pr=pr.number,
-    )
+    _report_phase_outcome(config, Phase.SPEC, issue_number, pr, notify_only=True)
 
 
 @main.command()
@@ -1760,27 +1716,19 @@ def watch(
     def dispatch_spec(issue_number: int):
         click.echo(f"Dispatching Spec Task Run for issue #{issue_number}...")
         pr = dispatcher.run_spec(issue_number)
-        _deliver_notification(
-            config,
-            NotificationEvent.SPEC_READY,
-            "Machinist Spec ready",
-            f"Issue #{issue_number} has draft PR #{pr.number}",
-            issue=issue_number,
-            pr=pr.number,
-        )
+        _report_phase_outcome(config, Phase.SPEC, issue_number, pr, notify_only=True)
         return pr
 
     def dispatch_execute(issue_number: int):
         click.echo(f"Dispatching Execute Task Run for issue #{issue_number}...")
-        pr = dispatcher.run_execute(issue_number, recovery="fresh")
-        if not config.review.enabled:
-            _notify_pr_ready(config, issue_number, pr.number)
+        pr = dispatcher.run_execute(issue_number)
+        _report_phase_outcome(config, Phase.EXECUTE, issue_number, pr, notify_only=True)
         return pr
 
     def dispatch_review(issue_number: int):
         click.echo(f"Dispatching Review Task Run for issue #{issue_number}...")
         pr = dispatcher.run_review(issue_number)
-        _notify_pr_ready(config, issue_number, pr.number)
+        _report_phase_outcome(config, Phase.REVIEW, issue_number, pr, notify_only=True)
         return pr
 
     state = WatchState()
@@ -1852,10 +1800,10 @@ def watch(
                     raise click.ClickException(str(exc)) from exc
                 click.echo(f"poll error: {exc}", err=True)
                 poll_failure = str(exc)
-                result = []
-            for event in result:
+                result = WatchResult()
+            for event in result.events:
                 click.echo(event)
-            deferred_tasks = tuple(getattr(result, "deferred", ()))
+            deferred_tasks = result.deferred
             for task in deferred_tasks:
                 reason = deferred_reasons.get(
                     (task.phase, task.issue_number),
@@ -1865,21 +1813,17 @@ def watch(
                     f"deferred: {task.phase} for issue #{task.issue_number}: {reason}"
                 )
             if deferred_tasks:
-                attempted = len(getattr(result, "attempted", ()))
+                attempted = len(result.attempted)
                 click.echo(
                     f"Pass summary: {attempted} dispatched, "
                     f"{len(deferred_tasks)} deferred."
                 )
-            failures = getattr(
-                result,
-                "failures",
-                tuple(event for event in result if event.startswith("error:")),
-            )
+            failures = result.failures
             failure_count = len(failures) + int(poll_failure is not None)
             try:
                 write_watcher_heartbeat(
                     repo_root,
-                    attempted=len(getattr(result, "attempted", ())),
+                    attempted=len(result.attempted),
                     deferred=len(deferred_tasks),
                     failures=failure_count,
                     interval_seconds=poll_interval,
@@ -1889,7 +1833,7 @@ def watch(
                     raise click.ClickException(str(exc)) from exc
                 click.echo(f"watcher health error: {exc}", err=True)
             if once:
-                if not result and not deferred_tasks:
+                if not result.events and not deferred_tasks:
                     click.echo("Nothing to do.")
                 if failures:
                     raise click.ClickException(
@@ -1908,94 +1852,47 @@ def watch(
     is_flag=True,
     help="Re-implement a ready PR; its current head must have fresh approval.",
 )
-@click.option(
-    "--retry",
-    "retry_failed",
-    is_flag=True,
-    help="Mark a failed task run retryable before executing.",
-)
-@click.option(
-    "--resume",
-    is_flag=True,
-    help="Resume the retained failed Workshop and preserve its manual changes.",
-)
-@click.option(
-    "--fresh",
-    is_flag=True,
-    help="Start from the approved remote head (the safe default).",
-)
-def run(
-    issue_number: int,
-    force: bool,
-    retry_failed: bool = False,
-    resume: bool = False,
-    fresh: bool = False,
-) -> None:
+def run(issue_number: int, force: bool) -> None:
     """Implement the approved spec for ISSUE_NUMBER (Phase 3)."""
-    if resume and fresh:
-        raise click.UsageError("--resume and --fresh are mutually exclusive")
+    _execute_command(
+        issue_number, force=force, verb="implemented", start="Starting Execute"
+    )
+
+
+def _execute_command(
+    issue_number: int,
+    *,
+    force: bool,
+    verb: str,
+    start: str,
+    feedback: str | None = None,
+) -> None:
+    """One Execute entry for `run` and `amend`; recovery lives in `retry --run`."""
     try:
         config = load_config()
-        lifecycle = TaskLifecycle(Path(".machinist/runs"))
-        cancellations = CancellationStore(Path(".machinist/runs"))
-        if retry_failed:
-            observed_cancellation = cancellations.get(issue_number)
-            prior = lifecycle.record(issue_number, Phase.EXECUTE)
-            if prior and prior.status in {
-                RunStatus.FAILED,
-                RunStatus.CANCELLED,
-                RunStatus.ABANDONED,
-            }:
-                lifecycle.retry(issue_number, Phase.EXECUTE)
-                cancellations.clear_if_matches(issue_number, observed_cancellation)
-        if cancellations.requested(issue_number):
+        dispatcher = _task_dispatcher(config, repo_root=Path.cwd())
+        if dispatcher.cancellation.requested(issue_number):
             raise LifecycleError(
                 f"issue #{issue_number} has a cancellation request; "
                 f"run 'machinist cancel {issue_number} --clear' before starting"
             )
-        click.echo(f"Starting Execute Task Run for issue #{issue_number}...")
-        pr = _task_dispatcher(
-            config,
-            repo_root=Path.cwd(),
-            lifecycle=lifecycle,
-            cancellation=cancellations,
-        ).run_execute(
-            issue_number,
-            force=force,
-            recovery="resume" if resume else "fresh",
-        )
+        click.echo(f"{start} Task Run for issue #{issue_number}...")
+        pr = dispatcher.run_execute(issue_number, force=force, feedback=feedback)
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    if config.review.enabled:
-        click.echo(
-            f"PR #{pr.number} implemented; independent review is pending. "
-            f"{pr.url}\nNext: machinist review {issue_number}"
-        )
-    else:
-        click.echo(f"PR #{pr.number} implemented and ready for review: {pr.url}")
-        _notify_pr_ready(config, issue_number, pr.number)
+    _report_phase_outcome(config, Phase.EXECUTE, issue_number, pr, verb=verb)
 
 
 @main.command()
 @click.argument("issue_number", type=click.IntRange(min=1))
 def review(issue_number: int) -> None:
     """Independently review ISSUE_NUMBER's implemented draft pull request."""
-    repo_root = Path.cwd()
-    runs_dir = repo_root / ".machinist/runs"
     try:
         config = load_config()
-        lifecycle = TaskLifecycle(runs_dir, repo_root=repo_root)
-        cancellation = CancellationStore(runs_dir, repo_root=repo_root)
-        pr = _task_dispatcher(
-            config,
-            repo_root=repo_root,
-            lifecycle=lifecycle,
-            cancellation=cancellation,
-        ).run_review(issue_number)
+        pr = _task_dispatcher(config, repo_root=Path.cwd()).run_review(issue_number)
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"PR #{pr.number} passed independent review and is ready: {pr.url}")
-    _notify_pr_ready(config, issue_number, pr.number)
+    _report_phase_outcome(config, Phase.REVIEW, issue_number, pr)
 
 
 def _read_feedback_file(path: Path) -> str:
@@ -2058,47 +1955,65 @@ def amend(
     except ExecutePhaseError as exc:
         raise click.UsageError(str(exc)) from exc
     assert feedback is not None
-    try:
-        config = load_config()
-        runs_dir = Path(".machinist/runs")
-        lifecycle = TaskLifecycle(runs_dir)
-        cancellations = CancellationStore(runs_dir)
-        if cancellations.requested(issue_number):
-            raise LifecycleError(
-                f"issue #{issue_number} has a cancellation request; clear it first"
-            )
-        click.echo(f"Starting amendment Task Run for issue #{issue_number}...")
-        pr = _task_dispatcher(
+    # force stays explicit: it gates the draft override and the lifecycle
+    # repeat over a succeeded run; feedback alone does not.
+    _execute_command(
+        issue_number,
+        force=True,
+        feedback=feedback,
+        verb="amended",
+        start="Starting amendment",
+    )
+
+
+def _report_phase_outcome(
+    config: MachinistConfig,
+    phase: Phase,
+    issue: int,
+    pr: PullRequest,
+    *,
+    verb: str = "implemented",
+    notify_only: bool = False,
+) -> None:
+    """Render and notify one Phase outcome the same way from every command.
+
+    `watch` prints its own event lines, so it asks for notifications only.
+    An Execute outcome is "ready" only when Review is disabled; with Review
+    enabled the PR stays draft and the next action is the Review command.
+    """
+    if phase is Phase.SPEC:
+        if not notify_only:
+            click.echo(f"Draft PR #{pr.number}: {pr.url}")
+        _deliver_notification(
             config,
-            repo_root=Path.cwd(),
-            lifecycle=lifecycle,
-            cancellation=cancellations,
-        ).run_execute(
-            issue_number,
-            force=True,
-            recovery="fresh",
-            feedback=feedback,
+            NotificationEvent.SPEC_READY,
+            "Machinist Spec ready",
+            f"Issue #{issue} has draft PR #{pr.number}",
+            issue=issue,
+            pr=pr.number,
         )
-    except _MACHINIST_ERRORS as exc:
-        raise click.ClickException(str(exc)) from exc
-    if config.review.enabled:
-        click.echo(
-            f"PR #{pr.number} amended; independent review is pending. "
-            f"Next: machinist review {issue_number}"
-        )
-    else:
-        click.echo(f"PR #{pr.number} amended and ready for review: {pr.url}")
-        _notify_pr_ready(config, issue_number, pr.number)
-
-
-def _notify_pr_ready(config: MachinistConfig, issue: int, pr: int) -> None:
+        return
+    if phase is Phase.EXECUTE and config.review.enabled:
+        if not notify_only:
+            click.echo(
+                f"PR #{pr.number} {verb}; independent review is pending. "
+                f"{pr.url}\nNext: machinist review {issue}"
+            )
+        return
+    if not notify_only:
+        if phase is Phase.EXECUTE:
+            click.echo(f"PR #{pr.number} {verb} and ready for review: {pr.url}")
+        else:
+            click.echo(
+                f"PR #{pr.number} passed independent review and is ready: {pr.url}"
+            )
     _deliver_notification(
         config,
         NotificationEvent.PR_READY,
         "Machinist PR ready",
-        f"Issue #{issue} implementation is ready in PR #{pr}",
+        f"Issue #{issue} implementation is ready in PR #{pr.number}",
         issue=issue,
-        pr=pr,
+        pr=pr.number,
     )
 
 

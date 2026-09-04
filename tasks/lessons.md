@@ -41,3 +41,13 @@
 - Starter files and effective configuration displays should project from the
   validated model. Rendering may choose a sparse presentation, but it should not
   restate runtime defaults.
+
+## Simplification pass (2026-09-03)
+
+- Pin every operator-visible string change with a red `match=` before touching
+  code. Two message fixes claimed by the changelog slipped through eleven
+  green commits because no test named the new wording; the whole-branch
+  review caught them, not the suite.
+- When a review merges several findings into one card, keep a checklist of
+  the individual findings: the card can be "done" while a small member of it
+  is not.

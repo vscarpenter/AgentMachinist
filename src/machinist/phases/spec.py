@@ -7,7 +7,6 @@ spec file, commits, pushes, and opens the draft PR.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
 from importlib.resources import files
 from pathlib import Path
@@ -16,7 +15,13 @@ from uuid import uuid4
 
 from machinist.config import MachinistConfig
 from machinist.evidence import EvidenceError, TaskEvidence
-from machinist.github import DraftPR, Issue
+from machinist.github import (
+    APPROVED_LABEL_COLOR,
+    APPROVED_LABEL_DESCRIPTION,
+    DraftPR,
+    Issue,
+    PullRequest,
+)
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, write_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
@@ -25,12 +30,11 @@ from machinist.repository_custody import (
     PullRequestExpectation,
     RepositoryCustodyError,
     bind_repository,
-    same_repository_pr,
     validate_pr_base,
+    verify_branch_pr,
     verify_pull_request,
 )
 
-_APPROVED_LABEL_COLOR = "0e8a16"
 _SPEC_PROMPT = files("machinist") / "templates" / "spec-prompt.md"
 _MAX_ISSUE_TITLE_CHARS = 500
 
@@ -69,29 +73,26 @@ def run_spec_phase(
     github,
     harness,
     workspace,
-    claim=None,
+    claim,
     revise: bool = False,
     attempt: int | None = None,
     cancel_check: Callable[[], bool] | None = None,
-) -> DraftPR:
-    if hasattr(workspace, "cancel_check"):
-        workspace.cancel_check = cancel_check
+) -> PullRequest:
     report_progress(claim, "read Task", f"fetching GitHub issue #{issue_number}")
     repository_identity = _bind_repository(config, github, workspace)
     issue = github.get_issue(issue_number)
     _validate_issue(issue, config)
     _raise_if_cancelled(cancel_check, issue.number)
-    previous = TaskEvidence.load(getattr(claim, "previous_evidence", {}) or {})
+    previous = TaskEvidence.load(claim.previous_evidence)
     try:
         base = previous.pr_base() or github.default_branch()
     except EvidenceError as exc:
         raise SpecPhaseError("prior Spec checkpoint has an invalid PR base") from exc
     _require_pr_base(base, source="GitHub default branch")
-    if claim is not None:
-        claim.checkpoint(
-            pr_base=base,
-            harness=harness_evidence(harness, profile="spec"),
-        )
+    claim.checkpoint(
+        pr_base=base,
+        harness=harness_evidence(harness, profile="spec"),
+    )
     branch = f"{config.workspace.branch_prefix}issue-{issue.number}"
     # Always inspect the exact branch. GitHub permits only one open PR for a
     # head branch, and blindly calling create again makes a post-delivery crash
@@ -109,14 +110,9 @@ def run_spec_phase(
 
     provision_args = (f"issue-{issue.number}", branch, f"origin/{base}")
     report_progress(claim, "provision Workshop", branch)
-    path = (
-        workspace.provision(*provision_args)
-        if attempt is None
-        else workspace.provision(*provision_args, attempt=attempt)
-    )
+    path = workspace.provision(*provision_args, attempt=attempt)
     try:
-        if claim is not None:
-            claim.checkpoint(workspace_path=str(path))
+        claim.checkpoint(workspace_path=str(path))
         remote_before = workspace.remote_sha(path, branch)
         delivery_pr = _select_delivery_pr(
             existing_pr,
@@ -150,38 +146,26 @@ def run_spec_phase(
                     f"checkpointed Spec {spec_sha[:12]} is no longer remote branch "
                     f"{branch!r} ({(observed_sha or 'missing')[:12]})"
                 )
-            if claim is not None:
-                claim.checkpoint(
-                    spec_recovery="delivery-only",
-                    spec_sha=spec_sha,
-                    push_intended_sha=spec_sha,
-                    push_observed_sha=observed_sha,
-                )
+            claim.checkpoint(
+                spec_sha=spec_sha,
+                push_intended_sha=spec_sha,
+                push_observed_sha=observed_sha,
+            )
         else:
             instructions = config.resolve_instructions("spec", path)
-            if claim is not None:
-                profile = config.instructions.spec
-                claim.checkpoint(
-                    spec_recovery="generated",
-                    instructions_sha256=hashlib.sha256(
-                        instructions.encode()
-                    ).hexdigest(),
-                    instruction_paths=list(profile.paths),
-                    instruction_append=profile.append is not None,
-                    instruction_source="task-workspace",
-                )
+            claim.checkpoint(**config.instructions.evidence("spec", instructions))
             _raise_if_cancelled(cancel_check, issue.number)
             report_progress(claim, "generate Spec", harness.name)
             bind_harness_progress(harness, claim, stage="generate Spec")
-            spec_text = _generate_spec(issue, config, harness, path, instructions)
-            # The harness may finish just as an operator requests cancellation.
-            # This boundary is deliberately before any controller-owned write,
-            # commit, push, label, or PR mutation.
-            _raise_if_cancelled(cancel_check, issue.number)
-            if workspace.has_changes(path):
-                raise SpecPhaseError(
-                    f"{harness.name} changed repository files during read-only spec generation"
-                )
+            spec_text = _generate_spec(
+                issue,
+                config,
+                harness,
+                workspace,
+                path,
+                instructions,
+                cancel_check=cancel_check,
+            )
 
             spec_relative = (
                 Path(".machinist") / "specs" / f"issue-{issue.number}-spec.md"
@@ -199,8 +183,7 @@ def run_spec_phase(
                 f"docs(spec): {action} implementation spec for issue #{issue.number}",
             )
             spec_sha = workspace.head_sha(path)
-            if claim is not None:
-                claim.checkpoint(spec_sha=spec_sha, push_intended_sha=spec_sha)
+            claim.checkpoint(spec_sha=spec_sha, push_intended_sha=spec_sha)
             _raise_if_cancelled(cancel_check, issue.number)
             report_progress(claim, "push Spec", branch)
             workspace.push(
@@ -214,15 +197,14 @@ def run_spec_phase(
                     f"pushed Spec {spec_sha[:12]}, but remote branch {branch!r} "
                     f"resolved to {(observed_sha or 'missing')[:12]}"
                 )
-            if claim is not None:
-                claim.checkpoint(push_observed_sha=observed_sha)
+            claim.checkpoint(push_observed_sha=observed_sha)
 
         _raise_if_cancelled(cancel_check, issue.number)
         report_progress(claim, "deliver draft PR", branch)
         github.ensure_label(
             config.github.labels.approved,
-            color=_APPROVED_LABEL_COLOR,
-            description="Machinist: spec approved for implementation",
+            color=APPROVED_LABEL_COLOR,
+            description=APPROVED_LABEL_DESCRIPTION,
         )
         title = f"Spec: {issue.title} (#{issue.number})"
         body = _pr_body(issue, config, spec_sha)
@@ -243,20 +225,19 @@ def run_spec_phase(
             if delivery_pr.state == "CLOSED":
                 _raise_if_cancelled(cancel_check, issue.number)
                 github.reopen_pr(delivery_pr.number)
-            if not delivery_pr.is_draft and hasattr(github, "mark_draft"):
+            if not delivery_pr.is_draft:
                 _raise_if_cancelled(cancel_check, issue.number)
                 github.mark_draft(delivery_pr.number)
             _raise_if_cancelled(cancel_check, issue.number)
             github.update_pr(delivery_pr.number, title=title, body=body)
             pr = DraftPR(number=delivery_pr.number, url=delivery_pr.url)
-        if claim is not None:
-            # Persist delivery identity before the verification read so a
-            # crash after GitHub accepts the PR is explicitly reconcilable.
-            claim.checkpoint(pr_number=pr.number, pr_url=pr.url)
+        # Persist delivery identity before the verification read so a
+        # crash after GitHub accepts the PR is explicitly reconcilable.
+        claim.checkpoint(pr_number=pr.number, pr_url=pr.url)
 
         observed_pr = github.pr_for_branch(branch)
         report_progress(claim, "verify draft PR", f"PR #{pr.number}")
-        _assert_delivered_pr(
+        delivered = _assert_delivered_pr(
             observed_pr,
             pr,
             branch=branch,
@@ -264,12 +245,6 @@ def run_spec_phase(
             spec_sha=spec_sha,
             expected_repository=repository_identity,
         )
-        if claim is not None:
-            claim.checkpoint(
-                pr_observed_number=observed_pr.number,
-                pr_observed_base=observed_pr.base or base,
-                pr_observed_sha=observed_pr.head_sha,
-            )
     except BaseException as exc:
         cleanup_warning = finish_workshop_cleanup(
             workspace, path, success=False, claim=claim
@@ -278,7 +253,7 @@ def run_spec_phase(
             exc.add_note(cleanup_warning)
         raise
     finish_workshop_cleanup(workspace, path, success=True, claim=claim)
-    return pr
+    return delivered
 
 
 def preview_spec_phase(
@@ -298,23 +273,21 @@ def preview_spec_phase(
     base = github.default_branch()
     branch = f"{config.workspace.branch_prefix}issue-{issue.number}"
     preview_task = f"preview-issue-{issue.number}-{uuid4().hex[:12]}"
-    provision_preview = getattr(workspace, "provision_preview", None)
-    cleanup_preview = getattr(workspace, "cleanup_preview", None)
-    if not callable(provision_preview) or not callable(cleanup_preview):
-        raise SpecPhaseError("workspace does not support isolated Spec previews")
-    path = provision_preview(preview_task, branch, f"origin/{base}")
+    path = workspace.provision_preview(preview_task, branch, f"origin/{base}")
     try:
         instructions = config.resolve_instructions("spec", path)
         _raise_if_cancelled(cancel_check, issue.number)
-        spec_text = _generate_spec(issue, config, harness, path, instructions)
-        _raise_if_cancelled(cancel_check, issue.number)
-        if workspace.has_changes(path):
-            raise SpecPhaseError(
-                f"{harness.name} changed repository files during read-only spec preview"
-            )
-        return spec_text
+        return _generate_spec(
+            issue,
+            config,
+            harness,
+            workspace,
+            path,
+            instructions,
+            cancel_check=cancel_check,
+        )
     finally:
-        cleanup_preview(path)
+        workspace.cleanup_preview(path)
 
 
 def _select_delivery_pr(
@@ -328,33 +301,19 @@ def _select_delivery_pr(
     expected_repository: str,
 ):
     """Authorize either an explicit revision or a checkpoint-backed retry."""
-    if existing_pr is not None and existing_pr.is_cross_repository:
-        raise SpecPhaseError(
-            f"PR #{existing_pr.number} is cross-repository; refusing Spec custody"
-        )
-    if existing_pr is not None and not same_repository_pr(
-        existing_pr, expected_repository
-    ):
-        raise SpecPhaseError(
-            f"PR #{existing_pr.number} head repository does not match controller origin"
-        )
-    if existing_pr is not None and existing_pr.branch != branch:
-        raise SpecPhaseError(
-            f"GitHub returned PR #{existing_pr.number} for unexpected branch "
-            f"{existing_pr.branch!r}; expected {branch!r}"
-        )
-    if (
-        existing_pr is not None
-        and existing_pr.base
-        and existing_pr.base != expected_base
-    ):
-        raise SpecPhaseError(
-            f"PR #{existing_pr.number} targets base {existing_pr.base!r}; "
-            f"expected {expected_base!r}"
-        )
+    if existing_pr is not None:
+        try:
+            verify_branch_pr(
+                existing_pr,
+                branch=branch,
+                base=expected_base,
+                repository=expected_repository,
+            )
+        except RepositoryCustodyError as exc:
+            raise SpecPhaseError(
+                f"PR #{existing_pr.number} failed Spec custody: {exc}"
+            ) from exc
     if revise:
-        if existing_pr is None:  # guarded before provisioning; keeps helper total
-            return None
         if remote_sha != existing_pr.head_sha:
             raise SpecPhaseError(
                 f"existing PR #{existing_pr.number} head {existing_pr.head_sha[:12]} "
@@ -393,7 +352,7 @@ def _assert_delivered_pr(
     expected_base: str,
     spec_sha: str,
     expected_repository: str,
-) -> None:
+) -> PullRequest:
     """Verify GitHub observes this repository's exact delivered branch and SHA."""
     expected = PullRequestExpectation(
         number=pr.number,
@@ -404,7 +363,7 @@ def _assert_delivered_pr(
         is_draft=True,
     )
     try:
-        verify_pull_request(observed_pr, expected)
+        return verify_pull_request(observed_pr, expected)
     except RepositoryCustodyError as exc:
         raise SpecPhaseError(
             f"GitHub PR delivery verification failed for PR #{pr.number}: {exc}"
@@ -451,13 +410,25 @@ def _generate_spec(
     issue: Issue,
     config: MachinistConfig,
     harness,
+    workspace,
     path: Path,
     instructions: str,
+    *,
+    cancel_check: Callable[[], bool] | None,
 ) -> str:
+    """Run the read-only Harness and prove it returned a bounded Spec and left
+    the Workshop untouched. Cancellation is checked before the tree so a
+    cancel racing the Harness stays a cancellation, and the whole check runs
+    before any controller-owned write, commit, push, label, or PR mutation."""
     spec_text = harness.generate_spec(
         render_spec_prompt(issue, instructions),
         cwd=path,
     )
+    _raise_if_cancelled(cancel_check, issue.number)
+    if workspace.has_changes(path):
+        raise SpecPhaseError(
+            f"{harness.name} changed repository files during read-only Spec generation"
+        )
     if not spec_text.strip():
         raise SpecPhaseError(
             f"{harness.name} returned an empty spec for issue #{issue.number}"
@@ -478,8 +449,8 @@ def _pr_body(issue: Issue, config: MachinistConfig, spec_sha: str) -> str:
         "\n"
         f"**To approve:** apply the `{approved}` label, or comment "
         f"`/machinist-execute {spec_sha}`.\n"
-        "(GitHub's review **Approve button** is *not* the mechanism — GitHub blocks it\n"
-        "on your own PRs, and machinist only watches the label.)\n"
+        "(GitHub's review **Approve button** is *not* the mechanism; AgentMachinist\n"
+        "acts on the label plus the SHA-bound marker the approve workflow records.)\n"
         "Once approved, the machinist daemon implements the spec on this branch,\n"
         "runs the test gate, and marks this PR ready for review.\n"
         "Please leave this PR as a draft — machinist flips it to ready itself\n"

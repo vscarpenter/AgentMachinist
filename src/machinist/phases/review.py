@@ -79,7 +79,7 @@ def run_review_phase(
     harness,
     workspace,
     execute_evidence: dict[str, Any],
-    claim=None,
+    claim,
     cancel_check=None,
 ) -> PullRequest:
     """Review the exact Execute head and transition its PR to ready."""
@@ -252,22 +252,19 @@ def _deliver_review(
 ) -> None:
     current = _exact_pr(github, pr, branch, expected_sha)
     _cancel(cancel_check, "before Review comment")
-    previous = TaskEvidence.load(
-        getattr(claim, "previous_evidence", {}) if claim is not None else {}
-    )
+    previous = TaskEvidence.load(claim.previous_evidence)
     comment_id = github.upsert_pr_comment(
         current.number,
         _review_comment(issue_number, expected_sha, report),
         comment_id=previous.review_comment_id,
     )
-    _checkpoint(claim, review_comment_id=comment_id)
+    claim.checkpoint(review_comment_id=comment_id)
     current = _exact_pr(github, pr, branch, expected_sha)
     _cancel(cancel_check, "before marking PR ready")
     github.mark_ready(current.number)
     observed = _exact_pr(github, pr, branch, expected_sha)
     if observed.is_draft:
         raise ReviewPhaseError(f"GitHub PR #{pr.number} remained draft after Review")
-    _checkpoint(claim, ready_observed_sha=expected_sha)
 
 
 def _find_pr(github, config: MachinistConfig, branch: str) -> PullRequest:
@@ -389,17 +386,11 @@ def _checkpoint_review(claim, expected_sha: str, harness, report: ReviewReport) 
         level: sum(item.severity == level for item in report.findings)
         for level in sorted(_LEVELS)
     }
-    _checkpoint(
-        claim,
+    claim.checkpoint(
         reviewed_sha=expected_sha,
         harness=harness_evidence(harness, profile="review"),
         finding_counts=counts,
     )
-
-
-def _checkpoint(claim, **evidence: Any) -> None:
-    if claim is not None:
-        claim.checkpoint(**evidence)
 
 
 def _cancel(cancel_check, stage: str) -> None:

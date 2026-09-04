@@ -27,7 +27,7 @@ def finish_workshop_cleanup(
             f"Workshop cleanup failed after {outcome}; retained {path}: "
             f"{type(exc).__name__}: {str(exc).strip() or type(exc).__name__}"
         )
-        if claim is not None and hasattr(claim, "checkpoint"):
+        if claim is not None:
             try:
                 claim.checkpoint(
                     cleanup_succeeded=False,

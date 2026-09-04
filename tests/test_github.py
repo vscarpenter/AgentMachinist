@@ -630,14 +630,21 @@ def test_approval_sha_reads_a_marker_that_records_the_approver():
     assert client.approval_sha(57) == "c" * 40
 
 
-def test_approval_sha_ignores_markers_from_untrusted_commenters():
+def test_approval_sha_ignores_markers_from_human_commenters():
+    """Only the managed workflow mints Evidence; a human-typed marker is not
+    Approval, whatever the author's repository association."""
     payload = json.dumps(
         {
             "comments": [
                 {
                     "body": "<!-- agentmachinist:approval sha=" + "a" * 40 + " -->",
-                    "authorAssociation": "MEMBER",
-                    "author": {"login": "maintainer"},
+                    "authorAssociation": "OWNER",
+                    "author": {"login": "owner"},
+                },
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "c" * 40 + " -->",
+                    "authorAssociation": "COLLABORATOR",
+                    "author": {"login": "triage-collaborator"},
                 },
                 {
                     "body": "<!-- agentmachinist:approval sha=" + "b" * 40 + " -->",
@@ -649,14 +656,31 @@ def test_approval_sha_ignores_markers_from_untrusted_commenters():
     )
     client = GitHubClient(runner=FakeRunner((payload, 0, "")))
 
-    assert client.approval_sha(57) == "a" * 40
+    assert client.approval_sha(57) is None
+
+
+def test_approval_sha_accepts_the_workflow_bot_login():
+    payload = json.dumps(
+        {
+            "comments": [
+                {
+                    "body": "<!-- agentmachinist:approval sha=" + "d" * 40 + " -->",
+                    "authorAssociation": "NONE",
+                    "author": {"login": "github-actions[bot]"},
+                }
+            ]
+        }
+    )
+    client = GitHubClient(runner=FakeRunner((payload, 0, "")))
+
+    assert client.approval_sha(57) == "d" * 40
 
 
 def test_approve_pr_requests_one_server_side_sha_bound_transaction():
     runner = FakeRunner(("", 0, ""))
     client = GitHubClient(repo="vscarpenter/demo", runner=runner)
 
-    client.approve_pr(57, label="machinist:approved", head_sha="a" * 40)
+    client.approve_pr(57, head_sha="a" * 40)
 
     assert runner.calls[0][:5] == ["gh", "pr", "comment", "57", "--body"]
     assert runner.calls[0][5] == f"/machinist-execute {'a' * 40}"

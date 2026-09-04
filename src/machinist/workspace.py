@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import re
-import secrets
 import shutil
 import stat
 import subprocess
@@ -102,10 +101,13 @@ class _MetadataFingerprintBudget:
 
 @dataclass(frozen=True)
 class _PreviewClaim:
-    sidecar: Path
-    payload: bytes
-    sidecar_device: int
-    sidecar_inode: int
+    """The directory this process created for a preview, by identity.
+
+    Preview names carry a per-run nonce, so no other process ever targets the
+    same path; the in-memory dev/inode pair is the only ownership proof
+    ``cleanup_preview`` needs.
+    """
+
     target_device: int
     target_inode: int
 
@@ -285,11 +287,10 @@ class Workspace:
             raise WorkspaceError(
                 f"preview workspace {target} has no live controller ownership claim"
             )
-        self._assert_preview_claim(target, claim)
         try:
             metadata = target.lstat()
         except FileNotFoundError:
-            self._remove_preview_sidecar(target, claim)
+            self._preview_claims.pop(target, None)
             return
         except OSError as exc:
             raise WorkspaceError(
@@ -314,64 +315,27 @@ class Workspace:
             raise WorkspaceError(
                 f"preview workspace {target} still exists after removal"
             )
-        self._remove_preview_sidecar(target, claim)
+        self._preview_claims.pop(target, None)
 
     def _reserve_preview(self, path: Path) -> None:
         """Atomically claim a preview path before Git can create content in it."""
         target = self._preview_target(path)
-        if target.exists() or target.is_symlink():
-            raise WorkspaceError(f"preview workspace {target} already exists")
-        claim_key = hashlib.sha256(str(target).encode()).hexdigest()
-        sidecar = target.parent / f".agentmachinist-preview-{claim_key}.json"
-        record = self._owner_record(kind="preview")
-        record.update(
-            {
-                "target": target.name,
-                "nonce": secrets.token_hex(32),
-            }
-        )
-        payload = (
-            json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
-        ).encode()
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
         try:
-            descriptor = os.open(sidecar, flags, 0o600)
+            target.mkdir(mode=0o700)
         except FileExistsError as exc:
-            raise WorkspaceError(
-                f"preview workspace {target} already has an ownership claim"
-            ) from exc
+            raise WorkspaceError(f"preview workspace {target} already exists") from exc
         except OSError as exc:
             raise WorkspaceError(
-                f"could not create preview ownership claim {sidecar}: {exc}"
+                f"could not reserve preview workspace {target}: {exc}"
             ) from exc
-
-        sidecar_metadata = os.fstat(descriptor)
-        try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-            target.mkdir(mode=0o700)
-            target_metadata = target.lstat()
-            if not stat.S_ISDIR(target_metadata.st_mode):
-                raise WorkspaceError(
-                    f"preview workspace reservation is not a directory: {target}"
-                )
-        except Exception:
-            self._unlink_if_identity(
-                sidecar,
-                device=sidecar_metadata.st_dev,
-                inode=sidecar_metadata.st_ino,
+        metadata = target.lstat()
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise WorkspaceError(
+                f"preview workspace reservation is not a directory: {target}"
             )
-            raise
-
         self._preview_claims[target] = _PreviewClaim(
-            sidecar=sidecar,
-            payload=payload,
-            sidecar_device=sidecar_metadata.st_dev,
-            sidecar_inode=sidecar_metadata.st_ino,
-            target_device=target_metadata.st_dev,
-            target_inode=target_metadata.st_ino,
+            target_device=metadata.st_dev,
+            target_inode=metadata.st_ino,
         )
 
     def _preview_target(self, path: Path) -> Path:
@@ -389,71 +353,6 @@ class Workspace:
                 f"preview workspace {path} is outside managed workspace root {root}"
             )
         return parent / raw.name
-
-    def _assert_preview_claim(self, target: Path, claim: _PreviewClaim) -> None:
-        sidecar = claim.sidecar
-        try:
-            metadata = sidecar.lstat()
-        except OSError as exc:
-            raise WorkspaceError(
-                f"could not inspect preview ownership claim {sidecar}: {exc}"
-            ) from exc
-        if (
-            not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_dev != claim.sidecar_device
-            or metadata.st_ino != claim.sidecar_inode
-            or metadata.st_size != len(claim.payload)
-        ):
-            raise WorkspaceError(
-                f"preview workspace {target} has an invalid ownership claim"
-            )
-        try:
-            descriptor = os.open(
-                sidecar,
-                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
-            )
-            with os.fdopen(descriptor, "rb") as stream:
-                opened = os.fstat(stream.fileno())
-                if (
-                    opened.st_dev != claim.sidecar_device
-                    or opened.st_ino != claim.sidecar_inode
-                ):
-                    raise WorkspaceError(
-                        f"preview ownership claim changed during inspection: {sidecar}"
-                    )
-                payload = stream.read(len(claim.payload) + 1)
-        except OSError as exc:
-            raise WorkspaceError(
-                f"could not read preview ownership claim {sidecar}: {exc}"
-            ) from exc
-        if payload != claim.payload:
-            raise WorkspaceError(
-                f"preview workspace {target} has an invalid ownership claim"
-            )
-
-    def _remove_preview_sidecar(self, target: Path, claim: _PreviewClaim) -> None:
-        self._assert_preview_claim(target, claim)
-        try:
-            claim.sidecar.unlink()
-        except OSError as exc:
-            raise WorkspaceError(
-                f"could not remove preview ownership claim {claim.sidecar}: {exc}"
-            ) from exc
-        self._preview_claims.pop(target, None)
-
-    @staticmethod
-    def _unlink_if_identity(path: Path, *, device: int, inode: int) -> None:
-        try:
-            metadata = path.lstat()
-        except FileNotFoundError:
-            return
-        except OSError:
-            return
-        if metadata.st_dev == device and metadata.st_ino == inode:
-            try:
-                path.unlink()
-            except OSError:
-                pass
 
     def commit_all(self, path: Path, message: str) -> None:
         self._assert_bound_custody(path)
@@ -659,12 +558,31 @@ class Workspace:
             )
         return candidate
 
-    def resume(self, path: Path, *, branch: str, expected_sha: str) -> Path:
-        """Validate and return an existing Workshop without mutating it."""
+    def resume(
+        self,
+        path: Path,
+        *,
+        branch: str,
+        expected_sha: str,
+        git_custody: Mapping[str, object] | None = None,
+    ) -> Path:
+        """Validate and return an existing Workshop without mutating it.
+
+        ``git_custody`` is the token checkpointed when the Workshop was
+        provisioned. A fresh process passes it back so the raw metadata
+        comparison runs before the first Git subprocess; an in-process caller
+        may omit it and reuse the token bound by ``provision``. Without either
+        there is nothing to trust, so the retained checkout is refused.
+        """
         target = self.managed_path(path)
         if not target.exists() or not target.is_dir():
             raise WorkspaceError(f"workspace {target} does not exist")
-        self._assert_bound_custody(target)
+        token = git_custody if git_custody is not None else self._custody.get(target)
+        if token is None:
+            raise WorkspaceError(
+                f"workspace {target} has no Git-custody checkpoint; start a fresh retry"
+            )
+        self.assert_git_custody(target, token)
         self._assert_owned_checkout(target)
         self.assert_branch(target, branch)
         self.assert_head(target, expected_sha)
@@ -1194,6 +1112,11 @@ class Workspace:
             )
         self._origin_url = actual_origin
         self._custody[target] = token
+
+    def git_custody(self, path: Path) -> dict[str, object] | None:
+        """The custody token bound to a Workshop this process provisioned or resumed."""
+        token = self._custody.get(Path(path).resolve())
+        return dict(token) if token is not None else None
 
     def _assert_bound_custody(self, path: Path) -> None:
         token = self._custody.get(Path(path).resolve())
@@ -1753,13 +1676,12 @@ class Workspace:
             return True
         return self.remote_sha(path, target_branch) != head
 
-    def _common_git_dir(self, path: Path) -> Path:
-        raw = Path(self._git(path, "rev-parse", "--git-common-dir").strip())
-        return raw.resolve() if raw.is_absolute() else (path / raw).resolve()
-
     def _assert_owned_checkout(self, path: Path) -> None:
         if self.config.strategy is WorkspaceStrategy.WORKTREE:
-            if self._common_git_dir(path) != self._common_git_dir(self.repo_root):
+            # Raw layout comparison: no Git subprocess before ownership is known.
+            common_dir = self._resolve_git_layout_raw(path)[1]
+            controller_common = self._resolve_git_layout_raw(self.repo_root)[1]
+            if common_dir != controller_common:
                 raise WorkspaceError(
                     f"workspace {path} is not a worktree of {self.repo_root}"
                 )

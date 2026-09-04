@@ -94,3 +94,32 @@ def test_exact_pr_verification_returns_the_observed_pr():
     observed = pull_request()
 
     assert verify_pull_request(observed, expectation()) is observed
+
+
+def test_verify_branch_pr_accepts_this_repositorys_pr_at_branch_and_base():
+    from machinist.repository_custody import verify_branch_pr
+
+    verify_branch_pr(
+        pull_request(), branch="agent/issue-42", base="main", repository="owner/repo"
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"branch": "agent/issue-99"}, r"branch 'agent/issue-99' != 'agent/issue-42'"),
+        ({"base": "release"}, r"base 'release' != 'main'"),
+        ({"is_cross_repository": True}, "cross-repository"),
+        ({"head_repository": "fork/repo"}, "head repository does not match"),
+    ],
+)
+def test_verify_branch_pr_rejects_foreign_or_misplaced_prs(changes, message):
+    from machinist.repository_custody import verify_branch_pr
+
+    with pytest.raises(RepositoryCustodyError, match=message):
+        verify_branch_pr(
+            pull_request(**changes),
+            branch="agent/issue-42",
+            base="main",
+            repository="owner/repo",
+        )

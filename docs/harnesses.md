@@ -88,9 +88,11 @@ name. Discovery isolates load failures; one broken plugin cannot hide healthy
 adapters, and the unknown-adapter error lists both installed choices and failed
 entry points.
 
-Adapter tests should pin exact Spec, Execute, and Review argv; prove read-only
-controls for Spec/Review; and install a fixture entry point from an isolated
-path. A plugin that declares structured usage must record only numeric aggregate
+Adapters splice `self._passthrough_argv()` (the operator's `harness.model` and
+`harness.extra_args`) into both the read-only and the edit profile at their own
+prompt-relative position instead of restating that block. Adapter tests should
+pin exact Spec, Execute, and Review argv; prove read-only controls for
+Spec/Review; and install a fixture entry point from an isolated path. A plugin that declares structured usage must record only numeric aggregate
 token fields before `machinist report` includes them.
 
 ## Compatibility checks

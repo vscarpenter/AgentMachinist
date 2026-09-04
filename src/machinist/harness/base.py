@@ -98,6 +98,19 @@ class Harness(ABC):
     def command(self) -> str:
         return self.config.command or self.default_command
 
+    def _passthrough_argv(self) -> list[str]:
+        """Operator pass-throughs every adapter threads into both profiles.
+
+        The controller never interprets ``model`` or ``extra_args``; adapters
+        splice this list at their own prompt-relative position.
+        """
+        argv: list[str] = []
+        if self.config.model:
+            argv.extend(["--model", self.config.model])
+        if self.config.extra_args:
+            argv.extend(self.config.extra_args)
+        return argv
+
     @abstractmethod
     def spec_argv(self, prompt: str) -> list[str]:
         """Argv that makes the harness read a prompt and print a spec to stdout."""

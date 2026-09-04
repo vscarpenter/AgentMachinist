@@ -139,7 +139,7 @@ def test_execute_dispatch_owns_normal_retry_and_amendment_options(
     dispatcher(tmp_path, lifecycle, calls).run_execute(
         42,
         force=force,
-        recovery="fresh",
+        resume=False,
         feedback=feedback,
     )
 
@@ -149,7 +149,7 @@ def test_execute_dispatch_owns_normal_retry_and_amendment_options(
     assert kwargs["harness"] == ("harness", Phase.EXECUTE, 42)
     assert kwargs["workspace"] == "workspace"
     assert kwargs["force"] is force
-    assert kwargs["recovery"] == "fresh"
+    assert kwargs["resume"] is False
     assert kwargs.get("feedback") == feedback
     assert callable(kwargs["test_runner"])
     assert callable(kwargs["cancel_check"])
@@ -162,11 +162,11 @@ def test_retry_now_dispatches_the_selected_phase_with_recovery(tmp_path):
     dispatcher(tmp_path, lifecycle, calls).run_phase(
         42,
         Phase.EXECUTE,
-        recovery="resume",
+        resume=True,
     )
 
     assert lifecycle.calls == [(42, Phase.EXECUTE, False)]
-    assert calls[0][2]["recovery"] == "resume"
+    assert calls[0][2]["resume"] is True
 
 
 def test_review_dispatch_requires_execute_success_and_passes_its_evidence(tmp_path):
@@ -194,3 +194,66 @@ def test_cli_contains_no_phase_lifecycle_construction():
     import machinist.cli as cli_module
 
     assert "lifecycle.run(" not in inspect.getsource(cli_module)
+
+
+def test_run_spec_forwards_a_plain_revise_flag_by_default(tmp_path):
+    lifecycle = FakeLifecycle()
+    calls: list = []
+
+    dispatcher(tmp_path, lifecycle, calls).run_spec(42)
+
+    kwargs = calls[0][2]
+    assert kwargs["revise"] is False
+
+
+def test_preview_spec_builds_dependencies_without_a_task_run(tmp_path):
+    lifecycle = FakeLifecycle()
+    calls = []
+
+    def preview_runner(issue, config, **kwargs):
+        calls.append(("preview", issue, kwargs))
+        return "## Preview\n"
+
+    dispatcher = TaskDispatcher(
+        MachinistConfig(),
+        repo_root=tmp_path,
+        lifecycle=lifecycle,
+        cancellation=FakeCancellation(),
+        github=object(),
+        harness_factory=lambda phase, issue: ("harness", phase, issue),
+        workspace_factory=lambda: "workspace",
+        preview_runner=preview_runner,
+    )
+
+    assert dispatcher.preview_spec(42) == "## Preview\n"
+    kind, issue, kwargs = calls[0]
+    assert (kind, issue) == ("preview", 42)
+    assert kwargs["harness"] == ("harness", Phase.SPEC, 42)
+    assert kwargs["workspace"] == "workspace"
+    assert callable(kwargs["cancel_check"])
+    assert lifecycle.calls == []
+
+
+def test_real_workshop_construction_wires_task_cancellation(tmp_path):
+    from machinist.workspace import Workspace
+
+    lifecycle = FakeLifecycle()
+    calls = []
+
+    def spec_runner(issue, config, **kwargs):
+        calls.append(kwargs)
+        return pull_request()
+
+    TaskDispatcher(
+        MachinistConfig(),
+        repo_root=tmp_path,
+        lifecycle=lifecycle,
+        cancellation=FakeCancellation(),
+        github=object(),
+        harness_factory=lambda phase, issue: ("harness", phase, issue),
+        spec_runner=spec_runner,
+    ).run_spec(42)
+
+    workspace = calls[0]["workspace"]
+    assert isinstance(workspace, Workspace)
+    assert callable(workspace.cancel_check)

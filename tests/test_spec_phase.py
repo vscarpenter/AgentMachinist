@@ -42,6 +42,7 @@ class FakeGitHub:
 
     def ensure_label(self, name, *, color, description):
         self.calls.append(("ensure_label", name))
+        self.labels = {**getattr(self, "labels", {}), name: (color, description)}
 
     def create_draft_pr(self, *, branch, base, title, body):
         self.calls.append(("create_draft_pr", branch, base, title, body))
@@ -60,6 +61,9 @@ class FakeGitHub:
     def pr_for_branch(self, branch):
         self.calls.append(("pr_for_branch", branch))
         return self.existing_pr
+
+    def mark_draft(self, number):
+        self.calls.append(("mark_draft", number))
 
     def reopen_pr(self, number):
         self.calls.append(("reopen_pr", number))
@@ -147,9 +151,15 @@ class FakeWorkspace:
 
 
 class FakeClaim:
+    attempt = 1
+
     def __init__(self, previous=None):
         self.previous_evidence = dict(previous or {})
         self.evidence = dict(self.previous_evidence)
+        self.progress_calls = []
+
+    def progress(self, stage, detail=None):
+        self.progress_calls.append((stage, detail))
 
     def checkpoint(self, **evidence):
         self.evidence.update(evidence)
@@ -190,7 +200,14 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     workspace = FakeWorkspace(tmp_path)
     config = MachinistConfig()
 
-    pr = run_spec_phase(42, config, github=github, harness=harness, workspace=workspace)
+    pr = run_spec_phase(
+        42,
+        config,
+        github=github,
+        harness=harness,
+        workspace=workspace,
+        claim=FakeClaim(),
+    )
 
     assert pr.number == 57
     assert ("provision", "issue-42", "agent/issue-42", "origin/main") in workspace.calls
@@ -216,6 +233,7 @@ def test_happy_path_creates_spec_branch_and_draft_pr(tmp_path):
     assert "machinist:approved" in body
     assert "/machinist-execute" in body
     assert f"/machinist-execute {'b' * 40}" in body
+    assert "only watches the label" not in body
     # Dogfood UX finding: solo devs reach for GitHub's review Approve button,
     # which GitHub blocks on their own PRs. The body must head that off.
     assert "Approve button" in body
@@ -291,6 +309,7 @@ def test_spec_rejects_symlink_trap_without_clobbering_external_file(tmp_path, tr
             github=FakeGitHub(),
             harness=harness,
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     protected = (
@@ -314,6 +333,7 @@ def test_spec_rejects_configured_repo_mismatch_before_github_read(tmp_path):
             github=github,
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert github.calls == []
@@ -357,6 +377,7 @@ def test_spec_refuses_fork_or_mismatched_existing_pr_custody(tmp_path, unsafe_pr
             harness=FakeHarness(),
             workspace=workspace,
             revise=True,
+            claim=FakeClaim(),
         )
 
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
@@ -370,7 +391,12 @@ def test_branch_prefix_comes_from_config(tmp_path):
     config = MachinistConfig.model_validate({"workspace": {"branch_prefix": "bot/"}})
 
     run_spec_phase(
-        42, config, github=FakeGitHub(), harness=FakeHarness(), workspace=workspace
+        42,
+        config,
+        github=FakeGitHub(),
+        harness=FakeHarness(),
+        workspace=workspace,
+        claim=FakeClaim(),
     )
 
     assert ("provision", "issue-42", "bot/issue-42", "origin/main") in workspace.calls
@@ -421,9 +447,10 @@ def test_revise_updates_existing_draft_pr_and_invalidates_approval(tmp_path):
         harness=FakeHarness(spec_text="## Revised\nDo the safer thing.\n"),
         workspace=workspace,
         revise=True,
+        claim=FakeClaim(),
     )
 
-    assert result == DraftPR(number=57, url=existing.url)
+    assert (result.number, result.url) == (57, existing.url)
     assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
     assert ("remove_pr_label", 57, "machinist:approved") in github.calls
     assert any(call[0] == "update_pr" for call in github.calls)
@@ -451,6 +478,7 @@ def test_revise_reopens_a_closed_spec_pr_after_successful_push(tmp_path):
         harness=FakeHarness(),
         workspace=workspace,
         revise=True,
+        claim=FakeClaim(),
     )
 
     assert ("reopen_pr", 57) in github.calls
@@ -481,6 +509,7 @@ def test_revise_fails_if_mark_draft_does_not_take_effect(tmp_path):
             harness=FakeHarness(),
             workspace=workspace,
             revise=True,
+            claim=FakeClaim(),
         )
 
     assert ("mark_draft", 57) in github.calls
@@ -506,6 +535,7 @@ def test_revise_refuses_a_merged_spec_pr(tmp_path):
             harness=FakeHarness(),
             workspace=FakeWorkspace(tmp_path),
             revise=True,
+            claim=FakeClaim(),
         )
 
 
@@ -520,6 +550,7 @@ def test_empty_spec_output_fails_and_keeps_nothing(tmp_path):
             github=github,
             harness=FakeHarness(spec_text="  \n"),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -544,6 +575,7 @@ def test_oversized_issue_input_is_rejected_before_harness_runs(tmp_path):
             github=github,
             harness=harness,
             workspace=FakeWorkspace(tmp_path),
+            claim=FakeClaim(),
         )
 
     assert harness.prompts == []
@@ -560,6 +592,7 @@ def test_oversized_spec_output_is_rejected_before_write_or_push(tmp_path):
             github=github,
             harness=FakeHarness(spec_text="x" * 100_001),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
@@ -576,6 +609,7 @@ def test_harness_failure_cleans_up_and_propagates(tmp_path):
             github=FakeGitHub(),
             harness=FakeHarness(error=boom),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -597,6 +631,7 @@ def test_spec_harness_repository_mutation_is_rejected(tmp_path):
             github=FakeGitHub(),
             harness=MutatingHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert not any(call[0] == "commit_all" for call in workspace.calls)
@@ -616,6 +651,7 @@ def test_cancellation_racing_after_harness_never_commits_or_publishes(tmp_path):
             harness=FakeHarness(),
             workspace=workspace,
             cancel_check=lambda: next(checks),
+            claim=FakeClaim(),
         )
 
     assert caught.value.cancelled is True
@@ -666,6 +702,7 @@ def test_normal_run_refuses_to_hijack_existing_branch_pr(tmp_path):
             github=github,
             harness=harness,
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert harness.prompts == []
@@ -720,7 +757,7 @@ def test_pr_created_crash_is_reconciled_by_checkpointed_retry(tmp_path):
     assert len([call for call in github.calls if call[0] == "create_draft_pr"]) == 1
     assert any(call[0] == "update_pr" for call in github.calls)
     assert not any(call[0] in {"commit_all", "push"} for call in retry_workspace.calls)
-    assert retry_claim.evidence["spec_recovery"] == "delivery-only"
+    assert "spec_recovery" not in retry_claim.evidence
 
 
 def test_label_failure_after_push_retries_as_delivery_only_and_creates_pr(tmp_path):
@@ -769,7 +806,7 @@ def test_label_failure_after_push_retries_as_delivery_only_and_creates_pr(tmp_pa
     assert result.number == 57
     assert len([call for call in github.calls if call[0] == "create_draft_pr"]) == 1
     assert not any(call[0] in {"commit_all", "push"} for call in retry_workspace.calls)
-    assert retry_claim.evidence["spec_recovery"] == "delivery-only"
+    assert "spec_recovery" not in retry_claim.evidence
 
 
 def test_remote_push_is_observed_before_checkpoint(tmp_path):
@@ -809,6 +846,7 @@ def test_post_delivery_rejects_pr_from_wrong_head(tmp_path):
             github=StaleGitHub(),
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -834,6 +872,7 @@ def test_post_delivery_rejects_cross_repository_pr_collision(tmp_path):
             github=ForkGitHub(),
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -855,6 +894,7 @@ def test_post_delivery_rejects_pr_retargeted_to_another_base(tmp_path):
             github=RetargetedGitHub(),
             harness=FakeHarness(),
             workspace=workspace,
+            claim=FakeClaim(),
         )
 
     assert ("cleanup", False) in workspace.calls
@@ -898,4 +938,98 @@ def test_spec_instructions_come_from_provisioned_task_head_and_are_checkpointed(
         == hashlib.sha256(b"rules from the provisioned task head").hexdigest()
     )
     assert claim.evidence["instruction_paths"] == ["AGENTS.md"]
-    assert claim.evidence["instruction_source"] == "task-workspace"
+    assert claim.evidence["instruction_append"] is False
+    assert "instruction_source" not in claim.evidence
+
+
+def test_spec_delivery_persists_no_observed_pr_copies(tmp_path):
+    claim = FakeClaim()
+
+    run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=FakeGitHub(),
+        harness=FakeHarness(),
+        workspace=FakeWorkspace(tmp_path),
+        claim=claim,
+    )
+
+    assert claim.evidence["pr_number"] == 57
+    for key in ("pr_observed_number", "pr_observed_base", "pr_observed_sha"):
+        assert key not in claim.evidence
+
+
+def test_spec_requires_a_claim(tmp_path):
+    with pytest.raises(TypeError, match="claim"):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=FakeGitHub(),
+            harness=FakeHarness(),
+            workspace=FakeWorkspace(tmp_path),
+        )
+
+
+def test_run_spec_phase_returns_the_observed_pull_request(tmp_path):
+    github = FakeGitHub()
+
+    result = run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=FakeHarness(),
+        workspace=FakeWorkspace(tmp_path),
+        claim=FakeClaim(),
+    )
+
+    assert result.number == 57
+    assert result.head_sha == "b" * 40
+    assert result.branch == "agent/issue-42"
+
+
+def test_spec_rejects_an_existing_pr_on_another_branch_through_custody(tmp_path):
+    stray = PullRequest(
+        number=57,
+        title="Spec",
+        url="https://github.com/vscarpenter/demo/pull/57",
+        branch="agent/issue-99",
+        is_draft=True,
+        head_sha="b" * 40,
+        base="main",
+    )
+    github = FakeGitHub(existing_pr=stray)
+    workspace = FakeWorkspace(tmp_path)
+    workspace._remote_sha = stray.head_sha
+
+    with pytest.raises(
+        SpecPhaseError, match=r"branch 'agent/issue-99' != 'agent/issue-42'"
+    ):
+        run_spec_phase(
+            42,
+            MachinistConfig(),
+            github=github,
+            harness=FakeHarness(),
+            workspace=workspace,
+            revise=True,
+            claim=FakeClaim(),
+        )
+
+
+def test_spec_uses_the_shared_approved_label_metadata(tmp_path):
+    from machinist.github import APPROVED_LABEL_COLOR, APPROVED_LABEL_DESCRIPTION
+
+    github = FakeGitHub()
+
+    run_spec_phase(
+        42,
+        MachinistConfig(),
+        github=github,
+        harness=FakeHarness(),
+        workspace=FakeWorkspace(tmp_path),
+        claim=FakeClaim(),
+    )
+
+    assert github.labels["machinist:approved"] == (
+        APPROVED_LABEL_COLOR,
+        APPROVED_LABEL_DESCRIPTION,
+    )
