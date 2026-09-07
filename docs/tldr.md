@@ -1,85 +1,75 @@
 # AgentMachinist TL;DR
 
-AgentMachinist turns one GitHub issue into a reviewed pull request:
+Start with a bounded Task and return to a reviewed local change:
 
 ```text
-Task → Spec → approve exact SHA → Execute → verify → Review → ready PR → you merge
+Task → Spec → approve exact SHA → Execute → verify → Review → you integrate
+                                                    → optional GitHub PR / GitLab MR
 ```
 
-The controller owns Git and GitHub transitions. The Harness writes the Spec,
-edits code, and reviews the result. AgentMachinist never merges.
+The controller owns Git and durable Evidence. The Harness produces the Spec,
+edits code, and reviews the result. AgentMachinist never merges automatically
+or remotely; local integration is explicit.
 
 ## One-time setup
 
+The new local workflow is unreleased. Install this source checkout with
+`uv tool install --editable .`, then enter the repository you want to change.
+You need an initial Git commit, a configured author, one installed Harness, and
+an executable verification command. No forge or origin is required.
+
+## First local Task
+
 ```sh
-cd your-repository
-machinist onboard                 # choose local or github-actions Spec dispatch
-machinist doctor --run-gates      # resolve every FAIL before unattended work
-git status --short
-git add machinist.yaml .machinist/specs/.gitkeep .gitignore
-git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows      # review generated workflows
-git diff --cached
-git commit -m "chore: configure AgentMachinist"
-git push
+machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
+# Read the saved Spec and copy its exact Approval command:
+machinist approve --task T1 --spec-sha <full-spec-commit-sha>
+# Approval continues implementation, verification, and independent Review.
+machinist status T1
+# Inspect the report/diff, then:
+machinist integrate T1
 ```
 
-`local` is the recommended first-run mode. If `github.spec_source` is
-`github-actions`, add the selected Spec adapter's declared secret and push the
-generated workflow before the first Task. CI owns only Spec; Execute and Review
-still run locally. See the [Harness matrix](harnesses.md) for secret names.
+Integration requires the clean expected base and exact reviewed candidate and
+permits only fast-forward. Review findings are advisory. Local orchestration
+can still use a cloud model; offline inference needs separate configuration.
 
-## Local Spec flow
+## Optional collaboration
 
 ```sh
-machinist task new --title "Fix login redirect" --dispatch
-machinist spec <issue>             # or leave machinist watch running
-# Read the draft Spec PR, then:
+machinist start --from-issue https://gitlab.com/team/project/-/issues/42
+machinist publish T1 --provider gitlab
+# Or: machinist publish T1 --provider github
+```
+
+Authenticate `glab` or `gh` for the selected host. Publication binds to origin
+and can retry without repeating local Phases. GitLab supports nested projects
+and self-managed hosts; it does not supply native Spec CI or remote Approval.
+
+## Recovery and amendments
+
+```sh
+machinist retry --task T1 --phase execute
+machinist retry --task T1 --phase execute --fresh
+machinist amend --task T1 --feedback "Also name the rejected timezone value."
+```
+
+Amendment generates a new Spec requiring fresh Approval. After integration
+starts, use a new Task. `machinist continue T1` reports or advances the next
+eligible action; it does not bypass Approval or explicit retry.
+
+## Existing GitHub automation
+
+The existing issue/watcher workflow remains available through
+`machinist onboard`. Review, commit, push, and merge setup before running
+`machinist doctor --run-gates`. For `github.spec_source: github-actions`, add
+the selected Spec adapter's declared secret. Execution remains local:
+
+```sh
 machinist approve --issue <issue>
-machinist status                   # continue only when state is approved
-machinist run <issue>              # Execute + authoritative Verification Gate
-machinist review <issue>           # independent Review marks the PR ready
+machinist run <issue>
+machinist review <issue>
 ```
 
-Review the ready PR and merge it yourself.
-
-## GitHub Actions Spec flow
-
-```sh
-machinist task new --title "Fix login redirect" --dispatch
-# The managed workflow writes the Spec and opens its draft PR.
-
-# Read the draft Spec PR, then:
-machinist approve --issue <issue>
-machinist status                   # wait for trusted SHA Evidence
-
-machinist run <issue>              # implementation always runs locally
-machinist review <issue>           # Review also runs locally
-```
-
-You can leave `machinist watch` running instead of invoking Spec, Execute, and
-Review manually. `github.spec_source` changes only who writes the Spec.
-
-## When something stops
-
-```sh
-machinist doctor --run-gates
-machinist inspect <issue>
-machinist retry <issue> --phase review   # or spec / execute
-```
-
-For a failed Execute attempt, choose retained edits or a clean Workshop:
-
-```sh
-machinist retry <issue> --phase execute --run --resume
-machinist retry <issue> --phase execute --run --fresh   # default
-```
-
-Revise a successful Spec with `machinist spec <issue> --revise`. Do not edit
-managed workflows directly; change `machinist.yaml`, run
-`machinist sync-workflows`, review the diff, commit, and push it. Approval
-becomes stale whenever the Spec head changes.
-
-For setup details, recovery cases, and trust limits, see
-[Getting Started](getting-started.md), the [operator runbook](operator-runbook.md),
-and the [trust model](trust-model.md).
+See the [local workflow](local-workflow.md), [Getting Started](getting-started.md),
+[operator runbook](operator-runbook.md), and [trust model](trust-model.md).

@@ -1,21 +1,48 @@
 # Architecture and lifecycle
 
-AgentMachinist is a controller around four external systems: Git, GitHub, a
-coding Harness, and the repository's configured verification commands. Its
-useful boundary is a ready-for-review pull request—not merge or deployment.
+AgentMachinist coordinates Git, a coding Harness, and the repository's
+verification commands. A reviewed local candidate is the primary result.
+GitHub/GitLab intake and publication are optional; integration requires an
+explicit human command and a clean fast-forward. Remote merge and production
+deployment remain outside the controller.
 
 ## Ownership
 
 | Owner | Responsibilities |
 | --- | --- |
-| GitHub | Issues, PRs, branch heads, approval marker comments, labels. |
-| AgentMachinist | Eligibility, local Claims, Task Runs, Workshops, commits, leased pushes, PR readiness. |
+| GitHub/GitLab | Optional source issues and published PRs/MRs; GitHub additionally supports its legacy trusted Approval workflows. |
+| AgentMachinist | Local Task identity, Approval, Claims, Task Runs, Workshops, commits, verified candidates, explicit local integration, leased publication. |
 | Harness | Read repository context, return a spec or working-tree edits, and independently review the delivered diff; may pre-run configured verification gates to iterate. |
-| Human | Issue intent, spec approval, code review, merge. |
+| Human | Task intent, exact Spec Approval, code review, explicit local integration or remote merge. |
 
 The controller keeps Git authority. Prompts tell the harness not to use Git;
 postconditions detect commits, remote branch changes, and `.machinist/` edits
 before the controller proceeds.
+
+## Local lifecycle and optional publication
+
+`local_tasks.py` stores monotonic local IDs (`T1`), revision-checked records,
+operation Claims, and reports under `.machinist/runs/local/`. Imported issues
+are provenance; they do not determine local identity or grant Approval.
+`local_setup.py` supplies minimal runtime settings without forge setup.
+
+`local_workflow.py` sends every Spec, Execute, and Review Task Run through
+`dispatch.py`, sharing the existing lifecycle, Evidence, Verification, and
+cancellation policies. Human Approval names the exact repository, Task, and
+Spec commit. Local Review always runs and remains advisory. A new Spec
+invalidates Approval; a new successful Execute SHA permits a fresh Review.
+
+`local_workspace.py` provisions no-origin Workshops and retains controller-owned
+candidate refs before cleanup. Explicit integration records intent, checks the
+clean base/candidate identities and ancestry, and advances only by fast-forward.
+An interrupted operation reconciles the recorded intended result.
+
+`publication.py` consumes the completed local candidate independently from the
+machine Phases. It checks exact successful Execute and Review Evidence, binds
+the origin to `forge.py`/`gitlab.py`, and journals intended SHA and remote lease
+before pushing. PR/MR creation and retries preserve number, repository, branch,
+base, open state, and exact head. Publication failures leave the local candidate
+and Evidence intact. See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
 
 ## Deep policy seams
 
@@ -36,7 +63,7 @@ These are internal module seams, not persistence migrations. Version-1 Task Run
 records and `machinist.yaml` remain compatible, and CLI text, JSON, and GitHub
 effects keep their existing contracts.
 
-## Lifecycle
+## Legacy GitHub lifecycle
 
 ```text
 trigger label
@@ -69,7 +96,7 @@ evidence, posts a bounded structured report, rechecks the head, and alone marks
 it ready. Findings are advisory; parse failure, mutation, cancellation, or head
 drift fails the Phase without an autonomous repair loop.
 
-## Immutable approval
+## Legacy GitHub immutable Approval
 
 Approval evidence is an HTML comment marker:
 

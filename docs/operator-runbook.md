@@ -1,6 +1,24 @@
 # Operator runbook
 
-## Preflight
+## Local foreground operation
+
+Use the [local workflow guide](local-workflow.md) for the complete no-forge
+journey. `machinist start` saves a local Task and stops at exact-SHA Approval;
+`machinist approve --task T1 --spec-sha <sha>` continues verification and
+independent Review. `machinist status T1` reports the next valid action without
+fetching forge state. Inspect the local report/diff before `machinist integrate T1`.
+
+Failed Phases require `machinist retry --task T1 --phase execute` (or Spec/Review);
+`--fresh` chooses a fresh Workshop. `machinist amend --task T1 --feedback <text>`
+generates a new Spec and invalidates Approval. After integration has begun,
+start a new Task from the current base instead of amending that Task.
+
+Publication is independent: `machinist publish T1 --provider gitlab` (or
+`github`) can retry an uncertain push or change creation without repeating the
+local Phases. Keep one persistent runner checkout per repository for a small
+team; local Claims and Task records are not multi-host coordination.
+
+## GitHub preflight
 
 Run from the configured repository root:
 
@@ -90,7 +108,7 @@ unavailable ledger warns and fails open rather than suppressing an alert.
 The configured `queue.max_tasks_per_pass` limits each poll; the
 `watch --max-tasks <n>` option overrides it for one process. `watch --dry-run`
 reports eligible and deferred Tasks without claiming or dispatching them.
-Optional allowed hours and daily Task/runtime budgets are evaluated from local
+Optional allowed hours and daily Task Run/runtime budgets are evaluated from local
 time and Task Run history.
 
 Use durable operator controls for planned pauses:

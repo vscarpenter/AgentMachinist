@@ -1,17 +1,20 @@
 # AgentMachinist
 
-AgentMachinist is a local-first, issue-to-reviewed-PR build pipeline for solo
-developers. It connects GitHub issues to Claude Code, OpenCode, Pi, or Codex,
-with a human-approved specification between planning and implementation.
+AgentMachinist takes a small development Task from intent to a reviewed local
+change. It coordinates Claude Code, OpenCode, Pi, or Codex, with human Approval
+of the exact Spec before implementation and human review before integration.
+GitHub and GitLab are optional sources of Tasks and destinations for publication.
 
 ```text
-issue + trigger label → spec commit → draft PR → SHA-bound approval
-                    → implementation → test gate → read-only review
-                    → ready PR → human merge
+Task → Spec commit → human Approval → implementation → verification → Review
+                                                                    │
+                                  human review → local integration ◄─┘
+                                  optional GitHub PR / GitLab MR
 ```
 
-The controller—not the harness—owns commits, pushes, PR transitions, and task
-records. AgentMachinist never merges.
+The controller owns commits, Task records, and optional publication. Local
+integration is an explicit fast-forward operation into your clean base checkout.
+AgentMachinist never merges remotely or automatically.
 
 Current release: [AgentMachinist 0.13.0 on PyPI](https://pypi.org/project/agentmachinist/0.13.0/).
 
@@ -21,8 +24,10 @@ Current release: [AgentMachinist 0.13.0 on PyPI](https://pypi.org/project/agentm
 uv tool install agentmachinist
 ```
 
-You also need `git`, an authenticated [`gh`](https://cli.github.com), and one
-supported harness executable (`claude`, `opencode`, `pi`, or `codex`). The core
+You also need `git` and one supported Harness executable (`claude`, `opencode`,
+`pi`, or `codex`). GitHub operations require authenticated [`gh`](https://cli.github.com);
+GitLab operations require authenticated [`glab`](https://docs.gitlab.com/cli/).
+The core
 CLI is tested on macOS and Linux with Python 3.12–3.14. Managed background
 service commands are macOS-only; on Linux, schedule `machinist watch --once`
 with your existing service manager.
@@ -42,11 +47,59 @@ never appears in `update-check --json`.
 
 ## Start
 
+The guided local workflow in this checkout is **unreleased**. Run
+`uv tool install --editable .` from this source checkout to try it; the
+published 0.13.0 package provides the existing GitHub workflow below.
+
+```sh
+cd your-repository
+machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
+# Read the saved Spec and copy the exact Approval command printed by start:
+machinist approve --task T1 --spec-sha <full-spec-commit-sha>
+# Approval continues implementation, verification, and independent Review.
+machinist status T1
+# Inspect the diff and report, then integrate explicitly:
+machinist integrate T1
+```
+
+First start detects an installed Harness and a verification command. Its local
+settings and Task records live under `.machinist/runs/local/`, excluded through
+Git's local exclude file. It does not require an origin, labels, a daemon, forge
+authentication, or hosted workflows. Existing `machinist.yaml` settings remain
+available. Local orchestration can still use a cloud model; offline inference
+requires a separately configured local provider.
+
+Verification runs in an isolated committed checkout; dependency folders from
+your working repository are not copied. Use a self-preparing command such as
+`npm ci && npm test` or `uv run pytest`. A failing baseline stops before the
+Spec Harness. Correct the Gate in `.machinist/runs/local/config.yaml` or its
+dependency setup, then run `machinist retry --task T1 --phase spec`.
+
+You can publish the same reviewed candidate when collaboration is useful:
+
+```sh
+machinist publish T1 --provider gitlab
+# Or: machinist publish T1 --provider github
+```
+
+Publication requires an origin that matches the selected forge and authenticated
+CLI. It preserves local work on failure and retries the same branch and change
+request without repeating Harness work or verification. GitLab support includes
+nested projects and explicitly bound self-managed hosts; it covers issue intake
+and merge-request publication, not GitLab-hosted Spec automation.
+
+See the [local workflow guide](docs/local-workflow.md) for input files, external
+issues, amendments, recovery, and use by a solo developer or small team.
+
+## GitHub automation
+
+Existing GitHub issue commands, trusted workflow Approval, and watcher operation
+remain available. Configure that integration separately:
+
 ```sh
 cd your-repository
 machinist onboard
 # Answer the setup questions, review the generated files, then:
-machinist doctor --run-gates   # one command checks config, labels, workflows, gates
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
@@ -54,6 +107,7 @@ git add -p .github/workflows   # review each hunk
 git diff --cached              # verify what will be committed
 git commit -m "chore: configure AgentMachinist"
 git push
+machinist doctor --run-gates   # after setup reaches the default branch
 machinist watch
 ```
 
@@ -65,12 +119,14 @@ the exact fix for any `FAIL`. Only run the individual
 
 Use `machinist onboard --setup-pr` when you want AgentMachinist to put only its
 managed setup files on a pushed `chore/agentmachinist-setup` branch and open a
-draft PR. It requires a clean default branch and leaves failures visible with a
-recovery command. Before creating a real issue, run `machinist rehearse` for a
-no-model, no-API controller simulation; `--harness` is the explicit opt-in to
-invoke the configured providers inside the disposable repository.
+draft PR. Fresh setup requires a clean default branch; a recognized partial
+setup resumes without replacing your preferences. Setup checks local readiness
+before publication. Merge setup, then run full doctor to verify the deployed
+workflows. `machinist rehearse` exercises the production local Phases, real Git,
+verification, and integration with a fake Harness; `--harness` explicitly opts
+into configured providers in the disposable repository.
 
-In a terminal, `machinist onboard` (the recommended entry point) asks a short
+In a terminal, `machinist onboard` (the GitHub setup entry point) asks a short
 set of setup questions — dispatch mode, managed workflows, harness, test gate,
 and notifications — each with a one-line explanation and a safe default. Flags
 such as `--harness`, `--test-cmd`, `--spec-source`, and `--notifications`
@@ -105,8 +161,9 @@ machinist approve --issue 57
 # /machinist-execute <full-spec-commit-sha>
 ```
 
-`approve` takes exactly one of `--issue` or `--pr`; there is no positional
-form, so an issue and a pull request that share a number cannot be confused.
+GitHub Approval takes exactly one of `--issue` or `--pr`; local Approval instead
+uses `--task T1 --spec-sha <sha>`. These selectors keep local Tasks, issues, and
+pull requests distinct.
 
 Editing the spec after approval makes that approval stale and blocks execution
 until the new head is approved.
@@ -142,16 +199,24 @@ PR.
 
 | Command | Purpose |
 | --- | --- |
+| `machinist start [<objective>] [--body-file <path>] [--from-issue <url>]` | Save a local Task, generate its Spec, and stop for exact human Approval. |
+| `machinist approve --task <Tn> --spec-sha <sha>` | Approve one local Spec and continue Execute, verification, and Review in the foreground. |
+| `machinist continue <Tn>` | Continue eligible local work or show the next required human action. |
+| `machinist status <Tn> [--json]` | Inspect one local Task and its next action without forge access. |
+| `machinist integrate <Tn>` | Explicitly fast-forward a clean local base to the exact reviewed candidate. |
+| `machinist publish <Tn> --provider github\|gitlab [--host <host>]` | Publish the reviewed local candidate as a PR or MR with recoverable intent. |
+| `machinist retry --task <Tn> --phase spec\|execute\|review [--fresh]` | Explicitly retry a failed local Phase in the foreground. |
+| `machinist amend --task <Tn> --feedback <text>` | Regenerate the local Spec from feedback and require fresh Approval. |
 | `machinist init [--yes]` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--yes` hands-free, `--no-input` skips without auto-enabling test command). |
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
-| `machinist rehearse [--harness]` | Simulate the lifecycle in a disposable local repository; model/API use is opt-in. |
+| `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |
 | `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |
 | `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration. |
 | `machinist task template --write\|--check` | Project or verify the sealed GitHub issue form. |
-| `machinist task new --title <title> [--dispatch]` | Create a structured issue; apply the trigger label only after local lint passes. |
+| `machinist task new --title <title> [--body-file <path>] [--dispatch]` | Create a structured GitHub issue; preserve drafts on failure and dispatch only after lint passes. |
 | `machinist task lint <issue> [--json]` | Check objective, acceptance criteria, constraints, and verification readiness. |
 | `machinist spec <issue> [--dry-run]` | Preview a Spec, or generate it and open its draft PR. |
 | `machinist spec <issue> --revise` | Regenerate a successful Spec on its existing branch and PR. |
@@ -179,7 +244,8 @@ PR.
 
 - [TL;DR](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/tldr.md)
 - [Getting started](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md)
-- [Visual first-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
+- [Local workflow and optional publication](docs/local-workflow.md)
+- [GitHub visual first-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
 - [Architecture and lifecycle](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md)
 - [Operator runbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md)
 - [Trust model](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md)

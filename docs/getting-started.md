@@ -1,19 +1,19 @@
 # Getting Started with AgentMachinist
 
-AgentMachinist turns a GitHub issue into a draft specification PR, waits for
-approval of that exact spec commit, then asks your coding harness to implement
-it. The resulting PR is still yours to review and merge.
+AgentMachinist takes a Task through an exact human-approved Spec, isolated
+implementation, verification, and independent Review. You can integrate the
+reviewed candidate locally and optionally publish it to GitHub or GitLab.
 
 ## What is AgentMachinist?
 
-It is an issue-to-reviewed-PR build pipeline with two human gates:
+It is a development workflow with two human Gates:
 
 ```text
-issue → SPEC → draft PR → APPROVE exact SHA → EXECUTE → tests → REVIEW → ready PR
-          machine                 human             machine          machine   human
+Task → Spec → human Approval of exact SHA → Execute → verify → Review
+                                                        → human review/integration
 ```
 
-AgentMachinist owns Git operations and GitHub transitions. Each task runs in a
+AgentMachinist owns Git operations and optional forge transitions. Each Task runs in a
 separate worktree or clone, so your active checkout is not used as the harness
 workspace. The harness never receives merge authority from AgentMachinist.
 
@@ -24,11 +24,12 @@ Install and verify:
 | Tool | Check |
 | --- | --- |
 | Git | `git --version` |
-| GitHub CLI, authenticated | `gh auth status` |
 | uv | `uv --version` |
 | One harness | for example, `claude --version` |
 
-You need push and pull-request access to the target GitHub repository.
+The local workflow requires no origin or forge account. Optional GitHub
+operations require authenticated `gh` and access to the target repository;
+GitLab operations require authenticated `glab` for the selected host.
 The core CLI is tested on macOS and Linux with Python 3.12–3.14. The managed
 LaunchAgent integration is macOS-only; Linux users can schedule
 `machinist watch --once` with their existing service manager.
@@ -70,7 +71,47 @@ pipeline contacts PyPI.
 
 ## Set up your repository
 
-From the repository root, use the guided entry point:
+For a local foreground Task, start from a repository with an initial commit and
+configured Git author:
+
+```sh
+machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
+# Read the Spec; use the exact SHA printed by start:
+machinist approve --task T1 --spec-sha <full-spec-commit-sha>
+# Approval continues Execute, verification, and independent Review.
+machinist status T1
+# Inspect the candidate diff and report, then:
+machinist integrate T1
+```
+
+This workflow is unreleased; install this checkout with
+`uv tool install --editable .` to try it. First start detects an installed
+Harness and verification command, writes local settings under
+`.machinist/runs/local/config.yaml`, and adds runtime exclusion through Git's
+local exclude file. It preserves existing repository configuration. A missing
+verification command needs an explicit `--test-cmd` before model work starts.
+Independent Review always runs for this local journey.
+
+The command must work from the Workshop's isolated committed checkout. Ignored
+dependency folders such as `node_modules/` and `.venv/` are not copied from your
+working repository. Commands such as `npm ci && npm test` or `uv run pytest`
+can prepare that environment. Baseline verification runs before the Spec
+Harness; on dependency or command failure, correct the required Gate in
+`.machinist/runs/local/config.yaml` and retry with
+`machinist retry --task T1 --phase spec`. See the local workflow guide for
+prepared-interpreter and changed-baseline cases.
+
+Integration is explicitly requested and requires the clean expected base and
+exact reviewed candidate to permit a fast-forward. It does not push or merge
+remotely. Use `machinist publish T1 --provider github` or
+`machinist publish T1 --provider gitlab` when you choose to share that candidate.
+See the [local workflow guide](local-workflow.md) for issue import, file/stdin
+input, amendments, exact-SHA Approval, and publication recovery.
+
+### GitHub setup and automation
+
+The remaining setup instructions configure the existing GitHub issue/watcher
+integration. From the repository root:
 
 ```sh
 machinist onboard
@@ -79,24 +120,29 @@ machinist onboard
 This creates `machinist.yaml`, `.machinist/specs/`, the sealed GitHub issue
 form, the managed approval workflow, and the configured labels. It also idempotently adds
 `/.machinist/runs/` to `.gitignore` so runtime records are not committed. It
-does not overwrite an existing config unless you pass `--force`.
+does not overwrite an existing config unless you pass `--force`. A recognized
+partial setup can be resumed by rerunning `machinist onboard`; valid config and
+operator preferences are retained.
 
 `onboard` uses the same renderer as `init`. Add `--setup-pr` when setup should
-land through review: AgentMachinist requires a clean default branch, creates
+land through review: initial setup requires a clean default branch, creates
 `chore/agentmachinist-setup`, commits only its managed allowlist, pushes it,
-and opens a draft PR. It never changes the default branch directly. Before a
+and opens a draft PR. Local readiness is checked before publishing the setup PR;
+full doctor verifies deployed workflows after you merge setup. A recognized
+setup branch can be resumed. It never changes the default branch directly. Before a
 real Task, prove the controller flow without GitHub or model cost:
 
 ```sh
 machinist rehearse
 ```
 
-The default rehearsal is deterministic and uses no model or API; it invokes no
-Harness process.
+The default rehearsal runs the production local Phases with real Git,
+verification, Review, and explicit integration. Its fake Harness is deterministic
+and uses no model or API; it invokes no external Harness process.
 `machinist rehearse --harness` is the explicit opt-in to run configured
 profiles in the disposable repository.
 
-In a terminal, `onboard` (recommended) walks you through the choices that matter on the first
+In a terminal, GitHub `onboard` walks you through the choices that matter on the first
 run, each with a one-line explanation and a safe default — `init` is the same
 setup step without the guided receipt:
 
@@ -136,7 +182,8 @@ tests:
   command: uv run pytest
 ```
 
-Then verify the installation without changing it:
+After setup is committed, pushed, and merged to the default branch, verify the
+deployed integration without changing it:
 
 ```sh
 machinist doctor --run-gates
@@ -178,6 +225,9 @@ operate commands grouped by workflow.
 
 ## Your first agent task
 
+For the local journey, use `machinist start` as shown above. The following
+commands create Tasks for the existing GitHub integration.
+
 Create and lint a focused Task before paying for agent work:
 
 ```sh
@@ -195,6 +245,12 @@ the default local dispatcher, start one pass:
 machinist watch --once
 ```
 
+Use `--body-file task.md` or `--body-file -` on `machinist task new` for file
+or stdin input. Invalid input and failed creation preserve a draft and print a
+recovery command. Required sections accept `##` and GitHub issue forms' `###`
+headings; deeper headings stay within their field. Objectives need at least six
+words, and acceptance checkboxes cannot be empty or placeholder text.
+
 Or address a specific issue directly:
 
 ```sh
@@ -210,6 +266,12 @@ and opens a draft PR.
 
 ## Review and approve
 
+Local Tasks use `machinist approve --task T1 --spec-sha <full-spec-commit-sha>`.
+The supplied SHA must match the saved Spec; Approval continues local Execute
+and Review. Local Review is advisory and does not authorize integration.
+
+For the GitHub issue workflow, use the trusted workflow Approval below.
+
 Read the spec in the draft PR. Approval records both the configured label and
 the exact 40-character PR head SHA. Choose one method:
 
@@ -218,9 +280,8 @@ machinist approve --pr 8
 # or: machinist approve --issue 7
 ```
 
-`approve` takes exactly one of `--pr` or `--issue`. There is no positional
-form, so an issue and a pull request that share a number can never be
-confused.
+GitHub `approve` takes exactly one of `--pr` or `--issue`; local Tasks use the
+separate `--task` selector. There is no ambiguous positional Approval target.
 
 Or post the exact PR comment:
 
@@ -633,14 +694,17 @@ queue:
     timezone: America/Chicago
     days: [mon, tue, wed, thu, fri]
   task_budget:
-    max_tasks_per_day: 5
+    max_runs_per_day: 5
     max_runtime_minutes_per_day: 240
     timezone: America/Chicago
 ```
 
-Allowed-hour windows may cross midnight. Daily counts come from local Task Run
-history, so these are conservative local admission controls, not distributed
-quotas across several Macs.
+Allowed-hour windows may cross midnight. `max_runs_per_day` counts Phase
+attempts: Spec, Execute, and Review each consume one Task Run. The legacy
+`max_tasks_per_day` key still loads with those same semantics; conflicting old
+and new values fail validation, and effective config emits the canonical key.
+Daily counts come from local Task Run history, so these are conservative local
+watcher admission controls, not distributed quotas across several Macs.
 
 Pause all new dispatches or defer one issue durably:
 

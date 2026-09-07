@@ -1,15 +1,23 @@
 # AgentMachinist Context
 
-AgentMachinist coordinates a human-approved path from a GitHub issue to a reviewable implementation while keeping task execution isolated from the developer's checkout.
+AgentMachinist coordinates a human-approved path from a Task to a reviewed local
+implementation while keeping Harness execution isolated from the developer's
+checkout. GitHub and GitLab intake and publication are optional.
 
 ## Language
 
 **Task**:
-A GitHub issue selected for AgentMachinist. One Task has at most one active Spec PR and one current Task Run per Phase.
+A bounded development objective owned by the controller. Local Tasks have IDs
+such as `T1`; an imported GitHub/GitLab issue is optional provenance. Existing
+GitHub issue Tasks retain numeric selectors and their Spec PR. One Task has one
+current Task Run per Phase, with previous attempts retained.
 _Avoid_: Job, ticket, work item
 
 **Phase**:
-One of the ordered kinds of machine work: Spec, Execute, or Review. Approval is a human Gate between Spec and Execute; human review and merge remain the final Gate after the machine Review Phase.
+One of the ordered kinds of machine work: Spec, Execute, or Review. Approval is a
+human Gate between Spec and Execute; human review and integration remain the
+final Gate after the machine Review Phase. Publication is a separate controller
+operation, not a Phase.
 _Avoid_: Stage, step
 
 **Spec**:
@@ -17,11 +25,15 @@ The Markdown implementation contract committed to the Task branch. A Spec is ide
 _Avoid_: Plan, proposal
 
 **Approval**:
-A human decision authorizing one exact Spec commit for Execute. An Approval becomes stale when the Task branch head changes.
+A human decision authorizing one exact Spec commit for Execute. Local Approval
+binds repository, Task, Spec SHA, actor, and time. The legacy GitHub flow requires
+its trusted workflow marker and label. Revising the Spec invalidates Approval.
 _Avoid_: Review approval, permission
 
 **Gate**:
-A control transfer that requires durable evidence before the next Phase can begin. Gate 1 is Approval; Gate 2 is human review and merge.
+A control transfer that requires durable Evidence before work can proceed.
+Gate 1 is Approval; the final human Gate is review and explicit local integration
+or a human merge on the forge. Verification Gates run the configured checks.
 _Avoid_: Checkpoint
 
 **Task Run**:
@@ -29,7 +41,9 @@ The durable local record of one Phase attempt for a Task, including claim, resul
 _Avoid_: Session, execution
 
 **Claim**:
-Exclusive local ownership of a Task Phase while it is running. A Claim prevents two local watchers from spending harness time on the same Task.
+Exclusive local ownership of a Task Phase while it is running. A Claim prevents
+local workers using the same runtime from spending Harness time on the same
+Task. It does not coordinate different runner checkouts or machines.
 _Avoid_: Lock, reservation
 
 **Workshop**:
@@ -41,12 +55,17 @@ A coding-agent CLI selected by configuration. Claude Code, OpenCode, PI, and Cod
 _Avoid_: Agent provider, model
 
 **Evidence**:
-Durable facts produced by a Task Run: approved Spec commit, verification result, implementation commit, independent Review report, PR, and error details.
+Durable facts produced by a Task Run: approved Spec commit, verification result,
+implementation commit, independent Review report, and error details. Local
+integration and optional PR/MR publication also retain recoverable intent and
+observed results.
 _Avoid_: Log, output
 
 ## Flagged ambiguities
 
-- "Approve" in GitHub means a pull-request review action. AgentMachinist Approval means authorizing an exact Spec commit through its label/comment/CLI flow.
+- "Approve" in a forge review UI does not authorize local Execute. AgentMachinist
+  Approval names an exact Spec through the local CLI or the legacy GitHub
+  workflow. GitLab remote reviews are not local Approval.
 - The existing code uses `Workspace` for the Workshop module. Keep the public code name for compatibility; documentation uses Workshop for the domain concept.
 
 ## Example dialogue

@@ -10,12 +10,14 @@ path that matches what you are trying to do:
 - [One-minute explainer](https://agentmachinist.vinny.dev/explainer.html) —
   animated issue-to-PR walkthrough.
 - [First-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
-  — visual, copy-and-run setup.
+  — visual setup for the existing GitHub integration.
 
 ## Adopt and operate it
 
 - [Getting Started](getting-started.md) — complete installation, configuration,
   first Task, and troubleshooting reference.
+- [Local workflow and optional publication](local-workflow.md) — foreground
+  Tasks, exact Approval, local integration, GitHub/GitLab publication, and teams.
 - [TL;DR](tldr.md) — one setup checklist plus concise local and GitHub Actions
   Task flows.
 - [Machinist Job Card](https://agentmachinist.vinny.dev/job-card.html) — compact
@@ -32,8 +34,13 @@ path that matches what you are trying to do:
 - [Harness support matrix](harnesses.md) — adapter behavior, authentication,
   and compatibility checks.
 
-Start with `machinist onboard` (or `machinist onboard --yes` for hands-free
-defaults + auto-detected test command), then run `machinist doctor --run-gates`
+Start locally with `machinist start "Handle an invalid timezone without crashing"`.
+Read the saved Spec and approve its exact SHA to continue implementation and
+Review. Optional `integrate` and `publish` commands are explicit human actions.
+This local journey is unreleased; use the source-install instructions in the
+local workflow guide. For the existing GitHub automation, use
+`machinist onboard` (or `machinist onboard --yes` for hands-free defaults and a
+detected test command), merge setup, then run `machinist doctor --run-gates`
 — the single health check that verifies labels, workflows, the sealed issue form,
 and verification gates and prints the exact fix for any `FAIL`. Only run
 `machinist sync-labels --check`, `machinist sync-workflows --check`, or
@@ -47,6 +54,7 @@ policy, live state, and local reliability. Run `machinist --help` for grouped
 
 - [ADR 0001: Review, plugin, and telemetry boundaries](adr/0001-review-plugin-telemetry-boundaries.md)
 - [ADR 0002: Deep module ownership for controller policy](adr/0002-deep-module-ownership.md)
+- [ADR 0003: Local workflow and optional publication](adr/0003-local-workflow-and-optional-publication.md)
 
 ## Historical design records
 

@@ -1,6 +1,28 @@
+# Guided local workflow and GitLab (IN PROGRESS)
+
+Approved specification: `tasks/spec.md`. Plan:
+`docs/superpowers/plans/2026-09-07-local-workflow-gitlab.md`.
+Branch: `codex/local-workflow-gitlab`.
+
+- [x] Record approved scope, implementation plan and ADR 0003.
+- [x] Repair adoption, amendment Review, native issue intake and daily Run budgets.
+- [x] Add repository-bound local Tasks and optional GitHub/GitLab publication.
+- [x] Add isolated local Git candidates, custody, resume and guarded integration.
+- [x] Connect foreground local Phases, exact Approval, amendment and recovery.
+- [x] Complete guided CLI/setup and production-path rehearsal.
+- [x] Reconcile current product, architecture and operator documentation.
+- [ ] Run independent adversarial review, canonical verification and installed smoke.
+- [ ] Commit the complete validated implementation and record final evidence.
+
+### Resuming From Here
+
+Implementation is active. No remote pushes, hosted changes or release publication
+are part of this request. GitLab hosted behavior is validated with recorded/stubbed
+API contracts; local Git, custody, leases and integration use real temporary repos.
+
 # Cards 7 and 14: resume-push fold and flags-only approve (IN PR)
 
-Spec: `tasks/spec.md`. Plan:
+Spec: `docs/superpowers/specs/2026-09-03-resume-push-and-approve-flags.md`. Plan:
 `docs/superpowers/plans/2026-09-03-resume-push-and-approve-flags.md`.
 Branch: `refactor/resume-push-and-approve-flags` (PR #40).
 

@@ -11,12 +11,39 @@ sandbox, container boundary, malware scanner, or policy engine.
 - Repository actors with write or admin access who can approve.
 - The local user account that launches AgentMachinist.
 
-Issue bodies and PR branches are untrusted task input. `pull_request_target`
+Task bodies, imported issues, and PR/MR branches are untrusted input. `pull_request_target`
 approval automation never checks out or executes PR-head code.
+
+## Local Approval, integration, and publication
+
+The local journey records an explicit human Approval tied to repository, Task,
+exact Spec SHA, actor, and time. Copying a Task record to another repository or
+changing its Spec does not carry valid Approval. Local records remain editable
+by the same OS account; they are workflow Evidence, not an authentication
+boundary against hostile local processes. Forge review buttons and GitLab
+comments do not mint local Approval.
+
+Every local candidate requires verification and completed independent Review
+of its exact SHA. Findings are advisory and the human must inspect the change.
+`machinist integrate T1` is explicit, requires the clean expected base and
+candidate, and permits only fast-forward integration. It records intent and
+observed completion for recovery; it does not authorize automatic or remote merge.
+
+Optional publication binds the authenticated forge client to the Git origin's
+host and repository. It refuses unowned existing branches, persists its push
+intent and expected remote SHA, leases the push, and verifies exact open PR/MR
+identity afterward. Publication retries use the saved candidate and do not
+repeat model work or successful verification. Local Tasks need no forge, but
+the Harness can still contact a cloud provider; no offline-model guarantee is
+implied.
 
 ## Enforced controls
 
-- Exact SHA-bound approval plus configured label.
+The following GitHub label/comment controls apply to the legacy issue pipeline;
+local Approval uses the repository/Task/Spec record described above. Git custody,
+verification, Task Run persistence, and read-only Review apply to both paths.
+
+- Exact SHA-bound GitHub approval plus configured label.
 - Exact `/machinist-execute <full-spec-commit-sha>` command and trusted author
   association; label approvals bind the SHA from the authorization event.
 - Actor authorization on both approval paths. Both comment and label approval
@@ -44,8 +71,10 @@ approval automation never checks out or executes PR-head code.
 - Required verification gates before push when `tests.command` or named
   `verification.gates` are configured.
 - Atomic local Task Run records and explicit retry.
-- A separate read-only Review Task Run must validate and comment on the exact
-  delivered implementation head before AgentMachinist marks it ready.
+- In the GitHub issue pipeline, a separate read-only Review Task Run must
+  validate and comment on the exact delivered implementation head before
+  AgentMachinist marks it ready. Local Review produces its report before
+  explicit integration or optional publication becomes eligible.
 
 “Enforced” here means AgentMachinist or the selected CLI checks it. It does not
 mean a hostile process with the same OS identity cannot work around it.

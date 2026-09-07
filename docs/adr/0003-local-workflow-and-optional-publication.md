@@ -4,7 +4,7 @@ Date: 2026-09-07
 
 Status: Accepted
 
-Decider: Vinny Carpenter through approval of the reviewed implementation roadmap.
+Deciders: Vinny Carpenter through approval of the reviewed implementation roadmap.
 
 ## Context
 
