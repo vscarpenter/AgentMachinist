@@ -742,6 +742,31 @@ def test_gh_failure_raises_github_error_with_stderr():
         client.get_issue(9999)
 
 
+@pytest.mark.parametrize("api", [False, True])
+def test_gh_failure_diagnostics_are_safe_and_bounded(api):
+    stderr = (
+        "\x1b[31mHTTP 403 Forbidden\x1b[0m\n"
+        "https://synthetic-user:sentinel-url-secret@example.test/repo\n"
+        "Authorization: Bearer sentinel-header-secret\n"
+        "GH_TOKEN=sentinel-token-secret\n" + "detail " * 1000
+    )
+    client = GitHubClient(runner=FakeRunner(("", 1, stderr)))
+
+    with pytest.raises(GitHubError) as caught:
+        if api:
+            client._gh_api("user")
+        else:
+            client.get_issue(1)
+
+    message = str(caught.value)
+    assert message.startswith("gh api failed:" if api else "gh issue view failed:")
+    assert "HTTP 403 Forbidden" in message
+    assert "sentinel" not in message
+    assert "\x1b" not in message
+    assert "truncated" in message
+    assert len(message) <= 2000
+
+
 def test_missing_gh_binary_is_a_github_error():
     runner = FakeRunner(FileNotFoundError("gh"))
     client = GitHubClient(runner=runner)

@@ -51,7 +51,12 @@ never-merges rule only for that human-directed local operation.
   revision-checked updates, operation Claims, reports, and external provenance
   under `.machinist/runs/local/`. These IDs never alias legacy issue numbers.
 - `local_setup.py` — minimal foreground configuration in local runtime storage,
-  installed Harness and verification discovery, and local Git exclusion.
+  shared read-only resolution for start/readiness, installed Harness and
+  verification discovery, and local Git exclusion only during setup.
+- `local_doctor.py` — optional `doctor --local` checks Git, resolved local
+  configuration, Harness probes, and verification availability without forge
+  setup, update checks, or runtime writes. `--run-gates` explicitly executes
+  Verification in the controller checkout, not an isolated Workshop.
 - `local_workflow.py` — guided local Spec, exact-SHA Approval, Execute, Review,
   amendment/recovery, and explicit integration. Task Run construction still
   belongs to `dispatch.py`; verification belongs to `verification.py`.
@@ -165,7 +170,12 @@ never-merges rule only for that human-directed local operation.
   into managed `.github/workflows/` files (`machinist-spec.yml`,
   `machinist-approve.yml`); drift detection for `--check`/doctor.
 - `doctor.py` — read-only diagnostics (git/gh/harness on PATH, gh auth, test
-  gate configured, workflow drift, failed/abandoned Task Runs).
+  gate configured, workflow drift, failed/abandoned Task Runs), shared report
+  rendering and Harness/Verification probes for local readiness.
+- `diagnostics.py` — bounded controller diagnostic text: recognized credential
+  redaction and terminal-control removal before truncation. Workspace errors,
+  forge invocation failures, and doctor details use this boundary; successful
+  Git/forge payloads remain exact. This does not sanitize arbitrary raw logs.
 - `updates.py` — advisory release-update checks: reads the latest published
   version from PyPI's JSON API (bounded read, https-only, injectable opener),
   compares it with a PEP 440 subset parser (`parse_version`/`is_newer`; never

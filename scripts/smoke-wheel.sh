@@ -43,6 +43,62 @@ grep -Fq 'execute verified' "$TMP_DIR/rehearsal.txt"
 grep -Fq 'review complete' "$TMP_DIR/rehearsal.txt"
 grep -Fq 'local integration complete' "$TMP_DIR/rehearsal.txt"
 
+# A no-origin project exercises the new optional check from the installed wheel.
+# Every Harness invocation is a deterministic probe; generation is an error.
+LOCAL_DIR="$TMP_DIR/local-project"
+mkdir "$LOCAL_DIR"
+cat > "$TMP_DIR/readiness-harness" <<'SH'
+#!/bin/sh
+case "$*" in
+  --version) echo 'codex smoke fixture' ;;
+  'login status') echo 'logged in' ;;
+  *--help*) echo 'usage: codex exec --sandbox --ephemeral -c' ;;
+  *) echo 'unexpected Harness invocation' >&2; exit 99 ;;
+esac
+SH
+chmod +x "$TMP_DIR/readiness-harness"
+"$ENV_DIR/bin/python" - "$LOCAL_DIR" "$TMP_DIR/readiness-harness" <<'PYCONFIG'
+import sys
+from pathlib import Path
+import yaml
+root = Path(sys.argv[1])
+(root / "machinist.yaml").write_text(yaml.safe_dump({
+    "harness": {"name": "codex", "command": sys.argv[2]},
+    "tests": {"command": "true"},
+    "workspace": {"root": str(root.parent / "workshops")},
+}))
+PYCONFIG
+git -C "$LOCAL_DIR" init -q -b main
+git -C "$LOCAL_DIR" -c core.hooksPath=/dev/null add machinist.yaml
+git -C "$LOCAL_DIR" -c core.hooksPath=/dev/null -c commit.gpgSign=false \
+  -c user.name=Smoke -c user.email=smoke@example.invalid commit -qm baseline
+"$ENV_DIR/bin/python" - "$LOCAL_DIR" "$ENV_DIR/bin/machinist" <<'PYLOCAL'
+import json
+import subprocess
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+def snapshot():
+    return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+before = snapshot()
+result = subprocess.run([sys.argv[2], "doctor", "--local", "--json"],
+                        cwd=root, text=True, capture_output=True, check=True)
+report = json.loads(result.stdout)
+assert report["ok"], report
+assert any(c["name"] == "verification execution" and "not run" in c["detail"]
+           for c in report["checks"]), report
+assert snapshot() == before, "default local readiness changed the repository"
+assert not (root / ".machinist").exists()
+result = subprocess.run([sys.argv[2], "doctor", "--local", "--run-gates", "--json"],
+                        cwd=root, text=True, capture_output=True, check=True)
+report = json.loads(result.stdout)
+assert report["ok"], report
+assert any(c["name"] == "verification execution" and c["level"] == "PASS"
+           for c in report["checks"]), report
+assert not (root / ".machinist").exists()
+print("installed local readiness: no-origin/read-only and explicit gates passed")
+PYLOCAL
+
 SDIST_ENV="$TMP_DIR/sdist-venv"
 uv venv "$SDIST_ENV"
 uv pip install --python "$SDIST_ENV/bin/python" "$SDIST"

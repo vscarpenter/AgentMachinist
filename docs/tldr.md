@@ -11,10 +11,13 @@ The controller owns Git and durable Evidence; the Harness writes the Spec, edits
 
 ## One-time setup
 
-Install with `uv tool install agentmachinist` or upgrade with `uv tool upgrade agentmachinist`.
-Confirm `machinist --version` reports 0.14.0, then enter a clean checkout on a named branch.
-You need an initial Git commit, configured author, an installed and authenticated Harness,
+Install with `uv tool install agentmachinist` or upgrade with `uv tool upgrade agentmachinist`; confirm version 0.14.0.
+Enter a clean named branch with an initial Git commit, configured author, an installed and authenticated Harness,
 and an executable required Verification Gate. No forge or origin is required.
+
+**Unreleased / source checkout:** optional `machinist doctor --local` checks readiness without adoption or model/forge calls.
+Install the current source with `uv tool install --editable .` to use it; it is not in published 0.14.0.
+`--run-gates` explicitly runs project commands in your controller checkout; they may write/download and do not prove the isolated baseline.
 
 ## First local Task
 
@@ -41,8 +44,6 @@ permits only fast-forward. Review findings are advisory. Local orchestration
 can still use a cloud model; offline inference needs separate configuration.
 
 ## Optional collaboration
-
-You can import an issue instead of typing the objective:
 
 ```sh
 machinist start --from-issue https://gitlab.com/team/project/-/issues/42
@@ -92,9 +93,8 @@ machinist run <issue>
 
 Only with `review.enabled: true`, follow successful Execute with `machinist review <issue>`.
 
-With local configuration present, default `status` lists local Tasks. Legacy
-`doctor`, `runs`, `inspect`, `report`, `watch`, and portfolio `status --all`
-retain their GitHub issue/configuration scope. Local records are separate;
-watcher budgets do not limit foreground Tasks.
+With local configuration present, default `status` lists local Tasks. Plain `doctor`, `runs`, `inspect`,
+`report`, `watch`, and portfolio `status --all` retain GitHub issue/configuration scope.
+Local records are separate; watcher budgets do not limit foreground Tasks.
 
 See the [local workflow](local-workflow.md), [Getting Started](getting-started.md), [operator runbook](operator-runbook.md), and [trust model](trust-model.md).

@@ -9,6 +9,7 @@ import subprocess
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit
 
+from machinist.diagnostics import sanitize_diagnostic
 from machinist.forge import (
     ExternalTask,
     ForgeError,
@@ -238,7 +239,9 @@ class GitLabClient:
         except subprocess.TimeoutExpired as exc:
             raise ForgeError("glab api timed out after 30 seconds") from exc
         if result.returncode != 0:
-            raise ForgeError(f"glab api failed: {result.stderr.strip()}")
+            raise ForgeError(
+                sanitize_diagnostic(f"glab api failed: {result.stderr.strip()}")
+            )
         try:
             if paginate:
                 # Current glab aggregates arrays; older versions emit one array

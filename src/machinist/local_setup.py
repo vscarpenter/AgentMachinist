@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -80,17 +81,11 @@ def ensure_local_config(
     try:
         runtime = _runtime(repo_root)
         path = runtime.path / "config.yaml"
-        registry = discover_harnesses()
-        if regular_file_exists(path):
-            config = _existing_config(runtime, registry, harness_name, test_command)
-        else:
-            config = _new_config(
-                runtime.repository_root,
-                registry,
-                harness_name=harness_name,
-                test_command=test_command,
-            )
-        _validate_local_config(config, runtime.repository_root, path)
+        config = resolve_local_config(
+            runtime.repository_root,
+            harness_name=harness_name,
+            test_command=test_command,
+        )
         LocalWorkspace(
             runtime.repository_root, config.workspace
         ).ensure_runtime_ignored()
@@ -99,7 +94,11 @@ def ensure_local_config(
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
             if regular_file_exists(path):
-                return _existing_config(runtime, registry, harness_name, test_command)
+                return resolve_local_config(
+                    runtime.repository_root,
+                    harness_name=harness_name,
+                    test_command=test_command,
+                )
             serialized = yaml.safe_dump(
                 config.model_dump(mode="json", exclude_unset=True), sort_keys=False
             )
@@ -115,6 +114,37 @@ def ensure_local_config(
         raise ConfigError(f"cannot configure local work: {exc}") from exc
 
 
+def resolve_local_config(
+    repo_root: Path,
+    *,
+    harness_name: str | None = None,
+    test_command: str | None = None,
+    which: Callable[[str], str | None] | None = None,
+) -> MachinistConfig:
+    """Resolve the same settings as start, without persisting or excluding files."""
+    try:
+        runtime = _runtime(repo_root)
+        path = runtime.path / "config.yaml"
+        registry = discover_harnesses()
+        locate = shutil.which if which is None else which
+        if regular_file_exists(path):
+            config = _existing_config(
+                runtime, registry, harness_name, test_command, locate
+            )
+        else:
+            config = _new_config(
+                runtime.repository_root,
+                registry,
+                harness_name=harness_name,
+                test_command=test_command,
+                which=locate,
+            )
+        _validate_local_config(config, runtime.repository_root, path)
+        return config
+    except (RuntimePathError, ValidationError) as exc:
+        raise ConfigError(f"cannot resolve local configuration: {exc}") from exc
+
+
 def _runtime(repo_root: Path) -> RuntimeDirectory:
     return RuntimeDirectory.bind(
         repo_root / ".machinist/runs/local", repo_root=repo_root
@@ -126,6 +156,7 @@ def _existing_config(
     registry: HarnessRegistry,
     harness_name: str | None,
     test_command: str | None,
+    which: Callable[[str], str | None],
 ) -> MachinistConfig:
     config = load_local_config(runtime.repository_root)
     path = runtime.path / "config.yaml"
@@ -144,7 +175,7 @@ def _existing_config(
                 f"--test-cmd conflicts with {path}; edit that local configuration "
                 "to change verification, or omit --test-cmd to reuse it"
             )
-    _validate_harnesses(config, registry, runtime.repository_root)
+    _validate_harnesses(config, registry, runtime.repository_root, which)
     return config
 
 
@@ -154,6 +185,7 @@ def _new_config(
     *,
     harness_name: str | None,
     test_command: str | None,
+    which: Callable[[str], str | None],
 ) -> MachinistConfig:
     source = root / CONFIG_FILENAME
     existing = load_config(source) if regular_file_exists(source) else None
@@ -163,10 +195,10 @@ def _new_config(
         else MachinistConfig.starter_projection(manage_workflows=False)
     )
     if harness_name is not None:
-        selected = _select_harness(registry, harness_name)
+        selected = _select_harness(registry, harness_name, which)
         values["harness"] = _harness_override(existing, selected)
     elif existing is None or "harness" not in existing.model_fields_set:
-        values["harness"] = {"name": _select_harness(registry, None)}
+        values["harness"] = {"name": _select_harness(registry, None, which)}
     values.setdefault("github", {}).update(
         {"spec_source": "local", "manage_workflows": False}
     )
@@ -190,7 +222,7 @@ def _new_config(
                 "Pass --test-cmd '<command>' before starting a Task."
             )
     config = MachinistConfig.model_validate(values)
-    _validate_harnesses(config, registry, root)
+    _validate_harnesses(config, registry, root, which)
     return config
 
 
@@ -237,7 +269,11 @@ def _test_gate_name(config: MachinistConfig) -> str:
     return f"local-tests-{index}"
 
 
-def _select_harness(registry: HarnessRegistry, requested: str | None) -> str:
+def _select_harness(
+    registry: HarnessRegistry,
+    requested: str | None,
+    which: Callable[[str], str | None],
+) -> str:
     phases = frozenset(phase.value for phase in HarnessPhase)
     if requested is not None:
         adapter = registry.adapters.get(requested)
@@ -252,9 +288,7 @@ def _select_harness(registry: HarnessRegistry, requested: str | None) -> str:
             )
         return requested
     for name, adapter in registry.adapters.items():
-        if phases <= adapter.descriptor.phases and shutil.which(
-            adapter.default_command
-        ):
+        if phases <= adapter.descriptor.phases and which(adapter.default_command):
             return name
     raise ConfigError(
         "No installed Harness supports Spec, Execute, and Review. Install and "
@@ -263,7 +297,10 @@ def _select_harness(registry: HarnessRegistry, requested: str | None) -> str:
 
 
 def _validate_harnesses(
-    config: MachinistConfig, registry: HarnessRegistry, root: Path
+    config: MachinistConfig,
+    registry: HarnessRegistry,
+    root: Path,
+    which: Callable[[str], str | None],
 ) -> None:
     for phase in HarnessPhase:
         profile = config.harness_for(phase)
@@ -273,7 +310,7 @@ def _validate_harnesses(
             raise ConfigError(f"configured Harness '{name}' cannot run {phase.value}")
         command = profile.command or adapter.default_command
         executable = str(root / command) if "/" in command else command
-        if not shutil.which(executable):
+        if not which(executable):
             raise ConfigError(
                 f"configured {phase.value} Harness executable '{command}' is not on PATH; "
                 f"install and authenticate {adapter.descriptor.display_name}, then retry"

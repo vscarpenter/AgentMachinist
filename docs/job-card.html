@@ -394,6 +394,7 @@ machinist start --from-issue https://github.com/team/project/issues/42
     <div class="rail"><strong>Local is not offline inference</strong><span>The Harness may use a cloud model. Offline inference needs a local provider, cached models and dependencies, and separate network-denied validation.</span></div>
     <div class="rail"><strong>One runner checkout</strong><span>Small teams can share issues and PRs/MRs while one operator owns local Tasks. Claims do not coordinate separate checkouts. Watcher Task Run budgets do not limit foreground local Tasks.</span></div>
   </div></section>
+  <p class="note" data-release="unreleased">Unreleased source checkout: optional <code>machinist doctor --local</code> checks readiness without forge setup or local Task state. Add <code>--run-gates</code> only to execute project commands in the controller checkout; isolated Workshop baseline verification still runs at start.</p>
   <footer><code>machinist status T1</code> for local next actions · <code>machinist doctor --run-gates</code> for existing GitHub adoption · <a href="first-run-guide.html">visual first-run guide</a> · <a href="local-workflow.md">local workflow reference</a> · <a href="trust-model.md">trust model</a></footer>
 </main>
 </body>

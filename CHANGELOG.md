@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Add optional `machinist doctor --local [--json] [--run-gates]` readiness for
+  new and existing local projects. Reuse start's configuration resolution,
+  inspect Git/Harness/verification readiness without creating local state or
+  contacting a forge, and execute project gates only when requested. Existing
+  GitHub doctor behavior remains available without `--local`.
+- Fetch and validate the exact remote base before provisioning a new legacy
+  Task Workshop. Deleted or renamed remote branches fail despite stale local
+  tracking refs; construction uses the captured commit. Existing remote Task
+  branches remain authoritative for recovery, and local Tasks remain offline
+  with respect to Git.
+- Sanitize bounded Git, GitHub, GitLab, and doctor diagnostics before rendering:
+  redact recognized credential syntax and remove unsafe terminal controls while
+  preserving useful multiline failures. Successful Git and forge data remains
+  unchanged; arbitrary raw logs are outside this defense-in-depth boundary.
+
 ## 0.14.0 — 2026-09-07
 
 - Allow 30 minutes for CI test and package/release build jobs so the expanded

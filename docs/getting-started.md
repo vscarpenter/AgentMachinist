@@ -148,7 +148,7 @@ Task with corrected intent; local amendment cannot revise that initial Spec.
 Once integration begins, start a new Task from the updated base instead.
 
 Local setup and the existing GitHub setup use separate configuration and run
-namespaces. `doctor`, `watch`, `queue`, `runs`, `inspect`, `explain`, `report`,
+namespaces. Plain `doctor`, `watch`, `queue`, `runs`, `inspect`, `explain`, `report`,
 `clean`, and portfolio `status --all` retain their legacy scope. They do not
 manage or aggregate `T1` records. See the [command and storage
 boundaries](local-workflow.md#command-and-storage-boundaries) before operating
@@ -983,8 +983,24 @@ healthy ones instead of failing the entire view.
 For a foreground Task, start with `machinist status T1`; follow its printed
 `Next:` command. Use `machinist config show --path .machinist/runs/local/config.yaml` to
 inspect the local settings and the [local recovery guide](local-workflow.md#amend-or-recover)
-for retry, amendment, integration, or publication problems. Root `doctor`
-checks GitHub setup and is not a foreground Task diagnostic.
+for retry, amendment, integration, or publication problems. Plain `doctor`
+checks GitHub setup.
+
+**Unreleased / source checkout:** optional local readiness is available with
+`machinist doctor --local` or `machinist doctor --local --json`. Install the
+current source checkout with `uv tool install --editable .` to use this option;
+it is not part of published 0.14.0 and adds no required onboarding step. It
+checks Git state and identity, the local configuration that `start` would use,
+Harness availability and supported version/help/authentication probes, and
+required Gate command entry points. By default it creates no Task, Workshop,
+runtime/config file, exclusion, or ref, and invokes no model, forge, update
+probe, or Verification Gate. A supported auth probe does not establish model
+access or quota.
+
+`machinist doctor --local --run-gates` explicitly runs the configured Gates in
+the controller checkout after readiness checks pass. Those commands can write
+or download; passing them does not prove the isolated Workshop baseline that
+`start` still checks. See [optional local readiness](local-workflow.md#optional-local-readiness).
 
 For the legacy GitHub issue workflow, start with:
 
@@ -1019,6 +1035,7 @@ Common states and responses:
 | Task should not start again | Run `machinist cancel <issue> --reason "..."`; clear it directly or explicitly retry only when dispatch is safe. |
 | Queue or issue is intentionally waiting | Run `machinist queue show`; use `queue resume` or `queue allow <issue>` as appropriate. |
 | Workspace already exists | Inspect it first, or prune it with `machinist clean --issue <issue>` or `machinist clean --all`. |
+| Remote base fetch fails (unreleased / source checkout) | Confirm origin and the repository's current default branch; a new remote Task will not use a stale tracking ref for a deleted branch. |
 | Managed workflow drift | `watch` and `update-check` report it. Run `machinist sync-workflows`, inspect, commit, and push. |
 | Configuration is unclear | Run `machinist config validate` and `machinist config show`; neither starts a Task. |
 | GitHub is unavailable | Read legacy Evidence with `machinist runs` or `machinist inspect <issue> --offline`; `machinist status --local` also works when no local Task configuration is present. |

@@ -15,6 +15,7 @@ from machinist.local_setup import (
     ensure_local_config,
     find_repository_root,
     load_local_config,
+    resolve_local_config,
 )
 
 
@@ -60,6 +61,30 @@ def repo(tmp_path, monkeypatch):
 
 def local_path(repo: Path) -> Path:
     return repo / ".machinist/runs/local/config.yaml"
+
+
+def test_read_only_resolution_matches_first_start_without_creating_runtime(repo):
+    exclude = (repo / ".git/info/exclude").read_bytes()
+    config = resolve_local_config(repo, test_command="python -m pytest")
+
+    assert not (repo / ".machinist").exists()
+    assert (repo / ".git/info/exclude").read_bytes() == exclude
+    assert ensure_local_config(repo, test_command="python -m pytest") == config
+
+
+def test_read_only_resolution_reuses_local_choices_and_injected_path_lookup(repo):
+    expected = ensure_local_config(repo, test_command="pytest")
+    before = local_path(repo).read_bytes()
+    (repo / "machinist.yaml").write_text("invalid: root config\n")
+    calls = []
+
+    def which(command):
+        calls.append(command)
+        return "/bin/local-agent" if command == "local-agent" else None
+
+    assert resolve_local_config(repo, which=which) == expected
+    assert calls == ["local-agent"] * 3
+    assert local_path(repo).read_bytes() == before
 
 
 def test_first_setup_detects_installed_plugin_and_keeps_project_unchanged(repo):

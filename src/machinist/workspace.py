@@ -23,6 +23,7 @@ from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from machinist.config import CleanupPolicy, WorkspaceConfig, WorkspaceStrategy
+from machinist.diagnostics import sanitize_diagnostic
 from machinist.gitconfig import (
     changed_sensitive_keys,
     is_sensitive_key,
@@ -115,6 +116,11 @@ class _PreviewClaim:
 class WorkspaceError(Exception):
     """A git workspace operation failed."""
 
+    def __init__(self, message: str = "") -> None:
+        # Bound at the exception boundary, including nested operation context.
+        # Successful Git stdout remains exact for SHA and custody validation.
+        super().__init__(sanitize_diagnostic(message))
+
 
 class WorkspaceCancelledError(WorkspaceError):
     """A Git operation stopped in response to a Task cancellation."""
@@ -166,16 +172,11 @@ class Workspace:
                 "(or 'git worktree remove' it) and retry"
             )
         origin_url = self._bind_controller_origin()
-        self._git(
-            self.repo_root,
-            "fetch",
-            "--no-tags",
-            origin_url,
-            "+refs/heads/*:refs/remotes/origin/*",
-            env=self._ephemeral_network_environment(origin_url),
-        )
         remote_head = self._fetch_remote_branch(branch)
-        start_sha = remote_head or self._resolve_commit(self.repo_root, base_ref)
+        # A surviving remote Task branch remains the recovery authority. Only
+        # new Tasks need the base, which must be fetched explicitly: a wildcard
+        # fetch can leave origin/<base> pointing at a deleted remote branch.
+        start_sha = remote_head or self._fetch_remote_base(base_ref)
 
         if self.config.strategy is WorkspaceStrategy.WORKTREE:
             if attempt is not None:
@@ -1575,6 +1576,34 @@ class Workspace:
             f"+refs/heads/{branch}:{remote_ref}",
             env=self._ephemeral_network_environment(self._origin_for(self.repo_root)),
         )
+        return self._resolve_commit(self.repo_root, remote_ref)
+
+    def _fetch_remote_base(self, base_ref: str) -> str:
+        remote_ref = base_ref.removeprefix("refs/remotes/")
+        if not remote_ref.startswith("origin/"):
+            raise WorkspaceError("remote base must name origin/<branch>")
+        branch = remote_ref.removeprefix("origin/")
+        self._validate_branch(branch)
+        origin_url = self._origin_for(self.repo_root)
+        remote_ref = f"refs/remotes/origin/{branch}"
+        try:
+            self._git(
+                self.repo_root,
+                "fetch",
+                "--no-tags",
+                origin_url,
+                f"+refs/heads/{branch}:{remote_ref}",
+                env=self._ephemeral_network_environment(origin_url),
+            )
+        except WorkspaceCancelledError:
+            raise
+        except WorkspaceError as exc:
+            raise WorkspaceError(
+                f"could not fetch remote base '{branch}'; confirm origin and "
+                f"the repository's default branch: {exc}"
+            ) from exc
+        # Resolve the freshly fetched, fully qualified branch once. Workshop
+        # creation uses this immutable SHA even if the tracking ref later moves.
         return self._resolve_commit(self.repo_root, remote_ref)
 
     def _resolve_commit(self, cwd: Path, ref: str) -> str:

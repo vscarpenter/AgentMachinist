@@ -84,6 +84,14 @@ your working repository are not copied. Use a self-preparing command such as
 Spec Harness. Correct the Gate in `.machinist/runs/local/config.yaml` or its
 dependency setup, then run `machinist retry --task T1 --phase spec`.
 
+**Unreleased (source checkout):** `machinist doctor --local` is an optional
+readiness check using the same configuration resolution as first start or your
+saved local settings. It checks Git, Harness probes, and verification command
+availability without creating a Task or requiring a forge. Add `--json` for
+structured output. Add `--run-gates` only to execute project commands in your
+current checkout; this does not prove dependencies are ready in a fresh Workshop.
+Plain `machinist doctor` retains its GitHub setup checks.
+
 You can publish the same reviewed candidate when collaboration is useful:
 
 ```sh
@@ -235,6 +243,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
 | `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |
 | `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). |
+| `machinist doctor --local [--run-gates] [--json]` | Unreleased: optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |

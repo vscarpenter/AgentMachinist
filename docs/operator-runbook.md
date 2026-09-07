@@ -38,6 +38,38 @@ GitLab supports nested namespaces and explicit self-managed hosts through
 CI Spec dispatch and remote Approval are not implemented. Local orchestration
 can use a cloud model; it does not establish offline inference.
 
+### Optional local readiness
+
+**Unreleased / source checkout:** install the current source with
+`uv tool install --editable .` to use these optional diagnostics; published
+0.14.0 does not include `doctor --local`.
+
+```sh
+machinist doctor --local
+machinist doctor --local --json
+```
+
+No setup step is added. The check resolves the same local settings as `start`,
+including first-run discovery without saving it, and inspects Git branch,
+commit, identity, cleanliness, Workshop location, Harness Phase support and
+available version/help/authentication probes, and required Gate entry points.
+It creates no Task, Claim, Workshop, runtime/config file, exclusion, or ref and
+does not invoke a model, forge, update probe, or Gate by default. JSON uses the
+existing doctor report shape; failed checks return a nonzero exit status.
+An available command or successful authentication probe does not prove passing
+tests, model access, or quota.
+
+The Git identity check follows the controller's existing fallback; it does not
+require an extra author setup step. Runtime exclusion is checked without writing
+it. Unsafe exclusion paths fail; an exclusion that still needs setup is a warning
+because `start` must apply and verify it against the repository's ignore rules.
+
+`machinist doctor --local --run-gates` explicitly executes configured Gates
+after readiness failures are resolved. It uses the shared Verification engine
+in the controller checkout; commands can write files or download dependencies.
+This does not replace `start`'s isolated Workshop baseline check. Plain
+`doctor` continues to inspect GitHub setup.
+
 ### Local settings and Evidence
 
 First start saves applicable root settings once in
@@ -80,7 +112,8 @@ continue reading `.machinist/runs/` issue records; they do not aggregate local
 Tasks. `status --local` reads legacy records only when local configuration is
 absent. Use `runs` and `inspect` for legacy Evidence in a mixed checkout.
 
-Root `doctor` remains a GitHub setup preflight. `watch`, `queue`, service
+Plain `doctor` remains a GitHub setup preflight; the unreleased `doctor --local`
+checks local readiness. `watch`, `queue`, service
 scheduling, admission budgets, and notifications belong to the legacy workflow;
 they do not govern foreground Tasks. `clean` manages legacy Workshops and has
 no `--task` selector. Local success cleanup follows `workspace.cleanup`; keep
@@ -276,6 +309,15 @@ per-repository errors, and does not include the foreground Task namespace.
 
 ## Recover a failed GitHub issue Task
 
+**Unreleased / source checkout:** new remote Workshops fetch the intended base
+branch explicitly and pin its resulting commit. A deleted or renamed remote
+base fails before Workshop creation even if a stale tracking ref survives.
+Check origin and the repository's current default branch, then use the normal
+explicit retry path. Existing remote Task branches remain the recovery
+authority; this does not replace approved heads with a newer default-branch
+commit. Foreground local Workshops continue to use local commits without a
+remote fetch.
+
 1. Stop or let the current watcher pass finish.
 2. Inspect the Task Run error with `machinist inspect <issue>` or `machinist status -v`.
 3. Inspect any retained workspace before choosing whether to preserve its edits.
@@ -370,6 +412,15 @@ successful Review is not repeated. When `review.enabled: true`, run
 `machinist review 42` after the amendment succeeds, or let the watcher dispatch
 it. This differs from local `amend --task`,
 which generates a new Spec and requires its Approval before Execute.
+
+## Diagnostic output
+
+**Unreleased / source checkout:** controller Git, `gh`, `glab`, and doctor
+diagnostics redact recognized URL credentials, authorization values, and
+secret assignments, remove unsafe terminal controls, and bound rendered text.
+A truncation notice means the displayed diagnostic is incomplete. This is not
+an arbitrary-secret guarantee or a sanitizer for stored raw logs; inspect
+Evidence and logs before sharing them.
 
 ## Configuration operations
 

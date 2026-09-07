@@ -675,7 +675,16 @@ def test_release_docs_describe_current_package_version():
         _REPO_ROOT / "docs/index.html",
     ):
         html = path.read_text().lower()
+        # Source-only additions must be visibly isolated from released commands.
+        # Do not ban honest unreleased notes or imply they shipped in 0.14.0.
+        html = re.sub(
+            r'<(?P<tag>details|p)\b[^>]*data-release="unreleased"[^>]*>.*?</(?P=tag)>',
+            "",
+            html,
+            flags=re.DOTALL,
+        )
         assert "unreleased" not in html, path
+        assert "machinist doctor --local" not in html, path
         assert version in html, path
         assert "uv tool install agentmachinist" in html, path
         for command in (
@@ -699,6 +708,21 @@ def test_release_docs_describe_current_package_version():
     assert "exact version" in release_text
     assert release_text.index("smoke-tests") < release_text.index("publishes")
     assert release_text.index("publishes") < release_text.index("attach")
+
+
+def test_local_readiness_examples_are_optional_and_identified_as_source_only():
+    for path in (_FIRST_RUN_GUIDE_PATH, _JOB_CARD_PATH):
+        html = path.read_text().lower()
+        blocks = re.findall(
+            r'<(?:details|p)\b[^>]*data-release="unreleased"[^>]*>(.*?)</(?:details|p)>',
+            html,
+            flags=re.DOTALL,
+        )
+        assert blocks, path
+        for block in blocks:
+            assert "unreleased" in block and "source checkout" in block, path
+            assert "optional" in block, path
+            assert "machinist doctor --local" in block, path
 
 
 def test_workflow_drift_advisory_is_documented_where_operators_read():

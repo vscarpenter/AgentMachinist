@@ -74,6 +74,18 @@ See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
 
 ## Deep policy seams
 
+**Unreleased / source checkout:** `local_doctor.py` adds optional
+`machinist doctor --local` using the read-only `local_setup.py` configuration
+resolver shared with `start`. Saved local settings take precedence; first-run
+discovery is previewed without adoption. It combines local Git/author/checkout
+checks with the existing Harness probes and Gate command checks, returning the
+existing doctor report contract. It creates no Task, Claim, Workshop, runtime
+file, configuration, exclusion, or ref and makes no model, forge, or update
+request by default. Explicit `--run-gates` reuses `verification.py` in the
+controller checkout, where commands may write or download; this does not prove
+the isolated baseline. Plain `doctor` keeps its GitHub setup behavior. These
+additions are not included in the published 0.14.0 package.
+
 The controller keeps one authoritative implementation for each policy that can
 change custody, spend Harness time, or interpret durable state:
 
@@ -297,7 +309,8 @@ The optional repository registry contains canonical local roots only.
 independently; one missing or corrupt repository does not erase healthy
 repository results. It does not include foreground `T1` records. A checkout with
 local configuration routes default `status` to local Tasks; `runs`, `inspect`,
-`explain`, `doctor`, `clean`, and aggregate reports retain legacy scope.
+`explain`, plain `doctor`, `clean`, and aggregate reports retain legacy scope.
+The unreleased `doctor --local` selects readiness for the local workflow.
 `config` defaults to root `machinist.yaml`, with `--path` required to inspect or
 change the foreground local configuration.
 
@@ -363,6 +376,14 @@ See [the trust model](trust-model.md) for the full key list and
 
 ## Push safety
 
+**Unreleased / source checkout:** legacy `Workspace.provision` fetches the
+intended remote base explicitly for new Tasks, resolves the freshly fetched
+ref, and constructs the Workshop from that immutable SHA. Missing or deleted
+remote bases fail even when a stale tracking ref remains; a narrow fetch
+configuration cannot silently select an older local ref. An existing remote
+Task branch remains the recovery authority. `LocalWorkspace` continues to
+provision from committed local state without fetching a remote.
+
 Legacy GitHub implementation pushes use `--force-with-lease` against the
 approved SHA. If the remote spec branch changes while the harness works, the push fails instead of
 overwriting the new head. AgentMachinist then retains the failed workspace and
@@ -377,3 +398,13 @@ Controller-provided forge credentials are scoped to its network subprocesses:
 clone, fetch, `ls-remote`, and push. Managed workflows check out with
 persisted Git credentials disabled, and the controller never exposes its token
 to coding harnesses or verification gates.
+
+## Diagnostic rendering
+
+**Unreleased / source checkout:** `diagnostics.py` owns bounded rendering for
+Git, GitHub, GitLab, and doctor diagnostics. It redacts recognized URL userinfo,
+authorization values, and secret assignments and strips unsafe terminal
+controls before truncation. Exception categories and useful context remain
+available to callers. This is defense in depth, not proof arbitrary output is
+secret-free; it does not sanitize stored raw logs or all successful command
+output. The helper reads no credential store or environment values.
