@@ -8,7 +8,9 @@ Deciders: Vinny Carpenter
 
 ## Current applicability
 
-The ownership decisions below remain in force for the legacy pipeline.
+The shared Evidence, dispatch, verification, transitions, configuration, and
+lifecycle ownership decisions below apply to both execution paths. Origin/PR
+custody in `repository_custody.py` remains specific to the legacy GitHub path.
 [ADR 0003](0003-local-workflow-and-optional-publication.md) adds separate local
 Task, Workshop, and publication modules, including explicit local fast-forward
 integration after the human Gate. It narrowly supersedes this record's blanket

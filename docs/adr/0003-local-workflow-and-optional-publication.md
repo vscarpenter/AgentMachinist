@@ -37,7 +37,8 @@ human Gate remains mandatory.
 ## Consequences
 
 - First useful Task requires no origin, gh/glab, labels or hosted workflows.
-- Existing CLI, configuration and history remain compatible.
+- The legacy GitHub workflow remains available. Local Task IDs and history use
+  a separate namespace; they do not repurpose legacy issue selectors or records.
 - Publication failure does not repeat paid work or invalidate local Evidence.
 - Local records are not distributed ownership or OS isolation.
 - GitLab imports issues and publishes MRs; hosted Spec CI is not included.

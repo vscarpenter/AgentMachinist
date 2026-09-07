@@ -39,8 +39,9 @@ diagnostic row. Set `MACHINIST_NO_UPDATE_CHECK=1` to suppress both probes on
 offline or CI machines.
 
 Upgrading the package is not always the whole upgrade. Managed workflows are
-projected files, so a workflow change only takes effect once you run
-`machinist sync-workflows`. `machinist watch` reports that drift at startup and
+projected files: run `machinist sync-workflows`, review the generated changes,
+and commit and merge them into the default branch for hosted workflows to use them.
+`machinist watch` reports local drift at startup and
 `machinist update-check` reports it alongside the release comparison, so you do
 not have to run `doctor` to find out. The advisory never blocks a command and
 never appears in `update-check --json`.
@@ -50,19 +51,27 @@ never appears in `update-check --json`.
 Version 0.14.0 includes the guided local workflow and optional GitLab support.
 If you already installed AgentMachinist with uv, upgrade with
 `uv tool upgrade agentmachinist`. The existing GitHub workflow remains available.
+Start on a clean named branch with an initial commit, configured Git author,
+and an installed, authenticated Harness. Replace the example's Python test
+command with verification appropriate to your project.
 
 ```sh
 cd your-repository
 machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
-# Read the saved Spec and copy the exact Approval command printed by start:
-machinist approve --task T1 --spec-sha <full-spec-commit-sha>
-# Approval continues implementation, verification, and independent Review.
-machinist status T1
-# Inspect the diff and report, then integrate explicitly:
-machinist integrate T1
 ```
 
-First start detects an installed Harness and a verification command. Its local
+Read the saved Spec and copy the exact Approval command printed by start:
+
+```sh
+machinist approve --task T1 --spec-sha <full-spec-commit-sha>
+```
+
+Approval continues implementation, verification, and independent Review. Use
+`machinist status T1` to find the report and diff; inspect them before running
+`machinist integrate T1`.
+
+First start reuses applicable root settings, discovering an installed Harness
+and verification command when those settings are absent. Its local
 settings and Task records live under `.machinist/runs/local/`, excluded through
 Git's local exclude file. It does not require an origin, labels, a daemon, forge
 authentication, or hosted workflows. Existing `machinist.yaml` settings remain
@@ -107,8 +116,13 @@ git add -p .github/workflows   # review each hunk
 git diff --cached              # verify what will be committed
 git commit -m "chore: configure AgentMachinist"
 git push
-machinist doctor --run-gates   # after setup reaches the default branch
-machinist watch
+```
+
+Review and merge setup into the repository's default branch, then check out
+that branch and pull the merged changes. Once it is up to date:
+
+```sh
+machinist doctor --run-gates && machinist watch
 ```
 
 `machinist doctor --run-gates` is the single health check — it already verifies
@@ -177,23 +191,33 @@ automatic repair or merge. Use `machinist review <issue>` manually or
 
 The CLI approval command submits the SHA-bound comment; the managed GitHub
 workflow independently verifies the current head and approver's write access,
-then records the marker and label. Until that workflow completes, `status`
-remains `awaiting approval` rather than pretending execution is authorized.
+then records trusted Approval Evidence and the configured label. Wait for that
+workflow to finish successfully before Execute. `machinist explain <issue>`
+shows the GitHub pipeline state even when default `status` lists local Tasks.
+An unapproved draft remains `awaiting approval`.
 `approval pending` specifically means the label is visible but trusted SHA
 Evidence has not arrived yet.
 
-Revise or explicitly abandon a successful Spec by issue number:
+To preview a Spec without commits, pushes, or a PR:
 
 ```sh
 machinist spec 42 --dry-run
+```
+
+To regenerate a successful Spec on its existing branch and draft PR:
+
+```sh
 machinist spec 42 --revise
+```
+
+Alternatively, reject it explicitly:
+
+```sh
 machinist spec 42 --abandon --reason "requirements changed"
 ```
 
-The dry run prints the proposed Spec without commits, pushes, or a PR. Revision
-regenerates the Spec on its existing branch and draft PR. Abandonment records
-the reason, removes the trigger and approval labels, and closes the open draft
-PR.
+Abandonment records the reason, removes the trigger and approval labels, and
+closes the open draft PR. Choose the operation that matches your decision.
 
 ## Commands
 
@@ -221,16 +245,16 @@ PR.
 | `machinist spec <issue> [--dry-run]` | Preview a Spec, or generate it and open its draft PR. |
 | `machinist spec <issue> --revise` | Regenerate a successful Spec on its existing branch and PR. |
 | `machinist spec <issue> --abandon [--reason <text>]` | Record rejection and close the open draft PR. |
-| `machinist approve [--issue <issue>\|--pr <pr>]` | Bind approval to the current PR head without number ambiguity. |
+| `machinist approve [--issue <issue>\|--pr <pr>]` | Request asynchronous workflow Approval for the current PR head; wait for trusted Evidence before Execute. |
 | `machinist run <issue>` | Implement an approved spec and run the test gate. |
-| `machinist review <issue>` | Independently review the exact implemented draft and mark it ready. |
+| `machinist review <issue>` | When legacy Review is enabled, independently review the exact implemented draft and mark it ready. |
 | `machinist amend <issue> --feedback <text>` | Rework a ready PR from explicit feedback after fresh approval. |
 | `machinist cancel <issue> [--reason <text>\|--clear]` | Cooperatively stop or block an issue's dispatch. |
 | `machinist watch [--once] [--dry-run] [--max-tasks <n>]` | Preview or dispatch eligible tasks continuously or once. |
 | `machinist queue pause\|resume\|defer\|allow\|show` | Persist operator controls over new watcher dispatches. |
 | `machinist service install\|start\|restart\|stop\|status\|logs\|uninstall` | Manage the repository's macOS launchd watcher; destructive lifecycle actions refuse active Claims unless forced. |
 | `machinist explain <issue> [--json]` | Show effective policy, resolved profiles, attempts, and the exact next action without secrets. |
-| `machinist status [--local\|--all] [--json]` | Show GitHub state, local Task Runs, or a registered portfolio. |
+| `machinist status [--local\|--all] [--json]` | With local configuration, default status and `--local` show local Tasks. Otherwise, default status shows the GitHub board and `--local` reads legacy Run Evidence. `--all` shows the registered GitHub portfolio. |
 | `machinist status --watch [--interval <seconds>] [--json]` | Emit changed-only live pipeline snapshots until Ctrl-C. |
 | `machinist runs [--issue <issue>] [--json]` | Read current, historical, orphaned, and corrupt local run records. |
 | `machinist report [--since 30d] [--json] [--otlp-endpoint <url>]` | Aggregate local reliability metrics and optionally export allowlisted OTLP/HTTP JSON. |
@@ -245,7 +269,7 @@ PR.
 - [TL;DR](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/tldr.md)
 - [Getting started](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md)
 - [Local workflow and optional publication](docs/local-workflow.md)
-- [GitHub visual first-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
+- [Visual first-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
 - [Architecture and lifecycle](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md)
 - [Operator runbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md)
 - [Trust model](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md)

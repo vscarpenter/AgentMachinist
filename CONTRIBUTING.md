@@ -16,7 +16,7 @@ known Evidence interpretation in `evidence.py`, Task Run construction in
 `dispatch.py`, journal discovery in `lifecycle.py`, transition decisions in
 `transitions.py`, repository/PR checks in `repository_custody.py`, and Gate
 execution in `verification.py`. Keep local aggregation in `reporting.py` and
-all network projection in `telemetry.py`; OTLP attributes are an allowlist, not
+all telemetry network export in `telemetry.py`; OTLP attributes are an allowlist, not
 a redaction pass.
 
 When config affects GitHub Actions, update the source template and projection

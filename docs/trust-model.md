@@ -109,9 +109,11 @@ mean a hostile process with the same OS identity cannot work around it.
   cannot undo an external side effect.
 - Removing common forge tokens, including `GH_TOKEN`, `GITHUB_TOKEN`, and
   `GITLAB_TOKEN`, askpass variables, and the SSH agent from
-  the harness environment reduces ambient controller authority. Provider keys
-  remain available. Other credentials—keychain helpers, SSH keys on disk,
-  cloud credentials, or tokens loaded by plugins—may still be reachable.
+  the harness environment reduces ambient controller authority. Explicitly
+  allowlisted provider keys remain available; other common secret names and
+  cloud credential variables are filtered. Other credentials—keychain helpers,
+  SSH keys on disk, cloud credentials, or tokens loaded by plugins—may still
+  be reachable.
 
 Therefore, documentation must not claim that a harness “has no Git access.”
 
@@ -173,10 +175,13 @@ baseline verification before Spec generation; disabling local Review or required
 verification is rejected on configuration load. A passing command proves only
 what that suite covers; it is not runtime, deployment, or security proof.
 
-By default the implementation harness is told the gate commands and may run
-exactly those commands itself to iterate before it finishes
-(`verification.harness_may_run_gates`). This grants no execution capability
-the pipeline does not already exercise: the controller runs the same
+By default the implementation Harness is told the Gate commands and asked to
+run them itself to iterate before it finishes
+(`verification.harness_may_run_gates`). Claude Code receives explicit allow
+rules for those commands and variants with additional arguments; the other
+built-in Execute adapters already permit command execution. The setting does
+not impose a command allowlist on those adapters. This grants no execution
+capability the pipeline does not already exercise: the controller runs the same
 repository-controlled commands on harness-authored code immediately
 afterwards, and that controller run remains the authoritative gate. Set
 `verification.harness_may_run_gates: false` to withhold both the commands and

@@ -192,6 +192,8 @@ class _HtmlReferences(HTMLParser):
         self.ids: list[str] = []
         self.hrefs: list[str] = []
         self.controls: list[str] = []
+        self.examples: list[str] = []
+        self._pre: list[str] | None = None
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
@@ -201,6 +203,19 @@ class _HtmlReferences(HTMLParser):
             self.hrefs.append(values["href"])
         if values.get("aria-controls"):
             self.controls.extend(values["aria-controls"].split())
+        if values.get("data-copy"):
+            self.examples.append(values["data-copy"])
+        if tag == "pre":
+            self._pre = []
+
+    def handle_data(self, data):
+        if self._pre is not None:
+            self._pre.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "pre" and self._pre is not None:
+            self.examples.append("".join(self._pre))
+            self._pre = None
 
 
 def test_rendered_document_navigation_and_controls_resolve():
@@ -250,6 +265,34 @@ def test_adrs_are_complete_and_discoverable():
         ):
             assert heading in text, f"{path} is missing {heading}"
         assert f"(adr/{path.name})" in docs_index, f"docs index does not link {path}"
+
+
+def test_github_approval_requires_a_separate_execution_copy_step():
+    # Comments and read-only inspection do not wait for asynchronous Approval.
+    # Keep the human confirmation between copy units, including hidden payloads.
+    paths = [_README_PATH, *sorted((_REPO_ROOT / "docs").glob("*.md"))]
+    paths.extend(sorted((_REPO_ROOT / "docs").glob("*.html")))
+    for path in paths:
+        text = path.read_text()
+        if path.suffix == ".html":
+            parser = _HtmlReferences()
+            parser.feed(text)
+            examples = parser.examples
+        else:
+            examples = re.findall(r"```[^\n]*\n(.*?)```", text, re.DOTALL)
+        for example in examples:
+            commands = "\n".join(
+                line
+                for line in example.splitlines()
+                if not line.lstrip().removeprefix("$ ").startswith("#")
+            )
+            approval = re.search(
+                r"\bmachinist\s+approve\b[^\n]*--(?:issue|pr)\b", commands
+            )
+            if approval:
+                assert not re.search(
+                    r"\bmachinist\s+(?:run|amend)\b", commands[approval.end() :]
+                ), f"{path}: split asynchronous GitHub Approval from execution"
 
 
 def test_tldr_is_one_short_provider_neutral_path():

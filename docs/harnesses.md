@@ -34,10 +34,10 @@ When gates are configured and `verification.harness_may_run_gates` is true
 harness to run required gates and iterate until they pass before finishing.
 `codex`, `pi`, and `opencode` execute modes already permit command execution,
 so only the prompt changes for them. `claude-code`'s headless edit mode
-denies commands, so the adapter additionally allowlists exactly the
-configured gate commands (`--allowedTools "Bash(<command>)"
-"Bash(<command>:*)"`). The controller's own gate run afterwards stays
-authoritative.
+denies commands, so the adapter additionally allowlists the configured gate
+commands and variants with additional arguments
+(`--allowedTools "Bash(<command>)" "Bash(<command>:*)"`). The controller's own
+gate run afterwards stays authoritative.
 
 ## Authentication
 
@@ -45,9 +45,11 @@ Runs use the Harness's existing provider authentication. Local setup checks
 installed executables and Phase support; it does not run the provider's login
 probe or validate model access. Use the checks below before your first Task.
 The legacy GitHub `doctor` checks the installed version, parses configured
-Spec, Execute, and Review invocations, and uses each
-CLI's read-only authentication probe. That confirms configured credentials,
-not subscription quotas or access to every possible model.
+Spec and Execute invocations, and checks Review when `review.enabled: true`.
+It uses the adapter's read-only authentication probe when one is available;
+plugins without a probe require manual verification. A successful probe
+confirms configured credentials, not subscription quotas or access to every
+possible model.
 
 Current authentication entry points are:
 
@@ -73,18 +75,22 @@ uses `glab` independently and does not install a hosted Spec workflow.
 ## Credential environment
 
 Harness subprocesses retain provider variables such as `ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY`. AgentMachinist removes common forge tokens, Git askpass,
-and SSH-agent variables and disables terminal credential prompting. This is
-credential reduction, not credential isolation; see the
+`OPENAI_API_KEY` through an explicit allowlist. Other provider or plugin keys
+are not automatically preserved: common secret-name suffixes and cloud
+credential variables are filtered. AgentMachinist also removes common forge
+tokens, Git askpass, and SSH-agent variables and disables terminal credential
+prompting. This is credential reduction, not credential isolation; see the
 [trust model](trust-model.md).
 
 ## Model and additional arguments
 
 `harness.model` passes one model selection to the adapter. `harness.extra_args`
-is an advanced option applied to Spec, Execute, and Review. AgentMachinist rejects
-adapter-owned sandbox, permission, model, session, and tool flags, including
-duplicate forms that could override its controls. Other additional arguments
-are appended to the adapter command and may change behavior as harness CLIs
+is an advanced option applied to Spec, Execute, and Review. For the four built-in
+adapters, AgentMachinist rejects reserved sandbox, permission, model, session,
+and tool flags, including duplicate forms that could override its controls.
+Third-party adapters do not inherit that reserved-argument map and must validate
+their own controls. Other additional arguments are appended to the adapter
+command and may change behavior as harness CLIs
 evolve, so keep `extra_args` empty unless you have reviewed the final command
 and updated your threat assessment.
 
@@ -124,9 +130,9 @@ an upgrade:
 machinist doctor
 ```
 
-The compatibility rows execute `--help` against the exact configured Spec,
-Execute, and Review argv without starting a Harness Task. If an argument changes, update
-the adapter, its exact argv test, this matrix, and the changelog together.
+The compatibility rows execute `--help` against the configured Spec and Execute
+argv, plus Review when enabled, without starting a Harness Task. If an argument
+changes, update the adapter, its exact argv test, this matrix, and the changelog together.
 `doctor` reads root `machinist.yaml` and checks GitHub setup; it does not inspect
 `.machinist/runs/local/config.yaml`. For foreground Tasks, inspect that file via
 `machinist config show --path .machinist/runs/local/config.yaml`, check the

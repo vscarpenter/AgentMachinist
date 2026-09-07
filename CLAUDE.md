@@ -55,8 +55,10 @@ never-merges rule only for that human-directed local operation.
 - `local_workflow.py` — guided local Spec, exact-SHA Approval, Execute, Review,
   amendment/recovery, and explicit integration. Task Run construction still
   belongs to `dispatch.py`; verification belongs to `verification.py`.
-- `local_workspace.py` — no-origin Workshops, durable candidate refs, Git
-  custody, explicit clean fast-forward integration, and leased publication Git.
+- `local_workspace.py` — Workshops provisioned from local commits without
+  requiring a forge (worktrees share repository remotes; clones remove origin),
+  durable candidate refs, Git custody, explicit clean fast-forward integration,
+  and leased publication Git.
 - `publication.py` — verifies local Approval and exact successful Phase
   Evidence, binds origin/forge identity, persists push intent, and reconciles
   optional publication independently from Harness and Verification work.
@@ -88,7 +90,8 @@ never-merges rule only for that human-directed local operation.
   `config_cli.py` renders or persists those values without restating defaults.
   `harness.model` (str | None) and
   `harness.extra_args` (list[str]) are optional pass-throughs into adapter
-  argv — the controller never interprets them.
+  argv. Configuration rejects reserved flags for built-in adapters; plugins
+  must validate their own controls.
 - `dispatch.py` — the only constructor for claimed Spec, Execute, and Review
   Task Runs, and for the unclaimed read-only Spec preview (`preview_spec`). It
   wires Claims, Harnesses, Workshops (including their `cancel_check`),
@@ -143,10 +146,12 @@ never-merges rule only for that human-directed local operation.
   draft-ness), harness with edit permissions, head/remote postconditions (the
   Workshop asserts metadata custody itself on every Git call),
   test-deletion guard (`limits.allow_test_deletions` opts out), test gate,
-  commit, leased push, mark PR ready. The implement prompt lists the gate
-  commands and asks the harness to iterate until they pass
+  commit, leased push, and mark PR ready only when legacy Review is disabled.
+  With Review enabled, its Phase owns the ready transition. The implement
+  prompt lists the gate commands and asks the harness to iterate until they pass
   (`verification.harness_may_run_gates` opts out); the claude-code adapter
-  allowlists exactly those commands via `Harness.allowed_commands`. Contains
+  allows those commands and added-argument variants via
+  `Harness.allowed_commands`. Contains
   partial-push recovery via checkpoint evidence.
 - `phases/review.py` — independent read-only review of the exact delivered
   Execute head; posts a bounded structured report and marks the PR ready only
