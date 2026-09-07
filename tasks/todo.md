@@ -1,26 +1,38 @@
-# AgentMachinist 0.14.0 release (IN PROGRESS)
+# AgentMachinist 0.14.0 release candidate (COMPLETE)
 
 User authorized committing everything, pushing to origin, and deploying a new
 version. This minor release includes the approved local/GitLab workflow and
-complete documentation update. Current branch: `codex/local-workflow-gitlab`.
+complete documentation update. Release branch: `codex/local-workflow-gitlab`.
 
 - [x] Align package, lockfile, managed projections, changelog, and release docs.
-- [ ] Pass `bash scripts/verify.sh` on the release candidate.
-- [ ] Push and verify origin SHA; open PR and verify exact-head CI/CodeQL.
-- [ ] Merge, publish `v0.14.0` at the merged main SHA, and verify release jobs.
-- [ ] Verify PyPI checksums/install, public docs, SHA alignment, and clean tree.
+- [x] Pass `bash scripts/verify.sh` on implementation candidate `860eab8`.
+- [x] Record the source verification and publication handoff before pushing.
+
+The canonical gate passed 1,413 tests in 696.81 seconds with 87.52% coverage,
+Ruff formatting/lint, twenty typed modules, lockfile/projection checks, and
+wheel/sdist build and isolated Python 3.13.15 installs. The installed wheel's
+fake-Harness rehearsal completed the production local workflow with real Git.
+This ledger-only follow-up does not change the verified implementation.
 
 ### Resuming From Here
 
-Origin currently publishes v0.13.0. Pages deploys `main:/docs` to the existing
-custom domain. Existing branch protection names obsolete unversioned test jobs
-and requires another reviewer; it permits configured administrator merges.
-Do not weaken the policy: require actual current matrix/aggregate CI and CodeQL
-success at the exact PR head before using that existing merge capability.
-Secret metadata confirms the configured Anthropic Actions secret is present.
-The candidate targets 0.14.0; lockfile and managed projection checks agree.
-The full gate is the next step. Documentation edits are complete and frozen
-while it runs; source-preview labels now describe the release installation.
+Source preparation is complete. At this snapshot, publication is the next
+operation: push the branch, verify exact-head CI/CodeQL, merge, then publish
+`v0.14.0` at the merged main SHA. The user has authorized these actions.
+The canonical publication records are the
+[GitHub Release](https://github.com/vscarpenter/AgentMachinist/releases/tag/v0.14.0),
+[release workflow](https://github.com/vscarpenter/AgentMachinist/actions/workflows/release.yml),
+and [PyPI version](https://pypi.org/project/agentmachinist/0.14.0/).
+Confirm their live state, checksums, isolated install, and Pages content rather
+than treating this pre-publication source snapshot as deployment proof.
+
+Pages deploys `main:/docs` to the existing custom domain. Existing branch
+protection names obsolete unversioned test jobs and requires another reviewer;
+it permits configured administrator merges. Require actual current matrix,
+aggregate CI, and CodeQL success at the exact PR head before using that existing
+capability; do not weaken the protection. Secret metadata confirms the configured
+Anthropic Actions secret is present. Live GitLab and offline-model validation
+remain separate from the fake-transport/Harness release checks.
 
 # Complete documentation reconciliation (COMPLETE)
 
