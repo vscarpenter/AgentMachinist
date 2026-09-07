@@ -1,3 +1,39 @@
+# Local readiness and controller hardening (COMPLETE)
+
+Approved scope: `tasks/spec.md`; plan: `tasks/local-readiness-plan.md`.
+Branch: `codex/local-readiness-hardening`. No release or push is included.
+
+- [x] Record approved scope, constraints, plan, and verification criteria.
+- [x] Implement and verify shared read-only local readiness and CLI.
+- [x] Verify remote bases before legacy Workshop creation.
+- [x] Bound and sanitize controller diagnostics consistently.
+- [x] Update guides/changelog/ADR and complete independent review.
+- [x] Pass canonical verification and installed CLI smoke; commit the work.
+
+### Resuming From Here
+
+Implementation is complete in local commits `002e50f` and `4daf607`, following
+the approved specification/plan in `ecf599b`. The package version remains 0.14.0;
+documentation marks these additions as unreleased source-checkout capabilities.
+The alternate checkout was not changed. Push and release remain separate work.
+
+`bash scripts/verify.sh` passed against `4daf607`: 1,508 tests in 694.74 seconds,
+87.80% coverage, formatting/lint, 22 typed modules, frozen dependency and managed
+workflow checks, wheel/sdist builds, and isolated Python 3.13.15 installations.
+The full suite ran on macOS/Python 3.12.13. Installed-wheel smoke completed the
+fake-Harness local workflow and proved no-origin local readiness leaves the
+repository unchanged; explicit `--run-gates` also passed. The first full run
+exposed an outdated packaging assertion about the typed-module list; its two-line
+test correction passed before the complete successful rerun.
+
+Independent review reproduced and verified corrections for supported ancestor
+Workshop roots, effective Git identity, and runtime-exclusion preflight. Default
+readiness creates no local Task/runtime state or exclusion changes; a pending
+exclusion is an explicit warning because start must apply and verify it. Gates
+run only when requested, in the controller checkout, and do not prove a fresh
+Workshop's dependencies. Diagnostic redaction covers recognized patterns, not
+arbitrary secrets or stored raw logs.
+
 # Documentation accuracy follow-up (COMPLETE)
 
 Scope: fix `docs/tldr.md` and re-review all 23 documentation files against the
