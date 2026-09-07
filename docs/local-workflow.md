@@ -24,8 +24,9 @@ commit become the Task's integration base:
 machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
 ```
 
-First start discovers an installed Harness that supports the three Phases and
-detects a verification command when the project manifest provides one. Use
+First start reuses configured Harness profiles and required Verification Gates
+when present. Otherwise it discovers an installed Harness that supports the
+three Phases and detects a verification command from the project manifest. Use
 `--harness codex` or another installed adapter to select it explicitly. Missing
 Harness executables or a required Gate produce configuration guidance before
 model work. Setup does not probe provider login or model access; authenticate
@@ -125,17 +126,25 @@ silently discarding edits. The command does not push or merge a remote PR/MR.
 A Markdown file or stdin can provide a richer Task body:
 
 ```sh
-machinist start "Handle an invalid timezone without crashing" --body-file task.md
-cat task.md | machinist start "Handle an invalid timezone without crashing" --body-file -
+machinist start "Handle an invalid timezone without crashing" --body-file ../task.md
+# Or read stdin instead:
+# cat ../task.md | machinist start "Handle an invalid timezone without crashing" --body-file -
 ```
+
+These examples keep `task.md` outside the repository. The clean-checkout
+requirement still applies when reading stdin. If the file is inside the
+repository, commit it first or keep it in an ignored location; a new untracked
+Task file otherwise makes `start` refuse the checkout.
 
 For issue intake, authenticate the appropriate forge CLI and use the exact
 issue URL:
 
 ```sh
 machinist start --from-issue https://github.com/team/project/issues/42
-machinist start --from-issue https://gitlab.com/team/subgroup/project/-/issues/42
-machinist start --from-issue https://gitlab.example.com/team/project/-/issues/42 --provider gitlab --host gitlab.example.com
+# Or GitLab:
+# machinist start --from-issue https://gitlab.com/team/subgroup/project/-/issues/42
+# Or self-managed GitLab:
+# machinist start --from-issue https://gitlab.example.com/team/project/-/issues/42 --provider gitlab --host gitlab.example.com
 ```
 
 GitHub uses `gh`; GitLab uses `glab`. Authenticate for the selected host before
@@ -179,8 +188,9 @@ failed Phase:
 ```sh
 machinist retry --task T1 --phase execute
 # Or start a fresh Workshop rather than reuse retained edits:
-machinist retry --task T1 --phase execute --fresh
-machinist retry --task T1 --phase review
+# machinist retry --task T1 --phase execute --fresh
+# For a failed Review instead:
+# machinist retry --task T1 --phase review
 ```
 
 Local retry runs immediately in the foreground and requires the current failed
@@ -193,11 +203,11 @@ human action; it does not grant Approval or replace explicit retry.
 
 ```sh
 machinist cancel --task T1 --reason "Requirements changed"
-machinist cancel --task T1 --clear
 ```
 
-Cancellation is cooperative and leaves durable Evidence. Resolve the cause and
-use the recovery action shown by status before continuing.
+Cancellation is cooperative and leaves durable Evidence. Resolve the cause
+before clearing it with `machinist cancel --task T1 --clear`, then use the
+recovery action shown by status before continuing.
 
 ## Publish when useful
 
@@ -207,8 +217,10 @@ repository and authenticate `gh` or `glab` for that host:
 
 ```sh
 machinist publish T1 --provider github
-machinist publish T1 --provider gitlab
-machinist publish T1 --provider gitlab --host gitlab.example.com
+# Or GitLab:
+# machinist publish T1 --provider gitlab
+# Or self-managed GitLab:
+# machinist publish T1 --provider gitlab --host gitlab.example.com
 ```
 
 The origin repository must have the Task's base branch. Use an HTTPS or SSH
@@ -244,9 +256,9 @@ Local Tasks and legacy issue numbers have separate records and recovery paths:
 | Operation | Local Task workflow | Existing GitHub issue workflow |
 | --- | --- | --- |
 | Create | `start` with text or explicit issue import | `task new`, trigger label, then `spec` or `watch` |
-| Approve | `approve --task T1 --spec-sha <sha>` continues in foreground | `approve --issue 42` or `--pr 8` requests trusted workflow evidence |
+| Approve | `approve --task T1 --spec-sha <sha>` continues in foreground | `approve --issue 42` or `--pr 8` requests trusted workflow Evidence; wait for `explain 42` to report `approved` before the first Execute |
 | Resume | `continue T1`; failure requires `retry --task T1 --phase execute` | `retry 42 --phase execute --run --resume` explicitly reuses edits |
-| Inspect | `status T1`, `status T1 --json`, printed report | `runs --issue 42`, `inspect 42`, `explain 42`, `report` |
+| Inspect | `status T1`, `status T1 --json`, printed report | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42`, `report` for Evidence |
 | Configure | `config show --path .machinist/runs/local/config.yaml` | `config show` reads `machinist.yaml` by default |
 | Schedule | Foreground commands | `watch`, `queue`, and macOS `service` |
 | Deliver | Explicit `integrate T1` and/or `publish T1 --provider gitlab` (or `github`) | Ready GitHub PR; human remote merge |

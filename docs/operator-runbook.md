@@ -128,7 +128,18 @@ and explicitly retried.
 - One scheduler-friendly pass: `machinist watch --once`
 - Read-only admission preview: `machinist watch --dry-run`
 - Manual phases: `machinist spec <issue>`, `machinist run <issue>`, and
-  `machinist review <issue>`
+  `machinist review <issue>` when `review.enabled: true` in root
+  `machinist.yaml`. With Review disabled, Execute marks the PR ready itself;
+  invoking `review` fails.
+
+GitHub `machinist approve --issue <issue>` requests Approval asynchronously.
+Before a manual `run`, wait for the managed approval workflow to succeed and
+verify the PR has both the configured approval label and a
+`github-actions[bot]` approval marker matching its exact current head.
+`machinist inspect <issue> --json` exposes the full `head_sha` and trusted
+`approval_sha`; they must match. Without local configuration, `status --watch`
+can also show a draft PR become `approved`. A watcher waits for that state;
+a premature manual `run` can create a failed Execute that needs explicit retry.
 
 Run one local watcher per repository. The claim is local, not cross-host. If
 `github.spec_source` is `github-actions`, the local watcher handles approved
@@ -340,13 +351,24 @@ fresh amendment:
 
 ```sh
 machinist approve --issue 42
+machinist inspect 42 --json
+```
+
+Wait for the managed approval workflow to succeed. Verify the PR's approval
+label is present and repeat inspection until its full `approval_sha` matches
+`head_sha`. A ready PR remains `in review` in legacy status even after fresh
+Approval, so do not wait for an `approved` status. Then run:
+
+```sh
 machinist amend 42 --feedback-file review-notes.txt
 ```
 
 Exactly one of `--feedback` or `--feedback-file` is required. Amendment does
 not resume a retained failed Workshop or create a new Spec. A new successful
 Execute SHA can receive a fresh independent Review and findings; same-head
-successful Review is not repeated. This differs from local `amend --task`,
+successful Review is not repeated. When `review.enabled: true`, run
+`machinist review 42` after the amendment succeeds, or let the watcher dispatch
+it. This differs from local `amend --task`,
 which generates a new Spec and requires its Approval before Execute.
 
 ## Configuration operations

@@ -44,21 +44,28 @@ command must prepare dependencies absent from the committed Workshop. Local
 Review always runs and remains advisory. A new Spec
 invalidates Approval; a new successful Execute SHA permits a fresh Review.
 
-`local_workspace.py` provisions no-origin Workshops and retains controller-owned
-candidate refs before cleanup. Explicit integration records intent, checks the
-clean base/candidate identities and ancestry, and advances only by fast-forward.
-An interrupted operation reconciles the recorded intended result. The starting
-named branch and commit define the integration base; dirty, changed-base,
-changed-candidate, and non-fast-forward states fail. A local amendment requires and starts
-from the previous completed reviewed candidate, invalidates Approval, and creates a new
-Spec; it is disallowed once integration has begun.
+`local_workspace.py` provisions Workshops from local commits without contacting
+a forge and retains controller-owned candidate refs before cleanup. Worktree
+Workshops share their parent repository's configuration and remotes; isolated
+clones have their copy-source `origin` removed. Explicit integration records
+intent, checks the clean base/candidate identities and ancestry, and advances
+only by fast-forward. The operation is complete only after the observed base
+and checkout match the exact candidate; saved intent alone is not success.
+An interrupted operation reconciles that recorded result. The starting named
+branch and commit define the integration base; dirty, changed-base,
+changed-candidate, and non-fast-forward states fail. A local amendment requires
+and starts from the previous completed reviewed candidate, invalidates Approval,
+and creates a new Spec. It is disallowed once integration intent has been saved,
+including when a later integration precondition fails.
 
 `publication.py` consumes the completed local candidate independently from the
 machine Phases. It checks exact successful Execute and Review Evidence, binds
 the origin to `forge.py`/`gitlab.py`, and journals intended SHA and remote lease
 before pushing. PR/MR creation and retries preserve number, repository, branch,
-base, open state, and exact head. Publication failures leave the local candidate
-and Evidence intact. `forge.py` supplies the GitHub adapter and normalized
+base, open state, and exact head. A saved `publishing` stage records an attempt;
+`published` is recorded only after the remote branch and PR/MR both match the
+candidate. Publication failures leave the local candidate and Evidence intact.
+`forge.py` supplies the GitHub adapter and normalized
 publication contract; `gitlab.py` uses host-bound `glab` calls, including nested
 project paths and self-managed hosts. Imported issue numbers remain external
 provenance. They do not select publication origin or supply local Approval.
@@ -130,9 +137,19 @@ Approval evidence is an HTML comment marker:
 <!-- agentmachinist:approval sha=<40-hex-head-sha> -->
 ```
 
-The workflow records the marker before adding the label. Execution requires
-both the label and a marker matching the current PR head. A later branch
-update naturally invalidates approval.
+For a comment request, the workflow records the marker before adding the
+label. For a label-triggered request, the label is already present while the
+workflow verifies the actor and records the marker. Execution requires both
+the label and a trusted marker matching the current PR head; the label alone
+is an `approval pending` state. A later branch update naturally invalidates
+Approval.
+
+Legacy `machinist approve --issue <n>` or `--pr <n>` posts the request and
+returns before this GitHub workflow completes. Wait for the workflow to
+succeed and confirm the matching marker and label before starting Execute or
+amendment. Starting Execute too soon fails its Approval guard and requires an
+explicit retry. Foreground `approve --task T1 --spec-sha <sha>` records local
+Approval synchronously and then continues Execute and Review.
 
 Both authorization paths check the actor before any evidence is minted. A
 `/machinist-execute` comment is considered only from OWNER, MEMBER, or
@@ -208,8 +225,9 @@ Execute resolves either ordered `verification.gates` or the legacy
 `tests.command` into one verification engine. By default the implement prompt
 lists those gate commands and asks the harness to run required gates and
 iterate until they pass before finishing; the `claude-code` adapter allowlists
-exactly those commands, and `verification.harness_may_run_gates: false`
-withholds both. The controller's own gate run afterwards remains the
+those commands and added-argument variants. Setting
+`verification.harness_may_run_gates: false` omits the prompt instructions and
+these Claude allow rules; it is not a universal command-execution restriction. The controller's own gate run afterwards remains the
 authoritative check. Required command failures prevent
 readiness; ordinary advisory command failures remain evidence. Cancellation,
 forbidden mutation, or inability to snapshot the working tree always blocks

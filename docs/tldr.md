@@ -7,35 +7,34 @@ Task → Spec → approve exact SHA → Execute → verify → Review → you in
                                                     → optional GitHub PR / GitLab MR
 ```
 
-The controller owns Git and durable Evidence. The Harness produces the Spec,
-edits code, and reviews the result. AgentMachinist never merges automatically
-or remotely; local integration is explicit.
+The controller owns Git and durable Evidence; the Harness writes the Spec, edits code, and reviews the result. AgentMachinist never merges automatically or remotely; local integration is explicit.
 
 ## One-time setup
 
-Install AgentMachinist 0.14.0 with `uv tool install agentmachinist`, or upgrade
-with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
-You need a clean checkout on a named branch, an initial Git commit, a
-configured author, one installed and authenticated Harness, and an executable
-required Verification Gate. No forge or origin is required.
+Install with `uv tool install agentmachinist` or upgrade with `uv tool upgrade agentmachinist`.
+Confirm `machinist --version` reports 0.14.0, then enter a clean checkout on a named branch.
+You need an initial Git commit, configured author, an installed and authenticated Harness,
+and an executable required Verification Gate. No forge or origin is required.
 
 ## First local Task
 
 ```sh
 machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
-# Read the saved Spec and copy its exact Approval command:
-machinist approve --task T1 --spec-sha <full-spec-commit-sha>
-# Approval continues implementation, verification, and independent Review.
-machinist status T1
-# Inspect the report/diff, then:
-machinist integrate T1
 ```
 
-First start saves local settings in `.machinist/runs/local/config.yaml`,
-copying applicable root settings once. Use `config show --path
-.machinist/runs/local/config.yaml` to inspect them. Baseline verification runs
-in the isolated committed checkout before model work; the command must also
-prepare any dependencies absent from that Workshop. Local Review always runs.
+Read the saved Spec and copy its exact Approval command:
+
+```sh
+machinist approve --task T1 --spec-sha <full-spec-commit-sha>
+```
+
+Approval continues implementation, verification, and independent Review. Use
+`machinist status T1` to find the report and diff; inspect them before `machinist integrate T1`.
+
+First start saves local settings in `.machinist/runs/local/config.yaml`, copying applicable root settings once.
+Inspect them with `machinist config show --path .machinist/runs/local/config.yaml`.
+Baseline verification runs in the isolated committed checkout before model work;
+the command must prepare any dependencies absent from that Workshop. Local Review always runs.
 
 Integration requires the clean expected base and exact reviewed candidate and
 permits only fast-forward. Review findings are advisory. Local orchestration
@@ -57,40 +56,41 @@ machinist publish T1 --provider gitlab
 # Or: machinist publish T1 --provider github
 ```
 
-Authenticate `glab` or `gh` for the selected host and configure one matching
-origin URL for publication. Issue import alone does not require an origin.
-Publication binds to origin
-and can retry without repeating local Phases. GitLab supports nested projects
-and self-managed hosts; it does not supply native Spec CI or remote Approval.
+Authenticate `glab` or `gh` for issue import and publication. Only publication
+requires a matching origin URL; it can retry without repeating local Phases.
+GitLab supports nested projects and self-managed hosts, without native Spec CI or remote Approval.
 
 ## Recovery and amendments
 
-```sh
-machinist retry --task T1 --phase execute
-machinist retry --task T1 --phase execute --fresh
-machinist amend --task T1 --feedback "Also name the rejected timezone value."
-```
+- Resume failed Execute: `machinist retry --task T1 --phase execute`.
+- Start a new Workshop instead: add `--fresh` to that retry command.
+- Rework a reviewed candidate: `machinist amend --task T1 --feedback "Also name the rejected timezone value."`
 
-Local retry runs immediately and resumes Execute edits by default; `--fresh`
-uses a new Workshop. Amendment requires a completed, verified and reviewed
-candidate; it generates a new Spec requiring fresh Approval. After integration
-starts, use a new Task. `machinist continue T1` reports or advances the next
-eligible action; it does not bypass Approval or explicit retry.
+Local retry runs immediately. Amendment requires a verified, reviewed candidate and generates a Spec needing fresh Approval.
+Once integration starts, use a new Task. `machinist continue T1` advances eligible
+work or reports the next action; it cannot bypass Approval or explicit retry.
 
 ## Existing GitHub automation
 
-The existing issue/watcher workflow remains available through
-`machinist onboard`, which resumes valid partial setup without overwriting
-choices. `machinist onboard --setup-pr` delivers or resumes a draft setup PR.
-Review, commit, push, and merge setup before running
-`machinist doctor --run-gates`. For `github.spec_source: github-actions`, add
-the selected Spec adapter's declared secret. Execution runs on the configured local runner:
+`machinist onboard` resumes valid partial GitHub setup without overwriting choices.
+Review and commit/push manual setup changes. `machinist onboard --setup-pr`
+commits and pushes managed changes and opens or resumes a draft PR; review and merge it.
+Run `machinist doctor --run-gates` after setup is merged. For `github.spec_source: github-actions`, add
+the selected Spec adapter's declared secret. Execute and optional Review run locally.
 
 ```sh
 machinist approve --issue <issue>
-machinist run <issue>
-machinist review <issue>
 ```
+
+Wait for the managed Approval workflow to succeed and check the configured approval label on the PR.
+Use `machinist inspect <issue> --json` to confirm `github_pr` has matching full
+`approval_sha` and `head_sha`, then run:
+
+```sh
+machinist run <issue>
+```
+
+Only with `review.enabled: true`, follow successful Execute with `machinist review <issue>`.
 
 With local configuration present, default `status` lists local Tasks. Legacy
 `doctor`, `runs`, `inspect`, `report`, `watch`, and portfolio `status --all`

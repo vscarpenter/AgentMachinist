@@ -1,3 +1,35 @@
+# Documentation accuracy follow-up (COMPLETE)
+
+Scope: fix `docs/tldr.md` and re-review all 23 documentation files against the
+current 0.14.0 implementation. Include root guidance where the same claims
+appear. No application behavior, package version, or release change is included.
+Branch: `codex/docs-workflow-accuracy`.
+
+- [x] Review every current guide, rendered page, ADR, and historical plan/spec.
+- [x] Correct async Approval sequencing, setup ownership, Review conditions,
+  mixed status scope, local Workshop semantics, and credential/adapter limits.
+- [x] Separate executable alternatives and add a regression check for the
+  approval-to-execution race, demonstrated failing before the TL;DR fix.
+- [x] Complete independent final review, documentation checks, and browser checks.
+- [x] Commit the validated changes and record the local delivery state.
+
+Reviewed all 23 content documents (18 Markdown and five HTML), including the
+historical plans/specs and ADRs. Corrected twelve docs files plus README,
+CLAUDE, and CONTRIBUTING; preserved historical records whose applicability
+notes already distinguish their original design from current behavior.
+
+Validation: 31 documentation tests pass, including the new approval sequencing
+regression; Ruff formatting/lint and `git diff --check` pass. All 116 local
+link/anchor checks, 15 displayed-command/Copy-payload comparisons, and three
+inline JavaScript syntax checks pass. Browser verification covered the three
+changed HTML pages, the expanded legacy walkthrough, separate Approval and
+Execute Copy feedback, and the index simulation. An independent final source
+review checked the corrected claims and required no application changes.
+
+Delivery: this documentation-only commit is local on
+`codex/docs-workflow-accuracy`. No push, hosted deployment, or package release
+is included in this follow-up.
+
 # AgentMachinist 0.14.0 release candidate (COMPLETE)
 
 User authorized committing everything, pushing to origin, and deploying a new

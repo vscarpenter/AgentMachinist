@@ -69,8 +69,9 @@ It reads the latest published release from PyPI, compares it with the copy you
 are running, and — when a newer release exists — prints the upgrade command
 that matches how this copy was installed (`uv tool upgrade`, `pipx upgrade`,
 `pip install --upgrade`, or `git pull && uv sync` for a source checkout). The
-command runs without a repository or a `machinist.yaml`, exits non-zero only
-when PyPI could not be reached, and supports `--json` for scripts.
+command runs without a repository or a `machinist.yaml`, exits non-zero when
+the update result is unknown (for example, a network or version-parsing error),
+and supports `--json` for scripts.
 `machinist doctor` runs the same check and reports an available release as a
 warning.
 
@@ -82,8 +83,9 @@ line is how you find out without running `doctor`. `machinist watch` prints the
 same advisory at startup. It never blocks a command and never appears in
 `update-check --json`.
 
-Set `MACHINIST_NO_UPDATE_CHECK=1` to disable both probes; nothing else in the
-pipeline contacts PyPI.
+Set `MACHINIST_NO_UPDATE_CHECK=1` to disable release-update probes. Package
+installation and configured verification commands can still contact package
+registries; this setting does not make the workflow offline.
 
 ## Set up your repository
 
@@ -101,8 +103,9 @@ machinist status T1
 machinist integrate T1
 ```
 
-First start detects an installed Harness with support for Spec, Execute, and
-Review and a manifest-backed verification command, then writes
+First start uses configured Harness profiles and required Verification Gates
+when present, otherwise it discovers an installed Harness with support for
+Spec, Execute, and Review and a manifest-backed verification command. It writes
 `.machinist/runs/local/config.yaml`. It copies applicable root configuration
 once, enables Review, disables managed workflows and telemetry export, and
 adds runtime exclusion through Git's local exclude file. It preserves the
@@ -128,7 +131,7 @@ See the [local workflow guide](local-workflow.md) for issue import, file/stdin
 input, amendments, exact-SHA Approval, and publication recovery.
 
 With local configuration present, `machinist status` lists local Tasks and
-`machinist status T1 --json` reads one Task without forge requests. `continue T1`
+`machinist status T1 --json` reads one Task without forge requests. `machinist continue T1`
 advances eligible Phases but never grants Approval or silently retries a
 failure. Local retry runs immediately and resumes Execute by default:
 
@@ -234,24 +237,11 @@ tests:
   command: uv run pytest
 ```
 
-After setup is committed, pushed, and merged to the default branch, verify the
-deployed integration without changing it:
-
-```sh
-machinist doctor --run-gates
-```
-
-`doctor --run-gates` is the single health check — it verifies config, labels,
-workflow drift, the sealed issue form, and verification gates, and prints the
-exact fix for any `FAIL` (e.g. `machinist sync-labels --check`,
-`machinist sync-workflows --check`, or `machinist task template --check` only if
-doctor asks). Resolve every `FAIL`. Treat a warning that no verification gates
-are configured as an explicit decision, not a harmless default.
-
-Review and persist the setup before the first task. The approval workflow must
-exist on GitHub before a comment or label can record SHA-bound approval. If you
-ran outside a configured repo, errors now point you to `machinist onboard` and
-the visual guide at https://agentmachinist.vinny.dev/first-run-guide.html:
+Review and persist the setup before the first Task. With `--setup-pr`, the
+controller already committed and pushed the managed files: review and merge
+the returned draft PR. With plain `machinist onboard`, review and commit the
+generated files yourself, then deliver the commit to the default branch through
+your repository's normal process:
 
 ```sh
 git status --short
@@ -263,17 +253,27 @@ git commit -m "chore: configure AgentMachinist"
 git push
 ```
 
-Or skip the prompts entirely:
-
-```sh
-machinist onboard --yes   # accepts safe defaults and auto-enables detected test command
-```
-
 If your repository already ignored `.machinist/runs/`, the initializer leaves
 that rule unchanged. Omit an unchanged `.gitignore` from the staged files. Do
 not commit anything until the staged diff matches the configuration you intend
-to run. Run `machinist --help` to see setup, task, build, and daily vs advanced
-operate commands grouped by workflow.
+to run.
+
+After setup lands on the default branch, switch back to that branch and update
+your checkout, then verify the deployed integration:
+
+```sh
+git switch <default-branch>
+git pull --ff-only
+machinist doctor --run-gates
+```
+
+`doctor --run-gates` checks config, labels, deployed workflows, the sealed issue
+form, and Verification Gates, and prints remediation for each `FAIL`. Resolve
+every `FAIL`. Treat a warning that no Gates are configured as an explicit
+decision. The approval workflow must exist on GitHub's default branch before a
+comment or label can record SHA-bound Approval. See the [visual
+guide](https://agentmachinist.vinny.dev/first-run-guide.html) for the foreground
+local alternative.
 
 ## Your first GitHub issue Task
 
@@ -349,12 +349,33 @@ by that label event, so a queued force-push cannot silently authorize new code.
 Both paths require write or admin access, because association and label
 permission can be weaker than push authority. Either way the approver's login
 is recorded on the approval comment. `machinist approve` requests this workflow
-transition; `machinist status` remains `awaiting approval` until the workflow
+transition; `machinist explain 7` remains `awaiting approval` until the workflow
 has verified and recorded it. `approval pending` means a label is already
 visible without trusted SHA Evidence, as can happen briefly on the manual-label
 path.
 
-If anyone changes the spec branch afterward, `machinist status` reports
+Wait for `machinist explain 7` to report `approved` before starting Execute.
+The command reads the legacy GitHub pipeline even when this checkout also has
+local Tasks; plain `machinist status` selects local Tasks in that case.
+
+```sh
+machinist explain 7
+```
+
+Repeat that read until it reports `approved`, then run Execute:
+
+```sh
+machinist run 7
+```
+
+After Execute succeeds, run `machinist review 7` if `review.enabled` is true.
+
+Alternatively, leave `machinist watch` running; it waits for valid Approval and
+dispatches eligible Phases. An early manual `run` can persist a failed Execute.
+After Approval is recorded, recover that failure with
+`machinist retry 7 --phase execute --run`, then complete Review when enabled.
+
+If anyone changes the spec branch afterward, `machinist explain 7` reports
 `approval stale` and execution refuses. Approve the new head again.
 
 To regenerate a successful Spec from the current issue on its existing branch
@@ -405,6 +426,19 @@ is required:
 
 ```sh
 machinist approve --issue 42
+```
+
+Wait for the approval workflow to succeed, then inspect its trusted Evidence:
+
+```sh
+machinist inspect 42 --json
+```
+
+Confirm that the GitHub PR source's `approval_sha` matches its full `head_sha`.
+The ready PR remains `in review`, so do not wait for an `approved` pipeline
+state here. Once the current head's Approval is recorded, run the amendment:
+
+```sh
 machinist amend 42 --feedback "Keep the public API; add the missing edge-case test."
 # or: machinist amend 42 --feedback-file review-notes.txt
 ```
@@ -704,11 +738,13 @@ By default (`verification.harness_may_run_gates: true`) the implementation
 prompt also lists the gate commands and asks the harness to run each required
 gate itself and iterate until it passes before finishing — fixing the code,
 never weakening a test. For `claude-code`, whose headless edit mode otherwise
-denies command execution, exactly those commands are allowlisted. The
-controller still runs every gate afterwards; the harness's own runs only
+denies command execution, those commands and added-argument variants are
+allowlisted. The controller still runs every gate afterwards; the harness's own runs only
 improve first-pass quality. Set `harness_may_run_gates: false` to keep the
-gate commands out of the harness entirely. Gate runs by the harness count
-against `harness.timeout_minutes`, so budget the timeout for at least one
+gate commands out of the generated prompt and omit these Claude allow rules.
+Other Execute adapters already permit command execution; this setting does
+not prevent a Harness from discovering and running tests itself. Gate runs by
+the harness count against `harness.timeout_minutes`, so budget the timeout for at least one
 full gate cycle.
 
 As the deterministic backstop for "fix the code, never the tests", Execute
@@ -879,12 +915,10 @@ and writes logs under `.machinist/runs/service/`; `service logs --lines` prints 
 bounded recent tail rather than following indefinitely. Lifecycle commands are
 explicit:
 
-```sh
-machinist service start
-machinist service restart
-machinist service stop
-machinist service uninstall
-```
+- Start the installed service: `machinist service start`.
+- Restart it: `machinist service restart`.
+- Stop it: `machinist service stop`.
+- Remove it: `machinist service uninstall`.
 
 `stop` preserves the installed plist and logs. `uninstall` removes the plist
 but deliberately preserves logs. `status` reports launchd registration, the
@@ -936,8 +970,9 @@ their local status together:
 machinist repo add /absolute/path/to/project
 machinist repo list --json
 machinist status --all --json
-machinist repo remove /absolute/path/to/project
 ```
+
+To unregister a repository later, run `machinist repo remove /absolute/path/to/project`.
 
 Portfolio status reads local legacy issue-run Evidence without GitHub requests.
 It reports an unavailable repository alongside
@@ -955,9 +990,12 @@ For the legacy GitHub issue workflow, start with:
 
 ```sh
 machinist doctor --run-gates
-machinist status
+machinist explain 7
 machinist inspect 7
 ```
+
+`machinist status` also shows the legacy pipeline when the checkout has no
+local configuration; otherwise it lists local Tasks.
 
 Common states and responses:
 
@@ -983,7 +1021,7 @@ Common states and responses:
 | Workspace already exists | Inspect it first, or prune it with `machinist clean --issue <issue>` or `machinist clean --all`. |
 | Managed workflow drift | `watch` and `update-check` report it. Run `machinist sync-workflows`, inspect, commit, and push. |
 | Configuration is unclear | Run `machinist config validate` and `machinist config show`; neither starts a Task. |
-| GitHub is unavailable | Preserve local evidence with `machinist status --local`, `machinist runs`, or `machinist inspect <issue> --offline`. |
+| GitHub is unavailable | Read legacy Evidence with `machinist runs` or `machinist inspect <issue> --offline`; `machinist status --local` also works when no local Task configuration is present. |
 | launchd watcher is quiet | Run `machinist service status` and `machinist service logs --lines 100`. |
 | Unsure whether the CLI is current | Run `machinist update-check`; it prints the upgrade command for this installation and flags managed-workflow drift. |
 | `doctor` warns that PyPI is unreachable | The update probe is advisory. Set `MACHINIST_NO_UPDATE_CHECK=1` on offline machines. |
