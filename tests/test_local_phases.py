@@ -415,3 +415,28 @@ def test_prepared_commit_recovery_rejects_changed_bytes(local, monkeypatch):
     with pytest.raises(LocalPhaseError, match="bytes changed"):
         local.run(Phase.EXECUTE, resume=True)
     assert local.harness.calls == ["spec", "execute"]
+
+
+@pytest.mark.parametrize("advisory_only", [False, True])
+def test_removed_required_gates_after_spec_block_execute_before_harness(
+    local, advisory_only
+):
+    local.run(Phase.SPEC)
+    local.approve()
+    payload = local.config.model_dump(mode="json")
+    payload["tests"]["command"] = None
+    if advisory_only:
+        payload["verification"]["gates"] = [
+            {
+                "name": "advice",
+                "command": f"{sys.executable} -c 'pass'",
+                "required": False,
+            }
+        ]
+    local.config = MachinistConfig.model_validate(payload)
+    with pytest.raises(
+        LocalPhaseError, match="required.*[Vv]erification|[Vv]erification.*required"
+    ):
+        local.run(Phase.EXECUTE)
+    assert local.harness.calls == ["spec"]
+    assert local.store.get(local.task.id).candidate_sha is None

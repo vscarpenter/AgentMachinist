@@ -441,6 +441,11 @@ def _begin(
         raise LocalPhaseError("local Task changed before the Phase began")
     if _sha(input_sha) is None:
         raise LocalPhaseError("local Phase input must be an exact commit SHA")
+    gates = config.resolved_verification_gates()
+    if not any(gate.required for gate in gates):
+        raise LocalPhaseError(
+            "local Phases require a required Verification Gate; configure one before continuing"
+        )
     workspace.cancel_check = cancel_check
     harness.cancel_check = cancel_check
     _cancel(cancel_check, "before local Phase")
@@ -455,10 +460,7 @@ def _begin(
                 "title": task.title,
                 "body": task.body,
                 "feedback": task.feedback,
-                "verification": [
-                    gate.model_dump(mode="json")
-                    for gate in config.resolved_verification_gates()
-                ],
+                "verification": [gate.model_dump(mode="json") for gate in gates],
                 "limits": config.limits.model_dump(mode="json"),
                 "instructions": config.instructions.model_dump(mode="json"),
             },
