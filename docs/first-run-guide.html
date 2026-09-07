@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A visual guide to the local AgentMachinist workflow: exact Spec Approval, implementation, verification, advisory Review, explicit integration, and optional GitHub or GitLab publication.">
+  <meta name="description" content="A visual guide to the local AgentMachinist 0.14.0 workflow: exact Spec Approval, implementation, verification, advisory Review, explicit integration, and optional GitHub or GitLab publication.">
   <meta name="theme-color" content="#f3f1eb">
   <title>Your first run with AgentMachinist</title>
   <style>
@@ -787,10 +787,10 @@
   </nav></header>
   <main id="main">
     <section class="hero shell" id="top"><div class="hero-copy reveal">
-      <p class="hero-kicker">A field guide to the current source checkout</p>
+      <p class="hero-kicker">A field guide to AgentMachinist 0.14.0</p>
       <h1>Your first Task, reviewed and ready locally.</h1>
       <p class="hero-lede">Start with an objective. Approve its exact Spec, follow implementation and verification in your terminal, then inspect the independent Review before integrating the change.</p>
-      <div class="version-note" role="note"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8"/></svg><p><strong>The local workflow and GitLab support are unreleased.</strong> Use the source installation below. The published package remains <strong>0.13.0</strong> with the <a href="#legacy-github">GitHub issue workflow</a>.</p></div>
+      <div class="version-note" role="note"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8"/></svg><p><strong>AgentMachinist 0.14.0 includes the local workflow and GitLab support.</strong> Install from PyPI below. The <a href="#legacy-github">GitHub issue workflow</a> remains supported.</p></div>
     </div><figure class="hero-visual reveal">
         <svg viewBox="0 0 620 520" role="img" aria-label="A local Task becomes an exact Spec commit, receives human Approval, passes implementation and verification, receives independent advisory Review, and awaits explicit local integration.">
           <defs>
@@ -854,7 +854,7 @@
       </figure></section>
     <section class="route-rail" aria-label="The eight stations in a local AgentMachinist Task"><ol class="route-list shell">
       <li><span class="route-number">01</span><strong>Prepare</strong><small>Committed repo, Harness, gates</small></li>
-      <li><span class="route-number">02</span><strong>Install</strong><small>Use the source checkout</small></li>
+      <li><span class="route-number">02</span><strong>Install</strong><small>Install from PyPI</small></li>
       <li><span class="route-number">03</span><strong>Start</strong><small>One objective becomes T1</small></li>
       <li><span class="route-number">04</span><strong>Spec</strong><small>Check baseline; save the plan</small></li>
       <li><span class="route-number">05</span><strong>Approve</strong><small>Authorize the exact Spec SHA</small></li>
@@ -862,8 +862,8 @@
       <li><span class="route-number">07</span><strong>Review</strong><small>Independent, advisory findings</small></li>
       <li><span class="route-number">08</span><strong>Integrate</strong><small>You accept the local candidate</small></li>
     </ol></section>
-    <section class="shell" style="margin-top:var(--space-6)"><div class="fast-track"><div class="fast-track-head"><h2 style="font-size:1.3rem;margin:0">The foreground journey</h2><span class="micro-note">No forge account required</span></div><p>Use a small change with a meaningful test. The Spec and final diff are human decision points; the machine Phases continue in the foreground after Approval.</p><div class="terminal" aria-label="local first Task"><div class="terminal-bar"><span>terminal / local first Task</span><button class="copy-button" type="button" data-copy="# Install from the current AgentMachinist source checkout:&#10;uv tool install --editable .&#10;# Then change to your project, with a clean committed baseline:&#10;cd ~/code/your-project&#10;machinist start &quot;Add CSV export for filtered transaction rows&quot; --test-cmd &quot;uv run pytest&quot;&#10;# Read the saved Spec. Copy its complete approval command:&#10;machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;&#10;# Inspect the diff, verification Evidence, and advisory Review:&#10;machinist status T1&#10;# Explicitly accept the exact candidate into the clean local base:&#10;machinist integrate T1">Copy commands</button></div><pre># Install from the current AgentMachinist source checkout:
-uv tool install --editable .
+    <section class="shell" style="margin-top:var(--space-6)"><div class="fast-track"><div class="fast-track-head"><h2 style="font-size:1.3rem;margin:0">The foreground journey</h2><span class="micro-note">No forge account required</span></div><p>Use a small change with a meaningful test. The Spec and final diff are human decision points; the machine Phases continue in the foreground after Approval.</p><div class="terminal" aria-label="local first Task"><div class="terminal-bar"><span>terminal / local first Task</span><button class="copy-button" type="button" data-copy="# Install the released controller:&#10;uv tool install agentmachinist&#10;# Then change to your project, with a clean committed baseline:&#10;cd ~/code/your-project&#10;machinist start &quot;Add CSV export for filtered transaction rows&quot; --test-cmd &quot;uv run pytest&quot;&#10;# Read the saved Spec. Copy its complete approval command:&#10;machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;&#10;# Inspect the diff, verification Evidence, and advisory Review:&#10;machinist status T1&#10;# Explicitly accept the exact candidate into the clean local base:&#10;machinist integrate T1">Copy commands</button></div><pre># Install the released controller:
+uv tool install agentmachinist
 # Then change to your project, with a clean committed baseline:
 cd ~/code/your-project
 machinist start &quot;Add CSV export for filtered transaction rows&quot; --test-cmd &quot;uv run pytest&quot;
@@ -881,7 +881,7 @@ machinist integrate T1</pre></div></div></section>
             <h3>Verification</h3><p>Use a real test command that works from committed files in an isolated Workshop. Baseline verification runs before model work.</p><code>uv run pytest</code>
           </article><article class="tool">
             <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M9 13h30v22H9z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15 21 5 4-5 4m9 0h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <h3>uv</h3><p>Installs the controller from the current source checkout. The published package is still 0.13.0.</p><code>uv --version</code>
+            <h3>uv</h3><p>Installs the released controller from PyPI. Python 3.12 or newer is required.</p><code>uv --version</code>
           </article><article class="tool">
             <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M15 8h18l7 12-7 20H15L8 20 15 8Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="24" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 12v5m0 14v5M12 24h5m14 0h5" stroke="currentColor" stroke-width="2"/></svg>
             <h3>A coding harness</h3><p>Choose Claude Code, OpenCode, Pi, or Codex. Install and authenticate it before your first Task.</p><code>claude --version</code>
@@ -903,8 +903,8 @@ machinist integrate T1</pre></div></div></section>
         <div class="harness-card"><h3>Pi</h3><p>Lightweight agent</p><code>pi auth check --model &lt;model&gt; --json --no-refresh</code><code>--harness pi</code></div>
       </div><p style="grid-column:1 / -1">Local setup discovers an installed Harness supporting Spec, Execute, and Review. A configured <code>model</code> is optional. Adapter-owned sandbox and permission flags cannot be overridden through <code>extra_args</code>; provider access is separate from executable discovery.</p>
     </div></section>
-    <section class="section shell" id="install"><div class="install-grid"><div class="install-copy"><p class="section-kicker">Install the controller</p><h2>Use the checkout with the new commands.</h2><ol><li>Run the editable installation from the current AgentMachinist source checkout.</li><li>Check that <code>machinist start --help</code> is available.</li><li>Change into the project where you want to work.</li></ol><p class="micro-note"><code>uv tool install agentmachinist</code> installs published 0.13.0. It does not include this unreleased journey. The source still reports 0.13.0, so the version number alone cannot distinguish them.</p><p><code>machinist rehearse</code> exercises the production local journey in a disposable real Git repository with a deterministic fake Harness. It makes no model or API calls. <code>--harness</code> explicitly uses configured Harnesses and may consume provider usage.</p></div><div class="terminal" aria-label="install source"><div class="terminal-bar"><span>terminal / install source</span><button class="copy-button" type="button" data-copy="# In the current AgentMachinist source checkout:&#10;uv tool install --editable .&#10;machinist start --help&#10;# Run the remaining commands in the project you want to change:&#10;cd ~/code/your-project">Copy commands</button></div><pre># In the current AgentMachinist source checkout:
-uv tool install --editable .
+    <section class="section shell" id="install"><div class="install-grid"><div class="install-copy"><p class="section-kicker">Install the controller</p><h2>Install once. Start in your own project.</h2><ol><li>Install AgentMachinist 0.14.0 from PyPI.</li><li>Check that <code>machinist start --help</code> is available.</li><li>Change into the project where you want to work.</li></ol><p class="micro-note">Already installed with uv? Run <code>uv tool upgrade agentmachinist</code>, then check <code>machinist --version</code>. The local workflow and GitLab support are included in 0.14.0.</p><p><code>machinist rehearse</code> exercises the production local journey in a disposable real Git repository with a deterministic fake Harness. It makes no model or API calls. <code>--harness</code> explicitly uses configured Harnesses and may consume provider usage.</p></div><div class="terminal" aria-label="install AgentMachinist"><div class="terminal-bar"><span>terminal / install AgentMachinist</span><button class="copy-button" type="button" data-copy="# Install the released controller:&#10;uv tool install agentmachinist&#10;machinist start --help&#10;# Run the remaining commands in the project you want to change:&#10;cd ~/code/your-project">Copy commands</button></div><pre># Install the released controller:
+uv tool install agentmachinist
 machinist start --help
 # Run the remaining commands in the project you want to change:
 cd ~/code/your-project</pre></div></div></section>
@@ -1098,7 +1098,7 @@ machinist publish T1 --provider gitlab --host gitlab.example.com</pre></div></di
       <details><summary>A Task must stop</summary><div class="detail-body"><p>Request cooperative cancellation, inspect the preserved Evidence, and resolve the reason before clearing it. Use the recovery action shown by status.</p><code>machinist cancel --task T1 --reason "Requirements changed"</code><br><code>machinist cancel --task T1 --clear</code></div></details>
       <details><summary>Existing GitHub adoption stopped</summary><div class="detail-body"><p>Rerun <code>machinist onboard --setup-pr</code> to resume managed setup work and reuse its draft PR. Existing valid settings are preserved; change them with <code>machinist config set</code>. Merge setup before checking deployed default-branch workflows.</p><code>machinist doctor --run-gates</code></div></details>
     </div></section>
-    <section class="section shell" id="legacy-github"><header class="section-head"><p class="section-kicker">Existing GitHub workflow</p><h2>Keep issue automation when you need it.</h2><p>The published 0.13.0 workflow uses GitHub issues, draft PR Specs, workflow-authored Approval, and a local Execute runner. It remains compatible. Numeric issue IDs and local <code>T1</code> IDs are separate.</p></header>
+    <section class="section shell" id="legacy-github"><header class="section-head"><p class="section-kicker">Existing GitHub workflow</p><h2>Keep issue automation when you need it.</h2><p>The supported GitHub workflow uses issues, draft PR Specs, workflow-authored Approval, and a local Execute runner. Numeric issue IDs and local <code>T1</code> IDs are separate.</p></header>
       <details><summary>GitHub Actions adoption and daily commands</summary><div class="detail-body"><p><code>onboard --setup-pr</code> performs setup preflight without requiring workflows to be deployed already. A retry preserves valid settings and resumes managed-only setup work; unrelated branch history is rejected. Review and merge its draft PR before the full deployment doctor.</p><div class="terminal" aria-label="legacy GitHub workflow"><div class="terminal-bar"><span>terminal / legacy GitHub workflow</span><button class="copy-button" type="button" data-copy="# GitHub setup: generate and review a resumable draft setup PR.&#10;machinist onboard --setup-pr --spec-source github-actions&#10;# Add the repository secret declared by your selected Spec adapter.&#10;# Review and merge the setup PR, then verify deployed workflows:&#10;machinist doctor --run-gates&#10;# Create a linted GitHub Task. The issue number is illustrative:&#10;machinist task new --title &quot;Add CSV export for filtered transaction rows&quot; --dispatch&#10;# Actions writes its Spec; read the draft before requesting Approval:&#10;machinist approve --issue 42&#10;# Or target its PR explicitly: machinist approve --pr 18&#10;machinist inspect 42&#10;# After trusted SHA-bound Approval is visible:&#10;machinist run 42&#10;machinist review 42">Copy commands</button></div><pre># GitHub setup: generate and review a resumable draft setup PR.
 machinist onboard --setup-pr --spec-source github-actions
 # Add the repository secret declared by your selected Spec adapter.
@@ -1119,7 +1119,7 @@ machinist retry 42 --phase execute --run --resume
 machinist retry 42 --phase execute --run --fresh</pre></div><p>Legacy Execute recovery defaults to fresh; local <code>retry --task T1</code> defaults to resume. In legacy <code>github.spec_source: local</code> mode, use <code>machinist spec 42</code> or <code>watch</code> for Spec generation. It still requires GitHub Approval workflows. See the <a href="getting-started.md#github-setup-and-automation">GitHub setup reference</a> and <a href="operator-runbook.md">operator runbook</a> for watcher services, labels, and recovery.</p></div></details>
     </section>
     <section class="section shell" id="launch"><div class="launch-card"><div><p class="section-kicker" style="color:#ff9d76">Pocket checklist</p><h2>Ready for the first Task?</h2><p>The guide remembers these checks in this browser.</p><ul class="checklist" id="checklist">
-      <li><label><input type="checkbox" value="local-source"> <span>The source installation exposes <code>machinist start</code></span></label></li>
+      <li><label><input type="checkbox" value="local-source"> <span>AgentMachinist 0.14.0 is installed and exposes <code>machinist start</code></span></label></li>
       <li><label><input type="checkbox" value="local-tools"> <span>Git author and an installed Harness are ready</span></label></li>
       <li><label><input type="checkbox" value="local-baseline"> <span>My clean committed baseline has a real verification command</span></label></li>
       <li><label><input type="checkbox" value="local-objective"> <span>The Task has an observable outcome and bounded scope</span></label></li>
@@ -1139,7 +1139,7 @@ machinist retry 42 --phase execute --run --fresh</pre></div><p>Legacy Execute re
       <tr><td><code>machinist publish T1 --provider github|gitlab</code></td><td>Optionally publish that candidate using the origin-bound forge CLI. <code>--host</code> binds an explicit expected host.</td></tr>
       <tr><td><code>machinist rehearse</code></td><td>Exercise the local path in a disposable repository with a fake Harness and real Git and gates.</td></tr>
     </tbody></table></div><p class="micro-note">GitHub-specific diagnostics remain available: <code>machinist doctor --run-gates</code>, <code>machinist sync-labels [--check|--apply]</code>, and <code>machinist sync-workflows --check</code>. These are not prerequisites for a local-only Task.</p></section>
-  </main><footer class="shell"><div class="footer-row"><span>AgentMachinist / current checkout field guide</span><span>Local Task → exact Spec Approval → verified candidate → explicit integration</span></div></footer>
+  </main><footer class="shell"><div class="footer-row"><span>AgentMachinist 0.14.0 / field guide</span><span>Local Task → exact Spec Approval → verified candidate → explicit integration</span></div></footer>
   <div id="live-region" class="mono" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>
   <script>
     (() => {

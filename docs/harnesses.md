@@ -7,9 +7,9 @@ may subsequently select different supported adapters. “Spec and Review control
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-The guided local workflow and GitLab publication are unreleased in this source
-checkout; the published release remains 0.13.0. The CI column below describes
-the existing GitHub Actions Spec workflow, not GitLab CI.
+AgentMachinist 0.14.0 includes the guided local workflow and optional GitLab
+publication. The CI column below describes the existing GitHub Actions Spec
+workflow, not GitLab CI.
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
 | --- | --- | --- | --- | --- |

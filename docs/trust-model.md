@@ -18,8 +18,8 @@ approval automation never checks out or executes PR-head code.
 
 ## Local Approval, integration, and publication
 
-The foreground local workflow and GitLab intake/publication are unreleased in
-this source checkout; the published release remains 0.13.0.
+The foreground local workflow and GitLab intake/publication are available in
+AgentMachinist 0.14.0 alongside the existing GitHub issue workflow.
 
 The local journey records an explicit human Approval tied to repository, Task,
 exact Spec SHA, actor, and time. Copying a Task record to another repository or

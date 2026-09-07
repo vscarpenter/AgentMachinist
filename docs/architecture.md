@@ -4,9 +4,9 @@ AgentMachinist coordinates Git, a coding Harness, and the repository's
 verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
-deployment remain outside the controller. The foreground local workflow and
-GitLab intake/publication are unreleased in this checkout; the published
-release remains 0.13.0.
+deployment remain outside the controller. AgentMachinist 0.14.0 includes the
+foreground local workflow and GitLab intake/publication alongside the compatible
+GitHub issue workflow.
 
 ## Ownership
 

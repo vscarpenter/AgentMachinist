@@ -632,9 +632,9 @@ def test_release_docs_describe_current_package_version():
         _REPO_ROOT / "docs/index.html",
     ):
         html = path.read_text().lower()
-        assert "unreleased" in html, path
+        assert "unreleased" not in html, path
         assert version in html, path
-        assert "uv tool install --editable ." in html, path
+        assert "uv tool install agentmachinist" in html, path
         for command in (
             "machinist start",
             "machinist approve --task t1 --spec-sha",

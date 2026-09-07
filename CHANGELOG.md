@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-09-07
+
 - Add the guided foreground local journey: `start` saves a Task and generates
   its Spec; `approve --task T1 --spec-sha <sha>` continues verified Execute and
   independent advisory Review. Status shows the local result and next action.
@@ -36,6 +38,10 @@
 - Rename the daily Phase-attempt limit to `max_runs_per_day`. Legacy
   `max_tasks_per_day` still loads with unchanged counting semantics; conflicting
   aliases fail validation and effective configuration emits the canonical key.
+- Update the complete documentation set and interactive guides for local
+  onboarding, configuration and command namespaces, recovery, optional
+  publication, and GitLab support. Preserve earlier design records with
+  applicability notes and current references.
 - Reconcile a crashed Execute push from the remote Task branch as well as
   GitHub's PR listing. When the listing lagged a push the controller had just
   made, a fresh run failed its approved-head check and advised approving the

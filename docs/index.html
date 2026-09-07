@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="How AgentMachinist works: a local Task, exact Spec Approval, verified implementation, advisory Review, and optional GitHub or GitLab publication. Unreleased source workflow.">
+  <meta name="description" content="How AgentMachinist works: a local Task, exact Spec Approval, verified implementation, advisory Review, and optional GitHub or GitLab publication. Available in AgentMachinist 0.14.0.">
   <meta name="theme-color" content="#f3f1eb">
   <meta property="og:title" content="How AgentMachinist works">
-  <meta property="og:description" content="A guided local workflow from Task to reviewed candidate. Integrate explicitly; publish to GitHub or GitLab when useful. Unreleased source workflow.">
+  <meta property="og:description" content="A guided local workflow from Task to reviewed candidate. Integrate explicitly; publish to GitHub or GitLab when useful. Available in AgentMachinist 0.14.0.">
   <meta name="twitter:card" content="summary">
   <title>How AgentMachinist works</title>
   <style>
@@ -232,7 +232,7 @@
       <p class="kicker">How AgentMachinist works · 2 minutes</p>
       <h1>One Task. A reviewed local change.</h1>
       <p class="lede">Start with a bounded objective. Approve its exact Spec, then let the controller coordinate implementation, verification, and independent Review. Inspect the result and integrate it locally. Publish a GitHub PR or GitLab MR whenever sharing helps.</p>
-      <p><strong>Unreleased source workflow.</strong> These commands are available in this checkout. The published package remains <strong>0.13.0</strong>, with the <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a>.</p>
+      <p><strong>AgentMachinist 0.14.0</strong> brings the complete local workflow and optional GitLab support. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
@@ -411,7 +411,7 @@
         <div>
           <p class="kicker">Get started for real</p>
           <h2>A repository, a Harness, and a real test command.</h2>
-          <p style="font-size:1.05rem;margin-bottom:1.5rem">Install this unreleased workflow from an AgentMachinist source checkout, then change into your project. First start saves local settings without overwriting your existing configuration.</p>
+          <p style="font-size:1.05rem;margin-bottom:1.5rem">Install AgentMachinist from PyPI, then change into your project. First start saves local settings without overwriting your existing configuration.</p>
           <div class="prereqs">
             <div class="prereq"><strong>Clean Git checkout with an initial commit and author</strong><code>git status --short</code></div>
             <div class="prereq"><strong>Python 3.12+ and uv</strong><code>uv --version</code></div>
@@ -422,10 +422,10 @@
           <p style="margin:1rem 0 0;font-size:0.9rem">Solo developers can keep the whole Task local. Small teams can use one persistent runner checkout and publish reviewable changes to their forge. Local Claims do not coordinate separate laptops. Watcher budgets do not constrain foreground local Tasks.</p>
         </div>
         <div class="term">
-          <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>terminal / source-checkout workflow</span></div>
+          <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>terminal / local workflow</span></div>
           <div class="term-body">
-            <p class="tline c"># in the AgentMachinist source checkout</p>
-            <p class="tline p"><b>$ </b>uv tool install --editable .</p>
+            <p class="tline c"># install the released controller</p>
+            <p class="tline p"><b>$ </b>uv tool install agentmachinist</p>
             <p class="tline c"># then change into your own committed project</p>
             <p class="tline p"><b>$ </b>machinist start "Add CSV export for the currently filtered rows" --test-cmd "uv run pytest"</p>
             <p class="tline c"># inspect the Spec; use the full SHA printed by start</p>
@@ -451,7 +451,7 @@
   </main>
   <footer class="site-footer shell">
     <div class="footer-row">
-      <span>AgentMachinist · local Task → exact Approval → verified candidate → your decision</span>
+      <span>AgentMachinist 0.14.0 · local Task → exact Approval → verified candidate → your decision</span>
       <nav aria-label="Documentation">
         <a href="local-workflow.md">Local workflow</a>
         <a href="first-run-guide.html">Field guide</a>

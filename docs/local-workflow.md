@@ -5,10 +5,13 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This workflow is currently unreleased. From an AgentMachinist source checkout,
-install it with `uv tool install --editable .`; then run the commands below in
-the repository you want to change. The published 0.13.0 package retains the
-[GitHub issue workflow](getting-started.md#github-setup-and-automation).
+This workflow is available in AgentMachinist 0.14.0. Install it with
+`uv tool install agentmachinist`, or upgrade an existing tool installation with
+`uv tool upgrade agentmachinist`; then run the commands below in the repository
+you want to change. The existing
+[GitHub issue workflow](getting-started.md#github-setup-and-automation)
+remains available. See [installation](getting-started.md#install) for an optional
+editable source setup.
 
 ## Complete one Task
 

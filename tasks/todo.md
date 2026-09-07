@@ -1,3 +1,27 @@
+# AgentMachinist 0.14.0 release (IN PROGRESS)
+
+User authorized committing everything, pushing to origin, and deploying a new
+version. This minor release includes the approved local/GitLab workflow and
+complete documentation update. Current branch: `codex/local-workflow-gitlab`.
+
+- [x] Align package, lockfile, managed projections, changelog, and release docs.
+- [ ] Pass `bash scripts/verify.sh` on the release candidate.
+- [ ] Push and verify origin SHA; open PR and verify exact-head CI/CodeQL.
+- [ ] Merge, publish `v0.14.0` at the merged main SHA, and verify release jobs.
+- [ ] Verify PyPI checksums/install, public docs, SHA alignment, and clean tree.
+
+### Resuming From Here
+
+Origin currently publishes v0.13.0. Pages deploys `main:/docs` to the existing
+custom domain. Existing branch protection names obsolete unversioned test jobs
+and requires another reviewer; it permits configured administrator merges.
+Do not weaken the policy: require actual current matrix/aggregate CI and CodeQL
+success at the exact PR head before using that existing merge capability.
+Secret metadata confirms the configured Anthropic Actions secret is present.
+The candidate targets 0.14.0; lockfile and managed projection checks agree.
+The full gate is the next step. Documentation edits are complete and frozen
+while it runs; source-preview labels now describe the release installation.
+
 # Complete documentation reconciliation (COMPLETE)
 
 Scope: update every current guide and rendered page in `docs/` for the approved

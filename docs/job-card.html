@@ -339,12 +339,12 @@
 </head>
 <body>
 <main class="shell" id="main">
-  <header><p class="kicker">AgentMachinist · Job card · Current checkout</p><h1>Machinist Job Card</h1><p class="lede">One local Task, an exact Spec to approve, and a verified candidate with independent advisory Review. You choose local integration and optional publication.</p><p><strong>Local workflow and GitLab support are unreleased.</strong> Install from the current source checkout. Published <strong>0.13.0</strong> retains the separate GitHub issue workflow.</p></header>
+  <header><p class="kicker">AgentMachinist · Job card · v0.14.0</p><h1>Machinist Job Card</h1><p class="lede">One local Task, an exact Spec to approve, and a verified candidate with independent advisory Review. You choose local integration and optional publication.</p><p><strong>AgentMachinist 0.14.0 includes the local workflow and GitLab support.</strong> Install from PyPI. The separate GitHub issue workflow remains supported.</p></header>
   <div class="pipeline-scroll" tabindex="0" role="region" aria-label="Local Task sequence"><div class="pipeline">
     <span class="step">Task T1</span><span class="arrow">→</span><span class="step">baseline + Spec commit</span><span class="arrow">→</span><span class="gate">approve exact SHA</span><span class="arrow">→</span><span class="step">Execute + gates</span><span class="arrow">→</span><span class="step">advisory Review</span><span class="arrow">→</span><span class="gate">you integrate</span>
   </div></div>
-  <section class="prep"><span class="op-index">PREP</span><h2>A committed repository, a Harness, and real tests</h2><p>Start with a clean Git checkout, an initial commit, configured author, and an installed, authenticated Harness. No origin, forge account, or watcher is required for local Tasks.</p><pre><code># From the current AgentMachinist source checkout:
-uv tool install --editable .
+  <section class="prep"><span class="op-index">PREP</span><h2>A committed repository, a Harness, and real tests</h2><p>Start with a clean Git checkout, an initial commit, configured author, and an installed, authenticated Harness. No origin, forge account, or watcher is required for local Tasks.</p><pre><code># Install the released controller:
+uv tool install agentmachinist
 machinist start --help
 # Then change to the repository you want to work on:
 cd ~/code/your-project

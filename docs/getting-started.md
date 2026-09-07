@@ -36,24 +36,28 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-The guided local workflow and GitLab intake/publication described in this guide
-are unreleased. To use them, run this from an AgentMachinist source checkout,
+AgentMachinist 0.14.0 includes the guided local workflow, optional GitHub/GitLab
+intake and publication, and the existing GitHub issue automation. Install it,
 then change into the repository you want to work on:
-
-```sh
-uv tool install --editable .
-machinist --version
-```
-
-For the published 0.13.0 GitHub issue workflow instead:
 
 ```sh
 uv tool install agentmachinist
 machinist --version
 ```
 
-Upgrade a published tool installation later with
-`uv tool upgrade agentmachinist`. That does not install unreleased features.
+Upgrade an existing tool installation with:
+
+```sh
+uv tool upgrade agentmachinist
+machinist --version
+```
+
+Confirm that `machinist --version` reports 0.14.0 or newer before using the
+foreground local commands. For contributing to AgentMachinist, an editable
+installation is optional: run `uv tool install --editable .` from its source
+checkout, then enter the repository you want to change. An editable install
+tracks that checkout instead of the published package; use its Git and `uv sync`
+workflow to update it.
 
 To find out whether an upgrade is waiting, run:
 

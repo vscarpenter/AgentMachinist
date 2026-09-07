@@ -1,8 +1,9 @@
 # Operator runbook
 
-The foreground local workflow and GitLab integration are unreleased in this
-source checkout. The published release remains 0.13.0. See the
-[installation instructions](getting-started.md#install) for the distinction.
+AgentMachinist 0.14.0 includes the foreground local workflow and optional GitLab
+integration. Install with `uv tool install agentmachinist`, or upgrade with
+`uv tool upgrade agentmachinist`. See the
+[installation instructions](getting-started.md#install) for other setups.
 
 ## Local foreground operation
 

@@ -1,9 +1,10 @@
 # AgentMachinist documentation
 
-This is the current operating documentation for this source checkout. The guided
-local workflow and GitLab support are **unreleased**; published package 0.13.0
-supports the earlier GitHub workflow. Start with the source-install instructions
-in the [local workflow guide](local-workflow.md) to use the new capabilities.
+This is the current operating documentation for AgentMachinist **0.14.0**, including
+the guided local workflow and optional GitHub/GitLab collaboration. Install with
+`uv tool install agentmachinist`, or upgrade an existing tool installation with
+`uv tool upgrade agentmachinist`. Start with the
+[local workflow guide](local-workflow.md) for your first Task.
 
 ## Understand the workflow
 
@@ -25,7 +26,7 @@ the local journey; the selected Harness may still use a cloud model.
 
 ## Adopt and operate it
 
-- [Local workflow and optional publication](local-workflow.md) — source install,
+- [Local workflow and optional publication](local-workflow.md) — installation,
   local configuration, exact Approval, recovery, integration, publication, and teams.
 - [Getting Started](getting-started.md) — complete installation, both workflows,
   configuration reference, Harness selection, and troubleshooting.

@@ -13,8 +13,8 @@ or remotely; local integration is explicit.
 
 ## One-time setup
 
-The new local workflow is unreleased. Install this source checkout with
-`uv tool install --editable .`, then enter the repository you want to change.
+Install AgentMachinist 0.14.0 with `uv tool install agentmachinist`, or upgrade
+with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
 You need a clean checkout on a named branch, an initial Git commit, a
 configured author, one installed and authenticated Harness, and an executable
 required Verification Gate. No forge or origin is required.

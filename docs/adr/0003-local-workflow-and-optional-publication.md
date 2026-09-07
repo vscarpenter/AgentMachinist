@@ -6,7 +6,7 @@ Status: Accepted
 
 Deciders: Vinny Carpenter through approval of the reviewed implementation roadmap.
 
-Implementation status: complete in source, unreleased. Follow the
+Implementation status: included in AgentMachinist 0.14.0. Follow the
 [local workflow guide](../local-workflow.md) for installation and commands,
 the [architecture](../architecture.md) for ownership and recovery, and the
 [trust model](../trust-model.md) for enforcement limits.

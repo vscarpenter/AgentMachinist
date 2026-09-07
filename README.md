@@ -16,7 +16,7 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-Current release: [AgentMachinist 0.13.0 on PyPI](https://pypi.org/project/agentmachinist/0.13.0/).
+Current release: [AgentMachinist 0.14.0 on PyPI](https://pypi.org/project/agentmachinist/0.14.0/).
 
 ## Install
 
@@ -47,9 +47,9 @@ never appears in `update-check --json`.
 
 ## Start
 
-The guided local workflow in this checkout is **unreleased**. Run
-`uv tool install --editable .` from this source checkout to try it; the
-published 0.13.0 package provides the existing GitHub workflow below.
+Version 0.14.0 includes the guided local workflow and optional GitLab support.
+If you already installed AgentMachinist with uv, upgrade with
+`uv tool upgrade agentmachinist`. The existing GitHub workflow remains available.
 
 ```sh
 cd your-repository
