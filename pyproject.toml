@@ -1,12 +1,12 @@
 [project]
 name = "agentmachinist"
 version = "0.13.0"
-description = "Local-first issue-to-PR build pipeline for coding harnesses"
+description = "Local-first verified coding workflow with optional GitHub and GitLab publication"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Vinny Carpenter", email = "vscarpenter@gmail.com" }]
-keywords = ["agents", "ci", "github", "claude-code", "developer-tools"]
+keywords = ["agents", "ci", "github", "gitlab", "claude-code", "developer-tools"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -91,6 +91,19 @@ files = [
     "src/machinist/process.py",
     "src/machinist/updates.py",
     "src/machinist/verification.py",
+    "src/machinist/dispatch.py",
+    "src/machinist/forge.py",
+    "src/machinist/gitlab.py",
+    "src/machinist/local_cli.py",
+    "src/machinist/local_setup.py",
+    "src/machinist/local_tasks.py",
+    "src/machinist/local_workflow.py",
+    "src/machinist/local_workspace.py",
+    "src/machinist/phases/local.py",
+    "src/machinist/publication.py",
+    "src/machinist/rehearsal.py",
+    "src/machinist/task_drafts.py",
+    "src/machinist/transitions.py",
 ]
 
 [tool.coverage.run]

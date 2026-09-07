@@ -16,7 +16,7 @@ from machinist.local_tasks import LocalTask, LocalTaskStore
 from machinist.local_workspace import LocalWorkspace
 from machinist.process import run_supervised
 from machinist.publication import ready_candidate
-from machinist.transitions import classify_local_task
+from machinist.transitions import LocalTransitionDecision, classify_local_task
 
 
 class LocalWorkflowError(Exception):
@@ -67,7 +67,7 @@ class LocalWorkflow:
         """Record a local Task and produce its Spec; stop for exact-SHA Approval."""
         if not title.strip():
             raise LocalWorkflowError("a Task objective is required")
-        if not self.config.resolved_verification_gates():
+        if not any(gate.required for gate in self.config.resolved_verification_gates()):
             raise LocalWorkflowError(
                 "configure a verification command before starting a local Task"
             )
@@ -245,6 +245,16 @@ class LocalWorkflow:
         decision = classify_local_task(
             task, records=records, claim_held=self.lifecycle.claim_held(task.number)
         )
+        expected_ref = task.candidate_sha if self._executed(task) else task.spec_sha
+        if (
+            decision.state
+            in {"awaiting approval", "approved", "ready to integrate", "integrated"}
+            and expected_ref
+            and self.workspace.branch_sha(task.branch) != expected_ref
+        ):
+            decision = LocalTransitionDecision(
+                "candidate changed", f"git log --oneline {task.branch}"
+            )
         return {
             "id": task.id,
             "title": task.title,
@@ -255,7 +265,7 @@ class LocalWorkflow:
             "spec": self.workspace.read_at_commit(
                 task.spec_sha,
                 f".machinist/specs/task-{task.number}-spec.md",
-                max_bytes=1024 * 1024,
+                max_bytes=self.config.limits.max_spec_chars * 4,
             )
             if task.spec_sha
             else None,

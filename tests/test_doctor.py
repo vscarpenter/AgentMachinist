@@ -625,6 +625,29 @@ def test_doctor_verifies_managed_workflows_on_remote_default_branch(tmp_path):
     assert report.to_dict()["checks"]
 
 
+def test_setup_readiness_does_not_require_unpublished_workflows(tmp_path):
+    """Adoption can be reviewed before its workflows reach the default branch."""
+    (tmp_path / ".git").mkdir()
+    config = MachinistConfig.model_validate(
+        {"workspace": {"root": str(tmp_path / "workspaces")}}
+    )
+    sync_workflows(tmp_path, config, installed_version="0.2.0", check=False)
+    sync_task_template(tmp_path, check=False)
+    calls = []
+    report = run_doctor(
+        tmp_path,
+        config,
+        installed_version="0.2.0",
+        which=lambda name: f"/bin/{name}",
+        runner=_runner_for(tmp_path, calls=calls),
+        check_deployment=False,
+    )
+
+    assert report.ok, report.to_dict()
+    assert "remote workflows" not in {check.name for check in report.checks}
+    assert not any("/contents/.github/workflows/" in str(args) for args, _ in calls)
+
+
 def test_doctor_can_opt_in_to_executing_configured_gates(tmp_path):
     (tmp_path / ".git").mkdir()
     config = MachinistConfig.model_validate(

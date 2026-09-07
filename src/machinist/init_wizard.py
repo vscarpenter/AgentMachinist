@@ -6,11 +6,55 @@ Flags passed to `machinist init` pre-answer questions, which the wizard
 then skips.
 """
 
+import shutil
 from dataclasses import dataclass
 
 import click
 
 from machinist.config import HarnessName
+from machinist.harness import discover_harnesses
+
+
+class HarnessChoice(click.ParamType):
+    """Resolve built-in and installed plugin identifiers when Click parses argv."""
+
+    name = "harness"
+
+    def convert(self, value, param, ctx):
+        registry = discover_harnesses()
+        if value in registry.adapters:
+            return value
+        choices = ", ".join(registry.adapters)
+        self.fail(
+            f"unknown Harness {value!r}; available adapters: {choices}", param, ctx
+        )
+
+
+def setup_harness_choices(
+    *, spec_source: str, manage_workflows: bool
+) -> tuple[str, ...]:
+    """Offer only adapters that can run every Phase of the starter pipeline."""
+    hosted_spec = spec_source == "github-actions" and manage_workflows
+    return tuple(
+        name
+        for name, adapter in discover_harnesses().adapters.items()
+        if {"spec", "execute", "review"} <= adapter.descriptor.phases
+        and (not hosted_spec or adapter.descriptor.ci_spec is not None)
+    )
+
+
+def validate_setup_harness(
+    name: str, *, spec_source: str, manage_workflows: bool
+) -> None:
+    if name not in setup_harness_choices(
+        spec_source=spec_source, manage_workflows=manage_workflows
+    ):
+        raise click.ClickException(
+            f"Harness {name!r} cannot run the starter pipeline with {spec_source} "
+            "Spec dispatch; choose an adapter supporting Spec, Execute and Review "
+            "and, for managed Actions, hosted Spec metadata."
+        )
+
 
 _LANGUAGE_TEST_COMMANDS = {
     "python": "pytest",
@@ -62,11 +106,18 @@ def run_init_wizard(
     resolved_harness = harness_name or _ask_harness(
         spec_source=resolved_spec_source, manage_workflows=resolved_workflows
     )
+    validate_setup_harness(
+        resolved_harness,
+        spec_source=resolved_spec_source,
+        manage_workflows=resolved_workflows,
+    )
     resolved_test_command = (
         test_command
         if test_command is not None
         else _ask_test_command(detected_test_command)
     )
+    backend: str | None
+    events: list[str] | None
     if notifications is not None:
         backend, events = notifications, None
     else:
@@ -110,10 +161,32 @@ def _ask_harness(*, spec_source: str, manage_workflows: bool) -> str:
     click.echo(
         "\nHarness — the coding agent CLI that writes your specs and implementation."
     )
+    choices = setup_harness_choices(
+        spec_source=spec_source, manage_workflows=manage_workflows
+    )
+    if not choices:
+        raise click.ClickException("No installed adapter supports this setup mode.")
+    registry = discover_harnesses()
+    installed = [
+        name
+        for name in choices
+        if shutil.which(registry.adapters[name].default_command)
+    ]
+    default = (
+        installed[0]
+        if installed
+        else (
+            HarnessName.CLAUDE_CODE.value
+            if HarnessName.CLAUDE_CODE.value in choices
+            else choices[0]
+        )
+    )
+    if installed:
+        click.echo("Available on PATH: " + ", ".join(installed))
     return click.prompt(
         "Harness",
-        type=click.Choice([harness.value for harness in HarnessName]),
-        default=HarnessName.CLAUDE_CODE.value,
+        type=click.Choice(choices),
+        default=default,
     )
 
 

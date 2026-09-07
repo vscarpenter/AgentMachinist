@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
+import shlex
 import shutil
 import stat
 import subprocess
 import sys
 import time
-import tomllib
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -22,7 +21,6 @@ from machinist.cancellation import CancellationError, CancellationStore
 from machinist.config import (
     MAX_CONFIG_BYTES,
     ConfigError,
-    HarnessName,
     MachinistConfig,
     NotificationEvent,
     load_config,
@@ -62,9 +60,26 @@ from machinist.github import (
     PullRequest,
 )
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
-from machinist.init_wizard import InitAnswers, run_init_wizard
+from machinist.init_wizard import (
+    HarnessChoice,
+    InitAnswers,
+    run_init_wizard,
+    validate_setup_harness,
+)
 from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
 from machinist.live_status import StatusSnapshot, iter_status_snapshots
+from machinist.local_cli import (
+    amend_local,
+    approve_local,
+    cancel_local,
+    has_local_configuration,
+    load_local_config,
+    local_status,
+    read_body_file,
+    register_local_commands,
+    retry_local,
+)
+from machinist.local_setup import detect_test_command, find_repository_root
 from machinist.managed_paths import (
     ManagedPathError,
     managed_file_exists,
@@ -112,6 +127,7 @@ from machinist.repository_custody import (
     RepositoryCustodyError,
     bind_repository,
 )
+from machinist.runtime_paths import RuntimePathError
 from machinist.service import (
     LaunchdService,
     ServiceError,
@@ -119,6 +135,7 @@ from machinist.service import (
     read_watcher_heartbeat,
     write_watcher_heartbeat,
 )
+from machinist.task_drafts import save_task_draft
 from machinist.task_intake import (
     TASK_TEMPLATE_PATH,
     TaskLintReport,
@@ -191,48 +208,7 @@ def _stdin_is_interactive() -> bool:
 
 
 def _detect_test_command(root: Path) -> str | None:
-    pyproject = root / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            data = tomllib.loads(pyproject.read_text())
-        except (OSError, UnicodeError, tomllib.TOMLDecodeError):
-            data = {}
-        dependency_text = json.dumps(
-            {
-                "project": data.get("project", {}),
-                "dependency-groups": data.get("dependency-groups", {}),
-                "tool": {"uv": data.get("tool", {}).get("uv", {})},
-            }
-        ).casefold()
-        pytest_configured = bool(data.get("tool", {}).get("pytest"))
-        if pytest_configured or re.search(r"\bpytest(?:\W|$)", dependency_text):
-            return (
-                "uv run pytest" if (root / "uv.lock").is_file() else "python -m pytest"
-            )
-    package_json = root / "package.json"
-    if package_json.is_file():
-        try:
-            package = json.loads(package_json.read_text())
-            script = package.get("scripts", {}).get("test")
-        except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
-            script = None
-        if (
-            isinstance(script, str)
-            and script.strip()
-            and "no test specified" not in script.casefold()
-        ):
-            if (root / "bun.lock").exists() or (root / "bun.lockb").exists():
-                return "bun run test"
-            if (root / "pnpm-lock.yaml").exists():
-                return "pnpm test"
-            if (root / "yarn.lock").exists():
-                return "yarn test"
-            return "npm test"
-    if (root / "Cargo.toml").exists():
-        return "cargo test"
-    if (root / "go.mod").exists():
-        return "go test ./..."
-    return None
+    return detect_test_command(root)
 
 
 def _print_init_receipt(
@@ -298,13 +274,6 @@ def _print_init_receipt(
             f"  {step}. Configure CI authentication: gh secret set {secret_name}"
         )
         step += 1
-    # Collapse the old 4-check preflight into a single doctor invocation; doctor
-    # covers labels, workflow drift, the sealed task template, and the gates.
-    click.echo(
-        f"  {step}. Verify setup (one command checks everything): "
-        "machinist doctor --run-gates"
-    )
-    step += 1
     click.echo(f"  {step}. Commit the generated files (copy-paste):")
     click.echo("       git status --short")
     click.echo("       git add machinist.yaml .machinist/specs/.gitkeep .gitignore")
@@ -314,6 +283,11 @@ def _print_init_receipt(
     click.echo("       git diff --cached              # verify what will be committed")
     click.echo('       git commit -m "chore: configure AgentMachinist"')
     click.echo("       git push")
+    step += 1
+    click.echo(
+        f"  {step}. After these files reach the default branch (merge any setup PR), "
+        "verify deployment and gates: machinist doctor --run-gates"
+    )
     step += 1
     click.echo(
         f"  {step}. Start dispatch: machinist watch  (or, on macOS, machinist service install)"
@@ -477,7 +451,24 @@ _MACHINIST_ERRORS = (
 
 _COMMAND_GROUPS: list[tuple[str, list[str]]] = [
     (
-        "Setup  — first run & health",
+        "Tasks  — create and approve work",
+        ["start", "task", "spec", "approve"],
+    ),
+    (
+        "Build  — implement and review",
+        [
+            "continue",
+            "run",
+            "review",
+            "amend",
+            "retry",
+            "cancel",
+            "integrate",
+            "publish",
+        ],
+    ),
+    (
+        "Setup  — rehearsal, optional GitHub & health",
         [
             "onboard",
             "init",
@@ -487,14 +478,6 @@ _COMMAND_GROUPS: list[tuple[str, list[str]]] = [
             "sync-workflows",
             "update-check",
         ],
-    ),
-    (
-        "Tasks  — create and approve work",
-        ["task", "spec", "approve"],
-    ),
-    (
-        "Build  — implement and review",
-        ["run", "review", "amend", "retry", "cancel"],
     ),
     (
         "Operate — daily",
@@ -556,11 +539,13 @@ class MachinistGroup(click.Group):
 @click.group(cls=MachinistGroup)
 @click.version_option(package_name="agentmachinist")
 def main() -> None:
-    """AgentMachinist: spec, approve, and execute GitHub issues with local coding agents.
+    """AgentMachinist: plan, approve, verify, and integrate local coding Tasks.
 
-    Start with 'machinist onboard' — it creates machinist.yaml, workflows, and
-    labels, then prints the exact next steps. See
-    https://agentmachinist.vinny.dev/first-run-guide.html for a visual walkthrough.
+    Start with 'machinist start OBJECTIVE' in a Git repository. Read the generated
+    Spec, approve its exact SHA, then integrate the reviewed result.
+
+    Try 'machinist rehearse' to exercise the local workflow with a fake Harness.
+    Use 'machinist onboard' for the optional GitHub issue and watcher integration.
     """
 
 
@@ -575,8 +560,8 @@ def main() -> None:
 @click.option(
     "--harness",
     "harness_name",
-    type=click.Choice([h.value for h in HarnessName]),
-    help="Coding harness to use (default: claude-code). Managed CI installs the selected harness.",
+    type=HarnessChoice(),
+    help="Built-in or installed plugin Harness. The wizard prefers an executable on PATH.",
 )
 @click.option(
     "--test-cmd",
@@ -611,6 +596,7 @@ def init(
     notifications: str | None = None,
     no_input: bool = False,
     yes: bool = False,
+    show_receipt: bool = True,
 ) -> None:
     """Set up machinist.yaml, .machinist/, and GitHub workflows in this repository.
 
@@ -678,6 +664,11 @@ def init(
     planned_config = MachinistConfig.model_validate(
         strict_yaml_load(template_text) or {}
     )
+    validate_setup_harness(
+        planned_config.harness.name,
+        spec_source=planned_config.github.spec_source.value,
+        manage_workflows=planned_config.github.manage_workflows,
+    )
     try:
         preflight_workflow_projection(
             repo_root,
@@ -694,6 +685,19 @@ def init(
             "confirm it with --test-cmd"
         )
 
+    _complete_onboarding_files(
+        repo_root, planned_config, detected_test_cmd, show_receipt=show_receipt
+    )
+
+
+def _complete_onboarding_files(
+    repo_root: Path,
+    config: MachinistConfig,
+    suggested_test_command: str | None,
+    *,
+    show_receipt: bool = True,
+) -> None:
+    """Complete managed setup projections without rewriting configuration."""
     labels_ready = False
     try:
         gitkeep = Path(".machinist/specs/.gitkeep")
@@ -706,7 +710,6 @@ def init(
     click.echo(f"ensured {_RUNTIME_IGNORE} is ignored by Git")
 
     try:
-        config = _load_setup_config(repo_root)
         report = project_workflows(
             repo_root, config, installed_version=_installed_version(), check=False
         )
@@ -745,10 +748,65 @@ def init(
     except (GitHubError, WorkspaceError) as exc:
         click.echo(f"note: could not create GitHub labels yet ({exc})")
 
-    _print_init_receipt(
-        config,
-        labels_ready=labels_ready,
-        suggested_test_command=detected_test_cmd,
+    if show_receipt:
+        _print_init_receipt(
+            config,
+            labels_ready=labels_ready,
+            suggested_test_command=suggested_test_command,
+        )
+
+
+def _resume_onboarding(
+    repo_root: Path,
+    *,
+    harness_name: str | None,
+    test_cmd: str | None,
+    spec_source: str | None,
+    install_workflows: bool | None,
+    notifications: str | None,
+    show_receipt: bool,
+) -> None:
+    """Preserve recognized config and user files while completing managed setup."""
+    try:
+        config = _load_setup_config(repo_root)
+        overrides = (
+            ("harness.name", harness_name, config.harness.name),
+            ("tests.command", test_cmd, config.tests.command),
+            ("github.spec_source", spec_source, config.github.spec_source.value),
+            (
+                "github.manage_workflows",
+                install_workflows,
+                config.github.manage_workflows,
+            ),
+            (
+                "notifications.backend",
+                notifications,
+                config.notifications.backend.value,
+            ),
+        )
+        for key, requested, existing in overrides:
+            if requested is not None and requested != existing:
+                raise click.ClickException(
+                    f"Existing machinist.yaml is preserved. To change {key}, run "
+                    f"'machinist config set {key} <value>', then rerun 'machinist onboard'."
+                )
+        read_managed_text(repo_root, Path(".gitignore"), max_bytes=_MAX_GITIGNORE_BYTES)
+        managed_file_exists(repo_root, Path(".machinist/specs/.gitkeep"))
+        preflight_workflow_paths(repo_root)
+        preflight_task_template(repo_root)
+        preflight_workflow_projection(
+            repo_root, config, installed_version=_installed_version()
+        )
+    except (
+        ConfigError,
+        ManagedPathError,
+        TaskTemplateDriftError,
+        WorkflowDriftError,
+    ) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo("preserved existing machinist.yaml")
+    _complete_onboarding_files(
+        repo_root, config, _detect_test_command(repo_root), show_receipt=show_receipt
     )
 
 
@@ -847,8 +905,8 @@ def _print_task_explanation(result: TaskExplanation) -> None:
 @click.option(
     "--harness",
     "harness_name",
-    type=click.Choice([h.value for h in HarnessName]),
-    help="Coding harness to use (default: claude-code).",
+    type=HarnessChoice(),
+    help="Built-in or installed plugin Harness. The wizard prefers an executable on PATH.",
 )
 @click.option(
     "--test-cmd",
@@ -888,10 +946,11 @@ def onboard(
 ) -> None:
     """Set up this repository for AgentMachinist (recommended first command).
 
-    Creates machinist.yaml, .machinist/specs/, the sealed task issue form,
+    Creates or resumes machinist.yaml, .machinist/specs/, the sealed task issue form,
     and managed GitHub workflows/labels. In a terminal it asks a few
     questions (dispatch mode, harness, test gate) with safe defaults — use
-    flags or --no-input to pre-answer.
+    flags or --no-input to pre-answer. Existing settings are preserved; use
+    'machinist config set' to change them before resuming.
 
     Prefer 'machinist onboard --setup-pr' when setup should be reviewed
     as a draft PR rather than committed directly.
@@ -907,14 +966,31 @@ def onboard(
         "notifications": notifications,
         "no_input": no_input,
         "yes": yes,
+        "show_receipt": not setup_pr,
     }
-    if not setup_pr:
-        ctx.invoke(init, **arguments)
-        return
     repo_root = _repository_root(Path.cwd())
 
     def initialize() -> None:
-        ctx.invoke(init, **arguments)
+        try:
+            exists = managed_file_exists(repo_root, Path("machinist.yaml"))
+        except ManagedPathError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if exists:
+            _resume_onboarding(
+                repo_root,
+                harness_name=harness_name,
+                test_cmd=test_cmd,
+                spec_source=spec_source,
+                install_workflows=install_workflows,
+                notifications=notifications,
+                show_receipt=not setup_pr,
+            )
+        else:
+            ctx.invoke(init, **arguments)
+
+    if not setup_pr:
+        initialize()
+        return
 
     def validate() -> None:
         config = _load_setup_config(repo_root)
@@ -930,6 +1006,7 @@ def onboard(
             config,
             installed_version=_installed_version(),
             run_gates=True,
+            check_deployment=False,
         )
         failures = [
             f"{check.name}: {check.detail}"
@@ -940,16 +1017,32 @@ def onboard(
             raise OnboardingError("setup preflight failed: " + "; ".join(failures))
 
     try:
+        setup_config = (
+            _load_setup_config(repo_root)
+            if managed_file_exists(repo_root, Path("machinist.yaml"))
+            else MachinistConfig()
+        )
         result = deliver_setup_pr(
             repo_root,
-            github=GitHubClient(),
+            github=_bound_github_client(setup_config, repo_root=repo_root),
             initialize=initialize,
             validate=validate,
         )
-    except (OnboardingError, GitHubError) as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(f"Draft setup PR #{result.pr.number}: {result.pr.url}")
-    click.echo("Next: review the generated files and run machinist doctor --run-gates.")
+    except (OnboardingError, *_MACHINIST_ERRORS) as exc:
+        raise click.ClickException(
+            f"{exc}. After resolving the cause, rerun 'machinist onboard --setup-pr' "
+            "to resume; existing settings and setup work are preserved."
+        ) from exc
+    if result.pr is None:
+        click.echo(
+            "Setup files already match the default branch; no setup PR is needed."
+        )
+        click.echo("Next: verify deployment with machinist doctor --run-gates.")
+    else:
+        click.echo(f"Draft setup PR #{result.pr.number}: {result.pr.url}")
+        click.echo(
+            "Next: review and merge the setup PR, then run machinist doctor --run-gates."
+        )
 
 
 @main.command()
@@ -957,27 +1050,31 @@ def onboard(
     "--harness",
     "use_harness",
     is_flag=True,
-    help="Invoke configured Harnesses in the disposable rehearsal repository.",
+    help="Use configured Spec, Execute, and Review Harnesses; provider usage may occur.",
 )
 def rehearse(use_harness: bool) -> None:
-    """Rehearse the lifecycle locally without creating GitHub artifacts."""
+    """Exercise the production local workflow with a fake Harness by default."""
     try:
-        config = load_config()
         if use_harness:
+            config = (
+                load_local_config(find_repository_root(Path.cwd()))
+                if has_local_configuration()
+                else load_config()
+            )
             result = run_harness_rehearsal(
                 config,
                 harness_factory=lambda phase: _make_harness(config, Phase(phase)),
             )
             mode = "configured Harnesses; API usage may have occurred"
         else:
-            result = simulate_rehearsal(review_enabled=config.review.enabled)
-            mode = "controller simulation; no model or API usage"
+            result = simulate_rehearsal(review_enabled=True)
+            mode = "production local Phases with a fake Harness; no model or API usage"
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Rehearsal passed ({mode}).")
     for transition in result.transitions:
         click.echo(f"  ✓ {transition}")
-    click.echo("Next: create or lint a real Task before applying the trigger label.")
+    click.echo("Next: machinist start OBJECTIVE")
 
 
 @main.group()
@@ -1023,15 +1120,74 @@ def task_lint(issue_number: int, as_json: bool) -> None:
 @task.command("new")
 @click.option("--title", required=True, help="GitHub issue title.")
 @click.option(
+    "--body-file", help="Read a Markdown task body from a UTF-8 file or '-' for stdin."
+)
+@click.option(
     "--dispatch",
     is_flag=True,
     help="Apply the configured trigger label after readiness lint passes.",
 )
-def task_new(title: str, dispatch: bool) -> None:
-    """Prompt for a structured Task and create a GitHub issue."""
+def task_new(title: str, dispatch: bool, body_file: str | None = None) -> None:
+    """Create a structured GitHub issue; preserve its draft before remote writes."""
+    try:
+        config = load_config()
+        github = _bound_github_client(config)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(str(exc)) from exc
+    body = (
+        read_body_file(body_file, max_bytes=config.limits.max_issue_body_chars)
+        if body_file is not None
+        else _prompt_task_body()
+    )
+    if len(body.encode("utf-8")) > config.limits.max_issue_body_chars:
+        raise click.ClickException("task body exceeds the configured size limit")
+    try:
+        draft = save_task_draft(Path.cwd(), body)
+    except (RuntimePathError, OSError) as exc:
+        raise click.ClickException(f"cannot preserve task draft: {exc}") from exc
+    recovery = shlex.join(
+        ["machinist", "task", "new", "--title", title, "--body-file", str(draft)]
+        + (["--dispatch"] if dispatch else [])
+    )
+    report = lint_task_body(body)
+    if not report.ready:
+        _print_task_lint(report, as_json=False)
+        click.echo(f"Draft saved: {draft}\nEdit the draft, then retry: {recovery}")
+        raise click.exceptions.Exit(1)
+    try:
+        issue = github.create_issue(title=title, body=body)
+    except _MACHINIST_ERRORS as exc:
+        raise click.ClickException(
+            f"{exc}\nDraft saved: {draft}\nRetry: {recovery}"
+        ) from exc
+    click.echo(f"Created Task #{issue.number}: {issue.url}")
+    if dispatch:
+        try:
+            github.add_issue_label(issue.number, config.github.labels.trigger)
+        except _MACHINIST_ERRORS as exc:
+            command = shlex.join(
+                [
+                    "gh",
+                    "issue",
+                    "edit",
+                    str(issue.number),
+                    "--add-label",
+                    config.github.labels.trigger,
+                ]
+            )
+            raise click.ClickException(
+                f"Task #{issue.number} was created; dispatch failed: {exc}. "
+                f"Resume dispatch: {command}\nDraft saved: {draft}"
+            ) from exc
+        click.echo(f"Dispatched with label {config.github.labels.trigger!r}.")
+    else:
+        click.echo(f"Next: machinist task lint {issue.number}")
+
+
+def _prompt_task_body() -> str:
     click.echo("Creating a structured Task — 5 prompts, then local lint before GitHub:")
     click.echo(
-        "  Objective: one sentence describing the outcome (e.g. 'Make auth errors actionable')."
+        "  Objective: one sentence describing the outcome (e.g. 'Make authentication errors explain the recovery command')."
     )
     click.echo(
         "  Acceptance: checkboxes the reviewer can verify (e.g. '- [ ] Error names the credential')."
@@ -1044,7 +1200,7 @@ def task_new(title: str, dispatch: bool) -> None:
     )
     click.echo("  Context: background or links (optional, default: Not provided).")
     click.echo("")
-    body = render_task_body(
+    return render_task_body(
         objective=click.prompt("Objective", prompt_suffix=" — one sentence outcome: "),
         acceptance=click.prompt(
             "Acceptance criteria", prompt_suffix=" — checkboxes to verify: "
@@ -1062,23 +1218,6 @@ def task_new(title: str, dispatch: bool) -> None:
             prompt_suffix=" — background/links: ",
         ),
     )
-    report = lint_task_body(body)
-    if not report.ready:
-        _print_task_lint(report, as_json=False)
-        raise click.exceptions.Exit(1)
-    try:
-        config = load_config()
-        github = _bound_github_client(config)
-        issue = github.create_issue(title=title, body=body)
-        if dispatch:
-            github.add_issue_label(issue.number, config.github.labels.trigger)
-    except _MACHINIST_ERRORS as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(f"Created Task #{issue.number}: {issue.url}")
-    if dispatch:
-        click.echo(f"Dispatched with label {config.github.labels.trigger!r}.")
-    else:
-        click.echo(f"Next: machinist task lint {issue.number}")
 
 
 def _print_task_lint(report: TaskLintReport, *, as_json: bool) -> None:
@@ -1368,8 +1507,26 @@ def config_set(key: str, value: str, path: Path) -> None:
     "--issue", "issue_target", type=int, help="Approve by source issue number."
 )
 @click.option("--pr", "pr_target", type=int, help="Approve by pull request number.")
-def approve(issue_target: int | None, pr_target: int | None) -> None:
-    """Approve the exact current head of a draft PR by --issue or --pr."""
+@click.option("--task", "task_target", help="Approve a local Task such as T1.")
+@click.option("--spec-sha", help="Exact local Spec SHA displayed by start or status.")
+def approve(
+    issue_target: int | None,
+    pr_target: int | None,
+    task_target: str | None = None,
+    spec_sha: str | None = None,
+) -> None:
+    """Approve a local Spec with --task/--spec-sha, or a GitHub --issue/--pr."""
+    if task_target is not None:
+        if issue_target is not None or pr_target is not None:
+            raise click.UsageError("--task cannot be combined with --issue or --pr")
+        if spec_sha is None:
+            raise click.UsageError(
+                "local Approval requires --spec-sha from the displayed Spec"
+            )
+        approve_local(task_target, spec_sha)
+        return
+    if spec_sha is not None:
+        raise click.UsageError("--spec-sha requires --task")
     if (issue_target is None) == (pr_target is None):
         raise click.UsageError("provide exactly one of --issue NUMBER or --pr NUMBER")
     try:
@@ -1397,7 +1554,10 @@ def approve(issue_target: int | None, pr_target: int | None) -> None:
 
 
 @main.command()
-@click.argument("issue_number", type=click.IntRange(min=1))
+@click.argument("issue_number", type=click.IntRange(min=1), required=False)
+@click.option(
+    "--task", "task_target", help="Retry a local Task such as T1 in the foreground."
+)
 @click.option("--phase", type=click.Choice([phase.value for phase in Phase]))
 @click.option(
     "--run",
@@ -1416,15 +1576,23 @@ def approve(issue_target: int | None, pr_target: int | None) -> None:
     help="Start Execute from the approved remote head (the safe default).",
 )
 def retry(
-    issue_number: int,
+    issue_number: int | None,
     phase: str | None,
     run_now: bool,
     resume: bool,
     fresh: bool,
+    task_target: str | None = None,
 ) -> None:
     """Make a failed Task Run eligible for one explicit retry."""
     if resume and fresh:
         raise click.UsageError("--resume and --fresh are mutually exclusive")
+    if task_target is not None:
+        if issue_number is not None:
+            raise click.UsageError("--task cannot be combined with an issue number")
+        retry_local(task_target, phase, resume=not fresh)
+        return
+    if issue_number is None:
+        raise click.UsageError("provide an issue number or --task T<number>")
     if (resume or fresh) and not run_now:
         raise click.UsageError("--resume/--fresh require --run")
     try:
@@ -1888,7 +2056,8 @@ def _read_feedback_file(path: Path) -> str:
 
 
 @main.command()
-@click.argument("issue_number", type=int)
+@click.argument("issue_number", type=int, required=False)
+@click.option("--task", "task_target", help="Revise a local Task Spec from feedback.")
 @click.option("--feedback", help="Bounded operator feedback for the amendment.")
 @click.option(
     "--feedback-file",
@@ -1896,16 +2065,23 @@ def _read_feedback_file(path: Path) -> str:
     help="Read operator feedback from a UTF-8 file.",
 )
 def amend(
-    issue_number: int,
+    issue_number: int | None,
     feedback: str | None,
     feedback_file: Path | None,
+    task_target: str | None = None,
 ) -> None:
-    """Rework a ready PR from explicit feedback after fresh approval."""
+    """Revise a local Task Spec or rework a GitHub PR from explicit feedback."""
+    if (task_target is None) == (issue_number is None):
+        raise click.UsageError("provide exactly one issue number or --task T<number>")
     if (feedback is None) == (feedback_file is None):
         raise click.UsageError("provide exactly one of --feedback or --feedback-file")
     if feedback_file is not None:
         feedback = _read_feedback_file(feedback_file)
     assert feedback is not None
+    if task_target is not None:
+        amend_local(task_target, feedback)
+        return
+    assert issue_number is not None
     try:
         feedback = normalize_operator_feedback(feedback)
     except ExecutePhaseError as exc:
@@ -1960,8 +2136,10 @@ def _report_phase_outcome(
         if phase is Phase.EXECUTE:
             click.echo(f"PR #{pr.number} {verb} and ready for review: {pr.url}")
         else:
+            findings = _review_finding_summary(issue, pr)
             click.echo(
-                f"PR #{pr.number} passed independent review and is ready: {pr.url}"
+                f"PR #{pr.number} advisory review complete{findings}; "
+                f"ready for human review: {pr.url}"
             )
     _deliver_notification(
         config,
@@ -1970,6 +2148,32 @@ def _report_phase_outcome(
         f"Issue #{issue} implementation is ready in PR #{pr.number}",
         issue=issue,
         pr=pr.number,
+    )
+
+
+def _review_finding_summary(issue: int, pr: PullRequest) -> str:
+    """Read only completed, matching Review Evidence for the delivery receipt."""
+    try:
+        record = TaskLifecycle(Path(".machinist/runs"), repo_root=Path.cwd()).record(
+            issue, Phase.REVIEW
+        )
+        if record is None or record.status is not RunStatus.SUCCEEDED:
+            return ""
+        evidence = TaskEvidence.load(record.evidence)
+        if evidence.reviewed_sha is None or (
+            pr.head_sha and evidence.reviewed_sha != pr.head_sha
+        ):
+            return ""
+        counts = evidence.finding_counts
+        if counts is None:
+            return ""
+    except (LifecycleError, OSError, ValueError):
+        return ""
+    total = sum(counts.values())
+    noun = "finding" if total == 1 else "findings"
+    return (
+        f": {total} {noun} ({counts['high']} high, "
+        f"{counts['medium']} medium, {counts['low']} low)"
     )
 
 
@@ -2011,7 +2215,10 @@ def _deliver_notification(
 
 
 @main.command()
-@click.argument("issue_number", type=int)
+@click.argument("issue_number", type=int, required=False)
+@click.option(
+    "--task", "task_target", help="Cancel or clear cancellation for a local Task."
+)
 @click.option(
     "--reason",
     default="operator requested cancellation",
@@ -2019,8 +2226,19 @@ def _deliver_notification(
     help="Reason persisted with the cooperative cancellation request.",
 )
 @click.option("--clear", is_flag=True, help="Clear a prior cancellation request.")
-def cancel(issue_number: int, reason: str, clear: bool) -> None:
+def cancel(
+    issue_number: int | None,
+    reason: str,
+    clear: bool,
+    task_target: str | None = None,
+) -> None:
     """Cancel an active supervised Task or prevent its next dispatch."""
+    if (task_target is None) == (issue_number is None):
+        raise click.UsageError("provide exactly one issue number or --task T<number>")
+    if task_target is not None:
+        cancel_local(task_target, reason, clear=clear)
+        return
+    assert issue_number is not None
     try:
         store = CancellationStore(Path(".machinist/runs"), repo_root=Path.cwd())
         if clear:
@@ -2319,6 +2537,7 @@ def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> 
 
 
 @main.command()
+@click.argument("task_id", required=False)
 @click.option(
     "-v",
     "--verbose",
@@ -2362,8 +2581,16 @@ def status(
     registry: Path = DEFAULT_REGISTRY_PATH,
     watch_status: bool = False,
     status_interval: float = 2.0,
+    task_id: str | None = None,
 ) -> None:
-    """Show the pipeline state of machinist-managed issues and PRs."""
+    """Show local Task state and next steps, or the configured GitHub pipeline."""
+    if task_id is not None and all_repositories:
+        raise click.UsageError("a local Task ID cannot be combined with --all")
+    if task_id is not None or (not all_repositories and has_local_configuration()):
+        local_status(
+            task_id, as_json=as_json, watch=watch_status, interval=status_interval
+        )
+        return
     if watch_status:
         if local_only or all_repositories:
             raise click.UsageError("--watch cannot be combined with --local or --all")
@@ -2948,3 +3175,6 @@ def service_uninstall(force: bool) -> None:
         click.echo(f"Uninstalled {service.label}; logs retained at {service.logs_dir}")
     else:
         click.echo(f"Service is not installed; logs retained at {service.logs_dir}")
+
+
+register_local_commands(main)
