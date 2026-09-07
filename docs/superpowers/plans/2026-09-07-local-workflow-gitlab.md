@@ -1,11 +1,20 @@
 # Local workflow and GitLab implementation plan
 
-Approved direction: tasks/spec.md, September 7, 2026. Proceed continuously.
+> [!IMPORTANT]
+> **Historical design record.** Preserved implementation context, not current
+> operating instructions. See [Getting Started](../../getting-started.md),
+> [Architecture and lifecycle](../../architecture.md), and
+> [Local workflow](../../local-workflow.md) for current behavior.
+> This completed plan records source implementation and local verification.
+> It does not establish a published release, deployed documentation, or live GitLab validation.
+
+Approved direction: [Task specification](../../../tasks/spec.md), September 7, 2026.
 
 Completed September 7, 2026. All seven steps below are implemented and verified.
 The canonical gate passed 1,411 tests with 87.52% coverage, twenty typed modules,
 and isolated distribution smoke tests including the production local rehearsal.
-See tasks/todo.md for the final evidence and external-validation boundary.
+See the [implementation ledger](../../../tasks/todo.md) for the final evidence
+and external-validation boundary.
 
 1. Record contracts and ADR on a feature branch. Repair adoption, intake, budgets,
    amendment/Review lifecycle with failing regression tests.

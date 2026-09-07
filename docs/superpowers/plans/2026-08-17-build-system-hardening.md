@@ -1,10 +1,12 @@
 # Build System Hardening Implementation Plan
 
 > [!IMPORTANT]
-> **Historical design record.** This plan preserves the v0.2 implementation
-> context and is not current operating documentation. See
-> [Getting Started](../../getting-started.md) and
-> [Architecture and lifecycle](../../architecture.md) for current behavior.
+> **Historical design record.** Preserved implementation context, not current
+> operating instructions. See [Getting Started](../../getting-started.md),
+> [Architecture and lifecycle](../../architecture.md), and
+> [Local workflow](../../local-workflow.md) for current behavior.
+> Build and release decisions remain historical. GitHub setup is optional for
+> current local Tasks, and explicit local integration is now available.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

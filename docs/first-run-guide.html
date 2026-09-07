@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A visual, action-first guide to installing AgentMachinist and moving a first GitHub issue through spec, approval, implementation, and review.">
+  <meta name="description" content="A visual guide to the local AgentMachinist workflow: exact Spec Approval, implementation, verification, advisory Review, explicit integration, and optional GitHub or GitLab publication.">
   <meta name="theme-color" content="#f3f1eb">
   <title>Your first run with AgentMachinist</title>
   <style>
@@ -263,7 +263,7 @@
       overflow: hidden;
     }
     .hero-visual::after {
-      content: "ISSUE → READY PR";
+      content: "TASK → LOCAL CANDIDATE";
       position: absolute;
       right: -3.5rem;
       bottom: 3.8rem;
@@ -368,7 +368,7 @@
     .terminal-dots { display: flex; gap: 0.4rem; }
     .terminal-dots i { width: 0.58rem; height: 0.58rem; border: 1px solid currentColor; border-radius: 50%; }
     .copy-button {
-      min-height: 2.25rem;
+      min-height: 2.75rem;
       padding: 0 var(--space-3);
       border-color: rgb(255 255 255 / 0.3);
       background: transparent;
@@ -414,7 +414,7 @@
       background: var(--paper-1);
     }
     .mode-toolbar p { margin: 0; color: var(--ink-2); font-size: 0.88rem; }
-    .mode-picker { display: flex; gap: var(--space-2); }
+    .mode-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
     .mode-button { padding: 0 var(--space-4); }
     .mode-button[aria-pressed="true"] {
       border-color: var(--signal);
@@ -509,6 +509,7 @@
     .walk-index { display: inline-block; margin-bottom: var(--space-4); color: var(--signal); font: 750 0.8rem ui-monospace, monospace; }
     .walk-copy p { font-size: 1.05rem; }
     .walk-command {
+      overflow-wrap: anywhere;
       display: inline-flex;
       align-items: center;
       min-height: 2.4rem;
@@ -661,12 +662,14 @@
       margin-top: var(--space-5);
     }
     .harness-card {
+      min-width: 0;
+      overflow-wrap: anywhere;
       padding: var(--space-4);
       border: 1px solid var(--line);
       border-radius: var(--radius-md);
       background: var(--paper-0);
     }
-    .harness-card h4 { margin: 0 0 var(--space-1); font-size: 0.95rem; font-weight: 700; color: var(--blueprint); }
+    .harness-card h3 { margin: 0 0 var(--space-1); font-size: 0.95rem; font-weight: 700; color: var(--blueprint); }
     .harness-card p { margin: 0; font-size: 0.8rem; }
     .harness-card code { display: block; margin-top: var(--space-2); font-size: 0.75rem; color: var(--ink-0); }
 
@@ -699,6 +702,7 @@
     .tip-box code { color: var(--ink-0); font-weight: 600; }
 
     .cmd-table-shell {
+      overflow-x: auto;
       margin-top: var(--space-7);
       padding-top: var(--space-6);
       border-top: 1px solid var(--line);
@@ -746,6 +750,7 @@
     }
 
     @media (max-width: 40rem) {
+      .harness-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .shell { width: min(100% - 1.25rem, 74rem); }
       .nav { min-height: 3.8rem; }
       .brand span { display: none; }
@@ -776,40 +781,18 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to the first-run guide</a>
-
-  <header class="site-header">
-    <nav class="nav shell" aria-label="First-run guide">
-      <a class="brand" href="#top">
-        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-          <path d="M6 9h20v14H6z" fill="none" stroke="currentColor" stroke-width="2"/>
-          <path d="M10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8" fill="none" stroke="currentColor" stroke-width="2"/>
-        </svg>
-        <span>AgentMachinist / first run</span>
-      </a>
-      <div class="nav-links">
-        <a href="#prepare">Prepare</a>
-        <a href="#choose-mode">Choose a mode</a>
-        <a href="#first-task">First task</a>
-        <a class="nav-keep" href="#troubleshoot">Get unstuck</a>
-        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
-      </div>
-    </nav>
-  </header>
-
+  <header class="site-header"><nav class="nav shell" aria-label="First-run guide">
+    <a class="brand" href="#top"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9h20v14H6zM10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>AgentMachinist / first run</span></a>
+    <div class="nav-links"><a href="#prepare">Prepare</a><a href="#first-task">First Task</a><a href="#publication">Publish optionally</a><a class="nav-keep" href="#troubleshoot">Get unstuck</a><button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button></div>
+  </nav></header>
   <main id="main">
-    <section class="hero shell" id="top">
-      <div class="hero-copy reveal">
-        <p class="hero-kicker">A visual field guide for the 0.13 release</p>
-        <h1>Your first issue, machined into a PR.</h1>
-        <p class="hero-lede">Set up AgentMachinist, choose who writes the spec, approve the exact plan you read, and let your coding harness build behind a test gate.</p>
-        <div class="version-note" role="note">
-          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <p><strong>AgentMachinist 0.13.0 is available on PyPI.</strong> Install it directly below. If <code>machinist --version</code> still prints an older version, run <code>uv tool upgrade agentmachinist</code>.</p>
-        </div>
-      </div>
-
-      <figure class="hero-visual reveal">
-        <svg viewBox="0 0 620 520" role="img" aria-label="An assembly line showing a GitHub issue becoming a spec, receiving human approval, being implemented and tested, and arriving as a ready pull request.">
+    <section class="hero shell" id="top"><div class="hero-copy reveal">
+      <p class="hero-kicker">A field guide to the current source checkout</p>
+      <h1>Your first Task, reviewed and ready locally.</h1>
+      <p class="hero-lede">Start with an objective. Approve its exact Spec, follow implementation and verification in your terminal, then inspect the independent Review before integrating the change.</p>
+      <div class="version-note" role="note"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v5m0 3h.01" stroke="currentColor" stroke-width="1.8"/></svg><p><strong>The local workflow and GitLab support are unreleased.</strong> Use the source installation below. The published package remains <strong>0.13.0</strong> with the <a href="#legacy-github">GitHub issue workflow</a>.</p></div>
+    </div><figure class="hero-visual reveal">
+        <svg viewBox="0 0 620 520" role="img" aria-label="A local Task becomes an exact Spec commit, receives human Approval, passes implementation and verification, receives independent advisory Review, and awaits explicit local integration.">
           <defs>
             <marker id="hero-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker>
           </defs>
@@ -823,9 +806,9 @@
             <g transform="translate(35 70)">
               <path d="M0 0h145v100H0z" fill="var(--paper-0)" stroke="var(--line-strong)" stroke-width="2"/>
               <circle cx="22" cy="23" r="8" fill="var(--signal)"/>
-              <text x="40" y="28" fill="var(--ink-0)" font-size="14" font-weight="700">Issue #42</text>
+              <text x="40" y="28" fill="var(--ink-0)" font-size="14" font-weight="700">Task T1</text>
               <path d="M18 48h108M18 62h90M18 76h70" stroke="var(--line-strong)" stroke-width="5"/>
-              <text x="18" y="93" fill="var(--signal)" font-size="10" font-family="ui-monospace, monospace">agent-task</text>
+              <text x="18" y="93" fill="var(--signal)" font-size="10" font-family="ui-monospace, monospace">local objective</text>
             </g>
             <g transform="translate(250 65)">
               <path d="M0 0h120v110l-16 16H0z" fill="var(--blueprint-soft)" stroke="var(--blueprint)" stroke-width="2"/>
@@ -850,8 +833,8 @@
             <g transform="translate(220 255)">
               <path d="M0 0h150v130H0z" fill="var(--paper-0)" stroke="var(--success)" stroke-width="2"/>
               <rect x="16" y="16" width="65" height="18" rx="9" fill="var(--success-soft)"/>
-              <text x="48" y="29" text-anchor="middle" fill="var(--success)" font-size="9" font-weight="700">READY</text>
-              <text x="16" y="58" fill="var(--ink-0)" font-size="13" font-weight="700">Pull request #18</text>
+              <text x="48" y="29" text-anchor="middle" fill="var(--success)" font-size="9" font-weight="700">REVIEWED</text>
+              <text x="16" y="58" fill="var(--ink-0)" font-size="13" font-weight="700">Review report</text>
               <path d="M16 76h112M16 90h94M16 104h74" stroke="var(--line-strong)" stroke-width="4"/>
               <circle cx="128" cy="115" r="7" fill="var(--signal)"/>
             </g>
@@ -859,95 +842,50 @@
               <path d="M18 0h76l18 20v88H0V20L18 0Z" fill="var(--signal-soft)" stroke="var(--signal)" stroke-width="2"/>
               <text x="56" y="42" text-anchor="middle" fill="var(--signal-strong)" font-size="12" font-weight="700">YOU</text>
               <text x="56" y="60" text-anchor="middle" fill="var(--ink-0)" font-size="11">review</text>
-              <text x="56" y="76" text-anchor="middle" fill="var(--ink-0)" font-size="11">and merge</text>
+              <text x="56" y="76" text-anchor="middle" fill="var(--ink-0)" font-size="11">and integrate</text>
             </g>
           </g>
           <g font-family="ui-monospace, monospace" font-size="10" fill="var(--ink-2)">
             <text x="35" y="44">INPUT</text><text x="250" y="44">PLAN</text><text x="440" y="44">GATE 1</text>
-            <text x="410" y="425">MACHINE WORK</text><text x="220" y="425">GATE 2</text><text x="45" y="425">OUTPUT</text>
+            <text x="410" y="425">MACHINE WORK</text><text x="220" y="425">ADVISORY REVIEW</text><text x="45" y="425">HUMAN DECISION</text>
           </g>
         </svg>
         <figcaption class="hero-caption"><span>Human actions use safety orange</span><span>Machine work uses blueprint blue</span></figcaption>
-      </figure>
-    </section>
-
-    <section class="route-rail" aria-label="The eight stations in a first AgentMachinist run">
-      <ol class="route-list shell">
-        <li><span class="route-number">01</span><strong>Prepare</strong><small>Git, gh, uv, harness</small></li>
-        <li><span class="route-number">02</span><strong>Install</strong><small>CLI and project files</small></li>
-        <li><span class="route-number">03</span><strong>Choose a mode</strong><small>Who writes the spec</small></li>
-        <li><span class="route-number">04</span><strong>Configure</strong><small>Harness, tests, labels</small></li>
-        <li><span class="route-number">05</span><strong>Shape the Task</strong><small>Structured, linted, dispatched</small></li>
-        <li><span class="route-number">06</span><strong>Spec</strong><small>Issue becomes a draft PR</small></li>
-        <li><span class="route-number">07</span><strong>Approve</strong><small>Bind consent to one SHA</small></li>
-        <li><span class="route-number">08</span><strong>Review</strong><small>Independent check; you merge</small></li>
-      </ol>
-    </section>
-
-    <section class="shell" style="margin-top:var(--space-6)">
-      <div class="fast-track">
-        <div class="fast-track-head">
-          <h3>Fast Track · The 60-Second Loop</h3>
-          <span class="micro-note" style="color:var(--signal-strong)">For experienced CLI developers</span>
-        </div>
-        <p>Already authenticated with GitHub and your coding harness? Here is the entire issue-to-tested-PR sequence at a glance.</p>
-        <div class="terminal" aria-label="Quick start command block">
-          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / quick-run</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist onboard  # or: machinist onboard --yes for hands-free defaults + auto-detected test command&#10;# Review the generated minimal machinist.yaml (~20 lines), then:&#10;machinist doctor --run-gates  # single health check — prints fix for any FAIL&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml&#10;git add -p .github/workflows  # review each hunk&#10;git diff --cached  # verify what will be committed&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push&#10;machinist task new --title &quot;Add CSV export&quot; --dispatch&#10;# Write the spec & open draft PR for issue #42:&#10;machinist spec 42&#10;# Review draft PR and request approval explicitly:&#10;machinist approve --issue 42&#10;machinist status&#10;# Implement, verify, then independently review the delivered head:&#10;machinist run 42&#10;machinist review 42">Copy flow</button></div>
-          <pre><span class="comment"># 1. Install, then answer the onboarding questions in your repository:</span>
-<span class="comment">#    machinist onboard --yes accepts safe defaults + auto-detected test command</span>
-<span class="prompt">$</span> uv tool install agentmachinist &amp;&amp; machinist onboard
-
-<span class="comment"># 2. Review the generated minimal machinist.yaml (~20 lines), then verify:</span>
-<span class="prompt">$</span> machinist doctor --run-gates  <span class="comment"># single health check — prints fix for any FAIL</span>
-<span class="prompt">$</span> git status --short
-<span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
-<span class="prompt">$</span> git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-<span class="prompt">$</span> git add -p .github/workflows  <span class="comment"># review each hunk</span>
-<span class="prompt">$</span> git diff --cached  <span class="comment"># verify what will be committed</span>
-<span class="prompt">$</span> git commit -m "chore: configure AgentMachinist" &amp;&amp; git push
-
-<span class="comment"># 3. Create a linted Task, then generate its draft spec PR:</span>
-<span class="prompt">$</span> machinist task new --title "Add CSV export" --dispatch
-<span class="prompt">$</span> machinist spec 42
-
-<span class="comment"># 4. Review spec and stamp approval (accepts PR #18 or issue #42):</span>
-<span class="prompt">$</span> machinist approve --issue 42
-
-<span class="comment"># 5. Implement and verify, then independently review the delivered head:</span>
-<span class="prompt">$</span> machinist run 42
-<span class="prompt">$</span> machinist review 42</pre>
-        </div>
-      </div>
-    </section>
-
-    <section class="section shell" id="prepare">
-      <header class="section-head">
-        <p class="section-kicker">Station 01 / lay out the tools</p>
-        <h2>Four tools. One repository. About fifteen minutes.</h2>
-        <p>AgentMachinist coordinates software you already use. Get these four checks green before asking it to touch an issue.</p>
-      </header>
-
-      <div class="tool-bench">
-        <div class="tool-panel">
-          <article class="tool">
+      </figure></section>
+    <section class="route-rail" aria-label="The eight stations in a local AgentMachinist Task"><ol class="route-list shell">
+      <li><span class="route-number">01</span><strong>Prepare</strong><small>Committed repo, Harness, gates</small></li>
+      <li><span class="route-number">02</span><strong>Install</strong><small>Use the source checkout</small></li>
+      <li><span class="route-number">03</span><strong>Start</strong><small>One objective becomes T1</small></li>
+      <li><span class="route-number">04</span><strong>Spec</strong><small>Check baseline; save the plan</small></li>
+      <li><span class="route-number">05</span><strong>Approve</strong><small>Authorize the exact Spec SHA</small></li>
+      <li><span class="route-number">06</span><strong>Execute</strong><small>Implement and verify</small></li>
+      <li><span class="route-number">07</span><strong>Review</strong><small>Independent, advisory findings</small></li>
+      <li><span class="route-number">08</span><strong>Integrate</strong><small>You accept the local candidate</small></li>
+    </ol></section>
+    <section class="shell" style="margin-top:var(--space-6)"><div class="fast-track"><div class="fast-track-head"><h2 style="font-size:1.3rem;margin:0">The foreground journey</h2><span class="micro-note">No forge account required</span></div><p>Use a small change with a meaningful test. The Spec and final diff are human decision points; the machine Phases continue in the foreground after Approval.</p><div class="terminal" aria-label="local first Task"><div class="terminal-bar"><span>terminal / local first Task</span><button class="copy-button" type="button" data-copy="# Install from the current AgentMachinist source checkout:&#10;uv tool install --editable .&#10;# Then change to your project, with a clean committed baseline:&#10;cd ~/code/your-project&#10;machinist start &quot;Add CSV export for filtered transaction rows&quot; --test-cmd &quot;uv run pytest&quot;&#10;# Read the saved Spec. Copy its complete approval command:&#10;machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;&#10;# Inspect the diff, verification Evidence, and advisory Review:&#10;machinist status T1&#10;# Explicitly accept the exact candidate into the clean local base:&#10;machinist integrate T1">Copy commands</button></div><pre># Install from the current AgentMachinist source checkout:
+uv tool install --editable .
+# Then change to your project, with a clean committed baseline:
+cd ~/code/your-project
+machinist start &quot;Add CSV export for filtered transaction rows&quot; --test-cmd &quot;uv run pytest&quot;
+# Read the saved Spec. Copy its complete approval command:
+machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;
+# Inspect the diff, verification Evidence, and advisory Review:
+machinist status T1
+# Explicitly accept the exact candidate into the clean local base:
+machinist integrate T1</pre></div></div></section>
+    <section class="section shell" id="prepare"><header class="section-head"><p class="section-kicker">Prepare the repository</p><h2>One clean baseline. One working Harness.</h2><p>Start in a Git repository with an initial commit, configured author, and no uncommitted changes. You do not need an origin, issue tracker, watcher, or server.</p></header><div class="tool-bench"><div class="tool-panel"><article class="tool">
             <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 16v17m0-12c6 0 14 2 14-5v17m-14-5c5 0 9 0 14 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="15" r="2.5" fill="currentColor"/><circle cx="17" cy="33" r="2.5" fill="currentColor"/><circle cx="31" cy="15" r="2.5" fill="currentColor"/><circle cx="31" cy="34" r="2.5" fill="currentColor"/></svg>
-            <h3>Git</h3><p>Creates isolated worktrees, commits controller-owned changes, and pushes with a lease.</p><code>git --version</code>
-          </article>
-          <article class="tool">
+            <h3>Git</h3><p>Needs an initial commit and configured author. The controller creates isolated Workshops and retains local candidate commits.</p><code>git --version</code>
+          </article><article class="tool">
             <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M11 37c-3-4-5-9-5-14C6 13 14 6 24 6s18 7 18 17c0 5-2 10-5 14" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 37v-5c-5 1-6-2-7-4m23 9v-5c5-2 7-5 7-10 0-3-1-5-3-7 1-2 1-5 0-7-3 0-5 1-7 2-3-1-7-1-10 0-2-1-4-2-7-2-1 2-1 5 0 7-2 2-3 4-3 7 0 5 2 8 7 10v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <h3>GitHub CLI</h3><p>Reads issues, opens PRs, records approvals, and reuses your authenticated GitHub session.</p><code>gh auth status</code>
-          </article>
-          <article class="tool">
+            <h3>Verification</h3><p>Use a real test command that works from committed files in an isolated Workshop. Baseline verification runs before model work.</p><code>uv run pytest</code>
+          </article><article class="tool">
             <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M9 13h30v22H9z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15 21 5 4-5 4m9 0h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <h3>uv</h3><p>Installs AgentMachinist and provides its locked Python environment.</p><code>uv --version</code>
-          </article>
-          <article class="tool">
+            <h3>uv</h3><p>Installs the controller from the current source checkout. The published package is still 0.13.0.</p><code>uv --version</code>
+          </article><article class="tool">
             <svg class="tool-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M15 8h18l7 12-7 20H15L8 20 15 8Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="24" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 12v5m0 14v5M12 24h5m14 0h5" stroke="currentColor" stroke-width="2"/></svg>
-            <h3>A coding harness</h3><p>Choose Claude Code, OpenCode, Pi, or Codex. Log in before your first automated run.</p><code>claude --version</code>
-          </article>
-        </div>
-
-        <aside class="readiness-gauge" aria-label="Readiness check">
+            <h3>A coding harness</h3><p>Choose Claude Code, OpenCode, Pi, or Codex. Install and authenticate it before your first Task.</p><code>claude --version</code>
+          </article></div><aside class="readiness-gauge" aria-label="Readiness check">
           <svg viewBox="0 0 260 170" role="img" aria-label="A readiness gauge pointing to ready after four tool checks.">
             <path d="M35 135a95 95 0 0 1 190 0" fill="none" stroke="var(--paper-2)" stroke-width="22" stroke-linecap="round"/>
             <path d="M35 135a95 95 0 0 1 190 0" fill="none" stroke="var(--success)" stroke-width="22" stroke-linecap="round" stroke-dasharray="299" stroke-dashoffset="20"/>
@@ -955,100 +893,38 @@
             <circle cx="130" cy="132" r="10" fill="var(--signal)"/>
             <text x="130" y="158" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">4 CHECKS</text>
           </svg>
-          <p class="gauge-value">Ready means authenticated.</p>
-          <p class="gauge-label">A version command proves the executable exists. Run your harness once interactively too; AgentMachinist cannot prove provider access for you.</p>
+          <p class="gauge-value">Ready means a working baseline.</p>
+          <p class="gauge-label">A version command only proves an executable exists. Check Harness provider access separately; start checks required settings and verifies the committed baseline before invoking it.</p>
         </aside>
-
-        <div class="harness-card-grid" style="grid-column: 1 / -1">
-          <div class="harness-card">
-            <h4>Claude Code</h4>
-            <p>Anthropic coding CLI</p>
-            <code>claude auth login</code>
-            <code>name: claude-code</code>
-          </div>
-          <div class="harness-card">
-            <h4>OpenCode</h4>
-            <p>Open-source agent</p>
-            <code>opencode auth login</code>
-            <code>name: opencode</code>
-          </div>
-          <div class="harness-card">
-            <h4>Codex</h4>
-            <p>CLI sandbox agent</p>
-            <code>codex login</code>
-            <code>name: codex</code>
-          </div>
-          <div class="harness-card">
-            <h4>Pi</h4>
-            <p>Lightweight agent</p>
-            <code>pi auth check --model &lt;model&gt; --json --no-refresh</code>
-            <code>name: pi</code>
-          </div>
-        </div>
-        <p style="grid-column: 1 / -1">AgentMachinist owns each adapter's sandbox and permission controls. Configure <code>extra_args</code> only for advanced provider options; adapter-owned safety flags are rejected.</p>
-      </div>
-    </section>
-
-    <section class="section shell" id="install">
-      <div class="install-grid">
-        <div class="install-copy">
-          <p class="section-kicker">Station 02 / install the controller</p>
-          <h2>Install, then check the number.</h2>
-          <ol>
-            <li>Install the current release directly from PyPI.</li>
-            <li>Confirm the CLI reports <strong>0.13.0</strong>.</li>
-            <li>Change into the repository you want agents to work on.</li>
-          </ol>
-          <p class="micro-note">Already installed an earlier version? Run <code>uv tool upgrade agentmachinist</code> instead.</p>
-        </div>
-        <div class="terminal" aria-label="Installation commands">
-          <div class="terminal-bar"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal / install</span><button class="copy-button" type="button" data-copy="uv tool install agentmachinist&#10;machinist --version&#10;cd ~/code/your-project">Copy commands</button></div>
-          <pre><span class="prompt">$</span> uv tool install agentmachinist
-
-<span class="prompt">$</span> machinist --version
-machinist, version 0.13.0
-
-<span class="prompt">$</span> cd ~/code/your-project</pre>
-        </div>
-      </div>
-    </section>
-
-    <section class="section shell" id="choose-mode">
-      <header class="section-head">
-        <p class="section-kicker">Station 03 / choose the spec dispatcher</p>
-        <h2>Where should planning happen?</h2>
-        <p>For a first run, keep planning local. GitHub Actions is useful later, but it needs a provider secret and still hands implementation back to your local watcher.</p>
-      </header>
-
-      <div class="mode-shell">
-        <div class="mode-toolbar">
-          <p>Switch routes to see exactly what changes.</p>
-          <div class="mode-picker" role="group" aria-label="Choose spec generation mode">
-            <button class="mode-button" type="button" data-mode-button="local" aria-pressed="true" aria-controls="local-route local-steps">Local · recommended</button>
-            <button class="mode-button" type="button" data-mode-button="ci" aria-pressed="false" aria-controls="ci-route ci-steps">GitHub Actions</button>
-          </div>
-        </div>
-        <noscript><p class="noscript-note">Route switching needs JavaScript. The recommended local route is shown below; the complete CI route is also documented in <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md">Getting Started</a>.</p></noscript>
-
-        <div class="mode-board">
-          <div class="mode-map">
-            <div class="mode-panel" id="local-route" data-mode-panel="local">
-              <div class="mode-title"><span>LOCAL ROUTE</span><h3>Your Mac owns Spec, Execute, and Review</h3></div>
-              <svg viewBox="0 0 560 330" role="img" aria-label="Local mode: GitHub sends a ready Task to the local watcher, which runs the harness for Spec, Execute, and independent Review before returning the pull request to GitHub.">
+      <div class="harness-card-grid" style="grid-column:1 / -1">
+        <div class="harness-card"><h3>Claude Code</h3><p>Anthropic coding CLI</p><code>claude auth login</code><code>--harness claude-code</code></div>
+        <div class="harness-card"><h3>OpenCode</h3><p>Open-source agent</p><code>opencode auth login</code><code>--harness opencode</code></div>
+        <div class="harness-card"><h3>Codex</h3><p>Coding CLI</p><code>codex login</code><code>--harness codex</code></div>
+        <div class="harness-card"><h3>Pi</h3><p>Lightweight agent</p><code>pi auth check --model &lt;model&gt; --json --no-refresh</code><code>--harness pi</code></div>
+      </div><p style="grid-column:1 / -1">Local setup discovers an installed Harness supporting Spec, Execute, and Review. A configured <code>model</code> is optional. Adapter-owned sandbox and permission flags cannot be overridden through <code>extra_args</code>; provider access is separate from executable discovery.</p>
+    </div></section>
+    <section class="section shell" id="install"><div class="install-grid"><div class="install-copy"><p class="section-kicker">Install the controller</p><h2>Use the checkout with the new commands.</h2><ol><li>Run the editable installation from the current AgentMachinist source checkout.</li><li>Check that <code>machinist start --help</code> is available.</li><li>Change into the project where you want to work.</li></ol><p class="micro-note"><code>uv tool install agentmachinist</code> installs published 0.13.0. It does not include this unreleased journey. The source still reports 0.13.0, so the version number alone cannot distinguish them.</p><p><code>machinist rehearse</code> exercises the production local journey in a disposable real Git repository with a deterministic fake Harness. It makes no model or API calls. <code>--harness</code> explicitly uses configured Harnesses and may consume provider usage.</p></div><div class="terminal" aria-label="install source"><div class="terminal-bar"><span>terminal / install source</span><button class="copy-button" type="button" data-copy="# In the current AgentMachinist source checkout:&#10;uv tool install --editable .&#10;machinist start --help&#10;# Run the remaining commands in the project you want to change:&#10;cd ~/code/your-project">Copy commands</button></div><pre># In the current AgentMachinist source checkout:
+uv tool install --editable .
+machinist start --help
+# Run the remaining commands in the project you want to change:
+cd ~/code/your-project</pre></div></div></section>
+    <section class="section shell" id="choose-mode"><header class="section-head"><p class="section-kicker">Choose the workflow</p><h2>Begin locally. Add collaboration when useful.</h2><p>The foreground route completes a Task without a forge. Existing GitHub issue automation remains available separately; <code>github.spec_source: local</code> in that legacy route still means GitHub-backed work.</p></header>
+      <div class="mode-shell"><div class="mode-toolbar"><p>Compare ownership and setup.</p><div class="mode-picker" role="group" aria-label="Choose workflow route"><button class="mode-button" type="button" data-mode-button="local" aria-pressed="true" aria-controls="local-route local-steps">Local · recommended</button><button class="mode-button" type="button" data-mode-button="ci" aria-pressed="false" aria-controls="ci-route ci-steps">Legacy GitHub Actions</button></div></div>
+      <noscript><p class="noscript-note">Route switching needs JavaScript. The local route is shown below; the <a href="#legacy-github">GitHub workflow instructions</a> are also available further down.</p></noscript><div class="mode-board"><div class="mode-map"><div class="mode-panel" id="local-route" data-mode-panel="local">
+              <div class="mode-title"><span>FOREGROUND ROUTE</span><h3>Your checkout owns the whole Task</h3></div>
+              <svg viewBox="0 0 560 330" role="img" aria-label="Local workflow: an objective starts a Task in your checkout, the Harness runs Spec, Execute, and independent Review around human Approval, and an exact reviewed candidate awaits your integration decision.">
                 <defs><marker id="local-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
                 <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#local-arrow)"><path d="M140 75H240"/><path d="M320 120v65"/><path d="M240 230H140"/></g>
                 <g font-family="Avenir Next, system-ui, sans-serif">
-                  <rect x="25" y="35" width="115" height="80" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="82" y="68" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">GitHub</text><text x="82" y="89" text-anchor="middle" fill="var(--ink-2)" font-size="11">issue + PR</text>
-                  <rect x="240" y="35" width="160" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="320" y="69" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">machinist watch</text><text x="320" y="90" text-anchor="middle" fill="var(--ink-1)" font-size="11">your Mac</text>
+                  <rect x="25" y="35" width="115" height="80" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="82" y="68" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">Task T1</text><text x="82" y="89" text-anchor="middle" fill="var(--ink-2)" font-size="11">your objective</text>
+                  <rect x="240" y="35" width="160" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="320" y="69" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">machinist start</text><text x="320" y="90" text-anchor="middle" fill="var(--ink-1)" font-size="11">your checkout</text>
                   <rect x="240" y="185" width="160" height="90" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="320" y="220" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">coding harness</text><text x="320" y="242" text-anchor="middle" fill="var(--ink-1)" font-size="11">spec + implement + review</text>
-                  <rect x="25" y="190" width="115" height="80" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="82" y="223" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Ready PR</text><text x="82" y="244" text-anchor="middle" fill="var(--ink-1)" font-size="11">you review</text>
+                  <rect x="25" y="190" width="115" height="80" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="82" y="223" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Candidate</text><text x="82" y="244" text-anchor="middle" fill="var(--ink-1)" font-size="11">you integrate</text>
                 </g>
-                <text x="280" y="313" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">github.spec_source: local</text>
+                <text x="280" y="313" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">No origin or forge required</text>
               </svg>
-            </div>
-
-            <div class="mode-panel" id="ci-route" data-mode-panel="ci" hidden>
-              <div class="mode-title"><span>CI ROUTE</span><h3>Actions writes the spec; your Mac executes</h3></div>
+            </div><div class="mode-panel" id="ci-route" data-mode-panel="ci" hidden>
+              <div class="mode-title"><span>LEGACY GITHUB</span><h3>Actions writes the Spec; your runner executes</h3></div>
               <svg viewBox="0 0 560 330" role="img" aria-label="GitHub Actions mode: a labeled issue triggers the Actions spec workflow, then the local watcher runs implementation after approval.">
                 <defs><marker id="ci-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
                 <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#ci-arrow)"><path d="M140 70H215"/><path d="M345 70H420"/><path d="M480 115v70"/><path d="M420 230H345"/></g>
@@ -1056,226 +932,87 @@ machinist, version 0.13.0
                   <rect x="20" y="35" width="120" height="75" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="80" y="67" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">Labeled issue</text><text x="80" y="87" text-anchor="middle" fill="var(--ink-2)" font-size="11">GitHub</text>
                   <rect x="215" y="30" width="130" height="85" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="280" y="63" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">Actions</text><text x="280" y="84" text-anchor="middle" fill="var(--ink-1)" font-size="11">adapter writes spec</text>
                   <rect x="420" y="35" width="120" height="80" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="67" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Approval</text><text x="480" y="88" text-anchor="middle" fill="var(--ink-1)" font-size="11">exact SHA</text>
-                  <rect x="420" y="185" width="120" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="218" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Local watch</text><text x="480" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">implements</text>
+                  <rect x="420" y="185" width="120" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="218" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Local runner</text><text x="480" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">Execute + Review</text>
                   <rect x="215" y="185" width="130" height="85" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="280" y="218" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Ready PR</text><text x="280" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">you review</text>
                 </g>
                 <text x="280" y="313" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">github.spec_source: github-actions</text>
               </svg>
-            </div>
-          </div>
-
-          <div class="mode-steps">
-            <div class="mode-panel" id="local-steps" data-mode-panel="local">
-              <h3>Local setup</h3>
-              <ol>
-                <li>Run <code>machinist onboard</code>. Accept <code>local</code> at the dispatch question — it is the default.</li>
-                <li>Pick your harness and confirm the detected test command at the prompts (or edit <code>machinist.yaml</code> later).</li>
-                <li>Run <code>machinist doctor --run-gates</code>, then start <code>machinist watch</code>.</li>
-                <li>Keep one watcher per repository. Local claims are not distributed locks.</li>
-              </ol>
-            </div>
-            <div class="mode-panel" id="ci-steps" data-mode-panel="ci" hidden>
-              <h3>GitHub Actions setup</h3>
-              <ol>
-                <li>Answer <code>github-actions</code> at the onboarding dispatch question (or set <code>github.spec_source: github-actions</code>). Managed workflows install the selected Spec adapter from its descriptor.</li>
-                <li>Leave <code>github.spec_install: pypi</code> so the workflow pins the released controller. Use <code>checkout</code> only when developing or dogfooding AgentMachinist itself; it runs the controller from that repository with uv.</li>
-                <li>Run <code>machinist sync-workflows</code> and commit the generated spec workflow.</li>
-                <li>Add the selected adapter's declared repository secret: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, or <code>GEMINI_API_KEY</code>. A plugin without hosted-Spec metadata stays local.</li>
-                <li>Keep a local watcher for approved execution; CI owns only the spec phase.</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-      </div>
+            </div></div><div class="mode-steps">
+        <div class="mode-panel" id="local-steps" data-mode-panel="local"><h3>Foreground local setup</h3><ol><li>Run <code>machinist start "Your bounded objective"</code>, supplying <code>--test-cmd</code> when needed.</li><li>First start saves local settings and verifies the committed baseline before asking the Harness for a Spec.</li><li>Read the saved Spec, then run the printed <code>approve --task T1 --spec-sha</code> command. Execute, verification, and independent Review follow.</li><li>Inspect the report and candidate diff. <code>integrate T1</code> and optional <code>publish T1 --provider github|gitlab</code> are separate decisions.</li></ol></div>
+        <div class="mode-panel" id="ci-steps" data-mode-panel="ci" hidden><h3>Existing GitHub Actions setup</h3><ol><li>Use <code>machinist onboard --setup-pr --spec-source github-actions</code> to prepare a draft setup PR.</li><li>Managed workflows install the selected Spec adapter and use its declared repository secret. <code>github.spec_install: pypi</code> pins the published controller; <code>checkout</code> is for its own development repository.</li><li>Review and merge setup first. Then run <code>machinist doctor --run-gates</code> to verify default-branch deployment.</li><li>Actions generates Specs and records trusted Approval. A local runner or watcher owns Execute and optional legacy Review. You merge the resulting PR yourself.</li></ol></div>
+      </div></div></div>
     </section>
-
-    <section class="section shell" id="configure">
-      <header class="section-head">
-        <p class="section-kicker">Station 04 / initialize the project</p>
-        <h2>Four lines deserve your attention — the rest has safe defaults.</h2>
-        <p><code>machinist onboard</code> (or <code>onboard --yes</code> for hands-free defaults + auto-detected test command) writes a minimal <code>machinist.yaml</code> (~20 lines). In a terminal it asks about each choice below with a one-line explanation and a safe default — answer once and the file is correct on the first write. <code>machinist --help</code> groups commands as Setup / Tasks / Build / Operate daily vs advanced. Errors outside a configured repo now point to <code>onboard</code> and this guide.</p>
-      </header>
-
-      <div class="config-layout">
-        <div class="code-sheet" aria-label="Annotated machinist configuration">
-          <pre><span class="comment"># machinist.yaml — minimal file written by machinist onboard (~20 lines)</span>
+    <section class="section shell" id="configure"><header class="section-head"><p class="section-kicker">Keep setup small</p><h2>Start writes the settings it needs.</h2><p>No separate onboarding wizard is required for local Tasks. Existing repository settings are preserved; local overrides live in <code>.machinist/runs/local/config.yaml</code>. Runtime files are excluded through Git’s local exclude file.</p></header>
+      <div class="config-layout"><div class="code-sheet" aria-label="Local configuration requirements"><pre># Illustrative local settings; start resolves Workshop paths.
 version: 1
-
 harness:
-  name: <span class="code-hot">claude-code</span>
-
+  name: <span class="code-hot">codex</span>
 tests:
-  command: <span class="code-hot">"uv run pytest"</span>  <span class="comment"># null when no test command is known</span>
-
+  command: <span class="code-hot">"uv run pytest"</span>
 github:
-  repo: null
-  spec_source: <span class="code-hot">local</span>
-  labels:
-    trigger: agent-task
-    approved: "machinist:approved"
-  poll_interval_seconds: 60
-
-workspace:
-  root: ~/.machinist/workspaces
-  strategy: worktree
-  cleanup: on_success
-  branch_prefix: agent/
-
+  spec_source: local
+  manage_workflows: false
 review:
-  enabled: true</pre>
-        </div>
-        <div class="annotations">
-          <article class="annotation"><h3>Pick the harness you use</h3><p><code>claude-code</code>, <code>opencode</code>, <code>pi</code>, or <code>codex</code>. Local runs reuse its provider authentication. <code>model</code> is optional. AgentMachinist rejects adapter-owned safety flags in <code>extra_args</code>; keep other additions empty unless you have reviewed the final adapter command.</p></article>
-          <article class="annotation"><h3>Keep ownership explicit</h3><p><code>local</code> is simplest for a first run. Changing dispatcher ownership requires <code>machinist sync-workflows</code>. <code>manage_workflows: false</code> means you own custom workflows and <code>doctor</code> intentionally skips managed drift checks.</p></article>
-          <article class="annotation"><h3>Make tests real</h3><p>When no named <code>verification.gates</code> exist, a null command skips verification. Configure either the command you trust before merging a human PR or named gates with the same standard.</p></article>
-        </div>
-      </div>
-      <p class="micro-note">This is an abridged first-run configuration. Before dispatch, use <code>machinist config validate</code> and <code>machinist config show</code>. Advanced configuration supports separate Spec/Execute/Review harness profiles, bounded instruction overlays, ordered named verification gates, notifications, local aggregate reporting, opt-in OTLP export, admission budgets, and change limits; the full reference is linked below.</p>
-
-      <div class="terminal" style="margin-top: var(--space-6)" aria-label="Initialization and diagnostic commands">
-        <div class="terminal-bar"><span>terminal / initialize</span><button class="copy-button" type="button" data-copy="machinist onboard  # or: machinist onboard --yes for hands-free defaults + auto-detected test command&#10;# Review minimal machinist.yaml (~20 lines), then:&#10;machinist doctor --run-gates  # single health check — prints fix for any FAIL&#10;git status --short&#10;git add machinist.yaml .machinist/specs/.gitkeep .gitignore&#10;git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml&#10;git add -p .github/workflows  # review each hunk&#10;git diff --cached  # verify&#10;git commit -m &quot;chore: configure AgentMachinist&quot;&#10;git push">Copy commands</button></div>
-        <pre><span class="prompt">$</span> machinist onboard  <span class="comment"># or: machinist onboard --yes for hands-free defaults + auto-detected command</span>
-Configuring machinist.yaml — press Enter to accept a [default],
-or rerun with --no-input to skip these questions.
-
-Dispatch mode — who runs the Spec phase when you label an issue:
-  local           this machine runs it via 'machinist watch'
-  github-actions  GitHub CI runs it (requires the selected Harness repository secret)
-Spec dispatch [local]:
-
-<span class="comment"># … managed workflows, harness, and notifications questions follow …</span>
-
-Test gate — command that must pass before an implementation PR is
-eligible for independent Review.
-Use detected test command 'uv run pytest'? [Y/n]:
-
-<span class="comment"># Review the generated minimal machinist.yaml (~20 lines), then:</span>
-<span class="prompt">$</span> machinist doctor --run-gates  <span class="comment"># single health check — prints fix for any FAIL</span>
-PASS repository               /Users/you/code/your-project
-PASS GitHub authentication    gh auth is active
-PASS harness                  /path/to/claude
-PASS test gate                uv run pytest
-PASS workflows                managed workflows match config
-PASS Task Runs                no failed or abandoned runs
-<span class="comment"># only if doctor asks:</span>
-<span class="prompt">$</span> machinist sync-workflows --check
-<span class="prompt">$</span> machinist task template --check
-
-<span class="comment"># Review every generated file before making setup durable:</span>
-<span class="prompt">$</span> git status --short
-<span class="prompt">$</span> git add machinist.yaml .machinist/specs/.gitkeep .gitignore
-<span class="prompt">$</span> git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-<span class="prompt">$</span> git add -p .github/workflows  <span class="comment"># review each hunk</span>
-<span class="prompt">$</span> git diff --cached  <span class="comment"># verify</span>
-<span class="prompt">$</span> git commit -m "chore: configure AgentMachinist"
-<span class="prompt">$</span> git push</pre>
-        <p class="micro-note"><code>machinist onboard</code> writes a minimal <code>machinist.yaml</code> (~20 lines; see abridged config above) and adds <code>/.machinist/runs/</code> to <code>.gitignore</code>. <code>doctor --run-gates</code> is the single health check and prints the exact fix for any <code>FAIL</code> — only run the individual <code>--check</code> commands if doctor asks. <code>machinist --help</code> groups commands as Setup / Tasks / Build / Operate daily vs advanced. Flags pre-answer questions and skip them: <code>--spec-source</code>, <code>--harness</code>, <code>--test-cmd</code>, and <code>--notifications</code>; <code>--yes</code> accepts safe defaults and auto-enables the detected test command; <code>--no-input</code> (or any non-interactive shell) also skips questions but needs <code>--test-cmd</code> to enable the gate. Errors outside a configured repo now point to <code>machinist onboard</code> and the guide. <code>--no-workflows</code> records <code>manage_workflows: false</code>; <code>doctor</code> then reports drift checking was intentionally skipped.</p>
-      </div>
+  enabled: <span class="code-hot">true</span>
+telemetry:
+  otlp_endpoint: null</pre></div><div class="annotations">
+      <article class="annotation"><h3>Reuse the Harness you know</h3><p>Select <code>--harness</code> on first start, or let setup find an installed full-pipeline adapter. Conflicting later flags ask you to edit the saved local configuration.</p></article>
+      <article class="annotation"><h3>Require executable verification</h3><p>At least one required Verification Gate must exist. When no named <code>verification.gates</code> exist, <code>tests.command</code> supplies that Gate. Local setup refuses a null-only gate configuration.</p></article>
+      <article class="annotation"><h3>Always complete local Review</h3><p>The local workflow enables and requires independent Review even when an existing GitHub configuration disabled it. Findings are advisory; a completed report is not a guarantee of correctness.</p></article>
+      </div></div><p class="micro-note">This is an abridged first-run configuration, not a replacement for the file generated by start. Do not commit local runtime records. First local setup does not generate GitHub workflows, labels, or issue forms.</p>
+      <div class="tip-box"><h3>Dependencies must work inside the Workshop</h3><p>Ignored <code>node_modules/</code> and <code>.venv/</code> directories are not copied from your checkout. Use a Gate that prepares dependencies, such as <code>npm ci &amp;&amp; npm test</code> with a committed lockfile or <code>uv run pytest</code>. A failing baseline stops before model work. Correct the saved Gate or external environment and explicitly retry the Spec; if committed baseline files must change, commit them and start a new Task.</p></div>
     </section>
+    <section class="section shell" id="first-task"><header class="section-head"><p class="section-kicker">Complete one Task</p><h2>From objective to an inspected local candidate.</h2><p>Use an observable result with a focused acceptance test. The examples below use Task <code>T1</code>; follow the ID and exact SHA printed by your own run.</p></header><div class="walkthrough"><article class="walk-step"><div class="walk-copy"><span class="walk-index">01 / GIVE THE TASK CONTEXT</span><h3>Describe one outcome.</h3><p>An objective is enough to begin. Use <code>--body-file task.md</code> for acceptance criteria and constraints, or <code>--body-file -</code> to read stdin. To create a Task from an external issue, use <code>start --from-issue</code>; the new Task receives its own local ID.</p><div class="terminal" aria-label="start one Task"><div class="terminal-bar"><span>terminal / start one Task</span><button class="copy-button" type="button" data-copy="machinist start &quot;Add CSV export for filtered transaction rows&quot; --body-file task.md --test-cmd &quot;uv run pytest&quot;">Copy commands</button></div><pre>machinist start &quot;Add CSV export for filtered transaction rows&quot; --body-file task.md --test-cmd &quot;uv run pytest&quot;</pre></div><div class="template-card"><h3>A useful Task body</h3><pre class="mono" style="white-space:pre-wrap;font-size:.85rem">## Objective
+Add CSV export for currently filtered transaction rows.
 
-    <section class="section shell" id="first-task">
-      <header class="section-head">
-        <p class="section-kicker">Stations 05–08 / run one real issue</p>
-        <h2>The first task, screen by screen.</h2>
-        <p>Use a small issue with a visible test. Your first run should teach the workflow, not test the outer limit of your model or repository.</p>
-      </header>
+## Acceptance criteria
+- [ ] Export only the currently filtered rows.
+- [ ] Preserve the visible column order.
 
-      <div class="walkthrough">
-        <article class="walk-step">
-          <div class="walk-copy">
-            <span class="walk-index">05 / WRITE THE INPUT</span>
-            <h3>File one outcome, not a project.</h3>
-            <p>Use the managed form for a concrete objective, acceptance checkboxes, constraints, and verification. <code>task new --dispatch</code> applies <code>agent-task</code> only after readiness lint passes. “Add CSV export for filtered rows” is a first run. “Improve reporting” is not.</p>
-            <span class="walk-command">machinist task new --title "Add CSV export" --dispatch</span>
+## Constraints
+Keep the current table UI and exclude email delivery.
 
-            <div class="template-card">
-              <div class="template-card-head">
-                <h4>GitHub Issue Prompt Template</h4>
-                <button class="copy-button" style="color:var(--ink-0);border-color:var(--line-strong)" type="button" data-copy="### Summary&#10;Add CSV export for filtered rows on the transactions table.&#10;&#10;### Acceptance Criteria&#10;- [ ] Clicking 'Export CSV' downloads only currently filtered rows&#10;- [ ] Preserves visible column order&#10;- [ ] Includes automated test in tests/test_export.py&#10;&#10;### Out of Scope&#10;- PDF export or background email delivery">Copy template</button>
-              </div>
-              <pre class="mono" style="margin:0;font-size:0.78rem;line-height:1.5;color:var(--ink-1);white-space:pre-wrap">### Summary
-Add CSV export for filtered rows on the table.
-
-### Acceptance Criteria
-- [ ] Exports only the currently filtered rows
-- [ ] Preserves visible column order
-- [ ] Has a focused automated test
-
-### Out of Scope
-- Background email delivery</pre>
-            </div>
-          </div>
-          <figure class="walk-visual">
-            <figcaption class="visual-label"><span>GITHUB ISSUE</span><span>good first input</span></figcaption>
-            <svg viewBox="0 0 680 330" role="img" aria-label="A GitHub issue titled Add CSV export for filtered rows with three acceptance criteria and the agent-task label.">
+## Verification
+Run the focused export test and the existing suite.</pre><p class="micro-note">The optional GitHub issue-form path accepts both <code>##</code> and <code>###</code> field headings. Its Objective lint requires at least six words and meaningful acceptance checkboxes.</p></div></div><figure class="walk-visual">
+            <figcaption class="visual-label"><span>LOCAL TASK</span><span>good first input</span></figcaption>
+            <svg viewBox="0 0 680 330" role="img" aria-label="A local Task titled Add CSV export for filtered rows with three acceptance criteria and a controller-owned Task ID.">
               <g font-family="Avenir Next, system-ui, sans-serif">
                 <rect x="38" y="35" width="604" height="260" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
-                <circle cx="76" cy="75" r="18" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="76" y="80" text-anchor="middle" fill="var(--signal)" font-weight="700">42</text>
+                <circle cx="76" cy="75" r="18" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="76" y="80" text-anchor="middle" fill="var(--signal)" font-weight="700">T1</text>
                 <text x="112" y="70" fill="var(--ink-0)" font-size="20" font-weight="700">Add CSV export for filtered rows</text>
-                <text x="112" y="94" fill="var(--ink-2)" font-size="12">Open · filed by you</text>
+                <text x="112" y="94" fill="var(--ink-2)" font-size="12">Created in your checkout</text>
                 <text x="74" y="138" fill="var(--ink-0)" font-size="13" font-weight="700">Acceptance criteria</text>
                 <g fill="none" stroke="var(--success)" stroke-width="2"><path d="m76 164 5 5 9-11M76 196l5 5 9-11M76 228l5 5 9-11"/></g>
                 <g fill="var(--ink-1)" font-size="13"><text x="103" y="169">Exports only the currently filtered rows</text><text x="103" y="201">Preserves visible column order</text><text x="103" y="233">Has a focused automated test</text></g>
-                <rect x="74" y="254" width="94" height="23" rx="11" fill="var(--signal-soft)"/><text x="121" y="270" text-anchor="middle" fill="var(--signal-strong)" font-size="11" font-weight="700">agent-task</text>
+                <rect x="74" y="254" width="94" height="23" rx="11" fill="var(--signal-soft)"/><text x="121" y="270" text-anchor="middle" fill="var(--signal-strong)" font-size="11" font-weight="700">Task T1</text>
               </g>
             </svg>
-          </figure>
-        </article>
-
-        <article class="walk-step">
-          <div class="walk-copy">
-            <span class="walk-index">06 / MAKE THE PLAN</span>
-            <h3>Run one poll, or address the issue directly.</h3>
-            <p><code>watch --once</code> picks up eligible work and exits. <code>spec 42</code> is the direct route. Either way, the result is a draft PR containing only the plan.</p>
-            <p class="micro-note">Silence is normal while the harness thinks: the CLI prints <code>still working (2m 30s elapsed)</code> every 30 seconds, and spec runs stop at ten minutes by default.</p>
-            <span class="walk-command">machinist watch --once</span>
-          </div>
-          <figure class="walk-visual">
-            <figcaption class="visual-label"><span>DRAFT PULL REQUEST</span><span>machine wrote the plan</span></figcaption>
-            <svg viewBox="0 0 680 360" role="img" aria-label="A draft pull request showing an implementation specification with summary, requirements, approach, risks, testing plan, and out-of-scope sections.">
+          </figure></article><article class="walk-step"><div class="walk-copy"><span class="walk-index">02 / READ THE SAVED SPEC</span><h3>Start stops at the decision.</h3><p>The controller creates the local Task, verifies the baseline, invokes the read-only Spec Harness, and commits the resulting Spec on a retained local branch. Your base branch stays unchanged.</p><p>Read the Spec in command output or use status to see it again. Check requirements, scope, risks, and the testing plan before authorizing implementation.</p><div class="terminal" aria-label="inspect saved Spec"><div class="terminal-bar"><span>terminal / inspect saved Spec</span><button class="copy-button" type="button" data-copy="machinist status T1">Copy commands</button></div><pre>machinist status T1</pre></div></div><figure class="walk-visual">
+            <figcaption class="visual-label"><span>SAVED SPEC COMMIT</span><span>machine wrote the plan</span></figcaption>
+            <svg viewBox="0 0 680 360" role="img" aria-label="A saved local Spec showing an implementation specification with summary, requirements, approach, risks, testing plan, and out-of-scope sections.">
               <g font-family="Avenir Next, system-ui, sans-serif">
                 <rect x="30" y="28" width="620" height="304" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
-                <rect x="54" y="51" width="58" height="22" rx="11" fill="var(--warning-soft)"/><text x="83" y="66" text-anchor="middle" fill="var(--warning)" font-size="10" font-weight="700">DRAFT</text>
-                <text x="128" y="67" fill="var(--ink-0)" font-size="18" font-weight="700">Spec: Add CSV export (#42)</text>
+                <rect x="54" y="51" width="58" height="22" rx="11" fill="var(--warning-soft)"/><text x="83" y="66" text-anchor="middle" fill="var(--warning)" font-size="10" font-weight="700">SPEC</text>
+                <text x="128" y="67" fill="var(--ink-0)" font-size="18" font-weight="700">Spec: Add CSV export (T1)</text>
                 <path d="M54 94h572" stroke="var(--line)"/>
-                <text x="64" y="124" fill="var(--ink-0)" font-size="14" font-weight="700">.machinist/specs/issue-42-spec.md</text>
+                <text x="64" y="124" fill="var(--ink-0)" font-size="14" font-weight="700">.machinist/specs/task-1-spec.md</text>
                 <g transform="translate(64 148)">
                   <rect width="150" height="162" rx="6" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/>
                   <text x="16" y="27" fill="var(--blueprint)" font-size="11" font-weight="700">DOCUMENT MAP</text>
                   <g fill="var(--ink-1)" font-size="11"><text x="16" y="52">Summary</text><text x="16" y="72">Requirements</text><text x="16" y="92">Approach</text><text x="16" y="112">Risks</text><text x="16" y="132">Testing plan</text><text x="16" y="152">Out of scope</text></g>
                 </g>
                 <g transform="translate(240 150)" stroke="var(--line-strong)" stroke-width="5"><path d="M0 0h330M0 20h285M0 53h320M0 73h250M0 106h300M0 126h200"/></g>
-                <rect x="480" y="294" width="138" height="21" rx="10" fill="var(--paper-2)"/><text x="549" y="308" text-anchor="middle" fill="var(--ink-2)" font-size="9">agent/issue-42</text>
+                <rect x="480" y="294" width="138" height="21" rx="10" fill="var(--paper-2)"/><text x="549" y="308" text-anchor="middle" fill="var(--ink-2)" font-size="9">agent/task-1</text>
               </g>
             </svg>
-          </figure>
-        </article>
-
-        <article class="walk-step">
-          <div class="walk-copy">
-            <span class="walk-index">07 / STAMP THE BLUEPRINT</span>
-            <h3>Approve the PR number or the issue number.</h3>
-            <p>Read the spec first. Run <code>machinist approve --pr 18</code> for PR #18 (or <code>machinist approve --issue 42</code> for issue #42), or copy the SHA-bound <code>/machinist-execute &lt;full-spec-commit-sha&gt;</code> command from the PR body. The positional form is accepted only when the number is unambiguous. The CLI requests approval; the managed workflow verifies write access and the current head before recording it. <code>machinist status</code> remains <code>awaiting approval</code> until that finishes; <code>approval pending</code> means a label is visible without trusted SHA evidence. Approval is bound to the authorized commit; edits make it stale.</p>
-            <span class="walk-command">machinist approve --pr 18</span>
-
-            <div class="tip-box">
-              <h4>Want to revise or reject the Spec?</h4>
-              <p>Regenerate a successful Spec on its existing branch and draft PR, then review and approve the new head:</p>
-              <pre class="mono" style="margin:var(--space-2) 0 0;font-size:0.75rem;color:var(--ink-0);white-space:pre-wrap">machinist spec 42 --revise
-
-# Or explicitly reject it and close the open draft PR:
-machinist spec 42 --abandon --reason "requirements changed"</pre>
-              <p style="margin-top:var(--space-2)"><code>--reason</code> is optional. Abandonment records the outcome and removes the trigger and approval labels; it never merges.</p>
-            </div>
-          </div>
-          <figure class="walk-visual">
+          </figure></article><article class="walk-step"><div class="walk-copy"><span class="walk-index">03 / AUTHORIZE ONE EXACT COMMIT</span><h3>Approve the Spec you actually read.</h3><p>Copy the complete command printed by start or status. Approval binds your repository, Task, actor, time, and the full 40-character Spec SHA. A stale or mismatched SHA is rejected.</p><div class="terminal" aria-label="exact Spec Approval"><div class="terminal-bar"><span>terminal / exact Spec Approval</span><button class="copy-button" type="button" data-copy="machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;">Copy commands</button></div><pre>machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;</pre></div><p>This command continues Execute, required verification, and independent Review in the foreground. It does not integrate or publish the candidate.</p><div class="tip-box"><h3>The initial Spec is not right?</h3><p>Do not approve it. Cancel the Task with <code>machinist cancel --task T1 --reason "Spec needs different scope"</code> and start a new Task with clearer context. Local amendment is available after a verified candidate and completed Review, before integration begins.</p></div></div><figure class="walk-visual">
             <figcaption class="visual-label"><span>HUMAN GATE</span><span>approval names one commit</span></figcaption>
-            <svg viewBox="0 0 680 350" role="img" aria-label="A human approval stamp binds the machinist approved label to a specific commit SHA; a later changed SHA invalidates it.">
+            <svg viewBox="0 0 680 350" role="img" aria-label="A human Approval binds repository, local Task T1, and the exact Spec commit SHA; a new Spec requires fresh Approval.">
               <g font-family="Avenir Next, system-ui, sans-serif">
                 <rect x="42" y="52" width="270" height="225" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
-                <text x="68" y="86" fill="var(--ink-2)" font-size="11" font-family="ui-monospace, monospace">CURRENT PR HEAD</text>
+                <text x="68" y="86" fill="var(--ink-2)" font-size="11" font-family="ui-monospace, monospace">SAVED SPEC COMMIT</text>
                 <text x="68" y="118" fill="var(--ink-0)" font-size="18" font-family="ui-monospace, monospace" font-weight="700">a17c98d42e6f</text>
-                <rect x="68" y="142" width="156" height="27" rx="13" fill="var(--success-soft)"/><text x="146" y="160" text-anchor="middle" fill="var(--success)" font-size="11" font-weight="700">machinist:approved</text>
+                <rect x="68" y="142" width="156" height="27" rx="13" fill="var(--success-soft)"/><text x="146" y="160" text-anchor="middle" fill="var(--success)" font-size="11" font-weight="700">T1 · approved SHA</text>
                 <path d="M68 195h188M68 214h152M68 233h176" stroke="var(--line-strong)" stroke-width="5"/>
                 <g transform="translate(340 70) rotate(-8 130 100)">
                   <circle cx="130" cy="100" r="87" fill="var(--signal-soft)" stroke="var(--signal)" stroke-width="7"/>
@@ -1283,38 +1020,17 @@ machinist spec 42 --abandon --reason "requirements changed"</pre>
                   <path d="m93 102 23 23 52-58" fill="none" stroke="var(--signal)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
                   <text x="130" y="151" text-anchor="middle" fill="var(--signal-strong)" font-size="12" font-weight="800">SHA BOUND</text>
                 </g>
-                <text x="470" y="299" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">branch changes → approval stale</text>
+                <text x="470" y="299" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">new Spec → fresh Approval</text>
               </g>
             </svg>
-          </figure>
-        </article>
-
-        <article class="walk-step">
-          <div class="walk-copy">
-            <span class="walk-index">08 / BUILD, TEST, REVIEW</span>
-            <h3>Let the machine work. Keep the merge.</h3>
-            <p>The watcher or <code>machinist run 42</code> provisions the approved branch, asks the harness to implement, runs the authoritative gates, and pushes with a lease while the PR stays draft. A separate read-only Review Task Run checks the exact delivered head, posts advisory findings, and alone marks it ready. You review and merge.</p>
-            <span class="walk-command">machinist run 42</span>
-
-            <div class="tip-box">
-              <h4>What if the test gate fails?</h4>
-              <p>The controller keeps the failed workspace instead of pushing bad code. Inspect it, then choose whether its edits belong in the next attempt:</p>
-              <pre class="mono" style="margin:var(--space-2) 0 0;font-size:0.75rem;color:var(--ink-0);white-space:pre-wrap">machinist inspect 42
-
-# Validate and continue the retained managed workspace:
-machinist retry 42 --phase execute --run --resume
-
-# Or start again from the approved head (the default):
-machinist retry 42 --phase execute --run --fresh</pre>
-            </div>
-          </div>
-          <figure class="walk-visual">
-            <figcaption class="visual-label"><span>READY FOR REVIEW</span><span>controller delivered; human decides</span></figcaption>
-            <svg viewBox="0 0 680 360" role="img" aria-label="A ready pull request with passing tests, changed files, and a final human review gate before merge.">
+          </figure></article><article class="walk-step"><div class="walk-copy"><span class="walk-index">04 / INSPECT AND INTEGRATE</span><h3>Keep the final decision explicit.</h3><p>After implementation, the controller runs the authoritative Verification Gates and retains the candidate before Workshop cleanup. A separate read-only Review checks that exact candidate against the approved Spec and Evidence. Findings remain advisory.</p><p>Inspect the saved report and candidate diff. When satisfied, integrate the exact reviewed candidate into the original local base:</p><div class="terminal" aria-label="accept the local candidate"><div class="terminal-bar"><span>terminal / accept the local candidate</span><button class="copy-button" type="button" data-copy="machinist status T1&#10;machinist integrate T1">Copy commands</button></div><pre>machinist status T1
+machinist integrate T1</pre></div><p>A dirty checkout, switched or changed base, changed candidate, or non-fast-forward result stops integration. No remote is needed and nothing is pushed.</p></div><figure class="walk-visual">
+            <figcaption class="visual-label"><span>REVIEW COMPLETE</span><span>controller delivered; human decides</span></figcaption>
+            <svg viewBox="0 0 680 360" role="img" aria-label="A retained local candidate with passing verification and a completed advisory Review; a human inspects its diff and chooses whether to integrate.">
               <g font-family="Avenir Next, system-ui, sans-serif">
                 <rect x="35" y="30" width="610" height="300" rx="10" fill="var(--paper-0)" stroke="var(--line-strong)"/>
-                <rect x="58" y="54" width="120" height="24" rx="12" fill="var(--success-soft)"/><text x="118" y="70" text-anchor="middle" fill="var(--success)" font-size="10" font-weight="700">READY FOR REVIEW</text>
-                <text x="196" y="71" fill="var(--ink-0)" font-size="17" font-weight="700">Add CSV export (#42)</text>
+                <rect x="58" y="54" width="120" height="24" rx="12" fill="var(--success-soft)"/><text x="118" y="70" text-anchor="middle" fill="var(--success)" font-size="10" font-weight="700">REVIEW COMPLETE</text>
+                <text x="196" y="71" fill="var(--ink-0)" font-size="17" font-weight="700">Add CSV export (T1)</text>
                 <g transform="translate(58 104)">
                   <rect width="255" height="164" rx="7" fill="var(--paper-1)" stroke="var(--line)"/>
                   <text x="18" y="28" fill="var(--ink-2)" font-size="10" font-family="ui-monospace, monospace">QUALITY GATE</text>
@@ -1328,251 +1044,103 @@ machinist retry 42 --phase execute --run --fresh</pre>
                   <text x="20" y="29" fill="var(--signal-strong)" font-size="10" font-family="ui-monospace, monospace">YOUR FINAL GATE</text>
                   <text x="20" y="59" fill="var(--ink-0)" font-size="15" font-weight="700">Review the diff</text>
                   <g fill="var(--ink-1)" font-size="11"><text x="20" y="84">• Does the code match the spec?</text><text x="20" y="106">• Do the tests prove the outcome?</text><text x="20" y="128">• Are deviations explained?</text></g>
-                  <rect x="174" y="136" width="78" height="20" rx="4" fill="var(--signal)"/><text x="213" y="150" text-anchor="middle" fill="#fff8f3" font-size="9" font-weight="700">MERGE</text>
+                  <rect x="174" y="136" width="78" height="20" rx="4" fill="var(--signal)"/><text x="213" y="150" text-anchor="middle" fill="#fff8f3" font-size="9" font-weight="700">INTEGRATE</text>
                 </g>
-                <text x="58" y="301" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">AgentMachinist never clicks merge.</text>
+                <text x="58" y="301" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">Only machinist integrate T1 updates the local base.</text>
               </g>
             </svg>
-          </figure>
-        </article>
-      </div>
-
-      <aside class="walk-coda">
-        <h3>After the merge, the loop closes itself.</h3>
-        <p>Merging closes the issue automatically — the spec PR carries <code>Closes #42</code>. The isolated workspace was already removed after the successful Execute run completed (<code>cleanup: on_success</code>), and GitHub deletes the branch if your repository auto-deletes merged heads. Run <code>machinist status</code>: an empty board means the shop is ready for the next labeled issue.</p>
-      </aside>
-    </section>
-
-    <section class="section" id="status">
-      <div class="shell section-head">
-        <p class="section-kicker">The shop-floor board</p>
-        <h2>Read status without guessing.</h2>
-        <p>Run <code>machinist status</code>. The wording tells you who moves next. Scroll the board horizontally on a small screen.</p>
-      </div>
-      <div class="status-board">
-        <div class="status-track shell">
-          <article class="status-item machine"><div class="status-dot"></div><code>awaiting spec</code><p>The trigger exists. Local watch or the configured CI owner must write the plan.</p></article>
-          <article class="status-item user"><div class="status-dot"></div><code>awaiting approval</code><p>A draft spec is ready. Read it before authorizing implementation.</p></article>
-          <article class="status-item alert"><div class="status-dot"></div><code>approval pending</code><p>The label exists without trusted SHA evidence. Inspect the approval workflow before retrying.</p></article>
-          <article class="status-item alert"><div class="status-dot"></div><code>approval stale</code><p>The branch changed after approval. Review and approve the new head.</p></article>
-          <article class="status-item machine"><div class="status-dot"></div><code>approved</code><p>The exact head can execute. Run the watcher or the issue directly.</p></article>
-          <article class="status-item machine"><div class="status-dot"></div><code>execute running</code><p>A live Claim owns the Task. Runs show the current named stage, gate number, and elapsed time.</p></article>
-          <article class="status-item alert"><div class="status-dot"></div><code>execute interrupted</code><p>The projection says running but no Claim is held. Use the exact <code>Next:</code> recovery command.</p></article>
-          <article class="status-item machine"><div class="status-dot"></div><code>awaiting review</code><p>Execute delivered a draft. The independent Review Task Run owns the next transition.</p></article>
-          <article class="status-item done"><div class="status-dot"></div><code>in review</code><p>Independent Review reached the ready PR. You own review and merge.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section shell" id="trust">
-      <div class="boundary">
-        <div class="boundary-copy">
-          <p class="section-kicker">Know the safety boundary</p>
-          <h2>Guardrails, not a vault.</h2>
-          <p>AgentMachinist keeps Git custody and detects ordinary harness violations, but the harness still runs as your operating-system user.</p>
-          <ul>
-            <li>Spec runs request the strongest available read-only mode and reject file mutations.</li>
-            <li>Implementation checks for harness commits, remote pushes, <code>.machinist/</code> edits, and deleted test files.</li>
-            <li>Common GitHub and SSH-agent credentials are removed from the harness environment.</li>
-            <li>These controls are not a VM, container, or protection from a malicious local executable.</li>
-          </ul>
-          <p><a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md">Read the full trust model before unattended use.</a></p>
-        </div>
-        <figure class="boundary-visual">
-          <svg viewBox="0 0 560 500" role="img" aria-label="Trust boundary diagram: AgentMachinist controls Git and GitHub, the harness receives a workspace and provider credentials, and the human owns approval and merge.">
+          </figure></article></div><aside class="walk-coda"><h3>The candidate survives the Workshop.</h3><p>Successful work remains reachable on a local candidate ref; Task records, Phase history, and the report remain under <code>.machinist/runs/local/</code>. Integration records intent before updating the base, so the same command can reconcile an interruption. Start your next Task from the newly committed baseline.</p><p>For rework before integration, use <code>machinist amend --task T1 --feedback "Also test empty filtered results."</code>. Amendment requires a completed candidate and Review, creates a new Spec, and requires fresh Approval. The next successful candidate receives its own Review; the old report is not reused.</p></aside></section>
+    <section class="section shell" id="publication"><header class="section-head"><p class="section-kicker">Collaborate when it helps</p><h2>Import an issue. Publish the result when ready.</h2><p>GitHub and GitLab are optional inputs and outputs. Authenticating a forge CLI is only needed when you choose issue intake or publication.</p></header><div class="install-grid"><div><div class="terminal" aria-label="optional issue import"><div class="terminal-bar"><span>terminal / optional issue import</span><button class="copy-button" type="button" data-copy="machinist start --from-issue https://github.com/team/project/issues/42&#10;machinist start --from-issue https://gitlab.com/team/subgroup/project/-/issues/42&#10;# Self-managed GitLab: bind the expected host explicitly.&#10;machinist start --from-issue https://gitlab.example.com/team/project/-/issues/42 --provider gitlab --host gitlab.example.com">Copy commands</button></div><pre>machinist start --from-issue https://github.com/team/project/issues/42
+machinist start --from-issue https://gitlab.com/team/subgroup/project/-/issues/42
+# Self-managed GitLab: bind the expected host explicitly.
+machinist start --from-issue https://gitlab.example.com/team/project/-/issues/42 --provider gitlab --host gitlab.example.com</pre></div></div><div><h3>Issue numbers are provenance</h3><p>Importing issue 42 can create <code>T1</code>. GitHub uses <code>gh</code>; GitLab uses <code>glab</code>, authenticated for the selected host. Remote labels, reviews, and CI do not become local Approval.</p><h3>One persistent runner for a small team</h3><p>Use shared issues and PRs/MRs for discussion. One operator’s checkout owns local Task records and Claims. Multiple laptops are not coordinated workers, and local daily Task Run budgets are not team-wide quotas.</p></div></div>
+      <div class="install-grid" style="margin-top:var(--space-7)"><div><h3>Publish the reviewed candidate</h3><p>A single origin must match the selected forge and repository. Publication checks exact Approval, successful Execute and Review Evidence, candidate identity, and a recorded remote lease before updating a PR/MR.</p><p>Publishing can happen before or after local integration. If it fails, rerun the same publish command: recovery reconciles the push and PR/MR without repeating successful Harness work or gates. Native GitLab CI Spec dispatch and remote GitLab Approval are not included.</p></div><div><div class="terminal" aria-label="optional publication"><div class="terminal-bar"><span>terminal / optional publication</span><button class="copy-button" type="button" data-copy="# Choose one provider matching this repository&#x27;s origin:&#10;machinist publish T1 --provider github&#10;# Or:&#10;machinist publish T1 --provider gitlab&#10;# Explicit self-managed host:&#10;machinist publish T1 --provider gitlab --host gitlab.example.com">Copy commands</button></div><pre># Choose one provider matching this repository&#x27;s origin:
+machinist publish T1 --provider github
+# Or:
+machinist publish T1 --provider gitlab
+# Explicit self-managed host:
+machinist publish T1 --provider gitlab --host gitlab.example.com</pre></div></div></div></section>
+    <section class="section" id="status"><div class="shell section-head"><p class="section-kicker">Read the next action</p><h2>Status tells you who moves next.</h2><p><code>machinist status T1</code> shows the saved Spec, candidate, report, and one next action. <code>machinist continue T1</code> advances eligible work; it never grants Approval or replaces explicit retry.</p></div><div class="status-board"><div class="status-track shell">
+      <article class="status-item machine"><div class="status-dot"></div><code>awaiting spec</code><p>The Task exists and the next eligible machine work is Spec generation.</p></article>
+      <article class="status-item user"><div class="status-dot"></div><code>awaiting approval</code><p>Read the saved Spec and approve its exact full SHA.</p></article>
+      <article class="status-item machine"><div class="status-dot"></div><code>approved</code><p>The exact Spec is authorized. Foreground continuation can Execute.</p></article>
+      <article class="status-item machine"><div class="status-dot"></div><code>awaiting review</code><p>A verified candidate needs its independent Review at that exact SHA.</p></article>
+      <article class="status-item user"><div class="status-dot"></div><code>ready to integrate</code><p>Review is complete. Inspect its findings and the candidate diff before integrating.</p></article>
+      <article class="status-item done"><div class="status-dot"></div><code>integrated</code><p>The local base contains the exact candidate. Publication remains optional.</p></article>
+    </div></div></section>
+    <section class="section shell" id="trust"><div class="boundary"><div class="boundary-copy"><p class="section-kicker">Know the boundary</p><h2>Local orchestration is not offline inference.</h2><p>No forge or server is required for a local Task. Your Harness may still send code to a cloud model. Offline inference needs a local provider, downloaded models, cached dependencies, and separate network-denied validation.</p><ul><li>The controller owns Git changes, Task records, and optional publication.</li><li>Spec and Review are read-only; Execute checks for Harness commits, protected metadata edits, and other custody violations.</li><li>Credential reduction and postconditions detect violations; they are not OS isolation against a hostile process running as your user.</li><li>AgentMachinist never automatically merges or merges a remote PR/MR. Explicit local integration is a clean, exact-base fast-forward.</li></ul><p><a href="trust-model.md">Read the full trust model.</a></p></div><figure class="boundary-visual">
+          <svg viewBox="0 0 560 500" role="img" aria-label="Trust boundary diagram: the controller owns Git, local Task records, and optional forge publication; the Harness runs as the same operating-system user, and the human owns Approval and integration.">
             <defs><marker id="boundary-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
             <rect x="60" y="50" width="440" height="390" rx="18" fill="none" stroke="var(--signal)" stroke-width="2" stroke-dasharray="8 8"/>
             <text x="80" y="82" fill="var(--signal-strong)" font-family="ui-monospace, monospace" font-size="11">LOCAL USER BOUNDARY</text>
             <rect x="115" y="110" width="330" height="105" rx="10" fill="var(--signal-soft)" stroke="var(--signal)"/>
             <text x="280" y="150" text-anchor="middle" fill="var(--signal-strong)" font-family="Avenir Next, system-ui, sans-serif" font-size="17" font-weight="700">AgentMachinist controller</text>
-            <text x="280" y="178" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="12">Git · GitHub · approval · tests · Task Runs</text>
+            <text x="280" y="178" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="12">Git · Approval · gates · Task Runs</text>
             <rect x="105" y="290" width="150" height="95" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/>
             <text x="180" y="328" text-anchor="middle" fill="var(--blueprint)" font-family="Avenir Next, system-ui, sans-serif" font-size="15" font-weight="700">Harness</text>
-            <text x="180" y="352" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="11">reads / edits workspace</text>
+            <text x="180" y="352" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="11">reads / edits Workshop</text>
             <rect x="305" y="290" width="150" height="95" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/>
-            <text x="380" y="328" text-anchor="middle" fill="var(--ink-0)" font-family="Avenir Next, system-ui, sans-serif" font-size="15" font-weight="700">GitHub</text>
-            <text x="380" y="352" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="11">issues / branches / PRs</text>
+            <text x="380" y="328" text-anchor="middle" fill="var(--ink-0)" font-family="Avenir Next, system-ui, sans-serif" font-size="15" font-weight="700">Optional forge</text>
+            <text x="380" y="352" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="11">GitHub / GitLab</text>
             <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#boundary-arrow)"><path d="M230 215 190 290"/><path d="M330 215 370 290"/></g>
             <circle cx="500" cy="50" r="38" fill="var(--success-soft)" stroke="var(--success)"/>
             <text x="500" y="47" text-anchor="middle" fill="var(--success)" font-family="Avenir Next, system-ui, sans-serif" font-size="11" font-weight="700">YOU</text>
-            <text x="500" y="63" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="9">approve + merge</text>
+            <text x="500" y="63" text-anchor="middle" fill="var(--ink-1)" font-family="Avenir Next, system-ui, sans-serif" font-size="9">approve + integrate</text>
           </svg>
-        </figure>
-      </div>
+        </figure></div></section>
+    <section class="section shell" id="troubleshoot"><header class="section-head"><p class="section-kicker">When the machine stops</p><h2>Resolve the cause, then retry explicitly.</h2><p>Failures retain Evidence instead of silently consuming another model run. Inspect the error, report, and retained Workshop before choosing recovery.</p></header><div class="trouble-grid">
+      <details><summary>Baseline verification failed</summary><div class="detail-body"><p>The Spec Harness has not run. Fix the required Gate in <code>.machinist/runs/local/config.yaml</code> or its external dependency setup, then retry. Changing committed baseline files instead requires a new Task.</p><code>machinist retry --task T1 --phase spec</code></div></details>
+      <details><summary>The approval SHA does not match</summary><div class="detail-body"><p>Read the current saved Spec and copy its complete Approval command. An amendment requires fresh Approval of the new Spec.</p><code>machinist status T1</code></div></details>
+      <details><summary>Execute failed or was interrupted</summary><div class="detail-body"><p>Local retry defaults to resuming validated retained edits. Use <code>--fresh</code> to start a new Workshop. Saved implementation-commit Evidence avoids repeating completed implementation and verification.</p><code>machinist retry --task T1 --phase execute</code><br><code>machinist retry --task T1 --phase execute --fresh</code></div></details>
+      <details><summary>Independent Review failed</summary><div class="detail-body"><p>Retry Review at the retained candidate. A completed Review with findings is advisory, not a failed gate. An amendment creates a fresh Spec and later a new Review for its changed candidate.</p><code>machinist retry --task T1 --phase review</code></div></details>
+      <details><summary>Local integration stopped</summary><div class="detail-body"><p>Check that the checkout is clean and on the expected base branch. Do not reset away edits to satisfy the guard. A changed base or candidate needs deliberate reconciliation; status retains the exact expected identities.</p><code>machinist status T1</code></div></details>
+      <details><summary>Publication stopped after a push</summary><div class="detail-body"><p>Resolve authentication, connectivity, or the reported remote conflict, then repeat the same provider and host selection. The controller reconciles recorded publication intent without rerunning successful local Phases.</p><code>machinist publish T1 --provider gitlab</code></div></details>
+      <details><summary>A Task must stop</summary><div class="detail-body"><p>Request cooperative cancellation, inspect the preserved Evidence, and resolve the reason before clearing it. Use the recovery action shown by status.</p><code>machinist cancel --task T1 --reason "Requirements changed"</code><br><code>machinist cancel --task T1 --clear</code></div></details>
+      <details><summary>Existing GitHub adoption stopped</summary><div class="detail-body"><p>Rerun <code>machinist onboard --setup-pr</code> to resume managed setup work and reuse its draft PR. Existing valid settings are preserved; change them with <code>machinist config set</code>. Merge setup before checking deployed default-branch workflows.</p><code>machinist doctor --run-gates</code></div></details>
+    </div></section>
+    <section class="section shell" id="legacy-github"><header class="section-head"><p class="section-kicker">Existing GitHub workflow</p><h2>Keep issue automation when you need it.</h2><p>The published 0.13.0 workflow uses GitHub issues, draft PR Specs, workflow-authored Approval, and a local Execute runner. It remains compatible. Numeric issue IDs and local <code>T1</code> IDs are separate.</p></header>
+      <details><summary>GitHub Actions adoption and daily commands</summary><div class="detail-body"><p><code>onboard --setup-pr</code> performs setup preflight without requiring workflows to be deployed already. A retry preserves valid settings and resumes managed-only setup work; unrelated branch history is rejected. Review and merge its draft PR before the full deployment doctor.</p><div class="terminal" aria-label="legacy GitHub workflow"><div class="terminal-bar"><span>terminal / legacy GitHub workflow</span><button class="copy-button" type="button" data-copy="# GitHub setup: generate and review a resumable draft setup PR.&#10;machinist onboard --setup-pr --spec-source github-actions&#10;# Add the repository secret declared by your selected Spec adapter.&#10;# Review and merge the setup PR, then verify deployed workflows:&#10;machinist doctor --run-gates&#10;# Create a linted GitHub Task. The issue number is illustrative:&#10;machinist task new --title &quot;Add CSV export for filtered transaction rows&quot; --dispatch&#10;# Actions writes its Spec; read the draft before requesting Approval:&#10;machinist approve --issue 42&#10;# Or target its PR explicitly: machinist approve --pr 18&#10;machinist inspect 42&#10;# After trusted SHA-bound Approval is visible:&#10;machinist run 42&#10;machinist review 42">Copy commands</button></div><pre># GitHub setup: generate and review a resumable draft setup PR.
+machinist onboard --setup-pr --spec-source github-actions
+# Add the repository secret declared by your selected Spec adapter.
+# Review and merge the setup PR, then verify deployed workflows:
+machinist doctor --run-gates
+# Create a linted GitHub Task. The issue number is illustrative:
+machinist task new --title &quot;Add CSV export for filtered transaction rows&quot; --dispatch
+# Actions writes its Spec; read the draft before requesting Approval:
+machinist approve --issue 42
+# Or target its PR explicitly: machinist approve --pr 18
+machinist inspect 42
+# After trusted SHA-bound Approval is visible:
+machinist run 42
+machinist review 42</pre></div><p>The managed workflow checks write or admin access and the current head before recording its trusted SHA marker. The CLI requests Approval; it does not mint that Evidence. The PR-body command <code>/machinist-execute &lt;full-spec-commit-sha&gt;</code> is another explicit request. GitHub’s review Approve button is not this Gate.</p><p>A label without trusted Evidence is <code>approval pending</code>; a changed head is <code>approval stale</code>. With legacy <code>review.enabled: true</code>, Execute leaves the PR draft until independent Review completes. Findings remain advisory. With Review disabled, Execute can mark it ready after verification. You perform the remote merge.</p>
+        <p>For manual setup commits, inspect the generated file list, stage selected files, review workflow hunks with <code>git add -p .github/workflows</code> and the full staged diff with <code>git diff --cached</code>, then <code>git commit</code> and <code>git push</code> before the full doctor check.</p><div class="terminal" aria-label="legacy revision and recovery"><div class="terminal-bar"><span>terminal / legacy revision and recovery</span><button class="copy-button" type="button" data-copy="machinist spec 42 --revise&#10;machinist spec 42 --abandon --reason &quot;requirements changed&quot;&#10;machinist retry 42 --phase execute --run --resume&#10;machinist retry 42 --phase execute --run --fresh">Copy commands</button></div><pre>machinist spec 42 --revise
+machinist spec 42 --abandon --reason &quot;requirements changed&quot;
+machinist retry 42 --phase execute --run --resume
+machinist retry 42 --phase execute --run --fresh</pre></div><p>Legacy Execute recovery defaults to fresh; local <code>retry --task T1</code> defaults to resume. In legacy <code>github.spec_source: local</code> mode, use <code>machinist spec 42</code> or <code>watch</code> for Spec generation. It still requires GitHub Approval workflows. See the <a href="getting-started.md#github-setup-and-automation">GitHub setup reference</a> and <a href="operator-runbook.md">operator runbook</a> for watcher services, labels, and recovery.</p></div></details>
     </section>
-
-    <section class="section shell" id="troubleshoot">
-      <header class="section-head">
-        <p class="section-kicker">When the machine stops</p>
-        <h2>Start with the sentence it gave you.</h2>
-        <p>Failures are parked instead of retried forever. Expand the symptom that matches what you see.</p>
-      </header>
-      <div class="trouble-grid">
-        <details>
-          <summary>Doctor reports a FAIL</summary>
-          <div class="detail-body"><p>Fix that prerequisite before running a task. Common causes are missing <code>gh</code> auth, a missing harness executable, a failing verification gate, or workflow drift.</p><code>machinist doctor --run-gates</code></div>
-        </details>
-        <details>
-          <summary>Status says approval pending</summary>
-          <div class="detail-body"><p>The label exists, but no trusted marker names the current SHA. Inspect the managed approval workflow first; approve again only if that run failed.</p><code>machinist status</code></div>
-        </details>
-        <details>
-          <summary>Status says approval stale</summary>
-          <div class="detail-body"><p>The spec branch changed after approval. Read the new diff, then approve the current head. This is a safety stop, not a synchronization bug.</p><code>machinist approve --pr &lt;pr&gt;</code></div>
-        </details>
-        <details>
-          <summary>A Task Run failed</summary>
-          <div class="detail-body"><p>Inspect the error and retained workspace first. Use <code>--resume</code> to validate and continue that managed workspace, or <code>--fresh</code> to provision another attempt from the approved head. Fresh is the default when neither flag is supplied.</p><code>machinist retry &lt;issue&gt; --phase execute --run --resume</code></div>
-        </details>
-        <details>
-          <summary>The workspace already exists</summary>
-          <div class="detail-body"><p>That is usually retained evidence from a failure. Inspect it before removal. Worktrees should be removed with Git, not by blindly deleting directories.</p><code>git worktree list</code></div>
-        </details>
-        <details>
-          <summary>Tests failed</summary>
-          <div class="detail-body"><p>Nothing new is pushed by the controller. Inspect the retained edits and test output, fix the underlying cause, then explicitly resume those edits or start fresh.</p><code>machinist retry &lt;issue&gt; --phase execute --run --fresh</code></div>
-        </details>
-        <details>
-          <summary>A running task must stop</summary>
-          <div class="detail-body"><p>Request cooperative cancellation. The durable marker also blocks a later watcher dispatch; clear it only after inspecting the cancelled run and resolving the cause.</p><code>machinist cancel &lt;issue&gt; --reason "requirements changed"</code></div>
-        </details>
-        <details>
-          <summary>The macOS watcher is quiet</summary>
-          <div class="detail-body"><p>Check launchd registration, the last watcher poll, health, and active Task Runs, then read the bounded recent stdout and stderr. Service lifecycle actions refuse active Claims unless explicitly forced; logs remain after stop or uninstall.</p><code>machinist service status</code><br><code>machinist service logs --lines 100</code></div>
-        </details>
-      </div>
-    </section>
-
-    <section class="section shell" id="launch">
-      <div class="launch-card">
-        <div>
-          <p class="section-kicker" style="color:#ff9d76">Pocket checklist</p>
-          <h2>Ready to make the first cut?</h2>
-          <p>Check these off as you go. The guide remembers your checks in this browser.</p>
-          <ul class="checklist" id="checklist">
-            <li><label><input type="checkbox" value="tools"> <span>Git, gh, uv, and one harness respond</span></label></li>
-            <li><label><input type="checkbox" value="version"> <span><code>machinist --version</code> matches this guide</span></label></li>
-            <li><label><input type="checkbox" value="config"> <span>Harness, spec owner, and test command are set</span></label></li>
-            <li><label><input type="checkbox" value="doctor"> <span><code>machinist doctor --run-gates</code> has no FAIL checks</span></label></li>
-            <li><label><input type="checkbox" value="persisted"> <span>Generated files and the runtime ignore are reviewed, committed, and pushed</span></label></li>
-            <li><label><input type="checkbox" value="issue"> <span>A small issue has acceptance criteria and <code>agent-task</code></span></label></li>
-            <li><label><input type="checkbox" value="merge"> <span>I know the machine never merges for me</span></label></li>
-          </ul>
-          <button class="reset-button" id="reset-checklist" type="button">Reset checklist</button>
-        </div>
-        <div class="launch-links">
-          <h3>Keep nearby</h3>
-          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md"><span>Full getting-started reference</span><span aria-hidden="true">→</span></a>
-          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md"><span>Operator runbook</span><span aria-hidden="true">→</span></a>
-          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/harnesses.md"><span>Harness support matrix</span><span aria-hidden="true">→</span></a>
-          <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md"><span>Trust model</span><span aria-hidden="true">→</span></a>
-        </div>
-      </div>
-    </section>
-
-    <section class="section shell" id="commands">
-      <div class="section-head">
-        <p class="section-kicker">Quick Reference</p>
-        <h2>Command Cheatsheet</h2>
-        <p>Keep these core subcommands nearby for day-to-day work.</p>
-      </div>
-      <div class="cmd-table-shell">
-        <table class="cmd-table">
-          <thead>
-            <tr>
-              <th>Command</th>
-              <th>What it does</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>machinist init</code></td>
-              <td>Set up <code>machinist.yaml</code>, <code>.machinist/</code>, workflows, and labels. Asks setup questions in a terminal; <code>--no-input</code> keeps verification disabled unless <code>--test-cmd</code> is explicit.</td>
-            </tr>
-            <tr>
-              <td><code>machinist doctor</code></td>
-              <td>Read-only diagnostics for Git, <code>gh</code>, Harness version/auth/argv compatibility, test gate, labels, permissions, and local/remote workflow drift. <code>--run-gates</code> opts into gate execution.</td>
-            </tr>
-            <tr>
-              <td><code>machinist config validate|show|schema|set</code></td>
-              <td>Validate, resolve, export, or atomically update <code>machinist.yaml</code>.</td>
-            </tr>
-            <tr>
-              <td><code>machinist status [--local|--all] [--json]</code></td>
-              <td>Show GitHub state, local evidence, or every repository in the optional registry.</td>
-            </tr>
-            <tr>
-              <td><code>machinist spec &lt;n&gt; [--dry-run|--revise|--abandon]</code></td>
-              <td>Preview or generate a Spec, revise its existing draft PR, or abandon it. Add <code>--reason "text"</code> with abandonment.</td>
-            </tr>
-            <tr>
-              <td><code>machinist approve [--issue &lt;n&gt;|--pr &lt;n&gt;]</code></td>
-              <td>Request approval for a draft PR by explicit issue or PR number. The managed workflow verifies write access and records evidence for the exact head SHA.</td>
-            </tr>
-            <tr>
-              <td><code>machinist run &lt;n&gt;</code></td>
-              <td>Run the Execute Phase and authoritative Verification Gate for issue <code>&lt;n&gt;</code>.</td>
-            </tr>
-            <tr>
-              <td><code>machinist amend &lt;n&gt; --feedback "text"</code></td>
-              <td>Rework a ready PR from explicit feedback after fresh approval of its current head.</td>
-            </tr>
-            <tr>
-              <td><code>machinist cancel &lt;n&gt; [--reason "text"|--clear]</code></td>
-              <td>Cooperatively stop or block an issue, or clear its durable cancellation marker.</td>
-            </tr>
-            <tr>
-              <td><code>machinist retry &lt;n&gt; --phase execute --run [--resume|--fresh]</code></td>
-              <td>Retry Execute using retained edits or a new workspace. Fresh is the default when neither recovery flag is supplied.</td>
-            </tr>
-            <tr>
-              <td><code>machinist clean [--issue &lt;n&gt;|--all]</code></td>
-              <td>Safely remove or prune retained worktrees under <code>workspace.root</code>.</td>
-            </tr>
-            <tr>
-              <td><code>machinist inspect &lt;n&gt; [--offline] [--json]</code></td>
-              <td>Display complete local history and, unless offline, GitHub and approval evidence.</td>
-            </tr>
-            <tr>
-              <td><code>machinist runs [--issue &lt;n&gt;] [--json]</code></td>
-              <td>Read current, historical, orphaned, and corrupt local Task Run records.</td>
-            </tr>
-            <tr>
-              <td><code>machinist watch [--once] [--dry-run] [--max-tasks &lt;n&gt;]</code></td>
-              <td>Preview eligibility or poll GitHub and dispatch only admitted Tasks.</td>
-            </tr>
-            <tr>
-              <td><code>machinist queue pause|resume|defer|allow|show</code></td>
-              <td>Persist global and per-issue controls over new watcher dispatches.</td>
-            </tr>
-            <tr>
-              <td><code>machinist service install|start|restart|stop|status|logs|uninstall</code></td>
-              <td>Manage the per-repository macOS launchd watcher and its retained logs.</td>
-            </tr>
-            <tr>
-              <td><code>machinist repo add|remove|list</code></td>
-              <td>Maintain the optional local repository portfolio used by <code>status --all</code>.</td>
-            </tr>
-            <tr>
-              <td><code>machinist sync-labels [--check|--apply]</code></td>
-              <td>Check required GitHub labels without mutation, or explicitly create and update them.</td>
-            </tr>
-            <tr>
-              <td><code>machinist sync-workflows [--check]</code></td>
-              <td>Project configuration into managed <code>.github/workflows/</code> files.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-
-  <footer class="shell">
-    <div class="footer-row"><span>AgentMachinist 0.13 first-run field guide</span><span>Issue → exact spec approval → tested PR → your merge</span></div>
-  </footer>
-
+    <section class="section shell" id="launch"><div class="launch-card"><div><p class="section-kicker" style="color:#ff9d76">Pocket checklist</p><h2>Ready for the first Task?</h2><p>The guide remembers these checks in this browser.</p><ul class="checklist" id="checklist">
+      <li><label><input type="checkbox" value="local-source"> <span>The source installation exposes <code>machinist start</code></span></label></li>
+      <li><label><input type="checkbox" value="local-tools"> <span>Git author and an installed Harness are ready</span></label></li>
+      <li><label><input type="checkbox" value="local-baseline"> <span>My clean committed baseline has a real verification command</span></label></li>
+      <li><label><input type="checkbox" value="local-objective"> <span>The Task has an observable outcome and bounded scope</span></label></li>
+      <li><label><input type="checkbox" value="local-approval"> <span>I read the exact Spec before approving its SHA</span></label></li>
+      <li><label><input type="checkbox" value="local-review"> <span>I inspect the candidate diff, gates, and advisory Review</span></label></li>
+      <li><label><input type="checkbox" value="local-integrate"> <span>Integration and optional publication are my explicit decisions</span></label></li>
+    </ul><button class="reset-button" id="reset-checklist" type="button">Reset checklist</button></div><div class="launch-links"><h3>Keep nearby</h3><a href="local-workflow.md"><span>Local workflow reference</span><span aria-hidden="true">→</span></a><a href="job-card.html"><span>One-page job card</span><span aria-hidden="true">→</span></a><a href="operator-runbook.md"><span>Operator runbook</span><span aria-hidden="true">→</span></a><a href="harnesses.md"><span>Harness support matrix</span><span aria-hidden="true">→</span></a><a href="trust-model.md"><span>Trust model</span><span aria-hidden="true">→</span></a></div></div></section>
+    <section class="section shell" id="commands"><div class="section-head"><p class="section-kicker">Quick reference</p><h2>The daily local commands.</h2><p>Use the Task ID shown by your run. For legacy numeric issue commands and watcher operations, use the GitHub reference above.</p></div><div class="cmd-table-shell"><table class="cmd-table"><thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead><tbody>
+      <tr><td><code>machinist start "Objective"</code></td><td>Create a local Task, verify its baseline, save a Spec, and stop for Approval.</td></tr>
+      <tr><td><code>machinist approve --task T1 --spec-sha &lt;sha&gt;</code></td><td>Approve one exact Spec and continue Execute, verification, and independent Review.</td></tr>
+      <tr><td><code>machinist status T1 [--json]</code></td><td>Show the saved Spec, candidate, report, and next action. Default status lists local Tasks after local adoption. Use <code>machinist inspect 42</code> for legacy issue Evidence in a mixed checkout.</td></tr>
+      <tr><td><code>machinist continue T1</code></td><td>Advance eligible local work without bypassing Approval or explicit retry.</td></tr>
+      <tr><td><code>machinist amend --task T1 --feedback "text"</code></td><td>From a verified candidate with completed Review, create a new Spec and require fresh Approval; unavailable after integration begins.</td></tr>
+      <tr><td><code>machinist retry --task T1 --phase execute [--fresh]</code></td><td>Retry explicitly, resuming validated retained edits by default. Select <code>spec</code> or <code>review</code> for those failed Phases.</td></tr>
+      <tr><td><code>machinist cancel --task T1 [--reason "text"|--clear]</code></td><td>Request cooperative cancellation or clear its durable marker.</td></tr>
+      <tr><td><code>machinist integrate T1</code></td><td>Explicitly fast-forward a clean expected local base to the exact reviewed candidate.</td></tr>
+      <tr><td><code>machinist publish T1 --provider github|gitlab</code></td><td>Optionally publish that candidate using the origin-bound forge CLI. <code>--host</code> binds an explicit expected host.</td></tr>
+      <tr><td><code>machinist rehearse</code></td><td>Exercise the local path in a disposable repository with a fake Harness and real Git and gates.</td></tr>
+    </tbody></table></div><p class="micro-note">GitHub-specific diagnostics remain available: <code>machinist doctor --run-gates</code>, <code>machinist sync-labels [--check|--apply]</code>, and <code>machinist sync-workflows --check</code>. These are not prerequisites for a local-only Task.</p></section>
+  </main><footer class="shell"><div class="footer-row"><span>AgentMachinist / current checkout field guide</span><span>Local Task → exact Spec Approval → verified candidate → explicit integration</span></div></footer>
   <div id="live-region" class="mono" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>
-
   <script>
     (() => {
       const root = document.documentElement;
@@ -1643,7 +1211,7 @@ machinist retry 42 --phase execute --run --fresh</pre>
       });
 
       const checklist = document.getElementById('checklist');
-      const storageKey = 'agentmachinist-first-run-checklist';
+      const storageKey = 'agentmachinist-local-first-run-checklist-v1';
       let checked = [];
       try { checked = JSON.parse(storage.get(storageKey) || '[]'); } catch (error) { checked = []; }
       checklist.querySelectorAll('input[type="checkbox"]').forEach((input) => {

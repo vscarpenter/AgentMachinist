@@ -1,5 +1,13 @@
 # Spec → Approval → Execute Simplification Implementation Plan
 
+> [!IMPORTANT]
+> **Historical design record.** Preserved implementation context, not current
+> operating instructions. See [Getting Started](../../getting-started.md),
+> [Architecture and lifecycle](../../architecture.md), and
+> [Local workflow](../../local-workflow.md) for current behavior.
+> The legacy GitHub simplification is retained. ADR 0003 now permits explicit
+> local integration; historical worker instructions and scratchpad references below are archival.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the top recommendation and every Strong card of the 2026-09-03 adversarial simplification review of the Spec → Approval → Execute path.
@@ -8,7 +16,7 @@
 
 **Tech Stack:** Python 3.12, Click, pydantic, pytest (offline; `gh` and harness subprocesses are faked, git tests use real repos in `tmp_path`).
 
-**Spec:** `tasks/spec.md` (approved 2026-09-03). Line-level evidence for every task lives in the review outputs under the session scratchpad `arch-review/lens-{A..F}.md` and `verify-{A..F}.md`; the finding ids below (C-1, E-1, …) index those files.
+**Original spec:** `tasks/spec.md` as approved on 2026-09-03; that working file now tracks later work and is not this plan's archived specification. Line-level evidence for every task lives in the review outputs under the session scratchpad `arch-review/lens-{A..F}.md` and `verify-{A..F}.md`; the finding ids below (C-1, E-1, …) index those files.
 
 ## Global Constraints
 

@@ -1,7 +1,15 @@
 # Harness support matrix
 
-AgentMachinist supports four local adapters. “Spec control” describes the
-adapter arguments; all adapters also face the controller's dirty-tree check.
+AgentMachinist includes four built-in adapters and discovers installed v1
+plugins. The guided local workflow requires executable adapters for all three
+Phases; the first-run selector accepts a full-pipeline adapter. Phase profiles
+may subsequently select different supported adapters. “Spec and Review control”
+describes adapter arguments; the controller also checks repository custody and
+rejects changes from these read-only Phases.
+
+The guided local workflow and GitLab publication are unreleased in this source
+checkout; the published release remains 0.13.0. The CI column below describes
+the existing GitHub Actions Spec workflow, not GitLab CI.
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
 | --- | --- | --- | --- | --- |
@@ -11,9 +19,13 @@ adapter arguments; all adapters also face the controller's dirty-tree check.
 | `opencode` | `opencode` | Pure plan agent; treated as advisory | Normal run agent; prompt plus Git postconditions | `ANTHROPIC_API_KEY` by default |
 
 Review is a separate durable Task Run even when it inherits the same adapter.
-It receives the approved Spec, diff, verification evidence, and issue metadata,
+It receives the approved Spec, diff, verification Evidence, and Task context,
 and runs under the adapter's read-only Review argv. Its version-1 findings are
-advisory; invalid output or a changed head leaves the pull request draft.
+advisory. Local Review is mandatory: invalid output, mutation, or a changed
+candidate prevents integration/publication eligibility. In the GitHub issue
+pipeline, `review.enabled` controls Review; when enabled, failure leaves the
+PR draft. A changed successful Execute SHA permits another Review, while a
+completed Review for the same candidate is not repeated.
 
 ## Verification feedback loop
 
@@ -29,8 +41,11 @@ authoritative.
 
 ## Authentication
 
-Local runs use the harness's existing provider authentication. `doctor` checks
-the installed version, parses both configured Phase invocations, and uses each
+Runs use the Harness's existing provider authentication. Local setup checks
+installed executables and Phase support; it does not run the provider's login
+probe or validate model access. Use the checks below before your first Task.
+The legacy GitHub `doctor` checks the installed version, parses configured
+Spec, Execute, and Review invocations, and uses each
 CLI's read-only authentication probe. That confirms configured credentials,
 not subscription quotas or access to every possible model.
 
@@ -49,13 +64,16 @@ harness's `--help` output when upgrading.
 The GitHub Actions Spec template installs the selected adapter at the pinned
 version declared in its descriptor and binds only the descriptor's secret.
 `github.spec_secret_env` may change the repository secret name without storing
-its value. A third-party adapter without `ci_spec` metadata is local-only and
-workflow projection fails with the recovery choice instead of guessing.
+its value. A third-party adapter without `ci_spec` metadata cannot run managed
+GitHub Spec CI; workflow projection fails with a recovery choice instead of
+guessing. It can still support foreground local Tasks or the local GitHub
+watcher if its declared Phases are sufficient. GitLab issue import/publication
+uses `glab` independently and does not install a hosted Spec workflow.
 
 ## Credential environment
 
 Harness subprocesses retain provider variables such as `ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY`. AgentMachinist removes its common GitHub token, Git askpass,
+`OPENAI_API_KEY`. AgentMachinist removes common forge tokens, Git askpass,
 and SSH-agent variables and disables terminal credential prompting. This is
 credential reduction, not credential isolation; see the
 [trust model](trust-model.md).
@@ -93,11 +111,14 @@ Adapters splice `self._passthrough_argv()` (the operator's `harness.model` and
 prompt-relative position instead of restating that block. Adapter tests should
 pin exact Spec, Execute, and Review argv; prove read-only controls for
 Spec/Review; and install a fixture entry point from an isolated path. A plugin that declares structured usage must record only numeric aggregate
-token fields before `machinist report` includes them.
+token fields before `machinist report` includes them. That aggregate report
+currently reads legacy issue-run history; use the printed local Task report
+and `machinist status T1 --json` for the foreground workflow.
 
 ## Compatibility checks
 
-Harness CLIs evolve independently. Before unattended use after an upgrade:
+Harness CLIs evolve independently. Before unattended GitHub watcher use after
+an upgrade:
 
 ```sh
 machinist doctor
@@ -106,3 +127,15 @@ machinist doctor
 The compatibility rows execute `--help` against the exact configured Spec,
 Execute, and Review argv without starting a Harness Task. If an argument changes, update
 the adapter, its exact argv test, this matrix, and the changelog together.
+`doctor` reads root `machinist.yaml` and checks GitHub setup; it does not inspect
+`.machinist/runs/local/config.yaml`. For foreground Tasks, inspect that file via
+`machinist config show --path .machinist/runs/local/config.yaml`, check the
+selected Harness's authentication, and use `machinist rehearse --harness` only
+when you intend to invoke its configured profiles in a disposable repository.
+Plain `machinist rehearse` exercises the production local controller with a
+fake Harness and no model cost.
+
+Local orchestration does not select a local model. A configured adapter may use
+a cloud provider. An offline setup needs a provider/adapter combination that
+supports local inference, downloaded models and dependencies, and a separately
+verified run with network access denied.

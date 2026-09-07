@@ -1,5 +1,13 @@
 # Resume-push fold and flags-only approve specification
 
+> [!IMPORTANT]
+> **Historical design record.** Preserved implementation context, not current
+> operating instructions. See [Getting Started](../../getting-started.md),
+> [Architecture and lifecycle](../../architecture.md), and
+> [Local workflow](../../local-workflow.md) for current behavior.
+> The issue/PR flags and push recovery remain the legacy GitHub contract.
+> Local Tasks additionally use `approve --task T1 --spec-sha FULL_SHA` and separate publication.
+
 Status: approved by the user on 2026-09-03 (cards 7 and 14 of the adversarial
 review; supersedes the completed Spec → Execute simplification spec).
 

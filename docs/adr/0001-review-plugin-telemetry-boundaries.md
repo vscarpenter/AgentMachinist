@@ -6,6 +6,16 @@ Status: Accepted
 
 Deciders: Vinny Carpenter
 
+## Current applicability
+
+[ADR 0003](0003-local-workflow-and-optional-publication.md) extends this decision
+with local Tasks and explicit local fast-forward integration. The PR transitions
+and disabled Review compatibility default below describe legacy GitHub Tasks.
+Local Tasks always run independent Review; publication is a separate optional
+action. Telemetry still summarizes legacy Task Run journals, not local `T1`
+records. Plugin and aggregate-export boundaries remain unchanged. See the
+[local workflow](../local-workflow.md) for current operating instructions.
+
 ## Context
 
 AgentMachinist needs an independent review step, extensible Harness support,

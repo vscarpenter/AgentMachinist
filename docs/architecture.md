@@ -4,7 +4,9 @@ AgentMachinist coordinates Git, a coding Harness, and the repository's
 verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
-deployment remain outside the controller.
+deployment remain outside the controller. The foreground local workflow and
+GitLab intake/publication are unreleased in this checkout; the published
+release remains 0.13.0.
 
 ## Ownership
 
@@ -15,34 +17,53 @@ deployment remain outside the controller.
 | Harness | Read repository context, return a spec or working-tree edits, and independently review the delivered diff; may pre-run configured verification gates to iterate. |
 | Human | Task intent, exact Spec Approval, code review, explicit local integration or remote merge. |
 
-The controller keeps Git authority. Prompts tell the harness not to use Git;
-postconditions detect commits, remote branch changes, and `.machinist/` edits
-before the controller proceeds.
+The controller keeps Git authority. Prompts tell the Harness not to use Git.
+Both workflows check Workshop/controller Git custody, commits, and protected
+`.machinist/` content before proceeding. Local Tasks also check local refs;
+legacy GitHub Phases check live remote-head postconditions. Foreground local
+Phases make no remote-head query before optional publication.
 
 ## Local lifecycle and optional publication
 
 `local_tasks.py` stores monotonic local IDs (`T1`), revision-checked records,
 operation Claims, and reports under `.machinist/runs/local/`. Imported issues
 are provenance; they do not determine local identity or grant Approval.
-`local_setup.py` supplies minimal runtime settings without forge setup.
+`local_setup.py` supplies minimal runtime settings without forge setup. First
+start copies applicable root configuration into
+`.machinist/runs/local/config.yaml`, then enforces required verification and
+Review, local Spec source, managed workflows off, telemetry endpoint unset,
+and an absolute Workshop root outside the repository. Later local commands
+read the saved copy; root changes do not propagate automatically. Runtime
+exclusion is local Git metadata, so adoption need not edit tracked files.
 
 `local_workflow.py` sends every Spec, Execute, and Review Task Run through
 `dispatch.py`, sharing the existing lifecycle, Evidence, Verification, and
 cancellation policies. Human Approval names the exact repository, Task, and
-Spec commit. Local Review always runs and remains advisory. A new Spec
+Spec commit. Baseline Verification Gates run before Spec generation; the Gate
+command must prepare dependencies absent from the committed Workshop. Local
+Review always runs and remains advisory. A new Spec
 invalidates Approval; a new successful Execute SHA permits a fresh Review.
 
 `local_workspace.py` provisions no-origin Workshops and retains controller-owned
 candidate refs before cleanup. Explicit integration records intent, checks the
 clean base/candidate identities and ancestry, and advances only by fast-forward.
-An interrupted operation reconciles the recorded intended result.
+An interrupted operation reconciles the recorded intended result. The starting
+named branch and commit define the integration base; dirty, changed-base,
+changed-candidate, and non-fast-forward states fail. A local amendment requires and starts
+from the previous completed reviewed candidate, invalidates Approval, and creates a new
+Spec; it is disallowed once integration has begun.
 
 `publication.py` consumes the completed local candidate independently from the
 machine Phases. It checks exact successful Execute and Review Evidence, binds
 the origin to `forge.py`/`gitlab.py`, and journals intended SHA and remote lease
 before pushing. PR/MR creation and retries preserve number, repository, branch,
 base, open state, and exact head. Publication failures leave the local candidate
-and Evidence intact. See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
+and Evidence intact. `forge.py` supplies the GitHub adapter and normalized
+publication contract; `gitlab.py` uses host-bound `glab` calls, including nested
+project paths and self-managed hosts. Imported issue numbers remain external
+provenance. They do not select publication origin or supply local Approval.
+Native GitLab Spec CI, GitLab remote Approval, and remote merge are out of scope.
+See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
 
 ## Deep policy seams
 
@@ -55,7 +76,7 @@ change custody, spend Harness time, or interpret durable state:
 | Claims, journals, and inventory | `lifecycle.py` | Current projections, append-only attempts, orphan classification, and corrupt-artifact meaning. Callers do not parse journal paths. |
 | Phase Task Run construction | `dispatch.py` | The only wiring point for Claims, Harnesses, Workshops, cancellation, verification, and Spec/Execute/Review functions. |
 | Pipeline transitions | `transitions.py` | State vocabulary, priority, dispatch eligibility, Task Run disposition, and next action. |
-| Repository and PR custody | `repository_custody.py` | One bound origin host/repository and exact same-repository PR identity checks. |
+| Repository and change custody | `repository_custody.py` for legacy GitHub; `local_workspace.py`, `publication.py`, and `forge.py` for optional delivery | Bind origin host/repository and verify exact PR/MR identity and candidate SHA. |
 | Verification Gates | `verification.py` | The sole required/advisory, timeout, cancellation, mutation, logging, and result implementation. |
 | Configuration behavior | `config.py` | Validated starter and effective projections; terminal rendering and atomic persistence live in `config_cli.py`. |
 
@@ -64,6 +85,8 @@ records and `machinist.yaml` remain compatible, and CLI text, JSON, and GitHub
 effects keep their existing contracts.
 
 ## Legacy GitHub lifecycle
+
+With `review.enabled: true`:
 
 ```text
 trigger label
@@ -89,12 +112,15 @@ approved ── EXECUTE + test gate succeeds ──► awaiting review
 Non-draft PR state outranks a leftover approval label, so a completed PR cannot
 be reclassified as executable.
 
-Review is a first-class `Phase.REVIEW`, not a callback inside Execute. Execute
+Review is a first-class `Phase.REVIEW`, not a callback inside Execute. When
+enabled for the legacy GitHub workflow, Execute
 records the exact delivered SHA and leaves the PR draft. Review provisions a
 clean read-only view of that head, evaluates the approved Spec, diff, and gate
 evidence, posts a bounded structured report, rechecks the head, and alone marks
 it ready. Findings are advisory; parse failure, mutation, cancellation, or head
-drift fails the Phase without an autonomous repair loop.
+drift fails the Phase without an autonomous repair loop. With legacy
+`review.enabled: false`, Execute marks the PR ready after its configured Gates;
+there is no independent Review guarantee. Local Review cannot be disabled.
 
 ## Legacy GitHub immutable Approval
 
@@ -127,14 +153,22 @@ than part of the parsed contract.
 
 ## Claims, Task Runs, and recovery
 
-`.machinist/runs/issue-<n>-<phase>.json` is the atomically written current-state
-projection. Each attempt also has append-only JSONL history under
-`.machinist/runs/history/`; controller checkpoints record intent before remote
-effects and the observed result afterward. Records include the phase, attempt,
+Legacy `.machinist/runs/issue-<n>-<phase>.json` is the atomically written
+current-state projection. Foreground Tasks use the same lifecycle format inside
+`.machinist/runs/local/`; the integer in these internal Phase filenames is the
+local Task number, not a GitHub issue ID. Local Task records and reports live
+in `.machinist/runs/local/tasks/`, with revision-checked atomic writes. Each
+attempt also has append-only JSONL history under
+`.machinist/runs/history/` for legacy issues or
+`.machinist/runs/local/history/` for foreground Tasks. Controller checkpoints
+record intent before side effects and the observed result afterward. Records
+include the phase, attempt,
 timestamps, status, error, harness profile, duration, current named stage,
 progress heartbeat, deviations, and reconciliation evidence. A local `flock`
-plus an in-process guard prevents overlapping work for one issue on a single
-host. It is not a distributed GitHub claim.
+plus an in-process guard prevents overlapping Phases within a repository/run
+namespace. The guard keys on the canonical runtime directory and Task number,
+so `T1` and legacy issue 1 do not collide. Local Task operations also hold a
+per-Task operation Claim. These Claims are not distributed coordination.
 
 Task Run states are `running`, `succeeded`, `failed`, `retryable`, `cancelled`,
 and `abandoned`. Explicit recovery moves an interrupted or unsuccessful record
@@ -143,23 +177,30 @@ survive a crash and preserve the approved SHA and pushed implementation SHA as
 recovery evidence. Execute recovery with
 `machinist retry <issue> --phase execute --run --resume` validates and reuses
 the retained managed workspace; the same command with `--fresh` provisions
-another attempt from the approved head. Fresh is the default when neither
-recovery flag is supplied.
+another attempt from the approved head. Fresh is the legacy default when
+neither recovery flag is supplied. Foreground
+`machinist retry --task T1 --phase execute` immediately resumes retained edits
+by default; `--fresh` selects a new Workshop. Successful committed work is
+reconciled from Evidence rather than repeating the Harness or successful Gates.
 
-Cancellation requests and queue controls are separate durable admission
-records. `machinist cancel` cooperatively stops supervised process groups and
+Cancellation requests and legacy watcher queue controls are separate durable
+records. Local cancellation is namespaced under `.machinist/runs/local/` and
+uses the explicit `--task` selector. `machinist cancel` cooperatively stops supervised process groups and
 blocks a later watcher dispatch until cleared. Queue pause/defer controls only
 new admissions; it does not interrupt an active claim. Malformed control state
 fails closed rather than silently admitting work.
 
-A successful Spec is regenerated only through the `--revise` mode of
+A successful legacy GitHub Spec is regenerated only through the `--revise` mode of
 `machinist spec <issue>`, which updates its existing branch and draft PR. The
 `--abandon` mode records rejection, removes lifecycle labels, and closes an open
 draft PR without merging it.
 
-A ready PR can be reworked with `machinist amend <issue> --feedback ...` only
+A ready legacy GitHub PR can be reworked with `machinist amend <issue> --feedback ...` only
 after its current head is approved again. Amend always starts from the approved
-remote head. Explicit feedback is bounded and recorded with Execute evidence.
+remote head. Explicit feedback is bounded and recorded with Execute Evidence.
+The dispatcher permits a fresh Review after the successful Execute SHA changes
+and clears stale findings/comment Evidence for that attempt. It does not repeat
+a successful Review of the same SHA.
 
 ## Verification and process supervision
 
@@ -200,18 +241,22 @@ diagnostics; it is not a sandbox or permission boundary.
 
 ## Reporting boundary
 
-Local JSONL history is reduced to aggregate outcomes, phase/status series,
+`machinist report` reduces locally stored legacy issue JSONL history to
+aggregate outcomes, phase/status series,
 duration percentiles, gate-failure statuses, safe Harness/model identity, and
 declared structured token counts. Network export lives in a separate module
 that accepts only the aggregate report. Its OTLP/HTTP JSON projector constructs
 an allowlist of repository, phase, status, Harness, and model attributes; it
 cannot serialize issue bodies, prompts, diffs, commands, errors, environment
 values, or arbitrary Evidence. Export is disabled without explicit config or a
-command flag.
+command flag. It does not aggregate the nested local Task namespace. Foreground
+Tasks instead expose status JSON, saved Phase Evidence, and a Markdown report;
+local configuration requires telemetry export to remain disabled.
 
 ## Dispatch sources and admission
 
-Every local claimed Phase enters through `TaskDispatcher`. Click commands keep
+Every claimed Phase in either workflow enters through `TaskDispatcher`. Click
+commands keep
 argument validation, output, notifications, and daemon presentation; watcher,
 retry-now, amendment, and direct Spec/Execute/Review paths share the same Task
 Run construction.
@@ -222,13 +267,21 @@ installed package version into managed workflow files; `--check` and `doctor`
 report drift without writing.
 
 Watcher admission combines durable queue pause/deferral state, optional allowed
-hours, optional daily Task/runtime budgets, and a per-pass maximum. The
+hours, optional daily Task Run/runtime budgets, and a per-pass maximum.
+`max_runs_per_day` counts individual Phase attempts and accepts the older
+`max_tasks_per_day` spelling as an input alias. These watcher controls do not
+govern foreground local Tasks. The
 `watch --dry-run` command evaluates these controls and reports eligibility
 without claiming or dispatching a Task.
 
 The optional repository registry contains canonical local roots only.
-`status --all` reads each repository's local Task Run evidence independently;
-one missing or corrupt repository does not erase healthy repository results.
+`status --all` reads each repository's locally stored legacy issue-run Evidence
+independently; one missing or corrupt repository does not erase healthy
+repository results. It does not include foreground `T1` records. A checkout with
+local configuration routes default `status` to local Tasks; `runs`, `inspect`,
+`explain`, `doctor`, `clean`, and aggregate reports retain legacy scope.
+`config` defaults to root `machinist.yaml`, with `--path` required to inspect or
+change the foreground local configuration.
 
 On macOS, the managed service is one per-repository LaunchAgent. It schedules
 `machinist watch --once`, sets the repository working directory, uses an
@@ -259,8 +312,8 @@ markers, `info/attributes`, `info/exclude`, `info/grafts`,
 `objects/info/alternates`, `shallow`, `refs/replace`, and every hook.
 
 **A worktree Workshop shares metadata with your own repository.** A Git
-worktree gets its own `HEAD`, index, and refs; `config`, `hooks/`, `info/`,
-and `objects/` belong to the parent. So under `workspace.strategy: worktree`
+worktree gets its own `HEAD`, index, and per-worktree refs; branch refs,
+`config`, `hooks/`, `info/`, and `objects/` belong to the parent. So under `workspace.strategy: worktree`
 the watched config is the one you edit yourself. Under
 `workspace.strategy: clone` the Workshop owns all of it.
 
@@ -270,7 +323,7 @@ That distinction sets how each file is compared:
 | --- | --- |
 | Config files shared with your repository | By sensitive key |
 | Config files the Workshop owns | Byte for byte |
-| Hooks, `info/`, `objects/`, `refs/replace` | Byte for byte |
+| Fingerprinted hooks, `info/`, object alternates, and `refs/replace` | Byte for byte |
 
 A shared config file trips the guard only when a change touches a key that can
 execute a program, name a path Git will trust, or redirect the network.
@@ -292,12 +345,17 @@ See [the trust model](trust-model.md) for the full key list and
 
 ## Push safety
 
-Implementation pushes use `--force-with-lease` against the approved SHA. If the
-remote spec branch changes while the harness works, the push fails instead of
+Legacy GitHub implementation pushes use `--force-with-lease` against the
+approved SHA. If the remote spec branch changes while the harness works, the push fails instead of
 overwriting the new head. AgentMachinist then retains the failed workspace and
 Task Run for diagnosis.
 
-GitHub credentials are scoped to controller-owned network subprocesses only:
+Optional local publication leases against its persisted remote expectation,
+refuses unowned branches, and binds exactly one origin URL without URL rewrites
+or a separate push URL. GitHub/`gh` and GitLab/`glab` provide credentials for
+explicit controller publication; a local Task before publication needs neither.
+
+Controller-provided forge credentials are scoped to its network subprocesses:
 clone, fetch, `ls-remote`, and push. Managed workflows check out with
 persisted Git credentials disabled, and the controller never exposes its token
 to coding harnesses or verification gates.

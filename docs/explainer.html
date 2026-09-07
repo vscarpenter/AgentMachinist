@@ -3,10 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A one-minute visual explanation of AgentMachinist's issue-to-reviewable-PR workflow, human Approval gate, verification, and recovery boundaries.">
+  <meta name="description" content="A one-minute illustration of AgentMachinist's local Task workflow: exact Spec Approval, verification, advisory Review, explicit integration, and optional GitHub or GitLab publication. Unreleased source workflow.">
   <meta name="theme-color" content="#090d13">
   <link rel="canonical" href="https://agentmachinist.vinny.dev/explainer.html">
-  <title>AgentMachinist — System Explainer Video</title>
+  <meta property="og:title" content="AgentMachinist — the local workflow in one minute">
+  <meta property="og:description" content="From a local Task to a reviewed candidate, with exact human Approval and optional GitHub or GitLab publication. Unreleased source workflow.">
+  <meta property="og:url" content="https://agentmachinist.vinny.dev/explainer.html">
+  <meta name="twitter:card" content="summary">
+  <title>AgentMachinist — the local workflow in one minute</title>
   <style>
     :root {
       --bg: #090d13;
@@ -61,7 +65,8 @@
     .video-frame {
       width: 100%;
       max-width: 960px;
-      aspect-ratio: 16 / 9;
+      aspect-ratio: auto;
+      min-height: 620px;
       background: #0d121b;
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -122,6 +127,7 @@
     /* Screen / Stage Area */
     .stage {
       flex: 1;
+      min-height: 430px;
       position: relative;
       display: flex;
       align-items: center;
@@ -211,7 +217,7 @@
       border-radius: var(--radius);
       padding: 1.5rem;
     }
-    .card-pain h3 {
+    .card-pain h2 {
       color: #f87171;
       font-size: 1.1rem;
       margin-bottom: 0.75rem;
@@ -244,7 +250,7 @@
       border-radius: var(--radius);
       padding: 1.5rem;
     }
-    .card-solution h3 {
+    .card-solution h2 {
       color: #4ade80;
       font-size: 1.1rem;
       margin-bottom: 0.75rem;
@@ -421,7 +427,7 @@
       font-size: 1.2rem;
       line-height: 1;
     }
-    .safety-text h4 {
+    .safety-text h2 {
       font-size: 0.88rem;
       color: var(--ink);
       margin-bottom: 0.15rem;
@@ -440,7 +446,7 @@
       flex-direction: column;
       justify-content: space-between;
     }
-    .adapters-box h4 {
+    .adapters-box h2 {
       font-size: 0.9rem;
       color: var(--blue);
       margin-bottom: 0.75rem;
@@ -691,7 +697,21 @@
         flex: 0 0 auto;
       }
     }
+    .release-note { width: min(100%, 960px); margin-top: 1rem; color: var(--ink-muted); font-size: 0.85rem; line-height: 1.6; }
+    .release-note a { color: var(--blue); text-underline-offset: 0.2em; }
+    .release-note a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+    .release-note nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem; margin-top: 0.5rem; }
+    .release-note nav a { display: inline-flex; align-items: center; min-height: 44px; }
+    .safety-icon svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+    .install-box { max-width: 100%; overflow-wrap: anywhere; }
+    .term-sim-body { overflow-wrap: anywhere; }
   </style>
+  <noscript><style>
+    .video-frame { aspect-ratio: auto; }
+    .stage { display: block; }
+    .scene { position: static; opacity: 1; visibility: visible; transform: none; }
+    .playback-controls, .caption-bar, .hud-timer { display: none; }
+  </style></noscript>
 </head>
 <body>
 
@@ -706,7 +726,7 @@
           <path d="M10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8"/>
         </svg>
         <span>AgentMachinist</span>
-        <span class="hud-badge">v0.13.0</span>
+        <span class="hud-badge">Source preview</span>
       </div>
       <div class="hud-scene-title" id="hud-scene-name">Scene 1 · Introduction</div>
       <div class="hud-timer" id="hud-time">00:00 / 01:00</div>
@@ -717,9 +737,9 @@
       <!-- Scene 1: Intro -->
       <section class="scene active" id="scene-1">
         <div class="scene-title-wrapper">
-          <div class="title-eyebrow">⚡ Local-First Issue-to-PR Pipeline</div>
-          <h1>Machining GitHub Issues Into Reviewable Pull Requests</h1>
-          <p class="lead">Connect GitHub issues to coding harnesses through a human Approval bound to the exact Spec head before implementation starts.</p>
+          <div class="title-eyebrow">Local Task → reviewed candidate</div>
+          <h1>One Task.<br>A reviewed local change.</h1>
+          <p class="lead">A foreground workflow for solo developers and small teams. Keep the change local, or publish a GitHub PR or GitLab MR when useful.</p>
           <div class="harness-pills">
             <span class="harness-pill">Claude Code</span>
             <span class="harness-pill">OpenCode</span>
@@ -733,21 +753,21 @@
       <section class="scene" id="scene-2">
         <div class="problem-grid">
           <div class="card-pain">
-            <h3>Uncontrolled AI Agents</h3>
+            <h2>Decisions you keep</h2>
             <ul>
-              <li>Hallucinate unwanted architecture changes</li>
-              <li>Push unverified commits directly to main</li>
-              <li>Break existing test suites without warning</li>
-              <li>Lack clear checkpoint between planning and coding</li>
+              <li>Describe one bounded, useful change</li>
+              <li>Read and approve the exact Spec commit</li>
+              <li>Inspect the candidate diff and Review findings</li>
+              <li>Choose local integration or optional publication</li>
             </ul>
           </div>
           <div class="card-solution">
-            <h3>The Machinist Guardrails</h3>
+            <h2>Work the controller coordinates</h2>
             <ul>
-              <li>Generates a draft Spec PR before implementation</li>
-              <li>Requires human approval bound to exact commit SHA</li>
-              <li>Executes inside isolated Git worktrees</li>
-              <li>Runs every configured verification gate before independent review</li>
+              <li>Verify the baseline before Spec generation</li>
+              <li>Retain a local Spec and enforce exact Approval</li>
+              <li>Implement inside an isolated Workshop</li>
+              <li>Run Verification Gates and independent Review</li>
             </ul>
           </div>
         </div>
@@ -759,28 +779,28 @@
           <div class="pipeline-steps">
             <div class="pipeline-step" id="p-step-1">
               <span class="step-num">01</span>
-              <div class="step-title">Trigger</div>
-              <div class="step-desc">Issue labeled <code>agent-task</code> with clear criteria</div>
+              <div class="step-title">Start a Task</div>
+              <div class="step-desc">Local objective or explicit GitHub/GitLab issue import</div>
             </div>
             <div class="pipeline-step" id="p-step-2">
               <span class="step-num">02</span>
-              <div class="step-title">Spec Plan</div>
-              <div class="step-desc">Harness writes plan to Draft PR without code changes</div>
+              <div class="step-title">Save the Spec</div>
+              <div class="step-desc">Baseline passes; a read-only Harness plans; the exact Spec is saved</div>
             </div>
             <div class="pipeline-step" id="p-step-3">
               <span class="step-num">03</span>
-              <div class="step-title">SHA Approval</div>
-              <div class="step-desc">Human approves exact commit SHA</div>
+              <div class="step-title">Exact Approval</div>
+              <div class="step-desc">Human reads the Spec and approves its full commit SHA</div>
             </div>
             <div class="pipeline-step" id="p-step-4">
               <span class="step-num">04</span>
-              <div class="step-title">Build & Review</div>
-              <div class="step-desc">Harness implements; tests pass; independent Review readies the exact head</div>
+              <div class="step-title">Build + Review</div>
+              <div class="step-desc">Implement, verify, and record advisory Review of the exact candidate</div>
             </div>
           </div>
           <div class="pipeline-callout">
-            <span class="callout-rule">🔒 Absolute Invariant: AgentMachinist NEVER clicks merge.</span>
-            <span class="callout-sub">Final review and merge stay with you.</span>
+            <span class="callout-rule">You choose: integrate locally or publish a PR/MR.</span>
+            <span class="callout-sub">Clean, exact-base fast-forward only. No automatic or remote merge.</span>
           </div>
         </div>
       </section>
@@ -792,28 +812,19 @@
             <span class="term-dot r"></span>
             <span class="term-dot y"></span>
             <span class="term-dot g"></span>
-            <span class="term-sim-title">bash — machinist operator loop</span>
+            <span class="term-sim-title">terminal — illustrated local journey</span>
           </div>
-          <div class="term-sim-body" id="term-content"><span class="c-prompt">$</span> <span class="c-cmd">machinist spec 42</span>
-<span class="c-dim">... reading issue #42: "Add CSV export for filtered rows"</span>
-<span class="c-ok">✓</span> Created draft PR #18 with .machinist/specs/issue-42-spec.md
-<span class="c-dim">... awaiting human review and approval</span>
-
-<span class="c-prompt">$</span> <span class="c-cmd">machinist approve --issue 42</span>
-<span class="c-dim">... approval requested; workflow checking write access and current head</span>
-<span class="c-ok">✓</span> Approval recorded for <span class="c-blue">a17c98d42e6f</span> by @operator
-
-<span class="c-prompt">$</span> <span class="c-cmd">machinist run 42</span>
-<span class="c-dim">... provisioned worktree ~/.machinist/workspaces/repo-issue-42</span>
-<span class="c-dim">... claude-code implemented requirements</span>
-<span class="c-dim">... running test gate: uv run pytest</span>
-<span class="c-ok">✓</span> 185 passed in 4.2s (quality gate passed!)
-<span class="c-ok">✓</span> Pushed with lease; PR #18 remains DRAFT
-
-<span class="c-prompt">$</span> <span class="c-cmd">machinist review 42</span>
-<span class="c-dim">... independent Review comparing Spec, diff, and verification Evidence</span>
-<span class="c-ok">✓</span> Advisory report posted for the unchanged head
-<span class="c-ok">✓</span> Converted PR #18 to READY FOR REVIEW</div>
+          <div class="term-sim-body" id="term-content"><span class="c-dim"># Illustrative output; this page performs no work.</span>
+<span class="c-prompt">$</span> <span class="c-cmd">machinist start "Handle an invalid timezone without crashing"</span>
+<span class="c-ok">✓</span> Baseline verified; read the saved Spec for T1.
+<span class="c-prompt">$</span> <span class="c-cmd">machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;</span>
+<span class="c-ok">✓</span> Execute, Verification Gates, and independent Review completed.
+<span class="c-dim"># Findings are advisory. Inspect the report and candidate diff.</span>
+<span class="c-prompt">$</span> <span class="c-cmd">machinist integrate T1</span>
+<span class="c-ok">✓</span> Clean expected base fast-forwarded to the reviewed candidate.
+<span class="c-dim"># Optional: matching origin and authenticated glab required.</span>
+<span class="c-prompt">$</span> <span class="c-cmd">machinist publish T1 --provider gitlab</span>
+<span class="c-ok">✓</span> Exact MR head verified; remote merge remains your decision.</div>
         </div>
       </section>
 
@@ -822,33 +833,33 @@
         <div class="safety-grid">
           <div class="safety-features">
             <div class="safety-item">
-              <span class="safety-icon">🛡️</span>
+              <span class="safety-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></svg></span>
               <div class="safety-text">
-                <h4>Credential Stripping</h4>
-                <p>GitHub tokens and SSH sockets are scrubbed from harness environments.</p>
+                <h2>Custody checks</h2>
+                <p>Reduced credentials and protected Git metadata detect violations. This is not an OS sandbox.</p>
               </div>
             </div>
             <div class="safety-item">
-              <span class="safety-icon">🌿</span>
+              <span class="safety-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 6v12M6 10h6a6 6 0 0 0 6-6"/><circle cx="6" cy="4" r="2"/><circle cx="6" cy="20" r="2"/><circle cx="18" cy="3" r="2"/></svg></span>
               <div class="safety-text">
-                <h4>Isolated Worktrees</h4>
-                <p>Builds happen in managed worktrees; failed runs retain Evidence for inspection.</p>
+                <h2>Recoverable local work</h2>
+                <p>Failed runs retain Evidence and need explicit retry. Amendments need a new Spec, Approval, and Review.</p>
               </div>
             </div>
             <div class="safety-item">
-              <span class="safety-icon">🔑</span>
+              <span class="safety-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="5"/><path d="m12 13 8 8m-4-4 3-3m-1 5 3-3"/></svg></span>
               <div class="safety-text">
-                <h4>Leased Pushes</h4>
-                <p>Pushes refuse if remote heads have diverged, preventing lost work.</p>
+                <h2>Optional publication</h2>
+                <p>GitHub PRs and GitLab MRs use origin binding and leased pushes. Repeating publication reuses successful local work.</p>
               </div>
             </div>
           </div>
           <div class="adapters-box">
-            <h4>Pluggable Coding Harnesses</h4>
+            <h2>Choose one Harness</h2>
             <div class="adapter-tags">
               <div class="adapter-tag"><span>Claude Code</span><span class="c-blue">Anthropic CLI</span></div>
               <div class="adapter-tag"><span>OpenCode</span><span class="c-ok">Open Source</span></div>
-              <div class="adapter-tag"><span>Codex</span><span class="c-warn">Sandbox CLI</span></div>
+              <div class="adapter-tag"><span>Codex</span><span class="c-warn">Coding CLI</span></div>
               <div class="adapter-tag"><span>Pi</span><span class="c-blue">Lightweight</span></div>
             </div>
           </div>
@@ -858,11 +869,11 @@
       <!-- Scene 6: Get Started -->
       <section class="scene" id="scene-6">
         <div class="outro-card">
-          <h2>Ready to make the first cut?</h2>
-          <p>Install from PyPI, configure a real verification gate, and prove readiness before the first Task.</p>
+          <h2>Try one small Task.</h2>
+          <p>This journey is unreleased. Install from the AgentMachinist source checkout, then run machinist start in your own clean repository with a working verification command.</p>
           <div class="install-box">
             <span class="prompt">$</span>
-            <code>uv tool install agentmachinist &amp;&amp; machinist onboard &amp;&amp; machinist doctor --run-gates</code>
+            <code>uv tool install --editable .</code>
           </div>
         </div>
       </section>
@@ -870,8 +881,8 @@
 
     <!-- Bottom Caption Bar -->
     <div class="caption-bar" aria-live="polite">
-      <span class="caption-pill" id="caption-tag">VOICEOVER</span>
-      <div class="caption-text" id="caption-text">Welcome to AgentMachinist: the issue-to-reviewed-PR build pipeline for solo developers.</div>
+      <span class="caption-pill" id="caption-tag">CAPTION</span>
+      <div class="caption-text" id="caption-text">A local Task, an exact human-approved Spec, and a reviewed candidate. Publication is optional.</div>
     </div>
 
     <!-- Playback Controls -->
@@ -886,51 +897,57 @@
         <button class="scene-btn active" type="button" data-scene="1" aria-pressed="true">1. Intro</button>
         <button class="scene-btn" type="button" data-scene="2" aria-pressed="false">2. Guardrails</button>
         <button class="scene-btn" type="button" data-scene="3" aria-pressed="false">3. Assembly line</button>
-        <button class="scene-btn" type="button" data-scene="4" aria-pressed="false">4. Live demo</button>
+        <button class="scene-btn" type="button" data-scene="4" aria-pressed="false">4. CLI example</button>
         <button class="scene-btn" type="button" data-scene="5" aria-pressed="false">5. Safety</button>
-        <button class="scene-btn" type="button" data-scene="6" aria-pressed="false">6. Launch</button>
+        <button class="scene-btn" type="button" data-scene="6" aria-pressed="false">6. Start</button>
       </div>
     </footer>
   </div>
+
+  <aside class="release-note" aria-label="Availability and scope">
+    <p><strong>Unreleased source workflow.</strong> The published release remains <strong>0.13.0</strong>. This is an animated illustration, not a live Harness or hosted publication demonstration. <code>machinist rehearse</code> runs the production local path in a temporary repository with a deterministic fake Harness.</p>
+    <p>GitLab support covers issue import and MR publication, including nested projects and explicit self-managed hosts. It does not include hosted GitLab Spec CI or remote GitLab Approval. A local model requires separate configuration and offline validation.</p>
+    <nav aria-label="Related documentation"><a href="index.html">How it works</a><a href="local-workflow.md">Local workflow</a><a href="first-run-guide.html">First-run guide</a><a href="getting-started.md#github-setup-and-automation">Existing GitHub workflow</a><a href="trust-model.md">Trust model</a></nav>
+  </aside>
 
   <script>
     (() => {
       const scenes = [
         {
           id: 1,
-          name: "Scene 1 · Introduction",
-          duration: 7000,
-          caption: "Welcome to AgentMachinist: the local-first, issue-to-reviewed-PR pipeline built specifically for solo developers."
+          name: "Scene 1 · A local workflow",
+          duration: 8000,
+          caption: "Start with a local Task. AgentMachinist coordinates one Harness around an exact approved Spec and a reviewed candidate. GitHub and GitLab are optional."
         },
         {
           id: 2,
-          name: "Scene 2 · Why Guardrails Matter",
-          duration: 7500,
-          caption: "Uncontrolled coding agents can make unwanted changes or push unsafe commits. AgentMachinist places a fail-closed human checkpoint between planning and coding."
+          name: "Scene 2 · Human decisions, machine Phases",
+          duration: 9000,
+          caption: "You define the objective, approve the Spec, and inspect the result. The controller checks the baseline, preserves commits, runs verification, and records independent Review."
         },
         {
           id: 3,
-          name: "Scene 3 · The Guarded Assembly Line",
-          duration: 8000,
-          caption: "Every Task moves through a visible trigger, draft Spec, exact human Approval, verified execution, and independent Review."
+          name: "Scene 3 · From Task to reviewed candidate",
+          duration: 11000,
+          caption: "Start stops at the saved Spec. Exact-SHA Approval continues Execute, verification, and advisory Review. Integration and publication remain separate explicit choices."
         },
         {
           id: 4,
-          name: "Scene 4 · Live CLI Walkthrough",
-          duration: 8500,
-          caption: "From `machinist spec` through `machinist review`: implementation stays isolated, verification is authoritative, and the exact delivered head is reviewed independently."
+          name: "Scene 4 · Illustrated CLI journey",
+          duration: 14000,
+          caption: "Inspect the completed report and diff before integrate. Publication can happen before or after local integration; GitHub uses gh, and GitLab uses glab. This output is illustrative."
         },
         {
           id: 5,
-          name: "Scene 5 · Safety Boundary & Adapters",
-          duration: 7000,
-          caption: "Reduced controller credentials, leased pushes, and first-class support for Claude Code, OpenCode, Codex, and Pi."
+          name: "Scene 5 · Recovery and trust boundaries",
+          duration: 10000,
+          caption: "Failed Phases need explicit retry. A completed candidate can be amended with fresh Approval and Review. Local orchestration may still use cloud models; custody checks are not an OS sandbox."
         },
         {
           id: 6,
-          name: "Scene 6 · Get Started",
-          duration: 7000,
-          caption: "Install AgentMachinist 0.13.0 from PyPI, configure verification, and run `machinist doctor --run-gates` before the first Task."
+          name: "Scene 6 · Start from source",
+          duration: 8000,
+          caption: "The local journey and GitLab support are unreleased checkout changes. Install from source to try them. Published version 0.13.0 retains the existing GitHub workflow."
         }
       ];
 
@@ -977,7 +994,8 @@
 
         // Pipeline animation highlight in scene 3
         if (s.id === 3) {
-          const stepIndex = Math.min(3, Math.floor(((elapsedTime % s.duration) / s.duration) * 4));
+          const sceneStart = scenes.slice(0, currentSceneIndex).reduce((sum, scene) => sum + scene.duration, 0);
+          const stepIndex = Math.min(3, Math.floor(((elapsedTime - sceneStart) / s.duration) * 4));
           for (let i = 1; i <= 4; i++) {
             const stepEl = document.getElementById(`p-step-${i}`);
             if (stepEl) stepEl.classList.toggle('highlight', i === stepIndex + 1);
@@ -1012,6 +1030,7 @@
       }
 
       function play() {
+        if (elapsedTime >= totalDuration) goToScene(0);
         isPlaying = true;
         playBtn.setAttribute('aria-label', 'Pause explainer');
         playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
@@ -1039,6 +1058,7 @@
       function seekTo(ratio) {
         ratio = Math.max(0, Math.min(1, ratio));
         elapsedTime = ratio * totalDuration;
+        currentSceneIndex = scenes.length - 1;
         let cumulative = 0;
         for (let i = 0; i < scenes.length; i++) {
           cumulative += scenes[i].duration;
@@ -1072,6 +1092,7 @@
         }
       });
 
+      updateUI();
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         updateUI();
       } else {

@@ -6,9 +6,15 @@ Status: Accepted
 
 Deciders: Vinny Carpenter through approval of the reviewed implementation roadmap.
 
+Implementation status: complete in source, unreleased. Follow the
+[local workflow guide](../local-workflow.md) for installation and commands,
+the [architecture](../architecture.md) for ownership and recovery, and the
+[trust model](../trust-model.md) for enforcement limits.
+
 ## Context
 
-GitHub supplies Task identity, Approval and delivery even for local computation.
+Previously, GitHub supplied Task identity, Approval and delivery even for local
+computation.
 Solo adoption needs a local result before forge setup; teams need optional GitHub
 or GitLab collaboration without repeating machine work after a publication error.
 

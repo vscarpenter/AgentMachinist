@@ -1,3 +1,34 @@
+# Complete documentation reconciliation (COMPLETE)
+
+Scope: update every current guide and rendered page in `docs/` for the approved
+local workflow, adoption/amendment fixes, optional publication, and GitLab.
+Preserve earlier design records with clear applicability notes and current links.
+No product contract, release, or deployment change is included.
+
+- [x] Inventory every document and compare current CLI and lifecycle behavior.
+- [x] Reconcile Markdown references, all five HTML pages, index, and decision records.
+- [x] Update documentation drift checks and validate links and rendered interactions.
+- [x] Commit the complete documentation update and record verification evidence.
+
+Updated all 23 content documents: eighteen Markdown files and five HTML pages.
+Reviewed and preserved `CNAME` and `.nojekyll`. Earlier specs/plans retain their
+historical bodies with current applicability notes; current pages distinguish
+unreleased source capabilities from published 0.13.0.
+
+Verification: 30 documentation tests pass; Ruff formatting/lint and diff checks
+pass; three inline JavaScript programs pass Node syntax checks. Relative file,
+Markdown section, HTML section, and accessible control targets resolve. Browser
+checks at the default desktop viewport and 390px mobile width covered all five
+HTML pages, route selection, checklist/reset, copy-button feedback, simulation
+step/replay, explainer scene/keyboard-seek/replay, and onboarding redirect. Fixed
+desktop explainer command clipping found during that check.
+
+An independent source review corrected amendment eligibility, imported Task IDs,
+local configuration/history namespaces, custody scope, and provider-auth limits.
+No product source changed, so the earlier 1,411-test implementation gate remains
+the implementation evidence; this documentation-only pass used focused checks.
+No push, hosted deployment, package version bump, or release publication occurred.
+
 # Guided local workflow and GitLab (COMPLETE)
 
 Approved specification: `tasks/spec.md`. Plan:

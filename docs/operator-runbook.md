@@ -1,22 +1,92 @@
 # Operator runbook
 
+The foreground local workflow and GitLab integration are unreleased in this
+source checkout. The published release remains 0.13.0. See the
+[installation instructions](getting-started.md#install) for the distinction.
+
 ## Local foreground operation
 
 Use the [local workflow guide](local-workflow.md) for the complete no-forge
 journey. `machinist start` saves a local Task and stops at exact-SHA Approval;
-`machinist approve --task T1 --spec-sha <sha>` continues verification and
+`machinist approve --task T1 --spec-sha <sha>` continues Execute, verification, and
 independent Review. `machinist status T1` reports the next valid action without
 fetching forge state. Inspect the local report/diff before `machinist integrate T1`.
 
-Failed Phases require `machinist retry --task T1 --phase execute` (or Spec/Review);
-`--fresh` chooses a fresh Workshop. `machinist amend --task T1 --feedback <text>`
-generates a new Spec and invalidates Approval. After integration has begun,
-start a new Task from the current base instead of amending that Task.
+Start requires a clean named branch, initial commit, configured Git author,
+installed/authenticated Harnesses, and at least one required Verification Gate.
+Baseline verification runs in an isolated committed checkout before the Spec
+Harness; ignored dependencies must be prepared by the Gate command or provided
+externally. Local Review always runs.
+
+Failed Phases require `machinist retry --task T1 --phase execute` (or
+`--phase spec`/`--phase review`). Local retry runs immediately, clears
+cancellation, and resumes Execute edits by default; `--fresh` chooses a fresh
+Workshop. `continue T1` does not replace explicit retry or exact-SHA Approval. `machinist amend --task T1 --feedback <text>`
+requires a completed reviewed candidate, generates a new Spec, and invalidates
+Approval. Recover a failed Phase with retry first. Local amendment cannot revise
+an initial Spec awaiting Approval; start a new Task with corrected intent if
+you reject that Spec. After integration has begun, start a new Task from the
+current base instead of amending that Task.
 
 Publication is independent: `machinist publish T1 --provider gitlab` (or
 `github`) can retry an uncertain push or change creation without repeating the
 local Phases. Keep one persistent runner checkout per repository for a small
 team; local Claims and Task records are not multi-host coordination.
+GitLab supports nested namespaces and explicit self-managed hosts through
+`--host`; the host must match origin. Authenticate `glab` for that host; GitLab
+CI Spec dispatch and remote Approval are not implemented. Local orchestration
+can use a cloud model; it does not establish offline inference.
+
+### Local settings and Evidence
+
+First start saves applicable root settings once in
+`.machinist/runs/local/config.yaml`. Subsequent local commands use this copy:
+
+```sh
+machinist config show --path .machinist/runs/local/config.yaml
+machinist config validate --path .machinist/runs/local/config.yaml
+machinist config set tests.command "uv run pytest" --path .machinist/runs/local/config.yaml
+machinist status T1 --json
+machinist status T1 --watch --interval 2
+```
+
+The `tests.command` example applies to the single-Gate form; edit
+`verification.gates` when using named Gates. Shared schema validation does not
+replace the local constraints checked on load: required verification, Review
+enabled, local Spec source, managed workflows off, telemetry endpoint unset,
+and an absolute Workshop root outside the repository. Repair a baseline Gate
+failure here and run `machinist retry --task T1 --phase spec`. If the committed
+baseline itself needs a fix, commit it and start a new Task from the new base.
+
+Task records and reports are in `.machinist/runs/local/tasks/`; Phase projections
+and history are under `.machinist/runs/local/`. Local setup uses Git's local
+exclude file to keep runtime state untracked. Do not edit Task JSON or delete
+retained recovery Evidence. Review the report path printed by status; the
+candidate ref is `agent/task-1` for `T1` with the default branch prefix.
+
+If integration fails, resolve a dirty checkout or select the recorded base
+branch, then rerun `machinist integrate T1`. A changed base/candidate is a
+conflict requiring a new decision, not authorization to force a merge. Repeat
+an interrupted integration using its saved intent. For publication failures,
+repeat the same `publish` command; resolve pending publication before amending.
+
+### Command scope in mixed checkouts
+
+With local configuration present, `status` lists local Tasks; `status T1`
+selects one, and `--watch` follows local changes. It does not query GitHub.
+Legacy `runs`, `inspect`, `explain`, `report`, and portfolio `status --all`
+continue reading `.machinist/runs/` issue records; they do not aggregate local
+Tasks. `status --local` reads legacy records only when local configuration is
+absent. Use `runs` and `inspect` for legacy Evidence in a mixed checkout.
+
+Root `doctor` remains a GitHub setup preflight. `watch`, `queue`, service
+scheduling, admission budgets, and notifications belong to the legacy workflow;
+they do not govern foreground Tasks. `clean` manages legacy Workshops and has
+no `--task` selector. Local success cleanup follows `workspace.cleanup`; keep
+failed local Workshops until you have selected a recovery action.
+
+The remaining sections describe the legacy GitHub workflow unless explicitly
+stated otherwise.
 
 ## GitHub preflight
 
@@ -51,7 +121,7 @@ warning that no verification gates are configured is acceptable. A Task Run
 warning points to a failed or process-abandoned record that should be inspected
 and explicitly retried.
 
-## Run modes
+## GitHub run modes
 
 - Interactive: `machinist watch`
 - One scheduler-friendly pass: `machinist watch --once`
@@ -103,13 +173,17 @@ repeat the same failure or stale-approval alert every interval. Failed or
 filtered deliveries remain eligible for another attempt; a corrupt or
 unavailable ledger warns and fails open rather than suppressing an alert.
 
-## Admission control
+## GitHub watcher admission control
 
 The configured `queue.max_tasks_per_pass` limits each poll; the
 `watch --max-tasks <n>` option overrides it for one process. `watch --dry-run`
 reports eligible and deferred Tasks without claiming or dispatching them.
-Optional allowed hours and daily Task Run/runtime budgets are evaluated from local
-time and Task Run history.
+Optional allowed hours and daily Task Run/runtime budgets are evaluated from
+local time and legacy Task Run history. `queue.task_budget.max_runs_per_day`
+counts Phase attempts, not unique issues: Spec, Execute, and Review each count.
+The older `max_tasks_per_day` key loads as an alias with the same semantics;
+conflicting values are rejected. These controls do not cap foreground local
+work.
 
 Use durable operator controls for planned pauses:
 
@@ -125,11 +199,11 @@ Pause applies to all new dispatches; defer applies to one issue. Neither stops
 a Task that already holds a claim. Corrupt queue state fails closed and is
 reported by `queue show`/the watcher.
 
-## Observe
+## Observe legacy GitHub work
 
-`machinist status` shows `awaiting spec`, `awaiting approval`,
+In a checkout without local configuration, `machinist status` shows `awaiting spec`, `awaiting approval`,
 `approval pending`, `approval stale`, `approved`, `awaiting review`, and
-`in review`. Local
+`in review`. Locally persisted issue-run
 outcomes add `spec running`, `spec interrupted`, `spec failed`,
 `spec cancelled`, `spec abandoned`, `spec closed`, `execute running`,
 `execute interrupted`, `execute failed`, `execute cancelled`,
@@ -141,13 +215,14 @@ available. A `retryable` persistence state projects back to remote eligibility
 so the watcher can dispatch it; it is not shown as a second competing pipeline
 state.
 
-Local Task Run records are under `.machinist/runs/`. They are runtime state and
+Legacy issue Task Run records are under `.machinist/runs/`. They are runtime state and
 should remain ignored by Git. `machinist init` idempotently adds
 `/.machinist/runs/` to `.gitignore`, and `doctor` reports a failure if the rule
 is removed. Failed workspaces are retained by the default `cleanup: on_success`
 policy; the error prints their path.
 
-For complete or scriptable local evidence, use:
+For scriptable legacy Evidence (and default/live status when no local
+configuration is present), use:
 
 ```sh
 machinist explain 42 --json
@@ -158,7 +233,7 @@ machinist inspect 42 --offline --json
 machinist report --since 30d --json
 ```
 
-The local read model includes current/history records plus orphaned, partial,
+The legacy local read model includes current/history records plus orphaned, partial,
 and corrupt artifacts. Without `--offline`, inspection adds GitHub sources but
 still preserves readable local evidence when a remote source fails.
 
@@ -184,9 +259,10 @@ machinist status --all --json
 machinist repo remove /absolute/path/to/repository
 ```
 
-Portfolio status is deliberately local-only and isolates per-repository errors.
+Portfolio status reads locally persisted legacy issue-run Evidence, isolates
+per-repository errors, and does not include the foreground Task namespace.
 
-## Recover a failed task
+## Recover a failed GitHub issue Task
 
 1. Stop or let the current watcher pass finish.
 2. Inspect the Task Run error with `machinist inspect <issue>` or `machinist status -v`.
@@ -239,7 +315,7 @@ Git metadata. If you did not, treat the named keys as a custody incident:
 inspect the retained workspace, revert the metadata, and rotate any credential
 the changed keys could have reached before retrying.
 
-## Cancel or amend a task
+## Cancel or amend a GitHub issue Task
 
 To cooperatively terminate an active supervised harness/gate process and block
 future watcher dispatches for the issue:
@@ -267,11 +343,15 @@ machinist amend 42 --feedback-file review-notes.txt
 ```
 
 Exactly one of `--feedback` or `--feedback-file` is required. Amendment does
-not resume a retained failed workspace.
+not resume a retained failed Workshop or create a new Spec. A new successful
+Execute SHA can receive a fresh independent Review and findings; same-head
+successful Review is not repeated. This differs from local `amend --task`,
+which generates a new Spec and requires its Approval before Execute.
 
 ## Configuration operations
 
-Use read-only config inspection before changing the watcher:
+These commands default to root `machinist.yaml`. Use read-only config
+inspection before changing the GitHub watcher:
 
 ```sh
 machinist config validate
@@ -286,7 +366,7 @@ verification feedback loop, independent Review, telemetry, the test-deletion
 guard, notifications, admission budgets, and change limits are documented in the
 [getting-started reference](getting-started.md).
 
-## Approval incidents
+## GitHub Approval incidents
 
 - `approval pending`: inspect the managed approval workflow before requesting
   approval again. The label is visible, but trusted evidence for the current
@@ -303,8 +383,9 @@ guard, notifications, admission budgets, and change limits are documented in the
 - Existing installs must run `machinist sync-workflows` to pick up the actor
   check; `machinist doctor` reports the drift until they do.
 
-## Workspace cleanup
+## Legacy Workshop cleanup
 
+These commands select legacy issue Workshops, not foreground local Workshops.
 Inspect before deleting. You can list and prune managed workspaces directly:
 
 ```sh
@@ -324,7 +405,7 @@ git worktree prune
 Use `--force` only after confirming no useful uncommitted diagnosis remains.
 Clone-strategy workspaces are ordinary directories but deserve the same check.
 
-## Workflow changes
+## GitHub workflow changes
 
 After editing dispatcher ownership or labels:
 

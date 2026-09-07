@@ -12,8 +12,10 @@ the repository you want to change. The published 0.13.0 package retains the
 
 ## Complete one Task
 
-Start in a Git repository with an initial commit, a configured Git author, an
-installed Harness, and a verification command appropriate to the project:
+Start on a named branch in a clean Git repository with an initial commit, a
+configured Git author, an installed and authenticated Harness, and a
+verification command appropriate to the project. This checked-out branch and
+commit become the Task's integration base:
 
 ```sh
 machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
@@ -22,15 +24,37 @@ machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run
 First start discovers an installed Harness that supports the three Phases and
 detects a verification command when the project manifest provides one. Use
 `--harness codex` or another installed adapter to select it explicitly. Missing
-prerequisites produce a next action before model work begins. The local journey
-requires a real verification command; supply `--test-cmd` when detection cannot
-find one. Local Review always runs, even if an existing GitHub configuration
+Harness executables or a required Gate produce configuration guidance before
+model work. Setup does not probe provider login or model access; authenticate
+the Harness and configure Git author identity yourself before starting. Supply
+`--test-cmd` when detection cannot find a required verification command. Local Review always runs, even if an existing GitHub configuration
 disabled its optional Review Phase.
 
-Local settings are stored in `.machinist/runs/local/config.yaml`. Runtime files
-are excluded through Git's local exclude file. A pre-existing `machinist.yaml`
-continues to provide repository settings; first start does not overwrite it or
-generate GitHub workflows, labels, or issue forms.
+Local settings are stored in `.machinist/runs/local/config.yaml`. First start
+copies applicable settings from a pre-existing `machinist.yaml`, then sets
+local Spec dispatch, disables managed workflows and telemetry export, and
+enables Review. Subsequent local commands read the saved local configuration;
+changes to the root file do not automatically propagate. Runtime files are
+excluded through Git's local exclude file. Setup preserves the root config and
+does not generate GitHub workflows, labels, or issue forms.
+
+To inspect or change these settings, target the local file explicitly:
+
+```sh
+machinist config show --path .machinist/runs/local/config.yaml
+machinist config set tests.command "uv run pytest" --path .machinist/runs/local/config.yaml
+machinist config validate --path .machinist/runs/local/config.yaml
+```
+
+The `tests.command` example applies when you use the single Gate. If you have
+named `verification.gates`, edit those entries instead; the two forms cannot
+be combined. Local commands require at least one required Gate,
+`review.enabled: true`, `github.spec_source: local`,
+`github.manage_workflows: false`, `telemetry.otlp_endpoint: null`, and an
+absolute Workshop root outside the repository. Generic config validation
+checks the shared schema; local commands also check these local constraints.
+Later `start --harness` or `--test-cmd` flags must agree with the saved settings;
+change the local file to change them.
 
 The verification command must work in an isolated checkout of committed files.
 An existing `node_modules/`, `.venv/`, or other ignored dependency directory in
@@ -73,8 +97,15 @@ machinist status T1
 machinist status T1 --json
 ```
 
-Status shows the current result and one next action. Inspect the report and
-diff before accepting the change. To integrate it locally:
+Status shows the Spec text, exact commits, report path, and one next action.
+`status T1 --json` also includes saved publication and integration results.
+Without an ID, `machinist status` lists local Tasks once this checkout has local
+configuration; `machinist status T1 --watch --interval 2` shows changed
+snapshots. Local status does not query the forge.
+
+The candidate is retained on `<branch_prefix>task-1` (`agent/task-1` by
+default). Inspect the report at the printed path and the diff from your recorded
+base to the candidate before accepting it. To integrate it locally:
 
 ```sh
 machinist integrate T1
@@ -104,7 +135,12 @@ machinist start --from-issue https://gitlab.com/team/subgroup/project/-/issues/4
 machinist start --from-issue https://gitlab.example.com/team/project/-/issues/42 --provider gitlab --host gitlab.example.com
 ```
 
-GitHub uses `gh`; GitLab uses `glab`, authenticated for the selected host. Local
+GitHub uses `gh`; GitLab uses `glab`. Authenticate for the selected host before
+importing, for example `gh auth login --hostname github.com` or
+`glab auth login --hostname gitlab.example.com`. Import accepts HTTPS issue URLs
+without credentials, query strings, or fragments. `--host`, when supplied,
+must match the URL. `--from-issue` cannot be combined with an objective or body
+file. Local
 Task IDs remain independent of issue numbers: imported issue 42 can become
 `T1`. The external source is saved as provenance. Importing an issue does not
 install automation or turn remote labels/reviews into local Approval.
@@ -118,7 +154,10 @@ lint or publication fails so corrections do not require retyping the Task.
 
 ## Amend or recover
 
-An amendment starts with explicit feedback and produces a new Spec:
+Amendment requires a completed, verified and reviewed candidate. It cannot
+revise an initial Spec awaiting Approval; if you reject that Spec, start a new
+Task with corrected intent. Supply feedback on a completed candidate to produce
+a new Spec:
 
 ```sh
 machinist amend --task T1 --feedback "Also show which timezone value was rejected."
@@ -126,8 +165,8 @@ machinist amend --task T1 --feedback "Also show which timezone value was rejecte
 ```
 
 The earlier Approval cannot authorize the new Spec. Prior candidate and Task
-Run history remain available. A later successful Execute can receive a fresh
-Review; repeating Review of the same successful candidate remains blocked.
+Run history remain available. A later successful Execute receives a fresh
+Review; continuing the same successful candidate does not repeat that Review.
 Once local integration has begun, start a new Task from the current base
 instead of amending the integrated Task.
 
@@ -141,7 +180,10 @@ machinist retry --task T1 --phase execute --fresh
 machinist retry --task T1 --phase review
 ```
 
-Retry validates retained Workshop custody. Recovery after the implementation
+Local retry runs immediately in the foreground and requires the current failed
+Phase. Execute retry resumes retained edits by default; `--fresh` selects a
+new Workshop. It clears a cancellation marker and validates retained Workshop
+custody before reuse. Recovery after the implementation
 commit uses the saved result instead of repeating successful implementation or
 verification. `machinist continue T1` advances eligible work or reports the next
 human action; it does not grant Approval or replace explicit retry.
@@ -157,14 +199,22 @@ use the recovery action shown by status before continuing.
 ## Publish when useful
 
 The completed candidate can remain local, be integrated locally, or be shared
-through a forge. Configure a single origin matching the intended repository
-and authenticate `gh` or `glab` for that host:
+through a forge. Configure exactly one origin URL matching the intended
+repository and authenticate `gh` or `glab` for that host:
 
 ```sh
 machinist publish T1 --provider github
 machinist publish T1 --provider gitlab
 machinist publish T1 --provider gitlab --host gitlab.example.com
 ```
+
+The origin repository must have the Task's base branch. Use an HTTPS or SSH
+Git URL; separate `remote.origin.pushurl` settings, Git URL rewrites, and
+ambiguous origin URLs are rejected. For HTTPS GitLab publication the controller
+uses host-bound `glab` credentials for its Git subprocesses. SSH transport needs
+your configured SSH authentication as well as forge API authentication.
+`--host` confirms the origin host; it does not redirect publication to a
+different repository. Issue provenance does not select the publication target.
 
 Each command is an explicit publication decision. The controller checks the
 approved Spec, successful Execute and Review Evidence, exact candidate branch,
@@ -184,6 +234,37 @@ nested project paths and explicitly selected self-managed hosts. Native GitLab
 CI Spec dispatch and remote GitLab Approval are not part of this workflow.
 Existing GitHub Actions Approval and watcher commands continue separately.
 
+## Command and storage boundaries
+
+Local Tasks and legacy issue numbers have separate records and recovery paths:
+
+| Operation | Local Task workflow | Existing GitHub issue workflow |
+| --- | --- | --- |
+| Create | `start` with text or explicit issue import | `task new`, trigger label, then `spec` or `watch` |
+| Approve | `approve --task T1 --spec-sha <sha>` continues in foreground | `approve --issue 42` or `--pr 8` requests trusted workflow evidence |
+| Resume | `continue T1`; failure requires `retry --task T1 --phase execute` | `retry 42 --phase execute --run --resume` explicitly reuses edits |
+| Inspect | `status T1`, `status T1 --json`, printed report | `runs --issue 42`, `inspect 42`, `explain 42`, `report` |
+| Configure | `config show --path .machinist/runs/local/config.yaml` | `config show` reads `machinist.yaml` by default |
+| Schedule | Foreground commands | `watch`, `queue`, and macOS `service` |
+| Deliver | Explicit `integrate T1` and/or `publish T1 --provider gitlab` (or `github`) | Ready GitHub PR; human remote merge |
+
+Local records, Phase history, configuration, and reports live under
+`.machinist/runs/local/`; Task records and reports are in its `tasks/` directory.
+The Spec itself is committed at `.machinist/specs/task-1-spec.md`. Preserve
+runtime records for recovery; do not commit them or edit Task JSON manually.
+
+`doctor` remains the root GitHub setup preflight. `runs`, `inspect`, `explain`,
+`report`, and portfolio `status --all` read the legacy issue-run namespace under
+`.machinist/runs/`; they do not aggregate the nested local Task namespace.
+`status --local` is an offline view of legacy issue runs only when no local
+configuration is present. In a mixed checkout, default status selects local
+Tasks; use `runs`/`inspect` for legacy Evidence.
+
+Watcher queue windows, daily Task Run budgets, notifications, and the managed
+service do not govern foreground local Tasks. `clean` manages legacy Workshops;
+there is no local `clean --task` command. Local success cleanup follows
+`workspace.cleanup`; retained failures should remain available for retry.
+
 ## Use it alone or with a small team
 
 For a solo developer, start with a bounded bug fix or small enhancement and an
@@ -195,7 +276,8 @@ For a small team, use one persistent runner checkout per repository. Team
 members can write issues and discuss PRs/MRs on their existing forge; the runner
 operator imports Tasks, approves Specs, and publishes reviewed results. Local
 Task records and Claims belong to that checkout. Multiple laptops are not
-coordinated workers, and local daily budgets are not shared team quotas.
+coordinated workers. Watcher daily budgets do not cap foreground local work
+and are not shared team quotas.
 
 Local orchestration means that no forge or server is required for the Task
 lifecycle. A Harness may still send code to a cloud model. Offline inference
