@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="How AgentMachinist works: the issue-to-reviewed-PR loop, who acts at each station, and a simulated first run.">
+  <meta name="description" content="How AgentMachinist works: a local Task, exact Spec Approval, verified implementation, advisory Review, and optional GitHub or GitLab publication. Available in AgentMachinist 0.14.0.">
   <meta name="theme-color" content="#f3f1eb">
+  <meta property="og:title" content="How AgentMachinist works">
+  <meta property="og:description" content="A guided local workflow from Task to reviewed candidate. Integrate explicitly; publish to GitHub or GitLab when useful. Available in AgentMachinist 0.14.0.">
+  <meta name="twitter:card" content="summary">
   <title>How AgentMachinist works</title>
   <style>
     :root {
@@ -38,6 +41,7 @@
       }
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html { scroll-behavior: smooth; }
     body { margin: 0; background: var(--paper-0); color: var(--ink-0); font-family: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; font-size: 1rem; line-height: 1.6; }
     a { color: var(--blueprint); text-underline-offset: 0.2em; }
@@ -47,6 +51,8 @@
     h1, h2, h3, p { margin-top: 0; }
     h1, h2, h3 { text-wrap: balance; }
     :focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; }
+    .skip-link { position: fixed; top: 0.5rem; left: 0.5rem; z-index: 30; transform: translateY(-200%); padding: 0.6rem 1rem; background: var(--paper-0); }
+    .skip-link:focus { transform: translateY(0); }
     .shell { width: min(100% - 2rem, 74rem); margin-inline: auto; }
     .kicker { margin: 0 0 1rem; color: var(--signal-strong); font-family: var(--mono); font-size: 0.78rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
     .site-header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--paper-0) 92%, transparent); backdrop-filter: blur(14px); }
@@ -87,7 +93,7 @@
     .step h3 { margin: 0 0 0.6rem; font-size: 1.6rem; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
     .step p { margin: 0 0 0.9rem; color: var(--ink-1); font-size: 1.02rem; max-width: 36rem; }
     .step code { font-size: 0.9em; }
-    .cmd { align-self: flex-start; display: inline-flex; align-items: center; min-height: 2.4rem; padding: 0 0.75rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--paper-1); color: var(--ink-0); font-family: var(--mono); font-size: 0.82rem; font-weight: 650; }
+    .cmd { max-width: 100%; overflow-wrap: anywhere; white-space: normal; padding-block: 0.4rem; align-self: flex-start; display: inline-flex; align-items: center; min-height: 2.4rem; padding: 0 0.75rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--paper-1); color: var(--ink-0); font-family: var(--mono); font-size: 0.82rem; font-weight: 650; }
     .board { position: sticky; top: 6rem; align-self: start; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--paper-1); padding: 1.4rem; box-shadow: var(--shadow-lg); }
     .board-label { margin: 0 0 1rem; color: var(--ink-2); font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; }
     .board-rows { position: relative; display: grid; gap: 0.6rem; padding-left: 1.4rem; }
@@ -130,17 +136,17 @@
     .sim-meta { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
     .sim-meta strong { display: block; font-size: 1.12rem; letter-spacing: -0.015em; }
     .sim-meta small { display: block; color: var(--ink-1); font-size: 0.9rem; max-width: 38rem; }
-    .sim-ctrl { display: flex; align-items: center; gap: 0.75rem; }
+    .sim-ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
     .sim-count { color: var(--ink-2); font-family: var(--mono); font-size: 0.75rem; }
     .sim-btn { min-height: 2.75rem; padding: 0 1rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--paper-0); color: var(--ink-0); cursor: pointer; font-weight: 650; }
     .sim-btn:hover { border-color: var(--signal); color: var(--signal-strong); }
     .sim-btn.primary { border-color: var(--signal); background: var(--signal); color: #fff8f3; }
     .sim-btn.primary:hover { background: var(--signal-strong); border-color: var(--signal-strong); color: #fff8f3; }
     .sim-btn:disabled { opacity: 0.45; cursor: default; }
-    .sim-dots { display: flex; gap: 0.4rem; margin-top: 1rem; }
-    .sim-dots button { width: 0.6rem; height: 0.6rem; border-radius: 999px; border: none; padding: 0; cursor: pointer; background: var(--paper-2); transition: all 200ms ease; }
+    .sim-dots { display: flex; flex-wrap: wrap; gap: 0.15rem; margin-top: 1rem; }
+    .sim-dots button { width: 2.75rem; height: 2.75rem; border-radius: 8px; border: 1px solid var(--line); padding: 0; cursor: pointer; background: var(--paper-0); color: var(--ink-1); transition: background 200ms ease; }
     .sim-dots button.past { background: var(--line-strong); }
-    .sim-dots button.now { width: 1.6rem; }
+    .sim-dots button.now { color: var(--paper-0); font-weight: 700; }
     .sim-dots button.now.mach { background: var(--blueprint); }
     .sim-dots button.now.you { background: var(--signal); }
     .sim-panes { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 1.5rem; margin-top: 1.5rem; align-items: stretch; }
@@ -149,7 +155,7 @@
     .term-dots { display: flex; gap: 0.4rem; }
     .term-dots i { width: 0.58rem; height: 0.58rem; border: 1px solid currentColor; border-radius: 50%; }
     .term-body { flex: 1; min-height: 19rem; padding: 1.25rem 1.5rem; font-family: var(--mono); }
-    .tline { margin: 0; white-space: pre-wrap; font-size: 0.85rem; line-height: 1.7; color: var(--terminal-ink); }
+    .tline { overflow-wrap: anywhere; margin: 0; white-space: pre-wrap; font-size: 0.85rem; line-height: 1.7; color: var(--terminal-ink); }
     .tline.p { color: var(--terminal-ink); } .tline.p b { color: #f0a07e; font-weight: 700; }
     .tline.ok { color: #72c79b; } .tline.c { color: var(--terminal-muted); }
     .cursor { display: inline-block; width: 0.55em; height: 1em; background: var(--terminal-ink); vertical-align: text-bottom; animation: blink 1.1s steps(1) infinite; }
@@ -192,7 +198,7 @@
     .start p { color: rgb(251 250 246 / 0.72); }
     .start a { color: #ff9d76; }
     .prereqs { display: grid; gap: 0.6rem; }
-    .prereq { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid rgb(255 255 255 / 0.22); border-radius: 8px; padding: 0.6rem 0.9rem; }
+    .prereq { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid rgb(255 255 255 / 0.22); border-radius: 8px; padding: 0.6rem 0.9rem; }
     .prereq strong { font-size: 0.9rem; }
     .prereq code { font-size: 0.78rem; color: #a9b7ba; }
     .start .term { border: 1px solid rgb(255 255 255 / 0.18); background: var(--terminal-deep); }
@@ -206,6 +212,7 @@
   </style>
 </head>
 <body>
+  <a href="#top" class="skip-link">Skip to content</a>
   <header class="site-header">
     <nav class="nav shell" aria-label="How it works">
       <a class="brand" href="#top">
@@ -223,81 +230,82 @@
   <main id="top">
     <section class="hero shell">
       <p class="kicker">How AgentMachinist works · 2 minutes</p>
-      <h1>An issue goes in. A reviewed PR comes out.</h1>
-      <p class="lede">AgentMachinist runs the plan-and-build loop on your machine while the controller keeps Git transitions. You approve the exact plan. You merge the result. Everything between is machine work behind a verification gate.</p>
+      <h1>One Task. A reviewed local change.</h1>
+      <p class="lede">Start with a bounded objective. Approve its exact Spec, then let the controller coordinate implementation, verification, and independent Review. Inspect the result and integrate it locally. Publish a GitHub PR or GitLab MR whenever sharing helps.</p>
+      <p><strong>AgentMachinist 0.14.0</strong> brings the complete local workflow and optional GitLab support. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
-        <small>Two colors are the whole story. Watch who holds the part.</small>
+        <small>No forge or server is needed for the local journey.</small>
       </div>
     </section>
     <section class="strip" aria-label="The pipeline at a glance">
       <div class="strip-grid shell">
-        <div class="strip-cell you"><span class="idx">01 · YOU</span><strong>Shape the Task</strong><small>structured, linted, dispatched</small></div>
-        <div class="strip-cell"><span class="idx">02 · MACHINE</span><strong>Write the spec</strong><small>a plan in a draft PR</small></div>
-        <div class="strip-cell you"><span class="idx">03 · YOU</span><strong>Approve the SHA</strong><small>consent to one commit</small></div>
-        <div class="strip-cell"><span class="idx">04 · MACHINE</span><strong>Build &amp; verify</strong><small>isolated worktree</small></div>
-        <div class="strip-cell"><span class="idx">05 · MACHINE</span><strong>Review the head</strong><small>independent, read-only</small></div>
-        <div class="strip-cell you"><span class="idx">06 · YOU</span><strong>Review &amp; merge</strong><small>machinist never merges</small></div>
+        <div class="strip-cell you"><span class="idx">01 · YOU</span><strong>Start a Task</strong><small>one objective, optional context</small></div>
+        <div class="strip-cell"><span class="idx">02 · MACHINE</span><strong>Save the Spec</strong><small>baseline verified, exact commit retained</small></div>
+        <div class="strip-cell you"><span class="idx">03 · YOU</span><strong>Approve the SHA</strong><small>read the plan before execution</small></div>
+        <div class="strip-cell"><span class="idx">04 · MACHINE</span><strong>Build and verify</strong><small>isolated Workshop, real Gates</small></div>
+        <div class="strip-cell"><span class="idx">05 · MACHINE</span><strong>Review the candidate</strong><small>independent, advisory findings</small></div>
+        <div class="strip-cell you"><span class="idx">06 · YOU</span><strong>Accept or share</strong><small>explicit integration; optional PR/MR</small></div>
       </div>
     </section>
     <section class="section shell" id="loop">
       <header class="section-head">
-        <p class="kicker">The loop</p>
-        <h2>Six stations. Two gates are yours.</h2>
-        <p>Scroll the story on the left; the board on the right tracks where the part is — and who is holding it.</p>
+        <p class="kicker">The local loop</p>
+        <h2>A clear handoff at each decision.</h2>
+        <p>The foreground command shows progress and a next action. Your original branch stays unchanged until you explicitly integrate the reviewed candidate.</p>
       </header>
       <div class="loop-grid">
-        <div class="steps">
+        <div>
           <article class="step you" data-step="0">
             <span class="who">STATION 01 · YOU</span>
-            <h3>Shape one outcome, not a project.</h3>
-            <p>The managed Task form captures an objective, acceptance checks, constraints, and verification. Readiness lint runs before <code>task new --dispatch</code> applies the <code>agent-task</code> trigger; nothing touches an unlabeled issue.</p>
-            <span class="cmd">machinist task new --title "Add CSV export" --dispatch</span>
+            <h3>Describe one useful change.</h3>
+            <p>Start from a clean committed Git checkout with an installed Harness and a verification command. Add detail with <code>--body-file task.md</code>, or import a GitHub or GitLab issue with <code>--from-issue</code>. The controller gives the Task a local ID such as <code>T1</code>.</p>
+            <span class="cmd">machinist start "Add CSV export for the currently filtered rows" --test-cmd "uv run pytest"</span>
           </article>
           <article class="step" data-step="1">
             <span class="who">STATION 02 · MACHINE</span>
-            <h3>A plan you can read, before any code.</h3>
-            <p>The harness reads your repository in its strongest read-only mode and writes a specification — summary, approach, testing plan, out of scope. The controller (never the harness) commits it, pushes <code>agent/issue-42</code>, and opens a draft PR that contains only the plan.</p>
-            <span class="cmd">machinist watch --once</span>
+            <h3>Check the baseline. Save the plan.</h3>
+            <p>The controller discovers local settings and verifies the committed baseline in an isolated Workshop. A read-only Harness writes a Spec; the controller commits it and retains its exact SHA. The command prints the Spec and stops for you.</p>
+            <span class="cmd">machinist status T1</span>
           </article>
           <article class="step you" data-step="2">
-            <span class="who">STATION 03 · YOU — GATE 1</span>
-            <h3>Approval names one exact commit.</h3>
-            <p>You read the spec, then approve. That binds your consent to the 40-character head SHA you actually reviewed. If anyone edits the branch afterward, the approval goes <strong>stale</strong> and execution refuses. Want changes? <code>spec 42 --revise</code> regenerates; <code>--abandon</code> rejects.</p>
-            <span class="cmd">machinist approve --pr 18</span>
+            <span class="who">STATION 03 · YOU — APPROVAL GATE</span>
+            <h3>Approval names one exact Spec commit.</h3>
+            <p>Read the Spec and copy the full Approval command printed by the CLI. Approval records this repository, Task, Spec SHA, actor, and time. A mismatched Spec or moved candidate branch refuses execution. Approval also starts the remaining machine Phases in the foreground.</p>
+            <span class="cmd">machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;</span>
           </article>
           <article class="step" data-step="3">
             <span class="who">STATION 04 · MACHINE</span>
-            <h3>Built and verified away from your checkout.</h3>
-            <p>Implementation starts fresh from the approved head in an isolated workspace. The harness edits files; the controller keeps Git custody, strips GitHub credentials from the harness environment, and runs the authoritative test gates before pushing the unchanged draft.</p>
-            <span class="cmd">machinist run 42</span>
+            <h3>Build and verify away from your checkout.</h3>
+            <p>The Harness edits in an isolated Workshop from the approved Spec. The controller owns commits and Task records, checks Git custody, and runs the configured Verification Gates. Failed verification retains the Workshop for an explicit retry.</p>
+            <span class="cmd">machinist status T1 --watch</span>
           </article>
           <article class="step" data-step="4">
             <span class="who">STATION 05 · MACHINE</span>
-            <h3>Independent Review checks the delivered head.</h3>
-            <p>A separate read-only Harness compares the approved Spec, delivered diff, and verification Evidence. Findings are advisory, but malformed output or a moved head fails closed and keeps the PR draft.</p>
-            <span class="cmd">machinist review 42</span>
+            <h3>Independent Review checks the exact candidate.</h3>
+            <p>A separate read-only Harness compares the approved Spec, candidate diff, and verification Evidence. Local Review always runs. Findings are advisory: a completed report means the candidate was reviewed, not that every finding is resolved.</p>
+            <span class="cmd">machinist status T1 --json</span>
           </article>
           <article class="step you" data-step="5">
-            <span class="who">STATION 06 · YOU — GATE 2</span>
-            <h3>Ready means reviewable — never merged.</h3>
-            <p>Independent Review alone marks the unchanged PR head ready. You review the diff against the spec and click merge yourself. AgentMachinist has no merge authority — the last word is structurally yours.</p>
-            <span class="cmd">GitHub · Merge pull request</span>
+            <span class="who">STATION 06 · YOU</span>
+            <h3>Inspect the diff. Choose its destination.</h3>
+            <p>Keep the candidate local, or explicitly fast-forward the clean expected base with <code>integrate</code>. To share it, choose <code>publish T1 --provider github</code> or <code>gitlab</code>. Publication needs a matching origin and authenticated forge CLI; it never reruns successful local Phases or merges a remote change.</p>
+            <span class="cmd">machinist integrate T1</span>
           </article>
         </div>
         <aside class="board" aria-label="Pipeline board">
           <p class="board-label">SHOP-FLOOR BOARD</p>
           <div class="board-rows">
             <div class="rail"><i id="rail-fill"></i></div>
-            <div class="board-row you active" data-row="0"><div class="row-line"><div class="row-name"><span class="num">01</span><strong>You shape one ready Task</strong></div><span class="chip you">YOU</span></div></div>
-            <div class="board-row" data-row="1"><div class="row-line"><div class="row-name"><span class="num">02</span><strong>The machine writes a plan</strong></div><span class="chip mach">MACHINE</span></div></div>
-            <div class="board-row you" data-row="2"><div class="row-line"><div class="row-name"><span class="num">03</span><strong>You approve one commit</strong></div><span class="chip you">YOU</span></div></div>
+            <div class="board-row you active" data-row="0"><div class="row-line"><div class="row-name"><span class="num">01</span><strong>You describe a Task</strong></div><span class="chip you">YOU</span></div></div>
+            <div class="board-row" data-row="1"><div class="row-line"><div class="row-name"><span class="num">02</span><strong>The machine saves a Spec</strong></div><span class="chip mach">MACHINE</span></div></div>
+            <div class="board-row you" data-row="2"><div class="row-line"><div class="row-name"><span class="num">03</span><strong>You approve its exact SHA</strong></div><span class="chip you">YOU</span></div></div>
             <div class="board-row" data-row="3"><div class="row-line"><div class="row-name"><span class="num">04</span><strong>The machine builds and verifies</strong></div><span class="chip mach">MACHINE</span></div></div>
-            <div class="board-row" data-row="4"><div class="row-line"><div class="row-name"><span class="num">05</span><strong>Independent Review checks the head</strong></div><span class="chip mach">MACHINE</span></div></div>
-            <div class="board-row you" data-row="5"><div class="row-line"><div class="row-name"><span class="num">06</span><strong>You review. You merge.</strong></div><span class="chip you">YOU</span></div></div>
+            <div class="board-row" data-row="4"><div class="row-line"><div class="row-name"><span class="num">05</span><strong>Independent Review records findings</strong></div><span class="chip mach">MACHINE</span></div></div>
+            <div class="board-row you" data-row="5"><div class="row-line"><div class="row-name"><span class="num">06</span><strong>You integrate or publish</strong></div><span class="chip you">YOU</span></div></div>
           </div>
-          <p class="board-note">Orange stations wait for you; blue ones run themselves. The loop halts at every orange station until you act.</p>
+          <p class="board-note">The machine Phases run in the foreground after your action. Failures stop for explicit recovery. Publication is a separate choice.</p>
         </aside>
       </div>
     </section>
@@ -305,21 +313,21 @@
       <div class="shell">
         <header class="section-head">
           <p class="kicker">Watch it run</p>
-          <h2>A first run, simulated.</h2>
-          <p>Step through issue #42 exactly as it would happen — your terminal on the left, GitHub on the right. Nothing here is live; it is the precise choreography of one task.</p>
+          <h2>A first run, illustrated.</h2>
+          <p>Step through local Task T1: terminal on the left, saved Task Evidence on the right. Output and SHAs are illustrative; this page does not run a Harness or publish anything. Optional publication appears last.</p>
         </header>
-        <noscript><p class="noscript-note">Stepping needs JavaScript. Without it, the complete run — every terminal line and GitHub state — is shown at once below.</p></noscript>
+        <noscript><p class="noscript-note">Stepping needs JavaScript. Without it, all terminal lines and Task Evidence are shown below. You can also read the <a href="local-workflow.md">local workflow guide</a>.</p></noscript>
         <div class="sim-card you" id="sim-card">
           <div class="sim-top">
             <div class="sim-meta">
               <span class="chip you" id="sim-who"><i></i>YOU ACT</span>
-              <div>
-                <strong id="sim-title">Create and dispatch Task #42</strong>
-                <small id="sim-note">The structured body passes readiness lint before agent-task puts it on the machine's pickup shelf.</small>
+              <div aria-live="polite">
+                <strong id="sim-title">Start local Task T1</strong>
+                <small id="sim-note">One objective in a clean committed repository; no remote required.</small>
               </div>
             </div>
             <div class="sim-ctrl">
-              <span class="sim-count" id="sim-count">1 / 9</span>
+              <span class="sim-count" id="sim-count">1 / 10</span>
               <button class="sim-btn" type="button" id="sim-back">← Back</button>
               <button class="sim-btn primary" type="button" id="sim-next">Next →</button>
               <button class="sim-btn" type="button" id="sim-replay" hidden>↺ Replay</button>
@@ -329,49 +337,48 @@
         </div>
         <div class="sim-panes">
           <div class="term">
-            <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>your terminal · simulated</span></div>
+            <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>your terminal · illustrative output</span></div>
             <div class="term-body" id="term-body">
-              <p class="tline p" data-at="1"><b>$ </b>machinist watch --once</p>
-              <p class="tline" data-at="1">issue #42 eligible → dispatching SPEC</p>
-              <p class="tline" data-at="2">worktree agent/issue-42 provisioned</p>
-              <p class="tline" data-at="2">spec written → .machinist/specs/issue-42-spec.md</p>
-              <p class="tline ok" data-at="2">draft PR #18 opened</p>
-              <p class="tline p" data-at="4"><b>$ </b>machinist approve --pr 18</p>
-              <p class="tline ok" data-at="4">approval bound to a17c98d42e6f</p>
-              <p class="tline p" data-at="5"><b>$ </b>machinist run 42</p>
-              <p class="tline" data-at="5">harness implementing… still working (2m 30s)</p>
-              <p class="tline" data-at="6">uv run pytest -q</p>
-              <p class="tline ok" data-at="6">84 passed in 12.3s</p>
-              <p class="tline" data-at="7">pushed agent/issue-42 (lease held)</p>
-              <p class="tline" data-at="7">PR #18 remains draft</p>
-              <p class="tline p" data-at="8"><b>$ </b>machinist review 42</p>
-              <p class="tline" data-at="8">reviewed approved Spec + delivered diff + test Evidence</p>
-              <p class="tline ok" data-at="8">PR #18 marked ready for review</p>
-              <p class="tline c" data-at="9"># your move — machinist never merges</p>
-              <p class="tline"><b style="color:#f0a07e">$ </b><span class="cursor"></span></p>
+              <p class="tline p" data-at="0"><b>$ </b>machinist start "Add CSV export for the currently filtered rows" --test-cmd "uv run pytest"</p>
+              <p class="tline" data-at="0">Created T1. Recover with machinist status T1.</p>
+              <p class="tline ok" data-at="1">Baseline verification completed in the Workshop.</p>
+              <p class="tline" data-at="2">Spec retained: .machinist/specs/task-1-spec.md</p>
+              <p class="tline" data-at="2">State: awaiting approval</p>
+              <p class="tline c" data-at="3"># Read the printed Spec; copy its full Approval command.</p>
+              <p class="tline p" data-at="4"><b>$ </b>machinist approve --task T1 --spec-sha a17c98d42e6f0123456789abcdef0123456789ab</p>
+              <p class="tline" data-at="5">Execute: Harness implementing in an isolated Workshop…</p>
+              <p class="tline" data-at="6">Verification: uv run pytest</p>
+              <p class="tline ok" data-at="6">Required verification completed; candidate retained locally.</p>
+              <p class="tline" data-at="7">Independent Review completed; findings are advisory.</p>
+              <p class="tline ok" data-at="7">State: ready to integrate</p>
+              <p class="tline c" data-at="8"># Inspect the report and candidate diff before accepting.</p>
+              <p class="tline p" data-at="8"><b>$ </b>machinist integrate T1</p>
+              <p class="tline ok" data-at="8">State: integrated</p>
+              <p class="tline c" data-at="9"># Optional: origin + authenticated glab required.</p>
+              <p class="tline p" data-at="9"><b>$ </b>machinist publish T1 --provider gitlab</p>
+              <p class="tline" data-at="9">Published T1: &lt;verified merge-request URL&gt;</p>
             </div>
           </div>
           <div class="gh">
-            <div class="gh-bar"><span>github.com / you / your-project</span><span>simulated</span></div>
+            <div class="gh-bar"><span>your-project / local Task record</span><span>illustrative</span></div>
             <div class="gh-body">
               <div class="gh-card" id="gh-issue">
                 <div class="gh-head">
-                  <div style="display:flex;align-items:center;gap:0.6rem;min-width:0"><span class="issue-no">42</span><strong>Add CSV export for filtered rows</strong></div>
-                  <span class="tag you">agent-task</span>
+                  <div style="display:flex;align-items:center;gap:0.6rem;min-width:0"><span class="issue-no">T1</span><strong>Add CSV export for filtered rows</strong></div>
+                  <span class="tag you">LOCAL TASK</span>
                 </div>
-                <p class="gh-sub">Issue · 3 acceptance criteria · filed by you</p>
-                <p class="gh-link" data-at="2">↳ linked: pull request #18</p>
+                <p class="gh-sub">Objective and optional body · saved in this checkout</p>
+                <p class="gh-link" data-at="2">↳ Spec commit retained on the Task branch</p>
               </div>
               <div class="gh-card" id="gh-pr" data-at="2">
-                <div class="gh-head">
-                  <strong>Spec: Add CSV export (#42) · PR #18</strong>
-                  <span class="tag warn" id="pr-badge">DRAFT</span>
-                </div>
-                <p class="gh-sub mono">.machinist/specs/issue-42-spec.md · branch agent/issue-42</p>
-                <p class="gh-callout" data-at="3" data-until="3">You are here — reading the plan. No code exists yet.</p>
-                <div class="gh-tags" data-at="4"><span class="tag ok">machinist:approved</span><span class="tag line">sha a17c98d42e6f</span></div>
-                <p class="gh-check" data-at="6">✓ test gate — uv run pytest · 84 passed</p>
-                <div class="gh-merge" data-at="9"><span class="merge-btn">Merge pull request</span><small>only you can press this</small></div>
+                <div class="gh-head"><strong>Exact Spec → reviewed candidate</strong><span class="tag warn" id="pr-badge">AWAITING APPROVAL</span></div>
+                <p class="gh-sub mono">.machinist/specs/task-1-spec.md</p>
+                <p class="gh-callout" data-at="3" data-until="3">Read the plan before authorizing implementation.</p>
+                <div class="gh-tags" data-at="4"><span class="tag ok">Spec approved</span><span class="tag line">repository + T1 + exact SHA</span></div>
+                <p class="gh-check" data-at="6">✓ required Verification Gates completed</p>
+                <p class="gh-sub" data-at="7">Independent Review report names this exact candidate SHA. Inspect its advisory findings and the diff.</p>
+                <div class="gh-merge" data-at="8"><span class="merge-btn">Explicit local integration</span></div>
+                <p class="gh-sub" data-at="9">Optional publication checks origin, leases the push, and verifies the exact PR/MR head. Remote merge remains a separate human action.</p>
               </div>
             </div>
           </div>
@@ -379,81 +386,79 @@
       </div>
     </section>
     <section class="section shell" id="recover">
-      <header class="section-head">
-        <p class="kicker">When something stops</p>
-        <h2>Failures park. Nothing retries behind your back.</h2>
-      </header>
+      <header class="section-head"><p class="kicker">When something changes</p><h2>Amend deliberately. Recover explicitly.</h2></header>
       <div class="recover-grid">
         <div class="recover-card">
-          <h3>Approval goes stale</h3>
-          <p>The spec branch changed after you approved. That is a safety stop, not a bug — read the new diff, then approve the current head.</p>
-          <code>machinist approve --pr 18</code>
+          <h3>The candidate needs more work</h3>
+          <p>Before integration begins, amend a completed candidate with feedback. A new Spec needs fresh Approval, verification, and Review. Once integration starts, create a new Task from the current base.</p>
+          <code>machinist amend --task T1 --feedback "Also escape quoted values in the export."</code>
         </div>
         <div class="recover-card danger">
-          <h3>The test gate fails</h3>
-          <p>Nothing is pushed. The workspace is kept as evidence — inspect it, then resume those edits or start fresh from the approved head.</p>
-          <code>machinist retry 42 --phase execute --run</code>
+          <h3>A Phase fails</h3>
+          <p>Inspect status, then retry the failed Phase explicitly. Execute resumes retained edits by default; <code>--fresh</code> starts a new Workshop. Recovery after the implementation commit uses saved Evidence.</p>
+          <code>machinist retry --task T1 --phase execute</code>
         </div>
         <div class="recover-card mach">
-          <h3>You need it to stop</h3>
-          <p>Cancellation cooperatively stops the running task and durably blocks re-dispatch. Pause the whole queue while traveling.</p>
-          <code>machinist cancel 42 --reason "…"</code>
+          <h3>You need to stop or publish later</h3>
+          <p>Cancel cooperatively while preserving Evidence. If publication fails, repeat the same publish command; successful implementation and verification are not repeated.</p>
+          <code>machinist cancel --task T1 --reason "Requirements changed"</code>
         </div>
       </div>
-      <p class="recover-more">The full symptom table lives in the <a href="first-run-guide.html#troubleshoot">field guide</a> and the <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md">operator runbook</a>.</p>
+      <p class="recover-more">Integration refuses dirty checkouts, a moved base, or a changed candidate. See the <a href="local-workflow.md">local workflow</a>, <a href="first-run-guide.html#troubleshoot">field guide</a>, and <a href="operator-runbook.md">operator runbook</a> for recovery actions.</p>
     </section>
     <section class="start" id="start">
       <div class="start-grid shell">
         <div>
           <p class="kicker">Get started for real</p>
-          <h2>One install. One onboarding pass. One ready Task.</h2>
-          <p style="font-size:1.05rem;margin-bottom:1.5rem">Four tools first — each proves itself with one command. Then the sequence on the right is your entire first run.</p>
+          <h2>A repository, a Harness, and a real test command.</h2>
+          <p style="font-size:1.05rem;margin-bottom:1.5rem">Install AgentMachinist from PyPI, then change into your project. First start saves local settings without overwriting your existing configuration.</p>
           <div class="prereqs">
-            <div class="prereq"><strong>Git</strong><code>git --version</code></div>
-            <div class="prereq"><strong>GitHub CLI, authenticated</strong><code>gh auth status</code></div>
-            <div class="prereq"><strong>uv</strong><code>uv --version</code></div>
-            <div class="prereq"><strong>One harness — Claude Code, OpenCode, Pi, or Codex</strong><code>claude --version</code></div>
+            <div class="prereq"><strong>Clean Git checkout with an initial commit and author</strong><code>git status --short</code></div>
+            <div class="prereq"><strong>Python 3.12+ and uv</strong><code>uv --version</code></div>
+            <div class="prereq"><strong>One installed Harness</strong><code>Claude Code · OpenCode · Pi · Codex</code></div>
+            <div class="prereq"><strong>Verification works in an isolated checkout</strong><code>uv run pytest</code></div>
           </div>
-          <p style="margin:1.5rem 0 0;font-size:0.9rem">Want every screen and setup question explained? Take the <a href="first-run-guide.html">visual field guide</a> or the <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md">full getting-started reference</a>.</p>
+          <p style="margin:1.5rem 0 0;font-size:0.9rem">Dependencies in your original <code>.venv/</code> or <code>node_modules/</code> are not copied. Include dependency setup in the Gate when needed, such as <code>npm ci &amp;&amp; npm test</code>.</p>
+          <p style="margin:1rem 0 0;font-size:0.9rem">Solo developers can keep the whole Task local. Small teams can use one persistent runner checkout and publish reviewable changes to their forge. Local Claims do not coordinate separate laptops. Watcher budgets do not constrain foreground local Tasks.</p>
         </div>
         <div class="term">
-          <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>terminal / your first run</span></div>
+          <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>terminal / local workflow</span></div>
           <div class="term-body">
-            <p class="tline c"># install the controller</p>
+            <p class="tline c"># install the released controller</p>
             <p class="tline p"><b>$ </b>uv tool install agentmachinist</p>
+            <p class="tline c"># then change into your own committed project</p>
+            <p class="tline p"><b>$ </b>machinist start "Add CSV export for the currently filtered rows" --test-cmd "uv run pytest"</p>
+            <p class="tline c"># inspect the Spec; use the full SHA printed by start</p>
+            <p class="tline p"><b>$ </b>machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;</p>
+            <p class="tline c"># inspect the report and diff before integration</p>
+            <p class="tline p"><b>$ </b>machinist status T1</p>
+            <p class="tline p"><b>$ </b>machinist integrate T1</p>
             <p class="tline">&nbsp;</p>
-            <p class="tline c"># in your repository — writes minimal machinist.yaml (~20 lines)</p>
-            <p class="tline p"><b>$ </b>machinist onboard  <span class="c" style="color:var(--terminal-muted)"># or: onboard --yes for hands-free</span></p>
-            <p class="tline p"><b>$ </b>machinist doctor --run-gates  <span class="c" style="color:var(--terminal-muted)"># single health check — prints fix</span></p>
+            <p class="tline c"># optional: choose one forge; matching origin/auth required</p>
+            <p class="tline p"><b>$ </b>machinist publish T1 --provider github</p>
+            <p class="tline c"># or: machinist publish T1 --provider gitlab</p>
             <p class="tline">&nbsp;</p>
-            <p class="tline c"># review the generated files, then make setup durable</p>
-            <p class="tline p"><b>$ </b>git status --short</p>
-            <p class="tline p"><b>$ </b>git add machinist.yaml .machinist/specs/.gitkeep .gitignore</p>
-            <p class="tline p"><b>$ </b>git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml</p>
-            <p class="tline p"><b>$ </b>git add -p .github/workflows  <span class="c" style="color:var(--terminal-muted)"># review each hunk</span></p>
-            <p class="tline p"><b>$ </b>git diff --cached  <span class="c" style="color:var(--terminal-muted)"># verify</span></p>
-            <p class="tline p"><b>$ </b>git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</p>
-            <p class="tline">&nbsp;</p>
-            <p class="tline c"># create a linted Task, then run the loop</p>
-            <p class="tline p"><b>$ </b>machinist task new --title "Add CSV export" --dispatch</p>
-            <p class="tline p"><b>$ </b>machinist watch --once   <span class="c" style="color:var(--terminal-muted)"># spec → draft PR</span></p>
-            <p class="tline p"><b>$ </b>machinist approve --issue 42 <span style="color:var(--terminal-muted)"># workflow verifies write access + SHA</span></p>
-            <p class="tline p"><b>$ </b>machinist run 42         <span style="color:var(--terminal-muted)"># build + test gate → draft PR</span></p>
-            <p class="tline p"><b>$ </b>machinist review 42      <span style="color:var(--terminal-muted)"># independent Review → ready PR</span></p>
+            <p class="tline c"># deterministic rehearsal: temporary Git repo, fake Harness</p>
+            <p class="tline p"><b>$ </b>machinist rehearse</p>
           </div>
         </div>
+      </div>
+      <div class="shell" style="padding-bottom:3rem">
+        <p><strong>Local orchestration does not guarantee offline inference.</strong> Your Harness may use a cloud model. Offline operation requires a local provider, downloaded models, prepared dependencies, and separate network-denied validation. Custody checks reduce credentials and detect violations; they are not an OS sandbox.</p>
+        <p>GitLab supports issue import, nested projects, explicit self-managed hosts, and MR publication through <code>glab</code>. Hosted GitLab Spec CI and remote GitLab Approval are outside this workflow. Existing <a href="getting-started.md#github-setup-and-automation">GitHub Actions setup and watcher commands</a> remain supported.</p>
       </div>
     </section>
   </main>
   <footer class="site-footer shell">
     <div class="footer-row">
-      <span>AgentMachinist · ready Task → exact spec approval → independent Review → your merge</span>
+      <span>AgentMachinist 0.14.0 · local Task → exact Approval → verified candidate → your decision</span>
       <nav aria-label="Documentation">
+        <a href="local-workflow.md">Local workflow</a>
         <a href="first-run-guide.html">Field guide</a>
         <a href="explainer.html">One-minute explainer</a>
-        <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md">Architecture</a>
-        <a href="https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md">Trust model</a>
-        <a href="https://github.com/vscarpenter/AgentMachinist">GitHub</a>
+        <a href="architecture.md">Architecture</a>
+        <a href="trust-model.md">Trust model</a>
+        <a href="https://github.com/vscarpenter/AgentMachinist">Source repository</a>
       </nav>
     </div>
   </footer>
@@ -471,16 +476,16 @@
       document.querySelectorAll('[data-step]').forEach((n) => io.observe(n));
 
       const STEPS = [
-        { who: 'YOU', title: 'Create and dispatch Task #42', note: 'The structured body passes readiness lint before agent-task puts it on the machine\'s pickup shelf.' },
-        { who: 'MACHINE', title: 'The watcher admits the task', note: 'One poll: the labeled issue is eligible, a local claim is taken, and the SPEC phase dispatches.' },
-        { who: 'MACHINE', title: 'Spec becomes a draft PR', note: 'The harness plans in read-only mode; the controller commits the spec and opens draft PR #18.' },
-        { who: 'YOU', title: 'Read the plan', note: 'The draft PR contains only the spec: summary, approach, testing plan, out-of-scope. No code exists yet.' },
-        { who: 'YOU', title: 'Approve the exact SHA', note: 'Your approval names commit a17c98d. Any later edit to the branch makes it stale — execution would refuse.' },
-        { who: 'MACHINE', title: 'Implement the approved plan', note: 'A fresh workspace from the approved head. The harness edits; the controller holds Git and the credentials.' },
-        { who: 'MACHINE', title: 'The test gate runs', note: "The controller runs your gate itself — the harness's own runs only improve first-pass quality." },
-        { who: 'MACHINE', title: 'Push with a lease, remain draft', note: 'The push is force-with-lease against the approved SHA: if the branch moved, it fails instead of overwriting.' },
-        { who: 'MACHINE', title: 'Independent Review checks the head', note: 'A separate read-only Harness compares the approved Spec, delivered diff, and test Evidence before readying that exact head.' },
-        { who: 'YOU', title: 'Review the diff. Click merge.', note: 'Tests passed and the spec was followed — but the merge button only answers to you. Merging closes #42.' },
+        { who: 'YOU', title: 'Start local Task T1', note: 'One objective in a clean committed repository; no remote required.' },
+        { who: 'MACHINE', title: 'Verify the baseline', note: 'The controller runs your required verification before invoking the Spec Harness. Missing dependencies or a failing baseline stop here.' },
+        { who: 'MACHINE', title: 'Retain the exact Spec commit', note: 'The Harness plans read-only. The controller saves the Spec and its SHA locally, then prints them for you.' },
+        { who: 'YOU', title: 'Read the plan', note: 'Inspect requirements, approach, testing plan, and scope. No implementation is authorized yet.' },
+        { who: 'YOU', title: 'Approve the exact Spec SHA', note: 'The explicit command binds Approval to this repository, Task, and full Spec commit, then continues foreground work.' },
+        { who: 'MACHINE', title: 'Implement in an isolated Workshop', note: 'The Harness edits from the approved Spec. The controller owns commits and checks protected Git and Task metadata.' },
+        { who: 'MACHINE', title: 'Verify and retain the candidate', note: 'The controller runs the configured Gates and saves a durable local candidate before Workshop cleanup.' },
+        { who: 'MACHINE', title: 'Review the exact candidate', note: 'Independent read-only Review records advisory findings against this SHA. Inspect them; completion is not a merge endorsement.' },
+        { who: 'YOU', title: 'Integrate explicitly', note: 'After inspecting the diff and report, you may fast-forward the clean expected base. A moved base or candidate stops integration.' },
+        { who: 'YOU', title: 'Publish only when useful', note: 'Optional GitHub PR or GitLab MR publication verifies origin, remote lease, and the exact change head. It can also happen before local integration.' },
       ];
       let k = 0;
       const $ = (id) => document.getElementById(id);
@@ -488,7 +493,8 @@
       STEPS.forEach((s, i) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.setAttribute('aria-label', 'Go to step ' + (i + 1));
+        b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + s.title);
+        b.textContent = i + 1;
         b.addEventListener('click', () => { k = i; render(); });
         dotsWrap.appendChild(b);
       });
@@ -506,6 +512,7 @@
         $('sim-next').disabled = k === STEPS.length - 1;
         $('sim-replay').hidden = k !== STEPS.length - 1;
         dots.forEach((d, i) => {
+          d.setAttribute('aria-pressed', i === k ? 'true' : 'false');
           d.className = i === k ? 'now ' + (STEPS[i].who === 'YOU' ? 'you' : 'mach') : i < k ? 'past' : '';
         });
         document.querySelectorAll('[data-at]').forEach((el) => {
@@ -514,10 +521,11 @@
           el.hidden = !(k >= at && k <= until);
         });
         const badge = $('pr-badge');
-        if (k >= 8) { badge.textContent = 'READY FOR REVIEW'; badge.className = 'tag ok'; }
-        else if (k >= 4) { badge.textContent = 'DRAFT · APPROVED'; badge.className = 'tag ok'; }
-        else { badge.textContent = 'DRAFT'; badge.className = 'tag warn'; }
-        $('gh-pr').classList.toggle('hot', k === 3 || k === 9);
+        if (k >= 8) { badge.textContent = 'INTEGRATED LOCALLY'; badge.className = 'tag ok'; }
+        else if (k >= 7) { badge.textContent = 'READY TO INTEGRATE'; badge.className = 'tag ok'; }
+        else if (k >= 4) { badge.textContent = 'SPEC APPROVED'; badge.className = 'tag ok'; }
+        else { badge.textContent = 'AWAITING APPROVAL'; badge.className = 'tag warn'; }
+        $('gh-pr').classList.toggle('hot', k === 3 || k >= 7);
       };
       $('sim-back').addEventListener('click', () => { k = Math.max(0, k - 1); render(); });
       $('sim-next').addEventListener('click', () => { k = Math.min(STEPS.length - 1, k + 1); render(); });

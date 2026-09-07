@@ -30,7 +30,7 @@ class SetupPRResult:
     branch: str
     base: str
     commit_sha: str
-    pr: DraftPR
+    pr: DraftPR | None
 
 
 def deliver_setup_pr(
@@ -42,49 +42,71 @@ def deliver_setup_pr(
     runner: Callable[..., Any] = subprocess.run,
     branch: str = _SETUP_BRANCH,
 ) -> SetupPRResult:
-    """Initialize on a clean setup branch, push it, and open a draft PR."""
+    """Initialize or resume bounded setup changes and reuse their draft PR."""
     root = Path(repo_root).resolve()
-    _require_clean(root, runner)
     base = github.default_branch()
     current = _git(root, runner, "branch", "--show-current").strip()
-    if current != base:
+    if current not in {base, branch}:
         raise OnboardingError(
-            f"setup PR must start from default branch '{base}', not '{current}'"
+            f"setup PR must start from default branch '{base}' or resume '{branch}', "
+            f"not '{current}'; switch branches and rerun 'machinist onboard --setup-pr'"
         )
-    _require_new_branch(root, runner, branch)
-    _git(root, runner, "switch", "-c", branch)
+    if current == base:
+        _require_clean(root, runner)
+        if _branch_exists(root, runner, branch):
+            _require_setup_history(root, runner, base, branch)
+            _git(root, runner, "switch", branch)
+        else:
+            _git(root, runner, "switch", "-c", branch)
+    else:
+        _require_setup_history(root, runner, base, branch)
+        _require_allowed_changes(_setup_changes(root, runner))
+
+    existing_pr = github.pr_for_branch(branch)
+    if existing_pr is not None and (
+        existing_pr.state != "OPEN"
+        or not existing_pr.is_draft
+        or existing_pr.branch != branch
+        or existing_pr.base != base
+    ):
+        raise OnboardingError(
+            f"setup PR #{existing_pr.number} is no longer an open draft targeting "
+            f"'{base}'; inspect it before changing its branch"
+        )
     initialize()
     changed = _setup_changes(root, runner)
-    if not changed:
-        raise OnboardingError("setup generated no repository changes")
-    unmanaged = [path for path in changed if not _allowed_setup_path(path)]
-    if unmanaged:
-        raise OnboardingError(
-            "setup changed paths outside the setup allowlist: "
-            + ", ".join(unmanaged)
-            + "; changes remain visible on the setup branch"
-        )
+    _require_allowed_changes(changed)
     if validate is not None:
         validate()
-    _git(root, runner, "add", "--", *changed)
-    _git(
-        root,
-        runner,
-        "-c",
-        "user.name=AgentMachinist",
-        "-c",
-        "user.email=agentmachinist@users.noreply.github.com",
-        "commit",
-        "-m",
-        "chore: adopt AgentMachinist",
-    )
+    if changed:
+        _git(root, runner, "add", "--", *changed)
+        _git(
+            root,
+            runner,
+            "-c",
+            "user.name=AgentMachinist",
+            "-c",
+            "user.email=agentmachinist@users.noreply.github.com",
+            "commit",
+            "-m",
+            "chore: adopt AgentMachinist",
+        )
     commit_sha = _git(root, runner, "rev-parse", "HEAD").strip()
+    delivered = _require_setup_history(root, runner, base, branch)
+    if not delivered and existing_pr is None:
+        if current == base:
+            _git(root, runner, "switch", base)
+        return SetupPRResult(branch=base, base=base, commit_sha=commit_sha, pr=None)
     _git(root, runner, "push", "--set-upstream", "origin", branch)
-    pr = github.create_draft_pr(
-        branch=branch,
-        base=base,
-        title="Adopt AgentMachinist",
-        body=_setup_pr_body(changed, commit_sha),
+    pr = (
+        DraftPR(number=existing_pr.number, url=existing_pr.url)
+        if existing_pr is not None
+        else github.create_draft_pr(
+            branch=branch,
+            base=base,
+            title="Adopt AgentMachinist",
+            body=_setup_pr_body(delivered, commit_sha),
+        )
     )
     return SetupPRResult(branch=branch, base=base, commit_sha=commit_sha, pr=pr)
 
@@ -99,14 +121,60 @@ def _require_clean(root: Path, runner: Callable[..., Any]) -> None:
         )
 
 
-def _require_new_branch(root: Path, runner: Callable[..., Any], branch: str) -> None:
+def _branch_exists(root: Path, runner: Callable[..., Any], branch: str) -> bool:
     result = _run_git(root, runner, "show-ref", "--verify", f"refs/heads/{branch}")
     if result.returncode == 0:
-        raise OnboardingError(
-            f"setup branch '{branch}' already exists; inspect or rename it first"
-        )
+        return True
     if result.returncode not in {1, 128}:
         raise OnboardingError(_git_failure(result, "show-ref"))
+    return False
+
+
+def _require_setup_history(
+    root: Path, runner: Callable[..., Any], base: str, branch: str
+) -> tuple[str, ...]:
+    # A final diff cannot reveal unrelated content added and then reverted.
+    # Publishing a branch publishes those commits too, so check every one.
+    commits = _git(root, runner, "rev-list", f"{base}..{branch}", "--").splitlines()
+    for commit in commits:
+        committed_paths = tuple(
+            path
+            for path in _git(
+                root,
+                runner,
+                "diff-tree",
+                "--no-commit-id",
+                "--name-only",
+                "--no-renames",
+                "--root",
+                "-r",
+                "-m",
+                "-z",
+                commit,
+                "--",
+            ).split("\0")
+            if path
+        )
+        _require_allowed_changes(committed_paths)
+    paths = tuple(
+        path
+        for path in _git(
+            root, runner, "diff", "--name-only", "-z", f"{base}...{branch}", "--"
+        ).split("\0")
+        if path
+    )
+    _require_allowed_changes(paths)
+    return paths
+
+
+def _require_allowed_changes(paths: tuple[str, ...]) -> None:
+    unmanaged = [path for path in paths if not _allowed_setup_path(path)]
+    if unmanaged:
+        raise OnboardingError(
+            "setup changed paths outside the setup allowlist: "
+            + ", ".join(unmanaged)
+            + "; preserve this work separately before rerunning 'machinist onboard --setup-pr'"
+        )
 
 
 def _setup_changes(root: Path, runner: Callable[..., Any]) -> tuple[str, ...]:
@@ -141,9 +209,10 @@ def _setup_pr_body(changed: tuple[str, ...], sha: str) -> str:
         "This draft contains generated adoption files for review. It does not "
         "merge itself or change branch protection.\n\n"
         f"Commit: `{sha}`\n\n### Generated files\n\n{listing}\n\n"
-        "### Next\n\nRun `machinist doctor --run-gates`, review the generated "
-        "configuration and workflows, then use the repository's normal human "
-        "review and merge process."
+        "### Next\n\nReview the generated configuration and workflows, then use "
+        "the repository's normal human review and merge process. After this PR "
+        "is merged, run `machinist doctor --run-gates` to verify deployed "
+        "workflows and execution readiness."
     )
 
 

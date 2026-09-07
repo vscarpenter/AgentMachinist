@@ -8,6 +8,7 @@ from typing import Protocol, TypeVar
 
 from machinist.cancellation import CancellationStore
 from machinist.config import MachinistConfig
+from machinist.evidence import TaskEvidence
 from machinist.github import GitHubClient, PullRequest
 from machinist.harness import get_harness
 from machinist.lifecycle import (
@@ -18,6 +19,7 @@ from machinist.lifecycle import (
     TaskClaim,
     TaskLifecycle,
 )
+from machinist.local_workspace import LocalWorkspace
 from machinist.phases.execute import run_execute_phase
 from machinist.phases.review import run_review_phase
 from machinist.phases.spec import preview_spec_phase, run_spec_phase
@@ -45,6 +47,7 @@ class Lifecycle(Protocol):
         action: Callable[[TaskClaim], _Result],
         *,
         repeat_succeeded: bool = False,
+        repeat_succeeded_if: Callable[[RunRecord], bool] | None = None,
     ) -> _Result: ...
 
     def record(self, issue: int, phase: Phase) -> RunRecord | None: ...
@@ -169,11 +172,29 @@ class TaskDispatcher:
 
     def run_review(self, issue: int) -> PullRequest:
         """Enter Review only for the exact successful Execute Evidence."""
-        execute = self.lifecycle.record(issue, Phase.EXECUTE)
-        if execute is None or execute.status is not RunStatus.SUCCEEDED:
-            raise LifecycleError(
-                f"issue #{issue} has no successful Execute Task Run to review"
+
+        def current_execute() -> RunRecord:
+            execute = self.lifecycle.record(issue, Phase.EXECUTE)
+            if execute is None or execute.status is not RunStatus.SUCCEEDED:
+                raise LifecycleError(
+                    f"issue #{issue} has no successful Execute Task Run to review"
+                )
+            return execute
+
+        def new_delivery(prior: RunRecord) -> bool:
+            delivered_sha = TaskEvidence.load(current_execute().evidence).pushed_sha
+            reviewed_sha = TaskEvidence.load(prior.evidence).reviewed_sha
+            return (
+                delivered_sha is not None
+                and reviewed_sha is not None
+                and delivered_sha != reviewed_sha
             )
+
+        # Preserve the preflight error without starting a failed Review record.
+        # Both reads used for repeat admission and execution are refreshed while
+        # holding the issue Claim, so a concurrent completion cannot admit a
+        # second Review for the same delivered head.
+        current_execute()
         return self.lifecycle.run(
             issue,
             Phase.REVIEW,
@@ -183,10 +204,11 @@ class TaskDispatcher:
                 github=self._github_client(),
                 harness=self._harness(Phase.REVIEW, issue),
                 workspace=self._workspace(issue),
-                execute_evidence=dict(execute.evidence),
+                execute_evidence=dict(current_execute().evidence),
                 claim=claim,
                 cancel_check=self.cancellation.check(issue),
             ),
+            repeat_succeeded_if=new_delivery,
         )
 
     def run_phase(
@@ -203,6 +225,77 @@ class TaskDispatcher:
             return self.run_execute(issue, resume=resume)
         return self.run_review(issue)
 
+    def run_local_spec(self, task, *, store, revise: bool = False):
+        """Enter a claimed local Spec using the same durable lifecycle."""
+        from machinist.phases.local import run_local_spec
+
+        return self.lifecycle.run(
+            task.number,
+            Phase.SPEC,
+            lambda claim: run_local_spec(
+                task,
+                self.config,
+                store=store,
+                workspace=self._local_workspace(task.number),
+                harness=self._harness(Phase.SPEC, task.number),
+                claim=claim,
+                cancel_check=self.cancellation.check(task.number),
+                test_runner=self._test_runner,
+            ),
+            repeat_succeeded=revise,
+            repeat_succeeded_if=lambda prior: bool(
+                task.spec_sha is None
+                and task.spec_base_sha
+                and task.feedback
+                and prior.evidence.get("spec_sha") != task.spec_base_sha
+            ),
+        )
+
+    def run_local_execute(self, task, *, store, resume: bool = False):
+        """Execute the exact local Approval, allowing a newly approved amendment."""
+        from machinist.phases.local import run_local_execute
+
+        return self.lifecycle.run(
+            task.number,
+            Phase.EXECUTE,
+            lambda claim: run_local_execute(
+                task,
+                self.config,
+                store=store,
+                workspace=self._local_workspace(task.number),
+                harness=self._harness(Phase.EXECUTE, task.number),
+                claim=claim,
+                cancel_check=self.cancellation.check(task.number),
+                test_runner=self._test_runner,
+                resume=resume,
+            ),
+            repeat_succeeded_if=lambda prior: (
+                prior.evidence.get("approved_sha") != task.spec_sha
+            ),
+        )
+
+    def run_local_review(self, task, *, store):
+        """Review one immutable local candidate, repeating only for a new head."""
+        from machinist.phases.local import run_local_review
+
+        return self.lifecycle.run(
+            task.number,
+            Phase.REVIEW,
+            lambda claim: run_local_review(
+                task,
+                self.config,
+                store=store,
+                workspace=self._local_workspace(task.number),
+                harness=self._harness(Phase.REVIEW, task.number),
+                claim=claim,
+                cancel_check=self.cancellation.check(task.number),
+                test_runner=self._test_runner,
+            ),
+            repeat_succeeded_if=lambda prior: (
+                prior.evidence.get("reviewed_sha") != task.candidate_sha
+            ),
+        )
+
     def _github_client(self) -> object:
         if self._github is not None:
             return self._github
@@ -212,6 +305,17 @@ class TaskDispatcher:
         github = GitHubClient()
         bind_repository(self.config, github, workspace)
         return github
+
+    def _local_workspace(self, number: int) -> LocalWorkspace:
+        workspace = (
+            self._workspace_factory()
+            if self._workspace_factory is not None
+            else LocalWorkspace(self.repo_root, self.config.workspace)
+        )
+        if not isinstance(workspace, LocalWorkspace):
+            raise LifecycleError("local Phase requires a LocalWorkspace")
+        workspace.cancel_check = self.cancellation.check(number)
+        return workspace
 
     def _harness(self, phase: Phase, issue: int) -> object:
         if self._harness_factory is not None:

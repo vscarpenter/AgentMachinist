@@ -1,9 +1,17 @@
 # Resume-push fold and flags-only approve — Implementation Plan
 
+> [!IMPORTANT]
+> **Historical design record.** Preserved implementation context, not current
+> operating instructions. See [Getting Started](../../getting-started.md),
+> [Architecture and lifecycle](../../architecture.md), and
+> [Local workflow](../../local-workflow.md) for current behavior.
+> The issue/PR flags and push recovery remain the legacy GitHub contract.
+> Local Tasks additionally use `approve --task T1 --spec-sha FULL_SHA` and separate publication.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Implement cards 7 and 14 of the 2026-09-03 review in one PR.
-**Spec:** `tasks/spec.md`. **Tech:** Python 3.12, pytest (offline).
+**Spec:** [Archived specification](../specs/2026-09-03-resume-push-and-approve-flags.md). **Tech:** Python 3.12, pytest (offline).
 
 ## Global Constraints
 - Invariants 2, 4, 7 preserved (see spec). TDD: red before green. One commit per card.

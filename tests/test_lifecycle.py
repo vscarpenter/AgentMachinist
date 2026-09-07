@@ -45,6 +45,87 @@ def test_run_persists_success_and_result_evidence(tmp_path):
     assert projection["evidence"]["pr_number"] == 57
 
 
+def test_conditional_success_repeat_is_checked_under_claim_before_start(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(
+        42, Phase.REVIEW, lambda claim: claim.checkpoint(reviewed_sha="a" * 40)
+    )
+    observed = []
+
+    def allow_new_delivery(prior):
+        observed.append(prior)
+        assert lifecycle.claim_held(42)
+        assert lifecycle.record(42, Phase.REVIEW).attempt == 1
+        return True
+
+    lifecycle.run(
+        42,
+        Phase.REVIEW,
+        lambda claim: observed.append(claim.previous_evidence),
+        repeat_succeeded_if=allow_new_delivery,
+    )
+
+    assert observed[0].evidence["reviewed_sha"] == "a" * 40
+    assert observed[1] == {}
+    assert lifecycle.record(42, Phase.REVIEW).attempt == 2
+    assert "reviewed_sha" not in lifecycle.record(42, Phase.REVIEW).evidence
+
+
+def test_conditional_repeat_refusal_does_not_create_an_attempt(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(42, Phase.REVIEW, lambda claim: None)
+
+    with pytest.raises(LifecycleError, match="refusing a duplicate run"):
+        lifecycle.run(
+            42,
+            Phase.REVIEW,
+            lambda claim: None,
+            repeat_succeeded_if=lambda prior: False,
+        )
+
+    assert lifecycle.record(42, Phase.REVIEW).attempt == 1
+    assert len(lifecycle.history(42, Phase.REVIEW)) == 1
+
+
+def test_conditional_repeat_does_not_authorize_an_abandoned_run(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(42, Phase.REVIEW, lambda claim: None)
+    lifecycle.abandon(42, Phase.REVIEW, "operator stopped this review")
+
+    with pytest.raises(LifecycleError, match="machinist retry 42"):
+        lifecycle.run(
+            42, Phase.REVIEW, lambda claim: None, repeat_succeeded_if=lambda prior: True
+        )
+
+    assert lifecycle.record(42, Phase.REVIEW).status is RunStatus.ABANDONED
+
+
+def test_same_issue_can_be_claimed_in_distinct_runtime_namespaces(tmp_path):
+    first = TaskLifecycle(tmp_path / "github-runs")
+    second = TaskLifecycle(tmp_path / "local-runs")
+
+    def run_other_namespace(claim):
+        assert first.claim_held(42)
+        assert not second.claim_held(42)
+        return second.run(42, Phase.SPEC, lambda other_claim: "independent")
+
+    assert first.run(42, Phase.SPEC, run_other_namespace) == "independent"
+    assert first.record(42, Phase.SPEC).status is RunStatus.SUCCEEDED
+    assert second.record(42, Phase.SPEC).status is RunStatus.SUCCEEDED
+
+
+def test_separate_lifecycles_for_same_runtime_still_share_in_process_claim(tmp_path):
+    first = TaskLifecycle(tmp_path / "runs")
+    second = TaskLifecycle(tmp_path / "runs")
+
+    def refuse_duplicate(claim):
+        assert second.claim_held(42)
+        with pytest.raises(LifecycleError, match="already claimed"):
+            second.run(42, Phase.SPEC, lambda other_claim: None)
+
+    first.run(42, Phase.SPEC, refuse_duplicate)
+
+
 def test_success_projection_failure_never_appends_a_conflicting_failed_terminal(
     tmp_path, monkeypatch
 ):

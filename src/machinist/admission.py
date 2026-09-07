@@ -28,7 +28,7 @@ def queue_admission(
     now: datetime | None = None,
     additionally_admitted: int = 0,
 ) -> AdmissionDecision:
-    """Evaluate allowed hours and durable daily task/runtime ceilings."""
+    """Evaluate allowed hours and durable daily Task Run/runtime ceilings."""
     moment = now or datetime.now(UTC)
     allowed_hours = config.queue.allowed_hours
     if allowed_hours is not None and not allowed_hours.contains(moment):
@@ -65,12 +65,12 @@ def queue_admission(
         return _corrupt_history_decision()
 
     if (
-        budget.max_tasks_per_day is not None
-        and len(todays) + additionally_admitted >= budget.max_tasks_per_day
+        budget.max_runs_per_day is not None
+        and len(todays) + additionally_admitted >= budget.max_runs_per_day
     ):
         return AdmissionDecision(
             False,
-            f"daily Task budget reached ({budget.max_tasks_per_day})",
+            f"daily Task Run budget reached ({budget.max_runs_per_day})",
         )
 
     elapsed_minutes = sum(_duration_seconds(record, moment) for record in todays) / 60

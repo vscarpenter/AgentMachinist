@@ -9,9 +9,94 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from machinist.evidence import TaskEvidence
 from machinist.lifecycle import Phase, RunRecord, RunStatus
+
+if TYPE_CHECKING:
+    from machinist.local_tasks import LocalTask
+
+
+@dataclass(frozen=True)
+class LocalTransitionDecision:
+    state: str
+    next_action: str
+
+
+def classify_local_task(
+    task: LocalTask,
+    *,
+    records: dict[Phase, RunRecord | None],
+    claim_held: bool,
+) -> LocalTransitionDecision:
+    """Project the local delivery cycle without relying on forge state."""
+
+    def phase_state(phase: Phase) -> LocalTransitionDecision | None:
+        record = records.get(phase)
+        if record is None or record.status is RunStatus.SUCCEEDED:
+            return None
+        if record.status is RunStatus.RETRYABLE:
+            return LocalTransitionDecision(
+                f"{phase.value} retryable", f"machinist continue {task.id}"
+            )
+        state = classify_run(record, claim_held=claim_held).state.value
+        action = (
+            f"machinist cancel --task {task.id}"
+            if claim_held
+            else f"machinist retry --task {task.id} --phase {phase.value}"
+        )
+        return LocalTransitionDecision(state, action)
+
+    pending = phase_state(Phase.SPEC)
+    if pending:
+        return pending
+    if task.spec_sha is None:
+        return LocalTransitionDecision("awaiting spec", f"machinist continue {task.id}")
+    if not task.approval or any(
+        task.approval.get(key) != value
+        for key, value in {
+            "repository": task.repository,
+            "task_id": task.id,
+            "spec_sha": task.spec_sha,
+        }.items()
+    ):
+        return LocalTransitionDecision(
+            "awaiting approval",
+            f"machinist approve --task {task.id} --spec-sha {task.spec_sha}",
+        )
+    pending = phase_state(Phase.EXECUTE)
+    if pending:
+        return pending
+    execute = records.get(Phase.EXECUTE)
+    if (
+        execute is None
+        or execute.evidence.get("approved_sha") != task.spec_sha
+        or not task.candidate_sha
+        or execute.evidence.get("implementation_sha") != task.candidate_sha
+    ):
+        return LocalTransitionDecision("approved", f"machinist continue {task.id}")
+    pending = phase_state(Phase.REVIEW)
+    if pending:
+        return pending
+    review = records.get(Phase.REVIEW)
+    if (
+        review is None
+        or review.evidence.get("reviewed_sha") != task.candidate_sha
+        or not task.review_report
+        or task.review_report.get("completed") is not True
+        or task.review_report.get("reviewed_sha") != task.candidate_sha
+    ):
+        return LocalTransitionDecision(
+            "awaiting review", f"machinist continue {task.id}"
+        )
+    if task.integration and task.integration.get("observed_sha") == task.candidate_sha:
+        return LocalTransitionDecision(
+            "integrated", f"machinist publish {task.id} (optional)"
+        )
+    return LocalTransitionDecision(
+        "ready to integrate", f"machinist integrate {task.id}"
+    )
 
 
 class PipelineState(StrEnum):

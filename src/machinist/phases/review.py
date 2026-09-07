@@ -89,6 +89,13 @@ def run_review_phase(
     pr = _find_pr(github, config, branch)
     evidence = TaskEvidence.load(execute_evidence)
     expected_sha, base = _review_identity(pr, evidence, github)
+    if TaskEvidence.load(claim.previous_evidence).reviewed_sha != expected_sha:
+        claim.checkpoint(
+            reviewed_sha=None,
+            review_comment_id=None,
+            finding_counts=None,
+            review_report=None,
+        )
     report_progress(claim, "provision Review preview", branch)
     preview_task = f"preview-review-issue-{issue_number}-{uuid4().hex[:12]}"
     path = workspace.provision_preview(preview_task, branch, f"origin/{base}")
@@ -256,7 +263,11 @@ def _deliver_review(
     comment_id = github.upsert_pr_comment(
         current.number,
         _review_comment(issue_number, expected_sha, report),
-        comment_id=previous.review_comment_id,
+        comment_id=(
+            previous.review_comment_id
+            if previous.reviewed_sha == expected_sha
+            else None
+        ),
     )
     claim.checkpoint(review_comment_id=comment_id)
     current = _exact_pr(github, pr, branch, expected_sha)

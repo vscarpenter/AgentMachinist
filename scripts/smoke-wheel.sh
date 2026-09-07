@@ -33,11 +33,15 @@ git -C "$PROJECT_DIR" init -q -b main
     --harness codex --spec-source local --notifications disabled
   PATH="$ENV_DIR/bin:$PATH" machinist config validate
   PATH="$ENV_DIR/bin:$PATH" machinist status --local --json > "$TMP_DIR/status.json"
+  PATH="$ENV_DIR/bin:$PATH" machinist rehearse > "$TMP_DIR/rehearsal.txt"
 )
 "$ENV_DIR/bin/python" -c "import json; p = json.load(open('$TMP_DIR/status.json')); assert p['schema_version'] == 1; assert p['current'] == []"
 test -f "$PROJECT_DIR/machinist.yaml"
 test -f "$PROJECT_DIR/.machinist/specs/.gitkeep"
 grep -Fxq '/.machinist/runs/' "$PROJECT_DIR/.gitignore"
+grep -Fq 'execute verified' "$TMP_DIR/rehearsal.txt"
+grep -Fq 'review complete' "$TMP_DIR/rehearsal.txt"
+grep -Fq 'local integration complete' "$TMP_DIR/rehearsal.txt"
 
 SDIST_ENV="$TMP_DIR/sdist-venv"
 uv venv "$SDIST_ENV"

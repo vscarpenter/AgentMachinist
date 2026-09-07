@@ -10,7 +10,8 @@ bash scripts/verify.sh
 `uv run pytest -o addopts=` is the verbose local equivalent of CI.
 
 Changes to lifecycle behavior should start with a failing contract test. Keep
-GitHub CLI construction behind `GitHubClient`, Git behavior behind `Workspace`,
+legacy GitHub CLI construction behind `GitHubClient`, optional forge operations
+behind `forge.py`/`gitlab.py`, and Git behavior behind `Workspace`/`LocalWorkspace`,
 known Evidence interpretation in `evidence.py`, Task Run construction in
 `dispatch.py`, journal discovery in `lifecycle.py`, transition decisions in
 `transitions.py`, repository/PR checks in `repository_custody.py`, and Gate

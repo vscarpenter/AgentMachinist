@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A one-page TL;DR of the AgentMachinist pipeline: local and GitHub Actions dispatch side by side, from repository prep to merged pull request.">
+  <meta name="description" content="A compact job card for the local AgentMachinist workflow, explicit integration, optional GitHub and GitLab publication, and the separate legacy GitHub issue workflow.">
   <meta name="theme-color" content="#f3f1eb">
   <title>Machinist Job Card</title>
   <style>
@@ -215,8 +215,9 @@
 
     /* ── Two-track grid ───────────────────── */
     .tracks {
+      align-items: start;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 0 var(--space-5);
     }
     .track-head {
@@ -236,6 +237,7 @@
     .track-head .cfg { font-size: 0.8rem; }
 
     .stage-bar {
+      flex-wrap: wrap;
       grid-column: 1 / -1;
       display: flex;
       align-items: baseline;
@@ -264,6 +266,8 @@
     .auto-tag { color: var(--ink-2); }
 
     .cell {
+      min-width: 0;
+      overflow-wrap: anywhere;
       margin-top: var(--space-4);
       padding: var(--space-4) var(--space-5);
       border: 1px solid var(--line);
@@ -326,212 +330,89 @@
     footer a { color: var(--blueprint); }
 
     @media (max-width: 44rem) {
-      .tracks { grid-template-columns: 1fr; }
+      .tracks {
+      align-items: start; grid-template-columns: 1fr; }
       .track-head.ci { margin-top: var(--space-4); }
       .gate-tag, .auto-tag { margin-left: 0; }
     }
   </style>
 </head>
 <body>
-<div class="shell">
-  <header>
-    <p class="kicker">AgentMachinist · Job card · Rev 0.13.0</p>
-    <h1>Machinist Job Card</h1>
-    <p class="lede">One GitHub issue in, one reviewed pull request out. The
-    machine writes the spec and the code; you approve the exact spec commit
-    and you do the merge. Two dispatch modes, same operations.</p>
-  </header>
-
-  <div class="pipeline-scroll">
-    <div class="pipeline">
-      <span class="step">issue + label</span><span class="arrow">→</span>
-      <span class="step">spec commit</span><span class="arrow">→</span>
-      <span class="step">draft PR</span><span class="arrow">→</span>
-      <span class="gate">approve SHA</span><span class="arrow">→</span>
-      <span class="step">implement</span><span class="arrow">→</span>
-      <span class="step">test gate</span><span class="arrow">→</span>
-      <span class="step">independent review</span><span class="arrow">→</span>
-      <span class="step">ready PR</span><span class="arrow">→</span>
-      <span class="gate">you merge</span>
-    </div>
-  </div>
-
-  <section class="prep">
-    <span class="op-index">OP 00</span>
-    <h2>Prep — get the repo onto GitHub first</h2>
-    <p>Machinist works against a GitHub remote: specs are pushed as branches,
-    approvals live on pull requests. Before <code>machinist onboard</code>, commit
-    everything and put the repository on GitHub.</p>
-    <pre><code>git init &amp;&amp; git add . &amp;&amp; git commit -m "initial commit"
-gh repo create my-project --private --source . --push
-gh auth status                       <span class="comment"># must be authenticated</span>
+<main class="shell" id="main">
+  <header><p class="kicker">AgentMachinist · Job card · v0.14.0</p><h1>Machinist Job Card</h1><p class="lede">One local Task, an exact Spec to approve, and a verified candidate with independent advisory Review. You choose local integration and optional publication.</p><p><strong>AgentMachinist 0.14.0 includes the local workflow and GitLab support.</strong> Install from PyPI. The separate GitHub issue workflow remains supported.</p></header>
+  <div class="pipeline-scroll" tabindex="0" role="region" aria-label="Local Task sequence"><div class="pipeline">
+    <span class="step">Task T1</span><span class="arrow">→</span><span class="step">baseline + Spec commit</span><span class="arrow">→</span><span class="gate">approve exact SHA</span><span class="arrow">→</span><span class="step">Execute + gates</span><span class="arrow">→</span><span class="step">advisory Review</span><span class="arrow">→</span><span class="gate">you integrate</span>
+  </div></div>
+  <section class="prep"><span class="op-index">PREP</span><h2>A committed repository, a Harness, and real tests</h2><p>Start with a clean Git checkout, an initial commit, configured author, and an installed, authenticated Harness. No origin, forge account, or watcher is required for local Tasks.</p><pre><code># Install the released controller:
 uv tool install agentmachinist
-claude --version                     <span class="comment"># or opencode / pi / codex on PATH</span></code></pre>
-  </section>
-
+machinist start --help
+# Then change to the repository you want to work on:
+cd ~/code/your-project
+# Optional: exercise the production path in a disposable repository.
+machinist rehearse</code></pre><p>The default rehearsal uses a fake Harness with real Git and verification, making no model or API calls. <code>rehearse --harness</code> uses configured Harnesses and may consume provider usage.</p></section>
   <div class="tracks">
-    <div class="track-head local">
-      <h2>Local</h2>
-      <p>Your machine runs everything. <span class="cfg mono">spec_source: local</span></p>
-    </div>
-    <div class="track-head ci">
-      <h2>GitHub Actions</h2>
-      <p>CI writes the spec; you approve from the GitHub UI. <span class="cfg mono">spec_source: github-actions</span></p>
-    </div>
-
-    <div class="stage-bar">
-      <span class="op-index">OP 01</span>
-      <h3>Initialize</h3>
-    </div>
-    <div class="cell local">
-      <span class="chip local">Local</span>
-      <pre><code>machinist onboard     <span class="comment"># dispatch mode: local — writes minimal machinist.yaml (~20 lines)</span>
-machinist doctor --run-gates   <span class="comment"># single health check — prints fix for any FAIL</span>
-<span class="comment"># or hands-free: machinist onboard --yes  # defaults + auto-detected test command</span>
-git add machinist.yaml .machinist/specs/.gitkeep .gitignore
-git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows   <span class="comment"># review each hunk</span>
-git diff --cached              <span class="comment"># verify what will be committed</span>
-git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
-      <p class="note">The wizard asks dispatch mode, harness, test gate, and
-      notifications — each with a safe default. <code>doctor --run-gates</code> already
-      checks labels, workflows, and the issue form; only run the individual
-      <code>--check</code> commands if doctor asks. <code>machinist --help</code> groups
-      commands as Setup / Tasks / Build / Operate daily vs advanced.</p>
-    </div>
-    <div class="cell ci">
-      <span class="chip ci">GitHub Actions</span>
-      <pre><code>machinist onboard --spec-source github-actions
-gh secret set ANTHROPIC_API_KEY       <span class="comment"># default claude-code adapter; see Harness matrix for others</span>
-machinist doctor --run-gates   <span class="comment"># single health check</span>
-git add machinist.yaml .machinist/specs/.gitkeep .gitignore
-git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows   <span class="comment"># review each hunk</span>
-git diff --cached
-git commit -m "chore: configure AgentMachinist" &amp;&amp; git push</code></pre>
-      <p class="note">Workflows must be pushed before GitHub can record a
-      SHA-bound approval. Managed CI installs the selected Spec adapter and
-      reads its declared repository secret. Only run <code>sync-labels --check</code> /
-      <code>sync-workflows --check</code> if doctor asks.</p>
-    </div>
-
-    <div class="stage-bar">
-      <span class="op-index">OP 02</span>
-      <h3>Create the issue</h3>
-    </div>
-    <div class="cell span">
-      <span class="chip both">Same on both tracks</span>
-      <pre><code>machinist task new --title "Add CSV export" --dispatch
-machinist task lint 7</code></pre>
-      <p class="note">The managed form captures the objective, acceptance
-      criteria, constraints, and verification. The <code>agent-task</code>
-      trigger is applied only after local readiness lint passes.</p>
-    </div>
-
-    <div class="stage-bar">
-      <span class="op-index">OP 03</span>
-      <h3>Spec</h3>
-      <span class="auto-tag">machine</span>
-    </div>
-    <div class="cell local">
-      <span class="chip local">Local</span>
-      <pre><code>machinist spec 7      <span class="comment"># or: machinist watch --once</span>
-machinist spec 7 --dry-run           <span class="comment"># read-only preview</span></code></pre>
-      <p class="note">Harness reads the issue read-only in an isolated
-      workshop, writes <code>.machinist/specs/issue-7-spec.md</code>, and the
-      controller pushes <code>agent/issue-7</code> as a draft PR.</p>
-    </div>
-    <div class="cell ci">
-      <span class="chip ci">GitHub Actions</span>
-      <p>Nothing to run. Applying the label triggers
-      <code>machinist-spec.yml</code>, which generates the spec in CI and opens
-      the draft PR.</p>
-      <p class="note">Your local <code>watch</code> daemon leaves labeled
-      issues alone — exactly one dispatcher owns this phase.</p>
-    </div>
-
-    <div class="stage-bar">
-      <span class="op-index">OP 04</span>
-      <h3>Approve the spec</h3>
-      <span class="gate-tag">Human gate</span>
-    </div>
-    <div class="cell span">
-      <span class="chip both">Same on both tracks</span>
-      <pre><code>machinist approve --issue 7          <span class="comment"># or --pr 8</span>
-<span class="comment"># The exact command from the PR body is also accepted:</span>
-/machinist-execute &lt;full-spec-commit-sha&gt;</code></pre>
-      <p class="note">Read the Spec first. The CLI requests approval; it does
-      not mint Evidence itself. The managed workflow checks write or admin
-      access and the current head before recording the SHA-bound marker.
-      <code>machinist status</code> stays <code>awaiting approval</code> while
-      that verification runs. A label without trusted Evidence is
-      <code>approval pending</code>.</p>
-    </div>
-
-    <div class="stage-bar">
-      <span class="op-index">OP 05</span>
-      <h3>Execute</h3>
-      <span class="auto-tag">machine</span>
-    </div>
-    <div class="cell span">
-      <span class="chip both">Always on your machine — CI only ever owns the spec phase</span>
-      <pre><code>machinist run 7       <span class="comment"># or leave `machinist watch` running to dispatch it</span></code></pre>
-      <p class="note">Harness implements against the approved spec, the test
-      gate runs (e.g. <code>uv run pytest</code>), and the controller commits
-      and pushes with <code>--force-with-lease</code>. The PR remains draft for
-      an independent Review. Edited the spec after approving? The approval goes
-      stale and execution refuses until you approve the new head.</p>
-    </div>
-
-    <div class="stage-bar">
-      <span class="op-index">OP 06</span>
-      <h3>Independent Review</h3>
-      <span class="auto-tag">machine</span>
-    </div>
-    <div class="cell span">
-      <span class="chip both">Same on both tracks</span>
-      <pre><code>machinist review 7    <span class="comment"># or leave `machinist watch` running</span></code></pre>
-      <p class="note">A separate read-only Harness compares the approved Spec,
-      delivered diff, and verification Evidence at the exact PR head. It posts
-      advisory findings and alone marks that unchanged head ready.</p>
-    </div>
-
-    <div class="stage-bar">
-      <span class="op-index">OP 07</span>
-      <h3>Review &amp; merge</h3>
-      <span class="gate-tag">Human gate</span>
-    </div>
-    <div class="cell span">
-      <span class="chip both">Same on both tracks</span>
-      <p>A ready PR means implementation finished and the test gate passed.
-      Review it like any teammate's PR and merge it yourself — AgentMachinist
-      never merges. For rework: <code>machinist amend 7 --feedback "…"</code>
-      after a fresh approval.</p>
-    </div>
+    <div class="track-head local"><h2>Foreground local workflow</h2><p>Recommended for solo developers and small teams. Task IDs such as <code>T1</code>.</p></div>
+    <div class="track-head ci"><h2>Legacy GitHub issues</h2><p>Existing GitHub Actions or local watcher dispatch. Numeric issue IDs such as <code>7</code>.</p></div>
+    <div class="stage-bar"><span class="op-index">01</span><h3>Start and prepare</h3></div>
+    <div class="cell local"><span class="chip local">Local</span><pre><code>machinist start "Add CSV export for filtered transaction rows" --test-cmd "uv run pytest"
+# Optional detail: --body-file task.md
+# Read stdin: --body-file -</code></pre><p>First start discovers an installed full-pipeline Harness, saves <code>.machinist/runs/local/config.yaml</code>, and runs baseline verification before model work. Select the Harness explicitly with <code>--harness codex</code> or another adapter.</p><p class="note">The Gate must work from committed files in an isolated Workshop. Ignored dependencies are not copied; use environment preparation such as <code>npm ci &amp;&amp; npm test</code> when needed. Local setup requires at least one required Gate and always enables Review.</p></div>
+    <div class="cell ci"><span class="chip ci">GitHub setup</span><pre><code>machinist onboard --setup-pr --spec-source github-actions
+# Add the selected adapter's repository secret.
+# Review and merge the draft setup PR, then:
+machinist doctor --run-gates</code></pre><p>Onboarding performs setup preflight before requiring remote default-branch deployment. Rerun it to resume managed setup work and reuse the draft PR. Existing valid settings are preserved; use <code>machinist config set</code> to change them.</p><p class="note">For local watcher Spec dispatch, choose <code>--spec-source local</code>. That legacy setting still requires GitHub; it is separate from local Tasks.</p></div>
+    <div class="stage-bar"><span class="op-index">02</span><h3>Read the Spec</h3><span class="auto-tag">Machine Phase</span></div>
+    <div class="cell local"><span class="chip local">Local</span><pre><code>machinist status T1</code></pre><p><code>start</code> generates a Spec, retains its exact commit on <code>agent/task-1</code>, and stops for Approval. Inspect the printed Spec and full SHA. Your original base is unchanged.</p><p class="note">Task records live under <code>.machinist/runs/local/</code> and are excluded using Git’s local exclude file. Existing <code>machinist.yaml</code> is preserved; local setup generates no GitHub artifacts.</p></div>
+    <div class="cell ci"><span class="chip ci">GitHub issue</span><pre><code>machinist task new --title "Add CSV export for filtered transaction rows" --dispatch
+# For the local watcher Spec source only:
+machinist spec 7</code></pre><p>GitHub Actions Spec dispatch runs after the trigger label is applied. It opens a draft PR containing <code>.machinist/specs/issue-7-spec.md</code>. A local watcher leaves that Spec Phase to CI.</p><p class="note">The issue form accepts <code>##</code> and GitHub’s <code>###</code> field headings. Its Objective needs at least six words; acceptance checkboxes must be meaningful. Failed lint or publication preserves a draft.</p></div>
+    <div class="stage-bar"><span class="op-index">03</span><h3>Approve the exact Spec</h3><span class="gate-tag">Human Gate</span></div>
+    <div class="cell local"><span class="chip local">Local Approval</span><pre><code>machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;</code></pre><p>Copy the complete command printed by start or status after reading the Spec. Approval records repository, Task, exact SHA, actor, and time. The command continues Execute, verification, and independent Review in the foreground.</p></div>
+    <div class="cell ci"><span class="chip ci">GitHub Approval</span><pre><code>machinist approve --issue 7
+# Or: machinist approve --pr 8
+# The exact command from the PR body also works:
+/machinist-execute &lt;full-spec-commit-sha&gt;</code></pre><p>The managed workflow checks write or admin access and the current head before recording the trusted SHA marker. The CLI requests Approval; it does not mint that Evidence. The GitHub review Approve button is not this Gate.</p></div>
+    <div class="stage-bar"><span class="op-index">04</span><h3>Execute, verify, and independently Review</h3><span class="auto-tag">Machine Phases</span></div>
+    <div class="cell local"><span class="chip local">Continues in foreground</span><pre><code># Read progress in the current terminal.
+# If eligible work remains after an interruption:
+machinist continue T1
+machinist status T1</code></pre><p>The Harness implements in an isolated Workshop. The controller runs required Verification Gates and retains the candidate before cleanup. A separate read-only Review checks the exact candidate and saves advisory findings.</p><p class="note"><code>continue</code> never bypasses Approval or explicit retry. A completed Review with findings is not a failed gate and does not certify the change safe to integrate.</p></div>
+    <div class="cell ci"><span class="chip ci">Local runner or watcher</span><pre><code># Wait for trusted SHA-bound Approval, then:
+machinist run 7
+# When optional legacy Review is enabled:
+machinist review 7</code></pre><p>Execute verifies and pushes with a lease. With <code>review.enabled: true</code>, the PR stays draft until an independent Review completes at the exact delivered head. With Review disabled, Execute can mark it ready after verification.</p><p class="note">Findings remain advisory. A changed successful Execute candidate can receive a fresh Review; the completed report for an earlier head is not reused.</p></div>
+    <div class="stage-bar"><span class="op-index">05</span><h3>Inspect and accept the result</h3><span class="gate-tag">Human decision</span></div>
+    <div class="cell local"><span class="chip local">Explicit local integration</span><pre><code>machinist status T1
+# Inspect the candidate diff and saved Review report.
+machinist integrate T1</code></pre><p>Integration requires a clean checkout of the expected base, exact base and reviewed candidate commits, and fast-forward ancestry. Intent is saved before the update so retry can reconcile an interruption. Nothing is pushed.</p></div>
+    <div class="cell ci"><span class="chip ci">Human remote merge</span><p>Inspect the PR diff, Verification Evidence, and any Review findings. Merge the remote PR yourself. AgentMachinist does not perform remote or automatic merges.</p><p class="note">Legacy amendment uses <code>machinist amend 7 --feedback "…"</code> after fresh Approval of the current head. Local amendment follows the new-Spec flow below.</p></div>
   </div>
-
-  <section class="guardrails">
-    <h2>Guardrails</h2>
-    <div class="rails">
-      <div class="rail"><strong>SHA-bound approval</strong>
-        <span>Approval authorizes one exact spec commit. Any new head on the
-        branch makes it stale.</span></div>
-      <div class="rail"><strong>Controller owns git</strong>
-        <span>The harness is instructed not to commit or push; postconditions
-        abort the run if it tries.</span></div>
-      <div class="rail"><strong>Draft = machine's</strong>
-        <span>Never mark the draft ready yourself — that transition is the
-        signal that independent Review accepted the exact delivered head.</span></div>
-      <div class="rail"><strong>Explicit retry</strong>
-        <span>A failed run blocks re-dispatch until
-        <code>machinist retry 7</code>. Nothing silently reruns.</span></div>
-    </div>
-  </section>
-
-  <footer>machinist explain 7 · machinist status --watch · machinist report ·
-  machinist doctor --run-gates — when anything looks off · full walkthrough:
-  <a href="first-run-guide.html">first-run
-  field guide</a></footer>
-</div>
+  <section class="prep" style="margin-top:var(--space-7)"><span class="op-index">OPTIONAL</span><h2>Bring GitHub or GitLab into the local workflow</h2><p>Authenticate <code>gh</code> or <code>glab</code> for the selected host. Issue intake saves provenance; imported issue 42 can become <code>T1</code>. Publication requires one origin matching the chosen forge and repository.</p><pre><code># Choose an issue source, if useful:
+machinist start --from-issue https://github.com/team/project/issues/42
+machinist start --from-issue https://gitlab.com/team/subgroup/project/-/issues/42
+# Publish a reviewed candidate, before or after local integration:
+machinist publish T1 --provider github
+# Or:
+machinist publish T1 --provider gitlab
+# Explicit self-managed GitLab host:
+machinist publish T1 --provider gitlab --host gitlab.example.com</code></pre><p>Publication verifies exact local Approval, successful Execute and Review, candidate identity, and its recorded remote lease. Retry the same command after a failure to reconcile the push or PR/MR without repeating successful Harness work or gates. GitLab supports issue import and MR publication, including nested projects and explicit hosts; hosted Spec CI and remote GitLab Approval are not included.</p></section>
+  <section class="guardrails"><h2>Amend and recover local Tasks</h2><pre><code># After completed verification and Review, before integration:
+# Create a fresh Spec from feedback; inspect and approve its new SHA:
+machinist amend --task T1 --feedback "Also test empty filtered results."
+# Retry failed Phases explicitly. Local Execute defaults to resume:
+machinist retry --task T1 --phase spec
+machinist retry --task T1 --phase execute
+machinist retry --task T1 --phase execute --fresh
+machinist retry --task T1 --phase review
+# Cooperative cancellation, then clear only after resolving the cause:
+machinist cancel --task T1 --reason "Requirements changed"
+machinist cancel --task T1 --clear</code></pre><p>Amendment requires a verified candidate with completed Review. It invalidates earlier Approval and requires Review of the new candidate. To reject an initial Spec before Approval, cancel that Task and start a new one with clearer context. Once integration has begun, start a new Task from the current base. Resolve a pending publication before replacing its candidate. Legacy numeric Execute retry remains <code>machinist retry 7 --phase execute --run --resume</code>; its default is fresh.</p><div class="rails">
+    <div class="rail"><strong>Exact human decisions</strong><span>Approval authorizes one Spec commit. Integration and publication are separate explicit operations.</span></div>
+    <div class="rail"><strong>Controller owns Git</strong><span>The Harness must not commit, push, or edit protected Task metadata. Custody checks reduce credentials and detect violations, without OS isolation.</span></div>
+    <div class="rail"><strong>Local is not offline inference</strong><span>The Harness may use a cloud model. Offline inference needs a local provider, cached models and dependencies, and separate network-denied validation.</span></div>
+    <div class="rail"><strong>One runner checkout</strong><span>Small teams can share issues and PRs/MRs while one operator owns local Tasks. Claims and Task Run budgets are local, not distributed coordination.</span></div>
+  </div></section>
+  <footer><code>machinist status T1</code> for local next actions · <code>machinist doctor --run-gates</code> for existing GitHub adoption · <a href="first-run-guide.html">visual first-run guide</a> · <a href="local-workflow.md">local workflow reference</a> · <a href="trust-model.md">trust model</a></footer>
+</main>
 </body>
 </html>

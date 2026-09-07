@@ -2194,7 +2194,7 @@ def test_rehearse_defaults_to_no_cost_controller_simulation():
         assert result.exit_code == 0, result.output
         assert "no model or API usage" in result.output
         assert "review complete" in result.output
-        assert "human merge pending" in result.output
+        assert "local integration complete" in result.output
 
 
 def test_approve_resolves_issue_number(monkeypatch):
@@ -3195,5 +3195,39 @@ def test_retry_run_review_reports_ready_and_notifies_like_review(monkeypatch):
         result = runner.invoke(main, ["retry", "42", "--phase", "review", "--run"])
 
         assert result.exit_code == 0, (result.output, result.exception)
-        assert "passed independent review and is ready" in result.output
+        assert "advisory review complete" in result.output
+        assert "ready for human review" in result.output
         assert len(notifications) == 1
+
+
+def test_review_outcome_reports_observed_finding_counts(tmp_path, monkeypatch, capsys):
+    from machinist.cli import _report_phase_outcome
+    from machinist.lifecycle import Phase, TaskLifecycle
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "machinist.cli._deliver_notification", lambda *args, **kwargs: None
+    )
+    lifecycle = TaskLifecycle(tmp_path / ".machinist/runs")
+    lifecycle.run(
+        42,
+        Phase.REVIEW,
+        lambda claim: claim.checkpoint(
+            reviewed_sha="a" * 40, finding_counts={"high": 2, "medium": 1, "low": 0}
+        ),
+    )
+
+    _report_phase_outcome(
+        MachinistConfig(),
+        Phase.REVIEW,
+        42,
+        PullRequest(
+            number=57, title="Task", url="pr", branch="agent/issue-42", is_draft=False
+        ),
+    )
+
+    output = capsys.readouterr().out
+    assert "advisory review complete" in output
+    assert "3 findings (2 high, 1 medium, 0 low)" in output
+    assert "ready for human review" in output
+    assert "passed" not in output

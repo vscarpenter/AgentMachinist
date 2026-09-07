@@ -86,6 +86,48 @@ def test_unknown_pipeline_state_fails_closed():
         transition_for("mystery", issue=42)
 
 
+@pytest.mark.parametrize(
+    "status", [RunStatus.FAILED, RunStatus.CANCELLED, RunStatus.RUNNING]
+)
+def test_local_failed_phase_uses_explicit_local_retry_selector(tmp_path, status):
+    from machinist.local_tasks import LocalTaskStore
+    from machinist.transitions import classify_local_task
+
+    store = LocalTaskStore(tmp_path)
+    task = store.create("Intent", "Detailed intent", "main", "a" * 40, "agent/")
+    decision = classify_local_task(
+        task,
+        records={Phase.SPEC: record(Phase.SPEC, status)},
+        claim_held=False,
+    )
+    assert decision.next_action == "machinist retry --task T1 --phase spec"
+    assert decision.state != "awaiting approval"
+
+
+def test_local_stale_approval_always_displays_new_exact_sha(tmp_path):
+    from machinist.local_tasks import LocalTaskStore
+    from machinist.transitions import classify_local_task
+
+    store = LocalTaskStore(tmp_path)
+    task = store.create("Intent", "Detailed intent", "main", "a" * 40, "agent/")
+    task = store.update(
+        task,
+        spec_sha="b" * 40,
+        approval={
+            "repository": task.repository,
+            "task_id": task.id,
+            "spec_sha": "a" * 40,
+        },
+    )
+    decision = classify_local_task(
+        task,
+        records={Phase.SPEC: record(Phase.SPEC, RunStatus.SUCCEEDED)},
+        claim_held=False,
+    )
+    assert decision.state == "awaiting approval"
+    assert decision.next_action == f"machinist approve --task T1 --spec-sha {'b' * 40}"
+
+
 def _record(status, *, phase=Phase.SPEC):
     return RunRecord(
         issue=42,

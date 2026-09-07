@@ -8,15 +8,60 @@ sandbox, container boundary, malware scanner, or policy engine.
 
 - The repository's default branch, config, prompts, hooks, and test command.
 - The installed harness executable and its provider/plugin ecosystem.
-- Repository actors with write or admin access who can approve.
+- The local operator who approves a local Spec and explicitly integrates it.
+- Repository actors with write or admin access who can authorize legacy GitHub
+  execution or review/merge published changes.
 - The local user account that launches AgentMachinist.
 
-Issue bodies and PR branches are untrusted task input. `pull_request_target`
+Task bodies, imported issues, and PR/MR branches are untrusted input. `pull_request_target`
 approval automation never checks out or executes PR-head code.
+
+## Local Approval, integration, and publication
+
+The foreground local workflow and GitLab intake/publication are available in
+AgentMachinist 0.14.0 alongside the existing GitHub issue workflow.
+
+The local journey records an explicit human Approval tied to repository, Task,
+exact Spec SHA, actor, and time. Copying a Task record to another repository or
+changing its Spec does not carry valid Approval. Local records remain editable
+by the same OS account; they are workflow Evidence, not an authentication
+boundary against hostile local processes. Forge review buttons and GitLab
+comments do not mint local Approval.
+
+Every local candidate requires at least one configured required Verification
+Gate and completed independent Review
+of its exact SHA. Findings are advisory and the human must inspect the change.
+`machinist integrate T1` is explicit, requires the clean expected base and
+candidate on the originally selected named base branch, and permits only
+fast-forward integration. It records intent and
+observed completion for recovery; it does not authorize automatic or remote merge.
+
+Optional publication binds the authenticated forge client to the Git origin's
+host and repository, with exactly one origin URL and no separate push URL or
+Git URL rewrites. It refuses unowned existing branches, persists its push
+intent and expected remote SHA, leases the push, and verifies exact open PR/MR
+identity afterward. Publication retries use the saved candidate and do not
+repeat model work or successful verification. Local Tasks need no forge, but
+the Harness can still contact a cloud provider; no offline-model guarantee is
+implied. GitLab issue import and publication use `glab` bound to the selected
+host, including nested project paths and self-managed instances. GitLab CI and
+remote Approval are not part of this contract. An imported issue's source is
+provenance; it cannot redirect the later publication target.
+
+Local Task records are tied to the canonical controller repository and live in
+`.machinist/runs/local/`, separate from legacy issue runs. Local setup writes
+Git's local runtime exclusion and a saved configuration; it does not grant the
+Harness authority over these files. Backups of this runtime state contain
+Task bodies, Approval, and detailed Evidence and deserve the same treatment as
+the repository's source.
 
 ## Enforced controls
 
-- Exact SHA-bound approval plus configured label.
+The following GitHub label/comment controls apply to the legacy issue pipeline;
+local Approval uses the repository/Task/Spec record described above. Git custody,
+verification, Task Run persistence, and read-only Review apply to both paths.
+
+- Exact SHA-bound GitHub approval plus configured label.
 - Exact `/machinist-execute <full-spec-commit-sha>` command and trusted author
   association; label approvals bind the SHA from the authorization event.
 - Actor authorization on both approval paths. Both comment and label approval
@@ -32,20 +77,26 @@ approval automation never checks out or executes PR-head code.
 - Codex read-only sandbox, Pi read-tool allowlist, and Claude plan/read-tool
   arguments during spec generation.
 - Rejection of any dirty repository after spec generation.
-- Post-implementation checks for harness-created commits, changed remote branch
-  heads, and edits under `.machinist/`.
+- Post-implementation checks for Harness-created commits and edits under
+  `.machinist/`. Local Phases also compare controller/Workshop HEAD, branch,
+  local refs, and custody. Live remote-head checks belong to legacy GitHub
+  Phases and optional publication; foreground local Phases do not query a forge.
 - Rejection of deleted test files (heuristic path patterns; renames count as a
   deletion) unless `limits.allow_test_deletions` is set. Modifying a test is
   not detectable this way — weakened tests still need human review.
 - Git metadata custody: the Workshop's `.git` pointer, config, hooks, and
   alternates are fingerprinted before the harness runs and re-checked before
   every later Git call. See Git metadata custody below.
-- Push lease against the approved head SHA.
-- Required verification gates before push when `tests.command` or named
-  `verification.gates` are configured.
+- Legacy push lease against the approved head SHA; optional local publication
+  lease against the Task's persisted remote expectation.
+- Required verification before local candidate delivery. The legacy GitHub
+  workflow enforces configured `tests.command` or named `verification.gates`
+  before push, but permits an explicitly ungated configuration.
 - Atomic local Task Run records and explicit retry.
-- A separate read-only Review Task Run must validate and comment on the exact
-  delivered implementation head before AgentMachinist marks it ready.
+- In the GitHub issue pipeline with `review.enabled: true`, a separate
+  read-only Review Task Run must validate and comment on the exact delivered
+  implementation head before AgentMachinist marks it ready. Local Review produces its report before
+  explicit integration or optional publication becomes eligible.
 
 “Enforced” here means AgentMachinist or the selected CLI checks it. It does not
 mean a hostile process with the same OS identity cannot work around it.
@@ -56,7 +107,8 @@ mean a hostile process with the same OS identity cannot work around it.
 - OpenCode plan-agent write behavior is treated as advisory.
 - Git postconditions detect ordinary violations after the harness exits; they
   cannot undo an external side effect.
-- Removing `GH_TOKEN`, `GITHUB_TOKEN`, askpass variables, and the SSH agent from
+- Removing common forge tokens, including `GH_TOKEN`, `GITHUB_TOKEN`, and
+  `GITLAB_TOKEN`, askpass variables, and the SSH agent from
   the harness environment reduces ambient controller authority. Provider keys
   remain available. Other credentials—keychain helpers, SSH keys on disk,
   cloud credentials, or tokens loaded by plugins—may still be reachable.
@@ -94,12 +146,13 @@ does not trip a shared-config comparison. A clone Workshop owns its config, so
 that file is compared byte for byte. An unreadable config fails custody rather
 than being assumed safe.
 
-Hooks, `info/`, and `objects/` stay compared byte for byte. A hook body is
+Fingerprinted hooks, `info/` metadata, and object alternates stay compared byte
+for byte. A hook body is
 code, so there is no benign subset to carve out.
 
 **`workspace.strategy: worktree` shares this metadata with your own
-repository.** A Git worktree gets its own `HEAD`, index, and refs, and shares
-`config`, `hooks/`, `info/`, and `objects/` with the parent. So the watched
+repository.** A Git worktree gets its own `HEAD`, index, and per-worktree refs,
+and shares branch refs, `config`, `hooks/`, `info/`, and `objects/` with the parent. So the watched
 config is your main repository's, and installing a hook or a `core.pager` in
 your own checkout while a Task runs will stop that Task. Use
 `workspace.strategy: clone` when you want each Workshop to own its Git
@@ -113,9 +166,12 @@ run record or an error message.
 
 The legacy test command and every named verification gate are
 repository-controlled shell text and run as the local user. A null
-`tests.command` skips only the legacy command; verification is skipped when no
-named gates are configured either. A passing command proves only what that
-suite covers; it is not runtime, deployment, or security proof.
+`tests.command` skips only the single legacy command. In the GitHub issue
+workflow, verification is skipped when no named Gates are configured either.
+Foreground local setup instead requires at least one required Gate and runs
+baseline verification before Spec generation; disabling local Review or required
+verification is rejected on configuration load. A passing command proves only
+what that suite covers; it is not runtime, deployment, or security proof.
 
 By default the implementation harness is told the gate commands and may run
 exactly those commands itself to iterate before it finishes
@@ -128,14 +184,18 @@ afterwards, and that controller run remains the authoritative gate. Set
 
 ## Telemetry
 
-Local reporting reads Task Run history but emits aggregates rather than raw
-Evidence. OTLP export is disabled by default and constructs its payload from an
+`machinist report` reads legacy issue Task Run history but emits aggregates
+rather than raw Evidence. OTLP export is disabled by default and constructs its payload from an
 allowlist: repository identity, phase, status, Harness, model, counts, rates,
 and duration statistics. Issue bodies, prompts, source/diffs, commands, error
 messages, arbitrary Evidence, environment values, and credential values are
 not export inputs. Authorization is read only from
 `MACHINIST_OTLP_AUTHORIZATION` and is rejected on malformed or credentialed
 endpoint URLs.
+
+Foreground local configuration requires telemetry export disabled. Its status
+and Markdown report remain on disk; the aggregate report command does not
+include that local Task namespace.
 
 An operator who configures an endpoint is trusting that collector with the
 allowlisted repository identity and usage aggregates. Use HTTPS and the same
@@ -144,7 +204,7 @@ network isolation expected for other observability traffic.
 ## Recommended deployment boundary
 
 For higher-risk repositories, run AgentMachinist in a dedicated OS account or
-ephemeral VM/container with scoped GitHub credentials, no unrelated cloud
+ephemeral VM/container with scoped forge credentials, no unrelated cloud
 credentials, and network controls appropriate to the harness provider. Keep
 merge protection and required CI reviews on the repository.
 
@@ -162,4 +222,5 @@ merge protection and required CI reviews on the repository.
   directory you also edit, so the guard reports your own changes as well as
   a harness's.
 
-The final control is still human review plus repository branch protection.
+Human review remains necessary for local integration. Published changes also
+need the forge's branch protection and remote review/merge policies.

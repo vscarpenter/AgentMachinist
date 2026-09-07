@@ -90,6 +90,23 @@ class TaskEvidence:
         return self._sha("push_observed_sha")
 
     @property
+    def reviewed_sha(self) -> str | None:
+        return self._sha("reviewed_sha")
+
+    @property
+    def finding_counts(self) -> dict[str, int] | None:
+        counts = self._mapping("finding_counts")
+        if counts is None:
+            return None
+        result: dict[str, int] = {}
+        for level in ("high", "medium", "low"):
+            value = counts.get(level, 0)
+            if type(value) is not int or value < 0:
+                return None
+            result[level] = value
+        return result
+
+    @property
     def intended_push_sha(self) -> str | None:
         return self._sha("push_intended_sha")
 

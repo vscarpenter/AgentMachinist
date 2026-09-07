@@ -64,7 +64,7 @@ def test_queue_admission_counts_durable_attempts_toward_daily_budget(
     decision = queue_admission(config, lifecycle, now=now)
 
     assert not decision.allowed
-    assert "daily Task budget" in decision.reason
+    assert "daily Task Run budget" in decision.reason
 
 
 def test_queue_admission_counts_orphan_history_toward_daily_task_budget(
@@ -95,7 +95,7 @@ def test_queue_admission_counts_orphan_history_toward_daily_task_budget(
     )
 
     assert not decision.allowed
-    assert "daily Task budget" in decision.reason
+    assert "daily Task Run budget" in decision.reason
 
 
 def test_queue_admission_counts_orphan_history_toward_daily_runtime_budget(
@@ -241,3 +241,19 @@ def test_queue_admission_accounts_for_same_pass_reservations(tmp_path: Path):
     )
 
     assert not decision.allowed
+
+
+def test_daily_budget_counts_each_phase_attempt_of_the_same_task(tmp_path: Path):
+    config = MachinistConfig.model_validate(
+        {"queue": {"task_budget": {"max_runs_per_day": 3, "timezone": "UTC"}}}
+    )
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+
+    for phase in (Phase.SPEC, Phase.EXECUTE, Phase.REVIEW):
+        assert queue_admission(config, lifecycle).allowed
+        lifecycle.run(42, phase, lambda claim: None)
+
+    decision = queue_admission(config, lifecycle)
+
+    assert not decision.allowed
+    assert decision.reason == "daily Task Run budget reached (3)"

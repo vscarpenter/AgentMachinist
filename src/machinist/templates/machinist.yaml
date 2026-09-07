@@ -76,7 +76,7 @@ queue:
   max_tasks_per_pass: 1        # conservative admission limit for each poll pass
   # Optional start/end/timezone/days window; supports overnight windows.
   allowed_hours: null
-  task_budget: null            # optional: {max_tasks_per_day: 5, max_runtime_minutes_per_day: 240}
+  task_budget: null            # optional: {max_runs_per_day: 5, max_runtime_minutes_per_day: 240}
 
 notifications:
   backend: desktop             # disabled | desktop | command | webhook

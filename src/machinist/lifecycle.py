@@ -185,7 +185,7 @@ class _JournalEvent:
 
 
 _T = TypeVar("_T")
-_HELD_ISSUES: set[int] = set()
+_HELD_ISSUES: set[tuple[Path, int]] = set()
 _HELD_LOCK = Lock()
 
 
@@ -269,14 +269,27 @@ class TaskLifecycle:
         action: Callable[[TaskClaim], _T],
         *,
         repeat_succeeded: bool = False,
+        repeat_succeeded_if: Callable[[RunRecord], bool] | None = None,
     ) -> _T:
+        """Run under one Claim, optionally admitting a new successful delivery.
+
+        A conditional repeat is checked against the current prior success while
+        holding the Claim, before creating an attempt. It starts fresh Evidence;
+        explicit retries and legacy forced repeats retain their checkpoints.
+        """
         with self._hold_claim(issue):
             prior = self.record(issue, phase)
             if prior is None:
                 prior_history = self.history(issue, phase)
                 prior = prior_history[-1] if prior_history else None
 
-            repeat = (
+            conditional_repeat = (
+                prior is not None
+                and prior.status is RunStatus.SUCCEEDED
+                and repeat_succeeded_if is not None
+                and repeat_succeeded_if(prior)
+            )
+            repeat = conditional_repeat or (
                 prior is not None
                 and prior.status in {RunStatus.SUCCEEDED, RunStatus.ABANDONED}
                 and repeat_succeeded
@@ -300,7 +313,9 @@ class TaskLifecycle:
                 )
 
             now = _now()
-            previous = {} if prior is None else dict(prior.evidence)
+            previous = (
+                {} if prior is None or conditional_repeat else dict(prior.evidence)
+            )
             attempt = (
                 max(
                     0 if prior is None else prior.attempt,
@@ -610,7 +625,7 @@ class TaskLifecycle:
         """Check a local Claim without waiting or creating a lock artifact."""
         self._ensure_runs(create=False)
         with _HELD_LOCK:
-            if issue in _HELD_ISSUES:
+            if (self.runs_dir, issue) in _HELD_ISSUES:
                 return True
 
         lock_path = self.runs_dir / f"issue-{issue}.lock"
@@ -681,11 +696,12 @@ class TaskLifecycle:
     @contextmanager
     def _hold_claim(self, issue: int, *, retrying: bool = False) -> Iterator[None]:
         self._ensure_runs(create=True)
+        key = (self.runs_dir, issue)
         with _HELD_LOCK:
-            if issue in _HELD_ISSUES:
+            if key in _HELD_ISSUES:
                 state = "still claimed" if retrying else "already claimed"
                 raise LifecycleError(f"issue #{issue} is {state} by this process")
-            _HELD_ISSUES.add(issue)
+            _HELD_ISSUES.add(key)
 
         lock_file = None
         locked = False
@@ -724,7 +740,7 @@ class TaskLifecycle:
                 finally:
                     lock_file.close()
             with _HELD_LOCK:
-                _HELD_ISSUES.discard(issue)
+                _HELD_ISSUES.discard(key)
 
     def _finish(
         self,

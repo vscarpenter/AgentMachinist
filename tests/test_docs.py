@@ -1,4 +1,4 @@
-"""Drift tests: docs/getting-started.md must stay true to the code.
+"""Drift tests: current documentation must stay true to the code.
 
 Guide conventions these tests rely on:
 - Every ```yaml fenced block is a machinist.yaml snippet rooted at the
@@ -10,7 +10,10 @@ Guide conventions these tests rely on:
 
 import re
 import tomllib
+from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import click
 import pytest
@@ -47,9 +50,9 @@ _REQUIRED_HEADINGS = (
     "## Before you begin",
     "## Install",
     "## Set up your repository",
-    "## Your first agent task",
+    "## Your first GitHub issue Task",
     "## Review and approve",
-    "## Spec generation: local or CI",
+    "## GitHub Spec generation: local or CI",
     "## Configuration reference",
     "## Choosing a harness",
     "## Troubleshooting",
@@ -59,18 +62,14 @@ _REQUIRED_HEADINGS = (
 _REQUIRED_DOCS = (
     "README.md",
     "tldr.md",
+    "local-workflow.md",
     "architecture.md",
     "operator-runbook.md",
     "trust-model.md",
     "harnesses.md",
 )
 
-_HISTORICAL_DOCS = (
-    _REPO_ROOT / "docs/superpowers/plans/2026-08-17-build-system-hardening.md",
-    _REPO_ROOT / "docs/superpowers/specs/2026-08-16-agentmachinist-design.md",
-    _REPO_ROOT
-    / "docs/superpowers/specs/2026-08-17-reliability-and-usability-hardening.md",
-)
+_HISTORICAL_DOCS = tuple(sorted((_REPO_ROOT / "docs/superpowers").rglob("*.md")))
 
 
 def _guide_text() -> str:
@@ -187,6 +186,48 @@ def test_local_document_links_resolve():
             assert (path.parent / relative).exists(), f"broken link in {path}: {target}"
 
 
+class _HtmlReferences(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.ids: list[str] = []
+        self.hrefs: list[str] = []
+        self.controls: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if values.get("id"):
+            self.ids.append(values["id"])
+        if values.get("href"):
+            self.hrefs.append(values["href"])
+        if values.get("aria-controls"):
+            self.controls.extend(values["aria-controls"].split())
+
+
+def test_rendered_document_navigation_and_controls_resolve():
+    pages = {}
+    for path in (_REPO_ROOT / "docs").glob("*.html"):
+        parser = _HtmlReferences()
+        parser.feed(path.read_text())
+        pages[path.resolve()] = parser
+        assert len(parser.ids) == len(set(parser.ids)), f"duplicate IDs in {path}"
+        assert set(parser.controls) <= set(parser.ids), (
+            f"missing aria-controls targets in {path}"
+        )
+
+    for path, parser in pages.items():
+        for href in parser.hrefs:
+            target = urlsplit(href)
+            if target.scheme or target.netloc or not target.fragment:
+                continue
+            destination = (
+                (path.parent / unquote(target.path)).resolve() if target.path else path
+            )
+            if destination in pages:
+                assert unquote(target.fragment) in pages[destination].ids, (
+                    f"broken section link in {path}: {href}"
+                )
+
+
 def test_adrs_are_complete_and_discoverable():
     adrs = sorted(_ADR_DIRECTORY.glob("[0-9][0-9][0-9][0-9]-*.md"))
     assert adrs, "docs/adr has no architecture decision records"
@@ -213,12 +254,15 @@ def test_adrs_are_complete_and_discoverable():
 
 def test_tldr_is_one_short_provider_neutral_path():
     text = _TLDR_PATH.read_text()
-    assert len(text.splitlines()) <= 85
+    assert len(text.splitlines()) <= 100
     assert text.count("## One-time setup") == 1
     assert "selected Spec adapter's declared secret" in text
     assert "machinist run <issue>" in text
     assert "machinist review <issue>" in text
-    assert "AgentMachinist never merges" in text
+    assert "AgentMachinist never merges automatically" in text
+    assert "local integration is explicit" in text
+    for command in ("start", "approve --task T1", "status T1", "integrate T1"):
+        assert f"machinist {command}" in text
     for provider_secret in (
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
@@ -283,7 +327,7 @@ def test_first_run_guide_is_visual_interactive_and_linked():
         'href="#main"',
         '<nav class="nav shell" aria-label=',
         '<main id="main">',
-        'role="group" aria-label="choose spec generation mode"',
+        'role="group" aria-label="choose workflow route"',
         'data-mode-button="local" aria-pressed="true"',
         'data-mode-button="ci" aria-pressed="false"',
         'aria-live="polite"',
@@ -337,7 +381,7 @@ def test_spec_lifecycle_and_execute_recovery_commands_are_documented():
         "machinist retry 42 --phase execute --run --resume",
         "machinist retry 42 --phase execute --run --fresh",
     ):
-        assert command in html
+        assert command in unescape(combined)
     assert "fresh is the default" in normalized_guide
     assert "fresh is the default" in operator
     assert "existing branch and draft pr" in normalized_guide
@@ -410,9 +454,10 @@ def test_all_public_docs_share_current_approval_and_readiness_contract():
     )
     assert "pi auth check --model &lt;model&gt; --json --no-refresh" in first_run
     assert "machinist sync-labels [--check|--apply]" in first_run
-    assert "machinist doctor --run-gates — when" in job_card
-    assert "machinist approve --issue 42" in explainer
-    assert "machinist doctor --run-gates" in explainer
+    assert "machinist doctor --run-gates" in job_card
+    assert "for existing github adoption" in job_card
+    assert "machinist approve --task t1 --spec-sha" in explainer
+    assert "machinist integrate t1" in explainer
 
     combined = "\n".join((trust, operator, first_run, job_card, explainer))
     for stale_claim in (
@@ -435,7 +480,7 @@ def test_explainer_is_current_discoverable_and_has_page_metadata():
     assert '<meta name="description"' in explainer
     assert '<meta name="theme-color"' in explainer
     assert '<link rel="canonical"' in explainer
-    assert "reviewable pull requests" in explainer
+    assert "reviewed local" in explainer
     assert "failed runs retain" in explainer
     assert 'href="#main"' in explainer
     assert 'role="slider"' in explainer
@@ -449,11 +494,22 @@ def test_historical_design_records_are_clearly_labeled():
         assert "historical design record" in opening, path
         assert "../../getting-started.md" in opening, path
         assert "../../architecture.md" in opening, path
+        assert "../../local-workflow.md" in opening, path
 
     docs_index = _DOCS_INDEX_PATH.read_text().lower()
     assert "current operating documentation" in docs_index
     assert "historical design records" in docs_index
-    assert "https://agentmachinist.vinny.dev/explainer.html" in docs_index
+    assert "(explainer.html)" in docs_index
+
+
+def test_earlier_adrs_explain_the_local_integration_exception():
+    for name in (
+        "0001-review-plugin-telemetry-boundaries.md",
+        "0002-deep-module-ownership.md",
+    ):
+        text = (_ADR_DIRECTORY / name).read_text()
+        assert "(0003-local-workflow-and-optional-publication.md)" in text
+        assert "explicit local fast-forward integration" in " ".join(text.split())
 
 
 def test_readme_lists_recovery_inspection_and_cleanup_commands():
@@ -541,9 +597,9 @@ def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> No
     assert "machinist task new" in job_card
     assert "machinist review 7" in job_card
     assert "independent review" in explainer
-    assert "machinist review 42" in explainer
-    assert "machinist task new" in landing
-    assert "machinist review 42" in landing
+    assert "machinist approve --task t1" in explainer
+    assert "machinist start" in landing
+    assert "machinist publish t1" in landing
     assert "independent review" in landing
     for forbidden_export in (
         "issue bodies",
@@ -559,7 +615,8 @@ def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> No
 def test_first_run_guide_describes_verification_and_cleanup_precisely():
     html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
     assert "when no named <code>verification.gates</code> exist" in html
-    assert "after the successful execute run completed" in html
+    assert "retains the candidate before workshop cleanup" in html
+    assert "at least one required" in html
     assert "removed when the tests passed" not in html
     assert "this is an abridged first-run configuration" in html
 
@@ -568,13 +625,24 @@ def test_release_docs_describe_current_package_version():
     version = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"][
         "version"
     ]
-    html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
-    assert f"agentmachinist {version} is available on pypi" in html
-    assert "uv tool install agentmachinist" in html
-    assert "unreleased" not in html
-    major_minor = ".".join(version.split(".")[:2])
-    assert f"a visual field guide for the {major_minor} release" in html
-    assert f"agentmachinist {major_minor} first-run field guide" in html
+    for path in (
+        _FIRST_RUN_GUIDE_PATH,
+        _EXPLAINER_PATH,
+        _JOB_CARD_PATH,
+        _REPO_ROOT / "docs/index.html",
+    ):
+        html = path.read_text().lower()
+        assert "unreleased" not in html, path
+        assert version in html, path
+        assert "uv tool install agentmachinist" in html, path
+        for command in (
+            "machinist start",
+            "machinist approve --task t1 --spec-sha",
+            "machinist integrate t1",
+            "machinist publish t1 --provider",
+        ):
+            assert command in html, (path, command)
+        assert "gitlab" in html, path
     changelog = _CHANGELOG_PATH.read_text()
     assert f"## {version} —" in changelog
     assert (
@@ -582,11 +650,6 @@ def test_release_docs_describe_current_package_version():
         in _README_PATH.read_text()
     )
     assert f"current release: {version}" in _CLAUDE_PATH.read_text().lower()
-    explainer = _EXPLAINER_PATH.read_text().lower()
-    assert f'<span class="hud-badge">v{version}</span>' in explainer
-    assert f"install agentmachinist {version} from pypi" in explainer
-    assert "uv tool install agentmachinist &amp;&amp; machinist onboard" in explainer
-    assert f"job card · rev {version}" in _JOB_CARD_PATH.read_text().lower()
     release_text = _README_PATH.read_text().lower().split("## releasing", 1)[1]
     assert "sha-256" in release_text
     assert "trusted publishing" in release_text

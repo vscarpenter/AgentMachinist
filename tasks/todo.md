@@ -1,6 +1,118 @@
+# AgentMachinist 0.14.0 release candidate (COMPLETE)
+
+User authorized committing everything, pushing to origin, and deploying a new
+version. This minor release includes the approved local/GitLab workflow and
+complete documentation update. Release branch: `codex/local-workflow-gitlab`.
+
+- [x] Align package, lockfile, managed projections, changelog, and release docs.
+- [x] Pass `bash scripts/verify.sh` on implementation candidate `860eab8`.
+- [x] Record the source verification and publication handoff before pushing.
+
+The canonical gate passed 1,413 tests in 696.81 seconds with 87.52% coverage,
+Ruff formatting/lint, twenty typed modules, lockfile/projection checks, and
+wheel/sdist build and isolated Python 3.13.15 installs. The installed wheel's
+fake-Harness rehearsal completed the production local workflow with real Git.
+The first follow-up recorded this evidence without changing the implementation.
+Hosted run `34135848884` passed Linux matrix, quality, minimum dependencies,
+and package verification, but cancelled macOS and coverage at the 15-minute
+limit. GitHub annotations confirm the timeout; no assertion failure appeared
+in the inspected cancelled logs. Minimum dependencies took 14m51s. CI test,
+coverage, minimum-dependency, and package/release build jobs now allow 30
+minutes. Required checks and the coverage floor remain unchanged; the new
+exact-head hosted run must pass before publication.
+
+### Resuming From Here
+
+Source preparation is complete. At this snapshot, publication is the next
+operation: push the branch, verify exact-head CI/CodeQL, merge, then publish
+`v0.14.0` at the merged main SHA. The user has authorized these actions.
+The canonical publication records are the
+[GitHub Release](https://github.com/vscarpenter/AgentMachinist/releases/tag/v0.14.0),
+[release workflow](https://github.com/vscarpenter/AgentMachinist/actions/workflows/release.yml),
+and [PyPI version](https://pypi.org/project/agentmachinist/0.14.0/).
+Confirm their live state, checksums, isolated install, and Pages content rather
+than treating this pre-publication source snapshot as deployment proof.
+
+Pages deploys `main:/docs` to the existing custom domain. Existing branch
+protection names obsolete unversioned test jobs and requires another reviewer;
+it permits configured administrator merges. Require actual current matrix,
+aggregate CI, and CodeQL success at the exact PR head before using that existing
+capability; do not weaken the protection. Secret metadata confirms the configured
+Anthropic Actions secret is present. Live GitLab and offline-model validation
+remain separate from the fake-transport/Harness release checks.
+
+# Complete documentation reconciliation (COMPLETE)
+
+Scope: update every current guide and rendered page in `docs/` for the approved
+local workflow, adoption/amendment fixes, optional publication, and GitLab.
+Preserve earlier design records with clear applicability notes and current links.
+No product contract, release, or deployment change is included.
+
+- [x] Inventory every document and compare current CLI and lifecycle behavior.
+- [x] Reconcile Markdown references, all five HTML pages, index, and decision records.
+- [x] Update documentation drift checks and validate links and rendered interactions.
+- [x] Commit the complete documentation update and record verification evidence.
+
+Updated all 23 content documents: eighteen Markdown files and five HTML pages.
+Reviewed and preserved `CNAME` and `.nojekyll`. Earlier specs/plans retain their
+historical bodies with current applicability notes; current pages distinguish
+unreleased source capabilities from published 0.13.0.
+
+Verification: 30 documentation tests pass; Ruff formatting/lint and diff checks
+pass; three inline JavaScript programs pass Node syntax checks. Relative file,
+Markdown section, HTML section, and accessible control targets resolve. Browser
+checks at the default desktop viewport and 390px mobile width covered all five
+HTML pages, route selection, checklist/reset, copy-button feedback, simulation
+step/replay, explainer scene/keyboard-seek/replay, and onboarding redirect. Fixed
+desktop explainer command clipping found during that check.
+
+An independent source review corrected amendment eligibility, imported Task IDs,
+local configuration/history namespaces, custody scope, and provider-auth limits.
+No product source changed, so the earlier 1,411-test implementation gate remains
+the implementation evidence; this documentation-only pass used focused checks.
+No push, hosted deployment, package version bump, or release publication occurred.
+
+# Guided local workflow and GitLab (COMPLETE)
+
+Approved specification: `tasks/spec.md`. Plan:
+`docs/superpowers/plans/2026-09-07-local-workflow-gitlab.md`.
+Branch: `codex/local-workflow-gitlab`.
+
+- [x] Record approved scope, implementation plan and ADR 0003.
+- [x] Repair adoption, amendment Review, native issue intake and daily Run budgets.
+- [x] Add repository-bound local Tasks and optional GitHub/GitLab publication.
+- [x] Add isolated local Git candidates, custody, resume and guarded integration.
+- [x] Connect foreground local Phases, exact Approval, amendment and recovery.
+- [x] Complete guided CLI/setup and production-path rehearsal.
+- [x] Reconcile current product, architecture and operator documentation.
+- [x] Run independent adversarial review, canonical verification and installed smoke.
+- [x] Commit the complete validated implementation and record final evidence.
+
+### Resuming From Here
+
+Done: all five roadmap stages are implemented. `bash scripts/verify.sh` passed
+at implementation commit `1492f91`: 1,411 tests on Python 3.12.13, 87.52% coverage,
+format/lint checks, 20 typed modules, unchanged managed-workflow projection, both
+distributions built, and isolated wheel/sdist installs on Python 3.13.15. The
+installed wheel's fake-Harness rehearsal completed the production local pipeline.
+The final ledger update changes documentation only.
+
+Independent review fixes cover ignored-file integration collisions, GitLab HTTPS
+credentials and SSH-port binding, amendment intent recovery, preserved publication
+ownership, exact commit recovery, and required verification at every local Phase.
+The first full gate found an outdated packaging assertion pinning seven typed
+modules; its expectation now covers all twenty, and the complete gate passed.
+
+Next: normal user review. No remote push, hosted changes, version bump or release
+publication occurred. GitLab APIs/authentication use recorded/stubbed contracts;
+local Git, custody, leases and integration use real temporary repositories.
+Offline inference and live hosted GitLab validation remain separate proof states.
+
+Completed 2026-09-07. Blockers: none.
+
 # Cards 7 and 14: resume-push fold and flags-only approve (IN PR)
 
-Spec: `tasks/spec.md`. Plan:
+Spec: `docs/superpowers/specs/2026-09-03-resume-push-and-approve-flags.md`. Plan:
 `docs/superpowers/plans/2026-09-03-resume-push-and-approve-flags.md`.
 Branch: `refactor/resume-push-and-approve-flags` (PR #40).
 

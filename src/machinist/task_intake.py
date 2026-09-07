@@ -14,7 +14,15 @@ TASK_TEMPLATE_PATH = Path(".github/ISSUE_TEMPLATE/agentmachinist-task.yml")
 _TEMPLATE = files("machinist") / "templates/github/agentmachinist-task.yml"
 _MANAGED_MARKER = "# agentmachinist-managed-sha256: "
 _MAX_TEMPLATE_BYTES = 512 * 1024
-_SECTION_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+_SECTION_PATTERN = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+_SECTION_NAMES = {
+    "objective",
+    "acceptance criteria",
+    "constraints",
+    "verification",
+    "context",
+}
+_CHECKBOX_PATTERN = re.compile(r"^[ \t]*[-*+][ \t]+\[[ xX]\]([^\r\n]*)$", re.MULTILINE)
 _PLACEHOLDERS = {"", "tbd", "todo", "none", "n/a", "_no response_"}
 
 
@@ -123,14 +131,17 @@ def lint_task_body(body: str) -> TaskLintReport:
             )
         )
     acceptance = sections.get("acceptance criteria")
+    criteria = _CHECKBOX_PATTERN.findall(acceptance or "")
     if (
         _placeholder(acceptance)
-        or re.search(r"(?m)^\s*-\s*\[[ xX]\]", acceptance or "") is None
+        or not criteria
+        or any(_placeholder(criterion) for criterion in criteria)
     ):
         errors.append(
             TaskLintFinding(
                 "acceptance criteria",
-                "add at least one Markdown checkbox with an observable result",
+                "add at least one Markdown checkbox with an observable result; "
+                "replace empty or placeholder checkboxes",
             )
         )
     for field in ("constraints", "verification"):
@@ -148,13 +159,26 @@ def lint_task_body(body: str) -> TaskLintReport:
 
 def _sections(body: str) -> dict[str, str]:
     matches = list(_SECTION_PATTERN.finditer(body))
+    levels = [
+        len(match.group(1))
+        for match in matches
+        if len(match.group(1)) in (2, 3)
+        and match.group(2).strip().casefold() in _SECTION_NAMES
+    ]
+    if not levels:
+        return {}
+    # GitHub issue forms render fields at level three; hand-written Tasks use
+    # level two. Deeper headings belong to a field, never a sibling field.
+    section_level = min(levels)
+    matches = [match for match in matches if len(match.group(1)) <= section_level]
     return {
-        match.group(1).strip().casefold(): body[
+        match.group(2).strip().casefold(): body[
             match.end() : matches[index + 1].start()
             if index + 1 < len(matches)
             else None
         ].strip()
         for index, match in enumerate(matches)
+        if len(match.group(1)) == section_level
     }
 
 

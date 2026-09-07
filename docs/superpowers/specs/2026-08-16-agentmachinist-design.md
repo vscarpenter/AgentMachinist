@@ -1,10 +1,12 @@
 # AgentMachinist v0.1 Design
 
 > [!IMPORTANT]
-> **Historical design record.** This specification preserves the original v0.1
-> contract and is not current operating documentation. See
-> [Getting Started](../../getting-started.md) and
-> [Architecture and lifecycle](../../architecture.md) for current behavior.
+> **Historical design record.** Preserved implementation context, not current
+> operating instructions. See [Getting Started](../../getting-started.md),
+> [Architecture and lifecycle](../../architecture.md), and
+> [Local workflow](../../local-workflow.md) for current behavior.
+> The original GitHub-only identity, label Approval, and three-step pipeline
+> below are superseded by exact-SHA Approval, required local Review, and optional publication.
 
 **Date:** 2026-08-16
 **Status:** Approved (stack: Python + Click; spec-gen: local + CI from day one)

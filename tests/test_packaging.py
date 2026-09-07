@@ -131,6 +131,19 @@ def test_static_type_gate_is_zero_error_core_with_explicit_expansion_debt():
         "src/machinist/process.py",
         "src/machinist/verification.py",
         "src/machinist/updates.py",
+        "src/machinist/dispatch.py",
+        "src/machinist/forge.py",
+        "src/machinist/gitlab.py",
+        "src/machinist/local_cli.py",
+        "src/machinist/local_setup.py",
+        "src/machinist/local_tasks.py",
+        "src/machinist/local_workflow.py",
+        "src/machinist/local_workspace.py",
+        "src/machinist/phases/local.py",
+        "src/machinist/publication.py",
+        "src/machinist/rehearsal.py",
+        "src/machinist/task_drafts.py",
+        "src/machinist/transitions.py",
     }
 
     assert set(mypy["files"]) == expected_core

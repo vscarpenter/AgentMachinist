@@ -6,6 +6,16 @@ Status: Accepted
 
 Deciders: Vinny Carpenter
 
+## Current applicability
+
+The ownership decisions below remain in force for the legacy pipeline.
+[ADR 0003](0003-local-workflow-and-optional-publication.md) adds separate local
+Task, Workshop, and publication modules, including explicit local fast-forward
+integration after the human Gate. It narrowly supersedes this record's blanket
+statement that merging is outside AgentMachinist. Remote and automatic merges
+remain outside the product. See the [current module map](../architecture.md)
+and [local workflow](../local-workflow.md) for both execution paths.
+
 ## Context
 
 AgentMachinist's operator workflow is mature, but several policies are interpreted

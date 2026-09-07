@@ -4,19 +4,19 @@ Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-AgentMachinist is a local-first, issue-to-reviewed-PR build pipeline for solo
-developers. It connects GitHub issues to a coding harness (Claude Code,
-OpenCode, Pi, or Codex) with a human-approved specification between planning
-and implementation:
+AgentMachinist is a local development workflow for solo developers and small
+teams. It coordinates a coding Harness (Claude Code, OpenCode, Pi, or Codex)
+around an exact human-approved Spec and a reviewed local candidate. GitHub and
+GitLab issue intake and PR/MR publication are optional:
 
 ```text
-issue + trigger label → spec commit → draft PR → SHA-bound approval
-                    → implementation → test gate → independent review
-                    → ready PR → human merge
+Task → Spec commit → human Approval → Execute → verification → Review
+                                                  → human local integration
+                                                  → optional PR/MR publication
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.13.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.14.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -25,7 +25,7 @@ pipeline for this repo (`spec_source: github-actions`, test gate
 
 ```sh
 uv sync                                  # install (creates .venv)
-uv run pytest                            # full suite (~5s, no network needed)
+uv run pytest                            # full suite, including real Git lifecycle tests
 uv run pytest tests/test_harness.py      # one module
 uv build                                 # sdist + wheel
 uv run machinist --help                  # run the CLI from source
@@ -37,13 +37,32 @@ injected runners; git tests run against real repos in `tmp_path`.
 
 ## Architecture
 
-The controller (this codebase) sits between four external systems: Git,
-GitHub, a coding harness, and the repository's test command. **The controller
-— never the harness — owns commits, pushes, PR transitions, and task
-records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
+The controller (this codebase) coordinates Git, a coding Harness, and the
+repository's verification commands. GitHub and GitLab are optional external
+systems. **The controller — never the Harness — owns commits, pushes, change
+request transitions, and Task records.** Explicit local integration can
+fast-forward a clean expected base to the exact reviewed candidate. Automatic
+and remote merges remain out of scope. ADR 0003 supersedes the earlier blanket
+never-merges rule only for that human-directed local operation.
 
 ### Module map (`src/machinist/`)
 
+- `local_tasks.py` — controller-owned `T1` identities, safe atomic records,
+  revision-checked updates, operation Claims, reports, and external provenance
+  under `.machinist/runs/local/`. These IDs never alias legacy issue numbers.
+- `local_setup.py` — minimal foreground configuration in local runtime storage,
+  installed Harness and verification discovery, and local Git exclusion.
+- `local_workflow.py` — guided local Spec, exact-SHA Approval, Execute, Review,
+  amendment/recovery, and explicit integration. Task Run construction still
+  belongs to `dispatch.py`; verification belongs to `verification.py`.
+- `local_workspace.py` — no-origin Workshops, durable candidate refs, Git
+  custody, explicit clean fast-forward integration, and leased publication Git.
+- `publication.py` — verifies local Approval and exact successful Phase
+  Evidence, binds origin/forge identity, persists push intent, and reconciles
+  optional publication independently from Harness and Verification work.
+- `forge.py`, `gitlab.py` — explicit GitHub/`gh` and GitLab/`glab` issue intake
+  and exact PR/MR publication. GitLab supports nested projects and explicit
+  hosts; it does not provide hosted Spec CI or remote Approval.
 - `cli.py` — Click entrypoints: `init [--harness --test-cmd]`, `doctor`,
   `sync-workflows [--check]`, `spec`, `approve`, `run [--force]`,
   `review`, `amend`, `watch [--once -v --interval]`,
@@ -53,8 +72,10 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
   (`_detect_test_command`: pyproject/uv.lock → `uv run pytest`, package.json
   → `npm test`, Cargo.toml → `cargo test`, go.mod → `go test ./...`);
   `approve` takes exactly one of `--issue <n>` (resolved through the
-  `<branch_prefix>issue-<n>` branch) or `--pr <n>`, with no positional
-  target; `retry <n> --phase execute --run
+  `<branch_prefix>issue-<n>` branch) or `--pr <n>` for legacy GitHub. Local
+  Approval uses `--task T1 --spec-sha <sha>` and continues the foreground
+  machine Phases; there is no ambiguous positional target.
+  `retry <n> --phase execute --run
   [--resume|--fresh]` is the one recovery entry (`run` carries no retry
   flags); `inspect <issue>` prints issue, PR,
   approval SHA, workspace path, and all Task Run records in one pass. Click
@@ -159,8 +180,8 @@ records.** AgentMachinist never merges; its boundary is a ready-for-review PR.
 
 ## Domain language (see CONTEXT.md for the full glossary)
 
-Use these terms exactly in docs and messages: **Task** (issue in the
-pipeline), **Phase** (Spec, Execute, or Review — Approve is a human Gate, not a
+Use these terms exactly in docs and messages: **Task** (controller-owned local
+objective or legacy GitHub issue), **Phase** (Spec, Execute, or Review — Approve is a human Gate, not a
 Phase), **Spec** (identified by its exact commit), **Approval** (authorizes
 one exact Spec commit; stale when the branch head changes), **Task Run**
 (durable record of one Phase attempt), **Claim** (exclusive local ownership),
@@ -171,26 +192,32 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 
 1. **Git custody**: the harness must not commit, push, or touch
    `.machinist/`. Prompts say so (advisory); postconditions in
-   `execute.py` enforce it (new HEAD, changed remote SHA, or `.machinist/`
-   edits abort the run). Spec phase rejects any dirty tree.
-2. **SHA-bound approval**: execution requires the approval label AND a
+   the Phase and Workshop modules enforce it. Both paths check HEAD and
+   protected metadata; local Phases additionally check local refs, while legacy
+   GitHub Phases check the remote head. Spec rejects any dirty tree.
+2. **SHA-bound Approval**: local Execute requires repository/Task-bound Approval
+   of the exact saved Spec commit. Local Approval is an explicit human CLI
+   action and does not protect against hostile code running as the same OS
+   user. Legacy GitHub execution requires the approval label AND a
    trusted comment marker `<!-- agentmachinist:approval sha=<head-sha> -->`
    matching the current PR head. The controller trusts a marker only when
    the managed workflow authored it (`github-actions[bot]`); a marker typed
    by a human is not Approval, whatever their association. GitHub's review
    Approve button is *not* the mechanism. The managed approve workflow gates both
    paths on the actor before minting evidence: a `/machinist-execute` comment
-   needs OWNER/MEMBER/COLLABORATOR, and the label path needs write or admin
-   access, because GitHub grants label permission at triage level. The
+   and a label action both need write or admin access, because GitHub grants
+   label permission at triage level. The
    approver's login is recorded on the approval comment.
-3. **Draft-ness outranks the label**: a non-draft PR is "in review" and never
+3. **Legacy GitHub draft-ness outranks the label**: a non-draft PR is "in review" and never
    re-executable without `run --force` (which demands fresh approval).
-4. **Leased pushes**: implementation pushes use `--force-with-lease` against
-   the approved SHA so concurrent remote changes fail loudly.
+4. **Leased pushes**: legacy implementation pushes use `--force-with-lease`
+   against the approved SHA. Optional local publication leases against its
+   persisted remote expectation and refuses unowned branches. Concurrent
+   remote changes fail loudly.
 5. **Single Task Run dispatcher**: every claimed Spec, Execute, and Review run
    is constructed by `TaskDispatcher`; Click and watcher code do not recreate
    Phase dependency wiring.
-6. **Single Spec source**: `github.spec_source` (`local` | `github-actions`)
+6. **Single legacy GitHub Spec source**: `github.spec_source` (`local` | `github-actions`)
    decides who owns Phase 1; managed workflows are projected from config,
    never hand-edited (the next sync intentionally replaces drift).
 7. **Explicit retry only**: a failed Task Run blocks re-runs until
@@ -201,6 +228,12 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    trust model (docs/trust-model.md, SECURITY.md) is credential *reduction*
    and detection, not OS-level isolation. `pull_request_target` automation
    must never check out or execute PR-head code.
+9. **Local delivery and human integration**: every local candidate requires
+   verification and exact completed independent Review. Findings remain
+   advisory. Preserve the candidate before Workshop cleanup. Integration is
+   explicit, clean, exact-base/exact-candidate, and fast-forward only; persist
+   intent before updating the base. Publication is optional, recoverable work
+   that never re-executes successful local Phases.
 
 ## Conventions
 
@@ -235,13 +268,12 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 - `tasks/todo.md` — milestone log (M1 spec phase, M2 execute, M3 watch
   daemon, beta-readiness sweep, 0.2 reliability hardening — all complete).
   Append progress there when doing milestone-style work.
-- `docs/superpowers/specs/` — the two design documents (initial design,
-  reliability/usability hardening) that drove the current architecture.
+- `docs/superpowers/` — historical specifications and implementation plans,
+  each linked to current operating references.
 - `docs/` — getting-started, architecture, operator-runbook, trust-model,
-  harnesses matrix, plus three HTML visual assets: onboarding.html and
-  first-run-guide.html (both structure- and link-checked by
-  `tests/test_docs.py`) and explainer.html, an animated system walkthrough
-  that no test or doc currently references.
+  harnesses matrix, local workflow, and five HTML pages: index, first-run guide,
+  job card, animated explainer, and the onboarding redirect. Documentation tests
+  validate commands, configuration, version identity, links, and control targets.
 - `AgentMachinist-Prompt.md` — the original kickoff prompt, historical.
 
 ## Releasing
@@ -252,9 +284,26 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current state (2026-09-03)
+## Current checkout (2026-09-07)
 
-- v0.13.0 is the current release: the Spec → Execute simplification pass
+- Version 0.14.0 includes the guided local workflow and GitLab intake/publication.
+  `start` stops at a saved
+  Spec; `approve --task T1 --spec-sha <sha>` continues the foreground Phases;
+  `integrate T1` and `publish T1 --provider github|gitlab` are separate explicit
+  human operations. See `docs/local-workflow.md`, `tasks/spec.md`, and ADR 0003.
+- Local setup requires an installed full-pipeline Harness and executable
+  verification. Local Review always runs, including when legacy root settings
+  disabled optional Review. Do not claim a live GitLab or offline-model run from
+  injected transport/Harness tests.
+
+## Published history (through 2026-09-07)
+
+- v0.14.0 adds foreground local Tasks, required verification and advisory Review,
+  exact-SHA Approval, explicit local integration, optional GitHub/GitLab
+  publication, resumable adoption, and amendment Review fixes. It also includes
+  the legacy resume-push fold and flags-only Approval selectors deferred from
+  the earlier review.
+- v0.13.0 delivered the Spec → Execute simplification pass
   (`tasks/spec.md`, `docs/superpowers/plans/2026-09-03-spec-to-execute-simplification.md`)
   from the adversarial review of that path. Gate 1 trusts only
   workflow-authored markers; `run` lost its retry flags in favour of

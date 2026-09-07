@@ -892,9 +892,28 @@ class AllowedHoursConfig(StrictModel):
 
 
 class TaskBudgetConfig(StrictModel):
-    max_tasks_per_day: int | None = Field(default=None, ge=1, le=10_000)
+    max_runs_per_day: int | None = Field(default=None, ge=1, le=10_000)
     max_runtime_minutes_per_day: int | None = Field(default=None, ge=1, le=24 * 60)
     timezone: str = "local"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_run_limit(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "max_tasks_per_day" not in value:
+            return value
+        values = dict(value)
+        legacy = values.pop("max_tasks_per_day")
+        if "max_runs_per_day" in values and values["max_runs_per_day"] != legacy:
+            raise ValueError(
+                "conflicting max_runs_per_day and legacy max_tasks_per_day limits"
+            )
+        values["max_runs_per_day"] = legacy
+        return values
+
+    @property
+    def max_tasks_per_day(self) -> int | None:
+        """Compatibility accessor; the limit has always counted Phase attempts."""
+        return self.max_runs_per_day
 
     @field_validator("timezone")
     @classmethod
@@ -903,7 +922,7 @@ class TaskBudgetConfig(StrictModel):
 
     @model_validator(mode="after")
     def _has_a_limit(self) -> "TaskBudgetConfig":
-        if self.max_tasks_per_day is None and self.max_runtime_minutes_per_day is None:
+        if self.max_runs_per_day is None and self.max_runtime_minutes_per_day is None:
             raise ValueError("task_budget must set at least one daily limit")
         return self
 

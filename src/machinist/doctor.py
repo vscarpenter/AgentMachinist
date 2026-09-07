@@ -1108,8 +1108,9 @@ def run_doctor(
     update_probe: Callable[[str], UpdateCheck] = check_for_update,
     run_gates: bool = False,
     gate_runner=run_supervised,
+    check_deployment: bool = True,
 ) -> DoctorReport:
-    """Accumulate diagnostics without creating or changing repository files."""
+    """Accumulate diagnostics; setup can defer checks of unpublished workflows."""
     root = Path(repo_root).expanduser().resolve()
     checks: list[DoctorCheck] = []
     locations: dict[str, str | None] = {}
@@ -1279,7 +1280,7 @@ def run_doctor(
                     CheckLevel.PASS, "workflows", "managed workflows match config"
                 )
             )
-        if local_workflows_match:
+        if local_workflows_match and check_deployment:
             checks.append(
                 _remote_workflows_check(
                     root,

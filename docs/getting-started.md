@@ -1,19 +1,19 @@
 # Getting Started with AgentMachinist
 
-AgentMachinist turns a GitHub issue into a draft specification PR, waits for
-approval of that exact spec commit, then asks your coding harness to implement
-it. The resulting PR is still yours to review and merge.
+AgentMachinist takes a Task through an exact human-approved Spec, isolated
+implementation, verification, and independent Review. You can integrate the
+reviewed candidate locally and optionally publish it to GitHub or GitLab.
 
 ## What is AgentMachinist?
 
-It is an issue-to-reviewed-PR build pipeline with two human gates:
+It is a development workflow with two human Gates:
 
 ```text
-issue → SPEC → draft PR → APPROVE exact SHA → EXECUTE → tests → REVIEW → ready PR
-          machine                 human             machine          machine   human
+Task → Spec → human Approval of exact SHA → Execute → verify → Review
+                                                        → human review/integration
 ```
 
-AgentMachinist owns Git operations and GitHub transitions. Each task runs in a
+AgentMachinist owns Git operations and optional forge transitions. Each Task runs in a
 separate worktree or clone, so your active checkout is not used as the harness
 workspace. The harness never receives merge authority from AgentMachinist.
 
@@ -24,23 +24,40 @@ Install and verify:
 | Tool | Check |
 | --- | --- |
 | Git | `git --version` |
-| GitHub CLI, authenticated | `gh auth status` |
 | uv | `uv --version` |
 | One harness | for example, `claude --version` |
 
-You need push and pull-request access to the target GitHub repository.
+The local workflow requires no origin or forge account. Optional GitHub
+operations require authenticated `gh` and access to the target repository;
+GitLab operations require authenticated `glab` for the selected host.
 The core CLI is tested on macOS and Linux with Python 3.12–3.14. The managed
 LaunchAgent integration is macOS-only; Linux users can schedule
 `machinist watch --once` with their existing service manager.
 
 ## Install
 
+AgentMachinist 0.14.0 includes the guided local workflow, optional GitHub/GitLab
+intake and publication, and the existing GitHub issue automation. Install it,
+then change into the repository you want to work on:
+
 ```sh
 uv tool install agentmachinist
 machinist --version
 ```
 
-Upgrade later with `uv tool upgrade agentmachinist`.
+Upgrade an existing tool installation with:
+
+```sh
+uv tool upgrade agentmachinist
+machinist --version
+```
+
+Confirm that `machinist --version` reports 0.14.0 or newer before using the
+foreground local commands. For contributing to AgentMachinist, an editable
+installation is optional: run `uv tool install --editable .` from its source
+checkout, then enter the repository you want to change. An editable install
+tracks that checkout instead of the published package; use its Git and `uv sync`
+workflow to update it.
 
 To find out whether an upgrade is waiting, run:
 
@@ -70,7 +87,74 @@ pipeline contacts PyPI.
 
 ## Set up your repository
 
-From the repository root, use the guided entry point:
+For a local foreground Task, start on a named branch in a clean repository
+with an initial commit and configured Git author. This branch and commit become
+the Task's integration base:
+
+```sh
+machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
+# Read the Spec; use the exact SHA printed by start:
+machinist approve --task T1 --spec-sha <full-spec-commit-sha>
+# Approval continues Execute, verification, and independent Review.
+machinist status T1
+# Inspect the candidate diff and report, then:
+machinist integrate T1
+```
+
+First start detects an installed Harness with support for Spec, Execute, and
+Review and a manifest-backed verification command, then writes
+`.machinist/runs/local/config.yaml`. It copies applicable root configuration
+once, enables Review, disables managed workflows and telemetry export, and
+adds runtime exclusion through Git's local exclude file. It preserves the
+root `machinist.yaml`; later root changes do not update the local copy.
+Authenticate the Harness before starting. A missing required Gate needs an
+explicit `--test-cmd` before model work. Independent Review always runs for
+this local journey, even when legacy GitHub settings disabled Review.
+
+The command must work from the Workshop's isolated committed checkout. Ignored
+dependency folders such as `node_modules/` and `.venv/` are not copied from your
+working repository. Commands such as `npm ci && npm test` or `uv run pytest`
+can prepare that environment. Baseline verification runs before the Spec
+Harness; on dependency or command failure, correct the required Gate in
+`.machinist/runs/local/config.yaml` and retry with
+`machinist retry --task T1 --phase spec`. See the local workflow guide for
+prepared-interpreter and changed-baseline cases.
+
+Integration is explicitly requested and requires the clean expected base and
+exact reviewed candidate to permit a fast-forward. It does not push or merge
+remotely. Use `machinist publish T1 --provider github` or
+`machinist publish T1 --provider gitlab` when you choose to share that candidate.
+See the [local workflow guide](local-workflow.md) for issue import, file/stdin
+input, amendments, exact-SHA Approval, and publication recovery.
+
+With local configuration present, `machinist status` lists local Tasks and
+`machinist status T1 --json` reads one Task without forge requests. `continue T1`
+advances eligible Phases but never grants Approval or silently retries a
+failure. Local retry runs immediately and resumes Execute by default:
+
+```sh
+machinist retry --task T1 --phase execute
+machinist retry --task T1 --phase execute --fresh
+machinist amend --task T1 --feedback "Also name the rejected timezone value."
+```
+
+Local amendment requires a completed, verified and reviewed candidate and
+creates a new Spec requiring fresh Approval and Review. Use retry to recover a
+failed Phase first. To reject an initial Spec awaiting Approval, start a new
+Task with corrected intent; local amendment cannot revise that initial Spec.
+Once integration begins, start a new Task from the updated base instead.
+
+Local setup and the existing GitHub setup use separate configuration and run
+namespaces. `doctor`, `watch`, `queue`, `runs`, `inspect`, `explain`, `report`,
+`clean`, and portfolio `status --all` retain their legacy scope. They do not
+manage or aggregate `T1` records. See the [command and storage
+boundaries](local-workflow.md#command-and-storage-boundaries) before operating
+both workflows in one checkout.
+
+### GitHub setup and automation
+
+The remaining setup instructions configure the existing GitHub issue/watcher
+integration. From the repository root:
 
 ```sh
 machinist onboard
@@ -79,29 +163,41 @@ machinist onboard
 This creates `machinist.yaml`, `.machinist/specs/`, the sealed GitHub issue
 form, the managed approval workflow, and the configured labels. It also idempotently adds
 `/.machinist/runs/` to `.gitignore` so runtime records are not committed. It
-does not overwrite an existing config unless you pass `--force`.
+preserves an existing valid config. A recognized partial setup can be resumed
+by rerunning `machinist onboard`; valid config and operator preferences are
+retained. Conflicting setup flags stop with configuration guidance. Use
+`machinist config set` to change a saved choice before resuming. Only the
+lower-level `init --force` command explicitly overwrites configuration;
+`onboard` has no `--force` option.
 
 `onboard` uses the same renderer as `init`. Add `--setup-pr` when setup should
-land through review: AgentMachinist requires a clean default branch, creates
+land through review: initial setup requires a clean default branch, creates
 `chore/agentmachinist-setup`, commits only its managed allowlist, pushes it,
-and opens a draft PR. It never changes the default branch directly. Before a
-real Task, prove the controller flow without GitHub or model cost:
+and opens a draft PR. Local readiness is checked before publishing the setup PR;
+full doctor verifies deployed workflows after you merge setup. A recognized
+setup branch containing only managed adoption changes can be resumed, and an
+existing draft setup PR is reused. Unrelated committed or working-tree changes
+are not swept into adoption. If the default branch already contains the exact
+setup, no new PR is needed. Before a real Task, prove the controller flow
+without GitHub or model cost:
 
 ```sh
 machinist rehearse
 ```
 
-The default rehearsal is deterministic and uses no model or API; it invokes no
-Harness process.
+The default rehearsal runs the production local Phases with real Git,
+verification, Review, and explicit integration. Its fake Harness is deterministic
+and uses no model or API; it invokes no external Harness process.
 `machinist rehearse --harness` is the explicit opt-in to run configured
 profiles in the disposable repository.
 
-In a terminal, `onboard` (recommended) walks you through the choices that matter on the first
+In a terminal, GitHub `onboard` walks you through the choices that matter on the first
 run, each with a one-line explanation and a safe default — `init` is the same
 setup step without the guided receipt:
 
 - **Dispatch mode** — `local` (the `machinist watch` daemon runs the Spec
-  phase on your machine) or `github-actions` (CI runs it; requires the selected
+  Phase for GitHub issues on your machine) or `github-actions` (CI runs it;
+  requires the selected
   Spec adapter's declared repository secret).
 - **Managed workflows** — install the Machinist-owned
   `.github/workflows/machinist-*.yml` files.
@@ -110,7 +206,8 @@ setup step without the guided receipt:
   adapter's pinned install and secret metadata.
 - **Test gate** — confirm the auto-detected command, or pick your language
   for a suggested one (`pytest`, `npm test`, `cargo test`, `go test ./...`,
-  `mvn test`), type your own, or skip the gate.
+  `mvn test`), type your own, or explicitly skip the Gate for the legacy
+  workflow. Foreground local Tasks require a required Gate.
 - **Notifications** — failures only, all key events, or none.
 
 Flags pre-answer their questions and skip them: `--spec-source`, `--harness`,
@@ -129,14 +226,16 @@ AgentMachinist, set that field to `true`, run `machinist sync-workflows`, review
 the generated files, and commit them.
 
 If you skipped the test-gate question or ran non-interactively, set a real test
-gate before committing (or rerun `init --force --test-cmd "<command>"`):
+Gate before committing, for example with
+`machinist config set tests.command "uv run pytest"`:
 
 ```yaml
 tests:
   command: uv run pytest
 ```
 
-Then verify the installation without changing it:
+After setup is committed, pushed, and merged to the default branch, verify the
+deployed integration without changing it:
 
 ```sh
 machinist doctor --run-gates
@@ -176,7 +275,10 @@ not commit anything until the staged diff matches the configuration you intend
 to run. Run `machinist --help` to see setup, task, build, and daily vs advanced
 operate commands grouped by workflow.
 
-## Your first agent task
+## Your first GitHub issue Task
+
+For the local journey, use `machinist start` as shown above. The following
+commands create Tasks for the existing GitHub integration.
 
 Create and lint a focused Task before paying for agent work:
 
@@ -189,11 +291,17 @@ machinist task new --title "Add export recovery" --dispatch
 The managed form captures objective, acceptance checkboxes, constraints,
 verification, and context. `task new` creates an unlabeled issue by default;
 `--dispatch` applies `agent-task` only after the same local lint passes. With
-the default local dispatcher, start one pass:
+`github.spec_source: local`, start one GitHub watcher pass:
 
 ```sh
 machinist watch --once
 ```
+
+Use `--body-file task.md` or `--body-file -` on `machinist task new` for file
+or stdin input. Invalid input and failed creation preserve a draft and print a
+recovery command. Required sections accept `##` and GitHub issue forms' `###`
+headings; deeper headings stay within their field. Objectives need at least six
+words, and acceptance checkboxes cannot be empty or placeholder text.
 
 Or address a specific issue directly:
 
@@ -210,6 +318,12 @@ and opens a draft PR.
 
 ## Review and approve
 
+Local Tasks use `machinist approve --task T1 --spec-sha <full-spec-commit-sha>`.
+The supplied SHA must match the saved Spec; Approval continues local Execute
+and Review. Local Review is advisory and does not authorize integration.
+
+For the GitHub issue workflow, use the trusted workflow Approval below.
+
 Read the spec in the draft PR. Approval records both the configured label and
 the exact 40-character PR head SHA. Choose one method:
 
@@ -218,9 +332,8 @@ machinist approve --pr 8
 # or: machinist approve --issue 7
 ```
 
-`approve` takes exactly one of `--pr` or `--issue`. There is no positional
-form, so an issue and a pull request that share a number can never be
-confused.
+GitHub `approve` takes exactly one of `--pr` or `--issue`; local Tasks use the
+separate `--task` selector. There is no ambiguous positional Approval target.
 
 Or post the exact PR comment:
 
@@ -266,7 +379,9 @@ trigger label and the PR's approval label, and closes the open draft PR. It
 does not merge or delete the branch.
 
 Do not mark the draft ready yourself. AgentMachinist uses that transition to
-signal that implementation, verification, and independent Review completed.
+signal completed implementation and configured Verification Gates, plus
+independent Review when `review.enabled` is true. Disabling Review in the
+legacy GitHub workflow means a ready PR has no independent Review guarantee.
 
 When `review.enabled` is true, Execute leaves the implementation draft. Review
 checks the exact delivered head in read-only mode against the approved Spec,
@@ -294,12 +409,18 @@ machinist amend 42 --feedback "Keep the public API; add the missing edge-case te
 # or: machinist amend 42 --feedback-file review-notes.txt
 ```
 
-Amendment always provisions a fresh Execute attempt from the approved remote
-head. It never imports manual edits from a retained failed workspace.
+Legacy GitHub amendment provisions a fresh Execute attempt from the approved
+remote head; it does not generate a new Spec or import manual edits from a
+retained failed Workshop. A new successful Execute SHA can receive a fresh
+Review with new Evidence and findings. A completed Review of the same SHA
+cannot run again. Local `amend --task T1` instead generates a new Spec and stops
+for its fresh exact-SHA Approval.
 
-## Spec generation: local or CI
+## GitHub Spec generation: local or CI
 
-`github.spec_source` assigns Phase 1 to exactly one dispatcher:
+`github.spec_source` assigns the legacy GitHub Spec Phase to exactly one
+dispatcher. Its `local` value is distinct from the foreground `T1` workflow;
+GitLab support does not include a hosted Spec dispatcher:
 
 ```yaml
 github:
@@ -322,6 +443,24 @@ or `GEMINI_API_KEY`). `github.spec_secret_env` overrides the secret name, not
 its value. A plugin without a CI Spec profile must use local dispatch.
 
 ## Configuration reference
+
+Both workflows use the same strict configuration schema. Commands default to
+root `machinist.yaml`; foreground Tasks read the saved local file. Inspect or
+change that file explicitly:
+
+```sh
+machinist config show --path .machinist/runs/local/config.yaml
+machinist config validate --path .machinist/runs/local/config.yaml
+machinist config set tests.command "uv run pytest" --path .machinist/runs/local/config.yaml
+```
+
+Use `tests.command` only for the single-Gate form; if named Gates are present,
+edit `verification.gates` instead. Local loading additionally requires at least
+one required Gate, Review enabled, local Spec source, managed workflows off,
+telemetry endpoint unset, and an absolute Workshop root outside the repository.
+Generic `config validate` checks the shared schema, not all local constraints.
+Changing `github.repo` does not choose a local publication target: that target
+comes from origin plus the explicit `publish --provider` selection.
 
 What `machinist onboard` writes to disk is intentionally minimal — about 20 lines:
 
@@ -434,8 +573,8 @@ limits:
   allow_test_deletions: false
 ```
 
-Unknown keys fail validation. With `repo: null`, AgentMachinist derives and
-binds the exact GitHub host, owner, and repository from the controller's Git
+Unknown keys fail validation. In the legacy GitHub workflow, with `repo: null`,
+AgentMachinist derives and binds the exact GitHub host, owner, and repository from the controller's Git
 origin; an explicit `repo` must match it. `workspace.strategy` is `worktree` by
 default, which is fast because the Workshop shares your repository's object
 store. It also shares `config`, `hooks/`, and `info/` with your checkout, so
@@ -446,7 +585,8 @@ Workshop to own its Git metadata; see
 can be `always`, `on_success`, or `never`;
 keeping failed workspaces is useful for diagnosis. `tests.command: null` skips
 the legacy command; verification is skipped only when no named
-`verification.gates` are configured, which is surfaced as a doctor warning.
+`verification.gates` are configured, which is surfaced as a legacy doctor
+warning. Foreground local Tasks reject a configuration without a required Gate.
 The later sections describe the phase profiles, named gates, admission
 controls, notifications, and safety limits.
 
@@ -465,8 +605,8 @@ machinist config set queue.max_tasks_per_pass 2
 atomically, and rewrites the file as canonical YAML; comments are normalized.
 `validate`, `show`, and `set` accept `--path` for a non-default config file.
 
-After changing labels, dispatcher ownership, or the installed package version,
-regenerate workflows:
+For the GitHub integration, after changing labels, dispatcher ownership, or
+the installed package version, regenerate workflows:
 
 ```sh
 machinist sync-workflows
@@ -551,8 +691,9 @@ limits:
   allow_binary: false
 ```
 
-Required command failures block PR readiness. Ordinary advisory command
-failures are preserved as evidence without blocking readiness, and advisory
+Required command failures block candidate delivery and PR readiness. Ordinary
+advisory command failures are preserved as Evidence without blocking delivery,
+and advisory
 gates must be read-only. Cancellation, forbidden working-tree mutation, or an
 inability to take the before/after snapshot always blocks fail-closed,
 regardless of `required`. Configure either named gates or `tests.command`,
@@ -578,11 +719,12 @@ directories, plus `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, and
 also refused. When an approved Spec legitimately removes or renames tests,
 set `limits.allow_test_deletions: true` for that run and turn it back off
 afterwards. Modified tests are not flagged — updating tests is normal Spec
-work — so weakened assertions still need human review on the PR.
+work — so weakened assertions still need human review in the local diff or PR/MR.
 
 ## Choosing a harness
 
-Set `harness.name` to `claude-code`, `opencode`, `pi`, or `codex`. Local runs
+Set `harness.name` to `claude-code`, `opencode`, `pi`, or `codex` in the
+configuration used by your chosen workflow. Runs
 reuse the provider authentication already available to that executable.
 
 ```yaml
@@ -593,8 +735,9 @@ harness:
 
 Support is not identical. Some spec modes have a CLI-enforced read-only tool or
 sandbox boundary; OpenCode's plan agent is advisory. All implementations are
-checked afterward for harness-created commits, remote branch changes, and
-`.machinist/` changes. See the [harness matrix](harnesses.md) and
+checked afterward for Harness-created commits and `.machinist/` changes.
+Local Phases check controller/Workshop HEAD, branch, refs, and custody without
+contacting a forge; legacy GitHub Phases also check live remote branch changes. See the [harness matrix](harnesses.md) and
 [trust model](trust-model.md) before unattended operation.
 
 Installed Python distributions may add a trusted adapter through the
@@ -613,6 +756,7 @@ final command and its trust impact.
 
 ## Watch admission and operator controls
 
+These controls govern the legacy GitHub watcher, not foreground local Tasks.
 Preview eligibility and every deferral reason without dispatching work:
 
 ```sh
@@ -633,14 +777,18 @@ queue:
     timezone: America/Chicago
     days: [mon, tue, wed, thu, fri]
   task_budget:
-    max_tasks_per_day: 5
+    max_runs_per_day: 5
     max_runtime_minutes_per_day: 240
     timezone: America/Chicago
 ```
 
-Allowed-hour windows may cross midnight. Daily counts come from local Task Run
-history, so these are conservative local admission controls, not distributed
-quotas across several Macs.
+Allowed-hour windows may cross midnight. `max_runs_per_day` counts Phase
+attempts: Spec, Execute, and Review each consume one Task Run. The legacy
+`max_tasks_per_day` key still loads with those same semantics; conflicting old
+and new values fail validation, and effective config emits the canonical key.
+Daily counts come from local Task Run history, so these are conservative local
+watcher admission controls, not distributed quotas across several Macs or
+spending caps on `start`/`approve --task`.
 
 Pause all new dispatches or defer one issue durably:
 
@@ -668,6 +816,8 @@ clears its cancellation marker.
 
 ## Notifications and safety limits
 
+Notification delivery belongs to the legacy GitHub command/watcher workflow.
+Foreground local commands print progress and results in the terminal.
 Notifications are best-effort and never turn a successful Task into a failure.
 Choose events from `failure`, `spec_ready`, `approval_stale`, and `pr_ready`:
 
@@ -745,7 +895,14 @@ currently supports macOS launchd only.
 
 ## Local evidence and repository portfolio
 
-Use the local read model when GitHub is unavailable or when scripts need JSON:
+For foreground local Tasks, use `machinist status T1 --json`,
+`machinist status T1 --watch`, and the printed report path under
+`.machinist/runs/local/tasks/`. With local configuration present, plain `status`
+lists these Tasks; its `--local` flag does not switch back to legacy records.
+
+The following read model and portfolio commands inspect the locally persisted
+**legacy GitHub issue runs** under `.machinist/runs/`. They do not aggregate
+nested `T1` history. In a checkout without local configuration, use:
 
 ```sh
 machinist status --local --json
@@ -782,12 +939,19 @@ machinist status --all --json
 machinist repo remove /absolute/path/to/project
 ```
 
-Portfolio status is local-only. It reports an unavailable repository alongside
+Portfolio status reads local legacy issue-run Evidence without GitHub requests.
+It reports an unavailable repository alongside
 healthy ones instead of failing the entire view.
 
 ## Troubleshooting
 
-Start with:
+For a foreground Task, start with `machinist status T1`; follow its printed
+`Next:` command. Use `machinist config show --path .machinist/runs/local/config.yaml` to
+inspect the local settings and the [local recovery guide](local-workflow.md#amend-or-recover)
+for retry, amendment, integration, or publication problems. Root `doctor`
+checks GitHub setup and is not a foreground Task diagnostic.
+
+For the legacy GitHub issue workflow, start with:
 
 ```sh
 machinist doctor --run-gates
@@ -838,14 +1002,20 @@ from inside the retained workspace.
 - Local file locks prevent duplicate work on one machine/process family; they
   are not a distributed lock across multiple hosts. Run one local watcher per
   repository.
-- Queue windows and daily budgets are local admission controls based on local
-  history; they do not coordinate several watcher hosts.
+- Queue windows and daily budgets are GitHub watcher admission controls based
+  on local issue history; they do not coordinate several hosts or govern
+  foreground local Tasks.
 - Harness processes run as your OS user. AgentMachinist reduces controller
   credentials and checks postconditions, but it is not a container or VM.
 - Provider authentication, quotas, model behavior, and spec quality remain
   external dependencies.
-- AgentMachinist produces a ready PR. It does not merge, deploy, or verify a
-  deployed runtime.
+- Foreground Tasks produce a reviewed local candidate. Explicit `integrate`
+  permits a clean exact fast-forward; `publish` optionally creates or updates
+  a GitHub PR or GitLab MR. Legacy GitHub automation produces a ready PR.
+  AgentMachinist does not merge remotely, deploy, or verify a deployed runtime.
+- Local orchestration requires no forge. Offline inference separately requires
+  a compatible local provider, downloaded models and dependencies, and a run
+  verified with network access denied.
 
 For restarts, retries, logs, and cleanup, continue with the
 [operator runbook](operator-runbook.md).

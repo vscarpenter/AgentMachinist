@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-09-07
+
+- Allow 30 minutes for CI test and package/release build jobs so the expanded
+  real-Git lifecycle and rehearsal suite can complete on hosted runners. All
+  test, coverage, and aggregate release checks remain required.
+
+- Add the guided foreground local journey: `start` saves a Task and generates
+  its Spec; `approve --task T1 --spec-sha <sha>` continues verified Execute and
+  independent advisory Review. Status shows the local result and next action.
+  Initial setup needs Git, an installed Harness, and a verification command;
+  no origin, forge account, labels, daemon, or hosted workflows are required.
+- Add durable local Task IDs, exact repository/Task/Spec Approval, retained
+  candidate refs, reports, explicit amendments, cancellation, and retry. Local
+  Task Run construction reuses the dispatcher, lifecycle, custody, and
+  Verification engine. Local orchestration does not imply offline inference.
+- Add explicit local integration: fast-forward only, from a clean expected
+  base to the exact reviewed candidate, with persisted recovery intent.
+  Automatic and remote merges remain outside the controller's contract.
+- Make local publication optional and recoverable through GitHub PRs or GitLab
+  MRs. GitLab issue intake and MR publication use authenticated `glab`, including
+  nested projects and explicit self-managed hosts. Exact repository/head
+  checks and leased pushes prevent silent destination changes or overwrites;
+  publication retries do not rerun successful Harness work or verification.
+  Native GitLab Spec CI and remote GitLab Approval are not included.
+- Fix GitHub setup PR's circular deployed-workflow prerequisite. Validate local
+  setup before creating the PR and check deployed readiness after merge.
+  Recognized partial onboarding resumes while preserving configuration.
+- Permit a fresh Review after a new successful Execute candidate, including
+  amendments, while blocking duplicate Review of the same successful head.
+  Print Review completion and finding counts instead of claiming it passed an
+  unimplemented severity policy.
+- Run rehearsal through the production local Phases, real Git, Verification,
+  Review, and integration. The default uses a deterministic fake Harness;
+  configured provider invocation remains an explicit `--harness` choice.
+- Accept Task bodies from files/stdin and preserve drafts on lint or creation
+  failure. Lint recognizes `##` and GitHub issue forms' `###` sections, respects
+  nested headings, and rejects empty or placeholder acceptance checkboxes.
+- Rename the daily Phase-attempt limit to `max_runs_per_day`. Legacy
+  `max_tasks_per_day` still loads with unchanged counting semantics; conflicting
+  aliases fail validation and effective configuration emits the canonical key.
+- Update the complete documentation set and interactive guides for local
+  onboarding, configuration and command namespaces, recovery, optional
+  publication, and GitLab support. Preserve earlier design records with
+  applicability notes and current references.
 - Reconcile a crashed Execute push from the remote Task branch as well as
   GitHub's PR listing. When the listing lagged a push the controller had just
   made, a fresh run failed its approved-head check and advised approving the
@@ -13,7 +57,7 @@
   implementation commit re-enters the same leased push, observation, and
   delivery instead of a separate resume-push path; a remote already at the
   implementation is a no-op, one that moved elsewhere fails the lease.
-- `machinist approve` takes exactly one of `--issue <n>` or `--pr <n>`. The
+- Legacy GitHub `machinist approve` takes exactly one of `--issue <n>` or `--pr <n>`. The
   positional target, which resolved issue-versus-PR ambiguity with its own
   error, is removed; every documented example already used the flags.
 
