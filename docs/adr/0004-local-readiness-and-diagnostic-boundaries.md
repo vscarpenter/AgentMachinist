@@ -7,7 +7,8 @@ Status: Accepted
 Deciders: Vinny Carpenter, through approval of local readiness followed by
 remote-base validation and diagnostics.
 
-Implementation status: unreleased; available in the source checkout. The
+Implementation status: 0.15.0 release candidate / source checkout; publication
+pending. The
 published 0.14.0 local workflow is described in [ADR 0003](0003-local-workflow-and-optional-publication.md).
 
 ## Context

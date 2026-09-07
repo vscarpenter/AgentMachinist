@@ -668,6 +668,15 @@ def test_release_docs_describe_current_package_version():
     version = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"][
         "version"
     ]
+    readme = _README_PATH.read_text()
+    published = re.search(
+        r"\[AgentMachinist (?P<version>\d+\.\d+\.\d+) on PyPI\]"
+        r"\(https://pypi.org/project/agentmachinist/(?P=version)/\)",
+        readme,
+    )
+    assert published, "README must identify the published package consistently"
+    published_version = published["version"]
+    pending = version != published_version
     for path in (
         _FIRST_RUN_GUIDE_PATH,
         _EXPLAINER_PATH,
@@ -675,8 +684,11 @@ def test_release_docs_describe_current_package_version():
         _REPO_ROOT / "docs/index.html",
     ):
         html = path.read_text().lower()
+        assert version in html, path
+        if pending:
+            assert "release candidate" in html and "publication pending" in html, path
+            assert published_version in html, path
         # Source-only additions must be visibly isolated from released commands.
-        # Do not ban honest unreleased notes or imply they shipped in 0.14.0.
         html = re.sub(
             r'<(?P<tag>details|p)\b[^>]*data-release="unreleased"[^>]*>.*?</(?P=tag)>',
             "",
@@ -685,8 +697,10 @@ def test_release_docs_describe_current_package_version():
         )
         assert "unreleased" not in html, path
         assert "machinist doctor --local" not in html, path
-        assert version in html, path
-        assert "uv tool install agentmachinist" in html, path
+        assert re.search(
+            rf'uv tool install ["\x27]?agentmachinist(?:=={re.escape(published_version)})?(?:["\x27\s<])',
+            unescape(html),
+        ), path
         for command in (
             "machinist start",
             "machinist approve --task t1 --spec-sha",
@@ -697,12 +711,17 @@ def test_release_docs_describe_current_package_version():
         assert "gitlab" in html, path
     changelog = _CHANGELOG_PATH.read_text()
     assert f"## {version} —" in changelog
-    assert (
-        f"https://pypi.org/project/agentmachinist/{version}/"
-        in _README_PATH.read_text()
+    assert version in readme
+    if pending:
+        assert "release candidate" in readme.lower()
+        assert "publication pending" in readme.lower()
+    claude = _CLAUDE_PATH.read_text().lower()
+    assert version in claude
+    assert re.search(
+        rf"(?:current release:|published release remains)\s*{re.escape(published_version)}",
+        claude,
     )
-    assert f"current release: {version}" in _CLAUDE_PATH.read_text().lower()
-    release_text = _README_PATH.read_text().lower().split("## releasing", 1)[1]
+    release_text = readme.lower().split("## releasing", 1)[1]
     assert "sha-256" in release_text
     assert "trusted publishing" in release_text
     assert "exact version" in release_text
@@ -720,7 +739,8 @@ def test_local_readiness_examples_are_optional_and_identified_as_source_only():
         )
         assert blocks, path
         for block in blocks:
-            assert "unreleased" in block and "source checkout" in block, path
+            assert "source checkout" in block, path
+            assert "unreleased" in block or "publication pending" in block, path
             assert "optional" in block, path
             assert "machinist doctor --local" in block, path
 

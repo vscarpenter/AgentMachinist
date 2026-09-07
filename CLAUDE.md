@@ -16,7 +16,8 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.14.0).
+hatchling, published to PyPI as `agentmachinist`. This checkout is the **0.15.0
+release candidate; publication pending**. The published release remains 0.14.0.
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -301,7 +302,14 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current checkout (2026-09-07)
 
-- Version 0.14.0 includes the guided local workflow and GitLab intake/publication.
+- **0.15.0 release candidate / source checkout; publication pending.** New in this
+  version: optional `doctor --local`, exact remote-base validation for new legacy
+  Workshops, and shared bounded diagnostic rendering. See ADR 0004. Published
+  installation remains 0.14.0; use `uv tool install --editable .` for this source.
+  A version bump and push do not authorize a GitHub Release or PyPI publication.
+
+- The guided local workflow and GitLab intake/publication introduced in 0.14.0
+  continue in this candidate.
   `start` stops at a saved
   Spec; `approve --task T1 --spec-sha <sha>` continues the foreground Phases;
   `integrate T1` and `publish T1 --provider github|gitlab` are separate explicit

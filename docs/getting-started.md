@@ -36,28 +36,32 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.14.0 includes the guided local workflow, optional GitHub/GitLab
-intake and publication, and the existing GitHub issue automation. Install it,
-then change into the repository you want to work on:
+**0.15.0 release candidate / source checkout; publication pending.** This guide
+covers the local workflow, optional GitHub/GitLab collaboration, and new local
+readiness, remote-base validation, and diagnostic improvements. Install the
+candidate from its AgentMachinist source checkout, then change into your project:
 
 ```sh
-uv tool install agentmachinist
+uv tool install --editable .
 machinist --version
 ```
 
-Upgrade an existing tool installation with:
+Confirm version 0.15.0 for the candidate. The published release remains 0.14.0;
+to install that release instead:
 
 ```sh
-uv tool upgrade agentmachinist
+uv tool install "agentmachinist==0.14.0"
 machinist --version
 ```
 
-Confirm that `machinist --version` reports 0.14.0 or newer before using the
-foreground local commands. For contributing to AgentMachinist, an editable
-installation is optional: run `uv tool install --editable .` from its source
-checkout, then enter the repository you want to change. An editable install
-tracks that checkout instead of the published package; use its Git and `uv sync`
-workflow to update it.
+The published 0.14.0 release includes foreground Tasks and GitLab support, but
+does not include the new 0.15.0 features. `uv tool upgrade agentmachinist` follows
+published releases. An editable install follows its source checkout; use that
+checkout's Git and `uv sync` workflow to update it.
+
+Managed GitHub workflows pin the installed version. Until 0.15.0 is published,
+use the released 0.14.0 controller for consumer GitHub Actions setup. This
+repository's development workflows use `github.spec_install: checkout`.
 
 To find out whether an upgrade is waiting, run:
 
@@ -986,7 +990,7 @@ inspect the local settings and the [local recovery guide](local-workflow.md#amen
 for retry, amendment, integration, or publication problems. Plain `doctor`
 checks GitHub setup.
 
-**Unreleased / source checkout:** optional local readiness is available with
+**New in the 0.15.0 release candidate:** optional local readiness is available with
 `machinist doctor --local` or `machinist doctor --local --json`. Install the
 current source checkout with `uv tool install --editable .` to use this option;
 it is not part of published 0.14.0 and adds no required onboarding step. It
@@ -1035,7 +1039,7 @@ Common states and responses:
 | Task should not start again | Run `machinist cancel <issue> --reason "..."`; clear it directly or explicitly retry only when dispatch is safe. |
 | Queue or issue is intentionally waiting | Run `machinist queue show`; use `queue resume` or `queue allow <issue>` as appropriate. |
 | Workspace already exists | Inspect it first, or prune it with `machinist clean --issue <issue>` or `machinist clean --all`. |
-| Remote base fetch fails (unreleased / source checkout) | Confirm origin and the repository's current default branch; a new remote Task will not use a stale tracking ref for a deleted branch. |
+| Remote base fetch fails (0.15.0 release candidate) | Confirm origin and the repository's current default branch; a new remote Task will not use a stale tracking ref for a deleted branch. |
 | Managed workflow drift | `watch` and `update-check` report it. Run `machinist sync-workflows`, inspect, commit, and push. |
 | Configuration is unclear | Run `machinist config validate` and `machinist config show`; neither starts a Task. |
 | GitHub is unavailable | Read legacy Evidence with `machinist runs` or `machinist inspect <issue> --offline`; `machinist status --local` also works when no local Task configuration is present. |

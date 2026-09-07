@@ -1,12 +1,13 @@
 # AgentMachinist documentation
 
-This is the current operating documentation for AgentMachinist **0.14.0**, including
-the guided local workflow and optional GitHub/GitLab collaboration. Install with
-`uv tool install agentmachinist`, or upgrade an existing tool installation with
-`uv tool upgrade agentmachinist`. Start with the
+This is the current operating documentation for the **0.15.0 release candidate / source checkout;
+publication pending**, including the guided local workflow and optional
+GitHub/GitLab collaboration. Install this source with `uv tool install --editable .`.
+The published release remains 0.14.0; install it with
+`uv tool install "agentmachinist==0.14.0"`. Start with the
 [local workflow guide](local-workflow.md) for your first Task.
 
-**Unreleased / source checkout:** optional `machinist doctor --local` previews
+**New in 0.15.0:** optional `machinist doctor --local` previews
 local readiness without adoption, model work, or forge setup. The source also
 hardens remote-base validation and diagnostic rendering. These additions are
 not in published 0.14.0; use `uv tool install --editable .` from the current
@@ -46,7 +47,7 @@ production local pipeline with a deterministic fake Harness and real Git, withou
 model calls. For GitHub automation, `machinist onboard --setup-pr` creates or
 resumes the setup PR; after merging setup, `machinist doctor --run-gates` checks
 GitHub readiness. That doctor command is not a prerequisite for local Tasks.
-The unreleased `doctor --local` is optional too; `--run-gates` explicitly runs
+The 0.15.0 candidate's `doctor --local` is optional too; `--run-gates` explicitly runs
 project commands in the controller checkout and does not prove the isolated
 Workshop baseline.
 

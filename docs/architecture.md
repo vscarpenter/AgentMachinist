@@ -4,9 +4,10 @@ AgentMachinist coordinates Git, a coding Harness, and the repository's
 verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
-deployment remain outside the controller. AgentMachinist 0.14.0 includes the
-foreground local workflow and GitLab intake/publication alongside the compatible
-GitHub issue workflow.
+deployment remain outside the controller. This document covers the **0.15.0
+release candidate / source checkout; publication pending**. The published
+0.14.0 release includes the local workflow and GitLab collaboration; 0.15.0 adds
+local readiness, exact remote-base validation, and bounded diagnostics.
 
 ## Ownership
 
@@ -74,7 +75,7 @@ See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
 
 ## Deep policy seams
 
-**Unreleased / source checkout:** `local_doctor.py` adds optional
+**New in the 0.15.0 release candidate:** `local_doctor.py` adds optional
 `machinist doctor --local` using the read-only `local_setup.py` configuration
 resolver shared with `start`. Saved local settings take precedence; first-run
 discovery is previewed without adoption. It combines local Git/author/checkout
@@ -310,7 +311,7 @@ independently; one missing or corrupt repository does not erase healthy
 repository results. It does not include foreground `T1` records. A checkout with
 local configuration routes default `status` to local Tasks; `runs`, `inspect`,
 `explain`, plain `doctor`, `clean`, and aggregate reports retain legacy scope.
-The unreleased `doctor --local` selects readiness for the local workflow.
+The 0.15.0 candidate's `doctor --local` selects readiness for the local workflow.
 `config` defaults to root `machinist.yaml`, with `--path` required to inspect or
 change the foreground local configuration.
 
@@ -376,7 +377,7 @@ See [the trust model](trust-model.md) for the full key list and
 
 ## Push safety
 
-**Unreleased / source checkout:** legacy `Workspace.provision` fetches the
+**New in the 0.15.0 release candidate:** legacy `Workspace.provision` fetches the
 intended remote base explicitly for new Tasks, resolves the freshly fetched
 ref, and constructs the Workshop from that immutable SHA. Missing or deleted
 remote bases fail even when a stale tracking ref remains; a narrow fetch
@@ -401,7 +402,7 @@ to coding harnesses or verification gates.
 
 ## Diagnostic rendering
 
-**Unreleased / source checkout:** `diagnostics.py` owns bounded rendering for
+**New in the 0.15.0 release candidate:** `diagnostics.py` owns bounded rendering for
 Git, GitHub, GitLab, and doctor diagnostics. It redacts recognized URL userinfo,
 authorization values, and secret assignments and strips unsafe terminal
 controls before truncation. Exception categories and useful context remain

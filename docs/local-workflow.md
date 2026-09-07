@@ -5,13 +5,13 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This workflow is available in AgentMachinist 0.14.0. Install it with
-`uv tool install agentmachinist`, or upgrade an existing tool installation with
-`uv tool upgrade agentmachinist`; then run the commands below in the repository
-you want to change. The existing
+**0.15.0 release candidate / source checkout; publication pending.** Install this
+source with `uv tool install --editable .`, then run the commands below in the
+repository you want to change. The published release remains 0.14.0 and includes
+this local workflow; install it with `uv tool install "agentmachinist==0.14.0"`.
+Optional local readiness is new in 0.15.0. The existing
 [GitHub issue workflow](getting-started.md#github-setup-and-automation)
-remains available. See [installation](getting-started.md#install) for an optional
-editable source setup.
+remains available. See [installation](getting-started.md#install) for both choices.
 
 ## Complete one Task
 
@@ -123,7 +123,7 @@ silently discarding edits. The command does not push or merge a remote PR/MR.
 
 ## Optional local readiness
 
-**Unreleased / source checkout:** `machinist doctor --local` adds an optional
+**New in the 0.15.0 release candidate:** `machinist doctor --local` adds an optional
 readiness check. Install the current AgentMachinist source checkout with
 `uv tool install --editable .`, then return to your project to use it. The
 published 0.14.0 package does not include this option. You can still begin with
@@ -312,7 +312,7 @@ Local records, Phase history, configuration, and reports live under
 The Spec itself is committed at `.machinist/specs/task-1-spec.md`. Preserve
 runtime records for recovery; do not commit them or edit Task JSON manually.
 
-Plain `doctor` remains the root GitHub setup preflight; the unreleased
+Plain `doctor` remains the root GitHub setup preflight; the 0.15.0 candidate's
 `doctor --local` checks local readiness as described above. `runs`, `inspect`, `explain`,
 `report`, and portfolio `status --all` read the legacy issue-run namespace under
 `.machinist/runs/`; they do not aggregate the nested local Task namespace.

@@ -1,9 +1,10 @@
 # Operator runbook
 
-AgentMachinist 0.14.0 includes the foreground local workflow and optional GitLab
-integration. Install with `uv tool install agentmachinist`, or upgrade with
-`uv tool upgrade agentmachinist`. See the
-[installation instructions](getting-started.md#install) for other setups.
+**0.15.0 release candidate / source checkout; publication pending.** Install this
+source with `uv tool install --editable .` for the new readiness, remote-base,
+and diagnostic behavior below. The published release remains 0.14.0 and includes
+the foreground workflow and GitLab integration. See the
+[installation instructions](getting-started.md#install) for both choices.
 
 ## Local foreground operation
 
@@ -40,7 +41,7 @@ can use a cloud model; it does not establish offline inference.
 
 ### Optional local readiness
 
-**Unreleased / source checkout:** install the current source with
+**New in the 0.15.0 release candidate:** install the current source with
 `uv tool install --editable .` to use these optional diagnostics; published
 0.14.0 does not include `doctor --local`.
 
@@ -112,7 +113,7 @@ continue reading `.machinist/runs/` issue records; they do not aggregate local
 Tasks. `status --local` reads legacy records only when local configuration is
 absent. Use `runs` and `inspect` for legacy Evidence in a mixed checkout.
 
-Plain `doctor` remains a GitHub setup preflight; the unreleased `doctor --local`
+Plain `doctor` remains a GitHub setup preflight; the 0.15.0 candidate's `doctor --local`
 checks local readiness. `watch`, `queue`, service
 scheduling, admission budgets, and notifications belong to the legacy workflow;
 they do not govern foreground Tasks. `clean` manages legacy Workshops and has
@@ -123,6 +124,10 @@ The remaining sections describe the legacy GitHub workflow unless explicitly
 stated otherwise.
 
 ## GitHub preflight
+
+Managed workflows pin the installed controller version. Until 0.15.0 is
+published, use the released 0.14.0 controller for consumer GitHub Actions setup.
+This repository's development workflows use `github.spec_install: checkout`.
 
 Run from the configured repository root:
 
@@ -309,7 +314,7 @@ per-repository errors, and does not include the foreground Task namespace.
 
 ## Recover a failed GitHub issue Task
 
-**Unreleased / source checkout:** new remote Workshops fetch the intended base
+**New in the 0.15.0 release candidate:** new remote Workshops fetch the intended base
 branch explicitly and pin its resulting commit. A deleted or renamed remote
 base fails before Workshop creation even if a stale tracking ref survives.
 Check origin and the repository's current default branch, then use the normal
@@ -415,7 +420,7 @@ which generates a new Spec and requires its Approval before Execute.
 
 ## Diagnostic output
 
-**Unreleased / source checkout:** controller Git, `gh`, `glab`, and doctor
+**New in the 0.15.0 release candidate:** controller Git, `gh`, `glab`, and doctor
 diagnostics redact recognized URL credentials, authorization values, and
 secret assignments, remove unsafe terminal controls, and bound rendered text.
 A truncation notice means the displayed diagnostic is incomplete. This is not
