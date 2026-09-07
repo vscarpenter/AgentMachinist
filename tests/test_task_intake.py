@@ -27,6 +27,65 @@ def test_rendered_task_body_round_trips_through_readiness_lint() -> None:
     assert report.errors == ()
 
 
+def test_github_issue_form_heading_level_is_ready() -> None:
+    assert lint_task_body(complete_body().replace("## ", "### ")).ready
+
+
+@pytest.mark.parametrize("heading", ["##", "###"])
+def test_child_headings_stay_in_their_parent_section(heading: str) -> None:
+    body = complete_body().replace("## ", f"{heading} ")
+    body = body.replace(
+        f"{heading} Acceptance criteria\n",
+        f"{heading} Acceptance criteria\n\n{heading}# Observable behavior\n",
+    )
+
+    assert lint_task_body(body).ready
+
+
+def test_child_heading_cannot_supply_a_missing_required_section() -> None:
+    body = complete_body().replace("## Verification", "### Verification")
+
+    report = lint_task_body(body)
+
+    assert not report.ready
+    assert any(finding.field == "verification" for finding in report.errors)
+
+
+@pytest.mark.parametrize("criterion", ["- [ ]", "- [x]   ", "- [ ] TBD"])
+def test_empty_or_placeholder_acceptance_checkbox_is_rejected(criterion: str) -> None:
+    body = render_task_body(
+        objective="Make failed authentication recovery obvious to a new operator.",
+        acceptance=criterion,
+        constraints="Preserve the local-first trust model.",
+        verification="Run the authentication regression suite.",
+        context="Not provided",
+    )
+
+    report = lint_task_body(body)
+
+    assert not report.ready
+    assert any(finding.field == "acceptance criteria" for finding in report.errors)
+
+
+def test_empty_checkbox_is_rejected_alongside_a_complete_criterion() -> None:
+    body = complete_body().replace("## Constraints", "- [ ]\n\n## Constraints")
+
+    assert not lint_task_body(body).ready
+
+
+def test_objective_keeps_documented_six_word_minimum() -> None:
+    body = complete_body().replace(
+        "Make failed authentication recovery obvious to a new operator.",
+        "Make auth errors actionable",
+    )
+
+    report = lint_task_body(body)
+
+    assert not report.ready
+    assert report.errors[0].field == "objective"
+    assert "six words" in report.errors[0].message
+
+
 def test_lint_names_missing_and_non_actionable_sections() -> None:
     body = """## Objective
 TBD

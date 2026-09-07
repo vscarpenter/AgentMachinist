@@ -792,6 +792,42 @@ def test_queue_defaults_to_one_task_per_pass_and_accepts_budgets():
     assert configured.queue.task_budget.timezone == "America/Chicago"
 
 
+@pytest.mark.parametrize("key", ["max_runs_per_day", "max_tasks_per_day"])
+def test_daily_budget_loads_old_and_new_keys_as_task_runs(tmp_path, key):
+    config = load_config(
+        write_config(tmp_path, f"queue:\n  task_budget:\n    {key}: 3\n")
+    )
+
+    assert config.queue.task_budget.max_runs_per_day == 3
+    assert config.queue.task_budget.max_tasks_per_day == 3
+    effective = config.effective_projection()["queue"]["task_budget"]
+    assert effective["max_runs_per_day"] == 3
+    assert "max_tasks_per_day" not in effective
+
+
+def test_daily_budget_accepts_matching_compatibility_and_canonical_values(tmp_path):
+    config = load_config(
+        write_config(
+            tmp_path,
+            "queue:\n  task_budget: {max_runs_per_day: 3, max_tasks_per_day: 3}\n",
+        )
+    )
+
+    assert config.queue.task_budget.max_runs_per_day == 3
+
+
+@pytest.mark.parametrize("old_value", ["2", "null"])
+def test_daily_budget_rejects_conflicting_compatibility_values(tmp_path, old_value):
+    with pytest.raises(ConfigError, match="conflicting.*max_runs_per_day"):
+        load_config(
+            write_config(
+                tmp_path,
+                "queue:\n  task_budget:\n"
+                f"    max_runs_per_day: 3\n    max_tasks_per_day: {old_value}\n",
+            )
+        )
+
+
 def test_allowed_hours_handles_daytime_and_overnight_windows():
     daytime = AllowedHoursConfig(
         start="09:00", end="17:00", timezone="UTC", days=["mon"]
