@@ -4,6 +4,10 @@ Status: approved direction in the September 7, 2026 user request. Spec, plan,
 implementation and verification proceed continuously under the standing correction.
 The prior completed specification is archived in docs/superpowers/specs/.
 
+Implementation completed September 7, 2026; the canonical gate passed 1,411
+tests with 87.52% coverage and both distribution smoke tests. See tasks/todo.md
+for the final implementation and validation record.
+
 ## Goal
 
 Repair adoption and amendment defects, provide a guided foreground Task journey,

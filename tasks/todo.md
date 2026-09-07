@@ -1,4 +1,4 @@
-# Guided local workflow and GitLab (IN PROGRESS)
+# Guided local workflow and GitLab (COMPLETE)
 
 Approved specification: `tasks/spec.md`. Plan:
 `docs/superpowers/plans/2026-09-07-local-workflow-gitlab.md`.
@@ -11,14 +11,30 @@ Branch: `codex/local-workflow-gitlab`.
 - [x] Connect foreground local Phases, exact Approval, amendment and recovery.
 - [x] Complete guided CLI/setup and production-path rehearsal.
 - [x] Reconcile current product, architecture and operator documentation.
-- [ ] Run independent adversarial review, canonical verification and installed smoke.
-- [ ] Commit the complete validated implementation and record final evidence.
+- [x] Run independent adversarial review, canonical verification and installed smoke.
+- [x] Commit the complete validated implementation and record final evidence.
 
 ### Resuming From Here
 
-Implementation is active. No remote pushes, hosted changes or release publication
-are part of this request. GitLab hosted behavior is validated with recorded/stubbed
-API contracts; local Git, custody, leases and integration use real temporary repos.
+Done: all five roadmap stages are implemented. `bash scripts/verify.sh` passed
+at implementation commit `1492f91`: 1,411 tests on Python 3.12.13, 87.52% coverage,
+format/lint checks, 20 typed modules, unchanged managed-workflow projection, both
+distributions built, and isolated wheel/sdist installs on Python 3.13.15. The
+installed wheel's fake-Harness rehearsal completed the production local pipeline.
+The final ledger update changes documentation only.
+
+Independent review fixes cover ignored-file integration collisions, GitLab HTTPS
+credentials and SSH-port binding, amendment intent recovery, preserved publication
+ownership, exact commit recovery, and required verification at every local Phase.
+The first full gate found an outdated packaging assertion pinning seven typed
+modules; its expectation now covers all twenty, and the complete gate passed.
+
+Next: normal user review. No remote push, hosted changes, version bump or release
+publication occurred. GitLab APIs/authentication use recorded/stubbed contracts;
+local Git, custody, leases and integration use real temporary repositories.
+Offline inference and live hosted GitLab validation remain separate proof states.
+
+Completed 2026-09-07. Blockers: none.
 
 # Cards 7 and 14: resume-push fold and flags-only approve (IN PR)
 
