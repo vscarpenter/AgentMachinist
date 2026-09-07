@@ -12,7 +12,14 @@ The canonical gate passed 1,413 tests in 696.81 seconds with 87.52% coverage,
 Ruff formatting/lint, twenty typed modules, lockfile/projection checks, and
 wheel/sdist build and isolated Python 3.13.15 installs. The installed wheel's
 fake-Harness rehearsal completed the production local workflow with real Git.
-This ledger-only follow-up does not change the verified implementation.
+The first follow-up recorded this evidence without changing the implementation.
+Hosted run `34135848884` passed Linux matrix, quality, minimum dependencies,
+and package verification, but cancelled macOS and coverage at the 15-minute
+limit. GitHub annotations confirm the timeout; no assertion failure appeared
+in the inspected cancelled logs. Minimum dependencies took 14m51s. CI test,
+coverage, minimum-dependency, and package/release build jobs now allow 30
+minutes. Required checks and the coverage floor remain unchanged; the new
+exact-head hosted run must pass before publication.
 
 ### Resuming From Here
 

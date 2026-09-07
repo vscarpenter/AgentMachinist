@@ -4,6 +4,10 @@
 
 ## 0.14.0 — 2026-09-07
 
+- Allow 30 minutes for CI test and package/release build jobs so the expanded
+  real-Git lifecycle and rehearsal suite can complete on hosted runners. All
+  test, coverage, and aggregate release checks remain required.
+
 - Add the guided foreground local journey: `start` saves a Task and generates
   its Spec; `approve --task T1 --spec-sha <sha>` continues verified Execute and
   independent advisory Review. Status shows the local result and next action.

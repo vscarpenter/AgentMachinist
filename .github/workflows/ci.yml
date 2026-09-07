@@ -18,7 +18,8 @@ concurrency:
 
 jobs:
   test:
-    timeout-minutes: 15
+    # Real-Git lifecycle/rehearsal coverage exceeds 15 minutes on hosted runners.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +45,7 @@ jobs:
 
   minimum-dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -92,7 +93,7 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -112,7 +113,7 @@ jobs:
 
   package:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
