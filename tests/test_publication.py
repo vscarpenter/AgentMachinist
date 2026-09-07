@@ -66,6 +66,10 @@ class Workshop:
     def origin_url(self):
         return self.origin
 
+    def bind_publication_auth(self, provider, *, origin_url):
+        assert provider in {"github", "gitlab"}
+        assert origin_url == self.origin
+
     def remote_sha(self, branch, *, origin_url):
         assert origin_url == self.origin
         self.events.append("remote-read")
@@ -178,6 +182,7 @@ def test_publish_records_intent_before_push_and_returns_exact_reviewed_change(re
     [
         "https://gitlab.com/team/subgroup/demo.git",
         "ssh://git@gitlab.com/team/subgroup/demo.git",
+        "ssh://git@gitlab.com:2222/team/subgroup/demo.git",
         "git@gitlab.com:team/subgroup/demo.git",
     ],
 )
@@ -185,6 +190,38 @@ def test_publication_binds_supported_git_transports(ready, origin):
     ready[1].origin = origin
 
     assert publish(ready).publication["repository"] == "team/subgroup/demo"
+
+
+def test_https_origin_port_is_part_of_the_bound_api_host(ready):
+    ready[1].origin = "https://gitlab.com:8443/team/subgroup/demo.git"
+    ready[2].host = "gitlab.com:8443"
+
+    assert publish(ready).publication["host"] == "gitlab.com:8443"
+
+
+def test_private_https_git_uses_credentials_refreshed_by_forge_lookup(
+    ready, monkeypatch
+):
+    _, workspace, forge, _ = ready
+    workspace.origin = "https://gitlab.com/team/subgroup/demo.git"
+    refreshed = False
+    find = forge.find_change
+    remote = workspace.remote_sha
+
+    def authenticated_find(branch):
+        nonlocal refreshed
+        refreshed = True
+        return find(branch)
+
+    def private_remote(branch, *, origin_url):
+        if not refreshed:
+            raise PermissionError("stored OAuth credential needs refresh")
+        return remote(branch, origin_url=origin_url)
+
+    monkeypatch.setattr(forge, "find_change", authenticated_find)
+    monkeypatch.setattr(workspace, "remote_sha", private_remote)
+
+    assert publish(ready).publication["stage"] == "published"
 
 
 @pytest.mark.parametrize(

@@ -8,7 +8,13 @@ import pytest
 from machinist.config import MachinistConfig
 from machinist.dispatch import TaskDispatcher
 from machinist.github import DraftPR, PullRequest
-from machinist.lifecycle import LifecycleError, Phase, RunRecord, RunStatus
+from machinist.lifecycle import (
+    LifecycleError,
+    Phase,
+    RunRecord,
+    RunStatus,
+    TaskLifecycle,
+)
 
 
 class FakeLifecycle:
@@ -16,7 +22,9 @@ class FakeLifecycle:
         self.execute_record = execute_record
         self.calls = []
 
-    def run(self, issue, phase, action, *, repeat_succeeded=False):
+    def run(
+        self, issue, phase, action, *, repeat_succeeded=False, repeat_succeeded_if=None
+    ):
         claim = SimpleNamespace(attempt=2, previous_evidence={"prior": "evidence"})
         self.calls.append((issue, phase, repeat_succeeded))
         return action(claim)
@@ -188,6 +196,80 @@ def test_review_dispatch_rejects_missing_successful_execute(tmp_path):
 
     with pytest.raises(LifecycleError, match="no successful Execute"):
         dispatcher(tmp_path, lifecycle, []).run_review(42)
+
+
+def test_amended_execute_can_be_reviewed_without_reusing_prior_review_evidence(
+    tmp_path,
+):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(
+        42, Phase.EXECUTE, lambda claim: claim.checkpoint(push_observed_sha="a" * 40)
+    )
+    lifecycle.run(
+        42,
+        Phase.REVIEW,
+        lambda claim: claim.checkpoint(reviewed_sha="a" * 40, review_comment_id=701),
+    )
+    lifecycle.run(
+        42,
+        Phase.EXECUTE,
+        lambda claim: claim.checkpoint(push_observed_sha="b" * 40),
+        repeat_succeeded=True,
+    )
+    calls = []
+
+    dispatcher(tmp_path, lifecycle, calls).run_review(42)
+
+    assert calls[0][2]["execute_evidence"]["push_observed_sha"] == "b" * 40
+    assert calls[0][2]["claim"].previous_evidence == {}
+    assert lifecycle.record(42, Phase.REVIEW).attempt == 2
+    assert "reviewed_sha" not in lifecycle.record(42, Phase.REVIEW).evidence
+    history = lifecycle.history(42, Phase.REVIEW)
+    assert len(history) == 2
+    assert history[0].evidence["reviewed_sha"] == "a" * 40
+    assert history[0].evidence["review_comment_id"] == 701
+
+
+@pytest.mark.parametrize("delivered_sha", ["a" * 40, None])
+def test_review_does_not_repeat_success_without_a_different_delivered_sha(
+    tmp_path, delivered_sha
+):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(
+        42,
+        Phase.EXECUTE,
+        lambda claim: claim.checkpoint(push_observed_sha=delivered_sha),
+    )
+    lifecycle.run(
+        42, Phase.REVIEW, lambda claim: claim.checkpoint(reviewed_sha="a" * 40)
+    )
+    calls = []
+
+    with pytest.raises(LifecycleError, match="refusing a duplicate run"):
+        dispatcher(tmp_path, lifecycle, calls).run_review(42)
+
+    assert calls == []
+    assert lifecycle.record(42, Phase.REVIEW).attempt == 1
+    assert len(lifecycle.history(42, Phase.REVIEW)) == 1
+
+
+def test_new_execute_head_does_not_bypass_explicit_retry_for_failed_review(tmp_path):
+    lifecycle = TaskLifecycle(tmp_path / "runs")
+    lifecycle.run(
+        42, Phase.EXECUTE, lambda claim: claim.checkpoint(push_observed_sha="b" * 40)
+    )
+    with pytest.raises(RuntimeError):
+        lifecycle.run(
+            42,
+            Phase.REVIEW,
+            lambda claim: (_ for _ in ()).throw(RuntimeError("review failed")),
+        )
+    calls = []
+
+    with pytest.raises(LifecycleError, match="machinist retry 42"):
+        dispatcher(tmp_path, lifecycle, calls).run_review(42)
+
+    assert calls == []
 
 
 def test_cli_contains_no_phase_lifecycle_construction():

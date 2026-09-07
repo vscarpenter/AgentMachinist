@@ -47,10 +47,13 @@ def publish_task(
         origin = workspace.origin_url()
         binding = _publication_binding(task, forge, origin)
         previous = _previous_publication(task.publication, binding)
+        workspace.bind_publication_auth(forge.provider, origin_url=origin)
+        # Let the authenticated forge API refresh OAuth before Git reads the
+        # stored credential. This is the same lookup needed for change custody.
+        existing = forge.find_change(task.branch)
         remote = workspace.remote_sha(task.branch, origin_url=origin)
         expected_remote = _expected_remote(previous, candidate, remote)
         expected_number = _change_number(previous)
-        existing = forge.find_change(task.branch)
         if existing is not None:
             _verify_existing(existing, binding, remote, expected_number)
         elif expected_number is not None:
@@ -204,7 +207,9 @@ def origin_target(origin: str) -> tuple[str, str]:
         ):
             raise PublicationError("Git origin has unsafe transport or credentials")
         raw_host = parsed.hostname
-        if parsed.port is not None:
+        # An SSH transport port is not the forge's HTTPS API port. Git keeps
+        # using the exact original URL; only API identity omits that SSH port.
+        if parsed.scheme == "https" and parsed.port is not None:
             raw_host += f":{parsed.port}"
         path = parsed.path.removeprefix("/")
     return normalize_host(raw_host), normalize_repository(path)

@@ -197,15 +197,20 @@ def test_upsert_rejects_a_different_returned_note_id():
         (f"https://{HOST}", HOST, True),
     ],
 )
-def test_ambient_tokens_cannot_cross_hosts(monkeypatch, ambient, target, keep):
+@pytest.mark.parametrize("host_variable", ["GITLAB_HOST", "GL_HOST", "GITLAB_URI"])
+def test_ambient_tokens_cannot_cross_hosts(
+    monkeypatch, ambient, target, keep, host_variable
+):
     monkeypatch.delenv("GITLAB_HOST", raising=False)
     monkeypatch.delenv("GITLAB_URI", raising=False)
+    monkeypatch.delenv("GL_HOST", raising=False)
     if ambient:
-        monkeypatch.setenv("GITLAB_HOST", ambient)
+        monkeypatch.setenv(host_variable, ambient)
     monkeypatch.setenv("GITLAB_TOKEN", "test-token")
     monkeypatch.setenv("GITLAB_ACCESS_TOKEN", "test-token-2")
     monkeypatch.setenv("OAUTH_TOKEN", "test-token-3")
     monkeypatch.setenv("GLAB_DEBUG_HTTP", "true")
+    monkeypatch.setenv("GLAB_DEBUG", "true")
     monkeypatch.setenv("GLAB_ENABLE_CI_AUTOLOGIN", "true")
     project = {**PROJECT, "web_url": f"https://{target}/{REPO}"}
     runner = Runner(project)
@@ -215,8 +220,12 @@ def test_ambient_tokens_cannot_cross_hosts(monkeypatch, ambient, target, keep):
     assert ("GITLAB_ACCESS_TOKEN" in environment) is keep
     assert ("OAUTH_TOKEN" in environment) is keep
     assert "GITLAB_HOST" not in environment
+    assert "GL_HOST" not in environment
     assert "GLAB_DEBUG_HTTP" not in environment
+    assert "GLAB_DEBUG" not in environment
     assert environment["GLAB_ENABLE_CI_AUTOLOGIN"] == "false"
+    assert environment["GLAB_NO_PROMPT"] == "true"
+    assert environment["GLAB_SEND_TELEMETRY"] == "false"
 
 
 @pytest.mark.parametrize(

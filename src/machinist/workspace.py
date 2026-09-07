@@ -908,7 +908,11 @@ class Workspace:
         )
 
     def capture_git_custody(
-        self, path: Path, *, standalone: bool = False
+        self,
+        path: Path,
+        *,
+        standalone: bool = False,
+        local_repository: bool = False,
     ) -> dict[str, object]:
         """Capture controller-owned Git metadata before an untrusted phase.
 
@@ -917,7 +921,7 @@ class Workspace:
         than config contents, avoiding credential disclosure in run records.
         """
         target = Path(path).resolve()
-        origin_url = self._bind_controller_origin()
+        origin_url = None if local_repository else self._bind_controller_origin()
         git_dir, common_dir, git_entry = self._resolve_git_layout_raw(target)
         controller_common = self._resolve_git_layout_raw(self.repo_root)[1]
         if (
@@ -1009,13 +1013,23 @@ class Workspace:
             "workspace": str(target),
             "git_dir": str(git_dir),
             "common_git_dir": str(common_dir),
-            "origin_identity_sha256": self._origin_identity(origin_url),
-            "origin_display": self._redact_origin(origin_url),
             "effective_config_sha256": self._sensitive_effective_digest(
                 effective_config
             ),
             "watched": records,
         }
+        if local_repository:
+            token.update(
+                repository_mode="local",
+                controller_repository=str(self.repo_root.resolve()),
+                controller_common_git_dir=str(controller_common),
+            )
+        else:
+            assert origin_url is not None
+            token.update(
+                origin_identity_sha256=self._origin_identity(origin_url),
+                origin_display=self._redact_origin(origin_url),
+            )
         self._custody[target] = token
         return token
 
@@ -1058,6 +1072,11 @@ class Workspace:
                 f"workspace {target} Git directory identity changed during an "
                 "untrusted phase"
             )
+        if token.get("repository_mode") == "local" and (
+            token["controller_repository"] != str(self.repo_root.resolve())
+            or token["controller_common_git_dir"] != str(controller_common)
+        ):
+            raise WorkspaceError("local Workshop belongs to another controller")
         watched = token["watched"]
         assert isinstance(watched, list)  # narrowed by _validate_custody_token
         fingerprint_budget = _MetadataFingerprintBudget()
@@ -1091,19 +1110,22 @@ class Workspace:
                 f"phase: {node}" + self._shared_metadata_hint(shared)
             )
 
-        expected_identity = str(token["origin_identity_sha256"])
-        if (
-            self._origin_url is not None
-            and self._origin_identity(self._origin_url) != expected_identity
-        ):
-            raise WorkspaceError("workspace origin identity does not match controller")
-
         effective = self._effective_local_config(target)
         effective_digest = self._sensitive_effective_digest(effective)
         if effective_digest != token["effective_config_sha256"]:
             raise WorkspaceError(
                 "effective local Git config changed during an untrusted phase"
             )
+        if token.get("repository_mode") == "local":
+            self._custody[target] = token
+            return
+
+        expected_identity = str(token["origin_identity_sha256"])
+        if (
+            self._origin_url is not None
+            and self._origin_identity(self._origin_url) != expected_identity
+        ):
+            raise WorkspaceError("workspace origin identity does not match controller")
         actual_origin = self._git(target, "remote", "get-url", "origin").strip()
         self._validate_origin_url(actual_origin)
         if self._origin_identity(actual_origin) != expected_identity:
@@ -1496,12 +1518,16 @@ class Workspace:
             )
         if token.get("workspace") != str(target):
             raise WorkspaceError("Git-custody checkpoint belongs to another workspace")
+        identity_fields = (
+            ("controller_repository", "controller_common_git_dir")
+            if token.get("repository_mode") == "local"
+            else ("origin_identity_sha256", "origin_display")
+        )
         for name in (
             "git_dir",
             "common_git_dir",
-            "origin_identity_sha256",
-            "origin_display",
             "effective_config_sha256",
+            *identity_fields,
         ):
             if not isinstance(token.get(name), str) or not token[name]:
                 raise WorkspaceError(f"invalid Git-custody checkpoint field: {name}")

@@ -179,6 +179,57 @@ def test_review_parses_structured_findings_and_marks_exact_pr_ready(tmp_path):
     assert provision[1].startswith("preview-review-issue-42-")
 
 
+@pytest.mark.parametrize("previous_sha", ["a" * 40, "c" * 40])
+def test_review_only_reuses_comment_evidence_for_the_same_delivered_head(
+    tmp_path, previous_sha
+):
+    github = FakeGitHub()
+    claim = FakeClaim()
+    claim.previous_evidence = {
+        "reviewed_sha": previous_sha,
+        "review_comment_id": 701,
+        "finding_counts": {"high": 1},
+    }
+
+    run_review_phase(
+        42,
+        config(),
+        github=github,
+        harness=FakeHarness(),
+        workspace=FakeWorkspace(tmp_path),
+        execute_evidence=execute_evidence(),
+        claim=claim,
+    )
+
+    comment = next(call for call in github.calls if call[0] == "upsert_pr_comment")
+    assert comment[3] == (701 if previous_sha == "c" * 40 else None)
+
+
+def test_new_head_review_failure_does_not_retain_old_success_evidence(tmp_path):
+    claim = FakeClaim()
+    claim.previous_evidence = {
+        "reviewed_sha": "a" * 40,
+        "review_comment_id": 701,
+        "finding_counts": {"high": 1},
+    }
+    claim.evidence.update(claim.previous_evidence)
+
+    with pytest.raises(ReviewPhaseError, match="valid JSON"):
+        run_review_phase(
+            42,
+            config(),
+            github=FakeGitHub(),
+            harness=FakeHarness("invalid report"),
+            workspace=FakeWorkspace(tmp_path),
+            execute_evidence=execute_evidence(),
+            claim=claim,
+        )
+
+    assert claim.evidence.get("reviewed_sha") is None
+    assert claim.evidence.get("review_comment_id") is None
+    assert claim.evidence.get("finding_counts") is None
+
+
 def test_review_provisions_its_preview_inside_a_real_managed_workspace(tmp_path):
     """Regression: the Review preview name must satisfy Workspace's preview contract."""
     origin = tmp_path / "origin.git"

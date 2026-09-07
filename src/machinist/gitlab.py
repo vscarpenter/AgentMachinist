@@ -287,16 +287,30 @@ def _draft_title(title: str, draft: bool) -> str:
 def gitlab_command_environment(host: str) -> dict[str, str]:
     """Keep ambient credentials on their declared host; otherwise use glab's store."""
     environment = os.environ.copy()
-    ambient = environment.get("GITLAB_HOST") or environment.get("GITLAB_URI")
+    ambient = (
+        environment.get("GITLAB_HOST")
+        or environment.get("GL_HOST")
+        or environment.get("GITLAB_URI")
+    )
     if ambient:
         parsed = urlsplit(ambient if "://" in ambient else f"https://{ambient}")
         ambient = parsed.netloc.casefold()
     if (ambient or "gitlab.com") != host:
         for name in ("GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "OAUTH_TOKEN"):
             environment.pop(name, None)
-    for name in ("GITLAB_HOST", "GITLAB_URI", "GLAB_REPO", "GLAB_DEBUG_HTTP", "DEBUG"):
+    for name in (
+        "GITLAB_HOST",
+        "GL_HOST",
+        "GITLAB_URI",
+        "GLAB_REPO",
+        "GLAB_DEBUG_HTTP",
+        "GLAB_DEBUG",
+        "DEBUG",
+    ):
         environment.pop(name, None)
     # Never let a local publication silently establish CI credentials/config.
     environment["GLAB_ENABLE_CI_AUTOLOGIN"] = "false"
     environment["GLAB_PROMPT_DISABLED"] = "true"
+    environment["GLAB_NO_PROMPT"] = "true"
+    environment["GLAB_SEND_TELEMETRY"] = "false"
     return environment
