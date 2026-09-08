@@ -243,6 +243,27 @@ def test_cli_failures_are_actionable_forge_errors(response, match):
         client(Runner(response)).default_branch()
 
 
+def test_glab_failure_diagnostics_are_safe_and_bounded():
+    stderr = (
+        "\x1b[31mHTTP 403 Forbidden\x1b[0m\n"
+        "https://synthetic-user:sentinel-url-secret@example.test/repo\n"
+        "Authorization: Bearer sentinel-header-secret\n"
+        "GITLAB_TOKEN=sentinel-token-secret\n" + "detail " * 1000
+    )
+    response = subprocess.CompletedProcess("glab", 1, "", stderr)
+
+    with pytest.raises(ForgeError) as caught:
+        client(Runner(response)).default_branch()
+
+    message = str(caught.value)
+    assert message.startswith("glab api failed:")
+    assert "HTTP 403 Forbidden" in message
+    assert "sentinel" not in message
+    assert "\x1b" not in message
+    assert "truncated" in message
+    assert len(message) <= 2000
+
+
 @pytest.mark.parametrize(
     "repository,host",
     [

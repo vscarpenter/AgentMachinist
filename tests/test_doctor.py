@@ -6,6 +6,7 @@ import subprocess
 from types import SimpleNamespace
 
 import pytest
+from click.testing import CliRunner
 
 from machinist.config import MachinistConfig
 from machinist.doctor import (
@@ -92,6 +93,82 @@ def test_doctor_accumulates_pass_warn_and_fail_without_writing(tmp_path):
     assert levels["harness"] is CheckLevel.FAIL
     assert levels["test gate"] is CheckLevel.WARN
     assert not (tmp_path / ".github").exists(), "doctor must remain read-only"
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_doctor_preserves_sanitized_multiline_failures_in_text_and_json(
+    tmp_path, monkeypatch, as_json
+):
+    from machinist.cli import main
+
+    (tmp_path / ".git").mkdir()
+    regular = _runner_for(tmp_path)
+
+    def runner(args, **kwargs):
+        if args[:3] == ["gh", "repo", "view"]:
+            stderr = (
+                '\x1b[31mTOKEN="sentinel-' + "x" * 5000 + '"\x1b[0m\n'
+                "HTTP 403 Forbidden\nCheck repository access.\n" + "detail " * 500
+            )
+            return subprocess.CompletedProcess(args, 1, "", stderr)
+        return regular(args, **kwargs)
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/usr/bin/{name}",
+        runner=runner,
+    )
+    check = next(item for item in report.checks if item.name == "GitHub repository")
+    assert check.level is CheckLevel.FAIL
+    assert "sentinel" not in check.detail
+    assert "\x1b" not in check.detail
+    assert "HTTP 403 Forbidden\nCheck repository access." in check.detail
+    assert "truncated" in check.detail
+    assert len(check.detail) <= 2000
+
+    monkeypatch.setattr("machinist.cli.load_config", MachinistConfig)
+    monkeypatch.setattr("machinist.cli.run_doctor", lambda *args, **kwargs: report)
+    result = CliRunner().invoke(main, ["doctor", *(["--json"] if as_json else [])])
+
+    assert result.exit_code == 1, result.output
+    assert "sentinel" not in result.output
+    assert "HTTP 403 Forbidden" in result.output
+    if as_json:
+        payload = json.loads(result.output)
+        rendered = next(
+            item for item in payload["checks"] if item["name"] == "GitHub repository"
+        )
+        assert rendered["detail"] == check.detail
+    else:
+        assert check.detail in result.output
+
+
+def test_successful_doctor_probe_details_are_redacted_before_any_shortening(tmp_path):
+    (tmp_path / ".git").mkdir()
+    regular = _runner_for(tmp_path)
+
+    def runner(args, **kwargs):
+        if args[:2] == ["claude", "--version"]:
+            stdout = 'PASSWORD="sentinel-' + "x" * 5000 + '"\nclaude-code 2.1.251\n'
+            return subprocess.CompletedProcess(args, 0, stdout, "")
+        return regular(args, **kwargs)
+
+    report = run_doctor(
+        tmp_path,
+        MachinistConfig(),
+        installed_version="0.2.0",
+        which=lambda name: f"/usr/bin/{name}",
+        runner=runner,
+    )
+    check = next(item for item in report.checks if item.name == "claude-code version")
+
+    assert check.level is CheckLevel.PASS
+    assert "sentinel" not in check.detail
+    assert "[REDACTED]" in check.detail
+    assert "claude-code 2.1.251" in check.detail
+    assert "truncated" not in check.detail
 
 
 def test_doctor_binds_null_repo_to_origin_and_ignores_ambient_routing(

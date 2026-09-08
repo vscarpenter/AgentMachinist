@@ -4,6 +4,10 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
+This model covers the **0.15.0 release candidate / source checkout; publication
+pending**. The published release remains 0.14.0; new 0.15.0 controls are identified
+below.
+
 ## Trusted inputs and principals
 
 - The repository's default branch, config, prompts, hooks, and test command.
@@ -166,6 +170,21 @@ run record or an error message.
 
 ## Verification commands
 
+**New in the 0.15.0 release candidate:** optional `machinist doctor --local` resolves
+the settings `start` would use and checks local Git readiness, Harness
+availability and supported version/help/authentication probes, and required
+Gate command entry points. By default the controller writes no Task, Workshop,
+runtime/config file, exclusion, or ref and invokes no model, forge, update
+probe, or Gate. Installed adapters and their probe commands remain trusted
+local code; a successful authentication check does not establish model access
+or quota. This option is not included in published 0.14.0.
+
+`machinist doctor --local --run-gates` explicitly executes configured project
+commands through the shared Verification engine in the controller checkout.
+Commands may write files or download dependencies. Passing there is not proof
+of the isolated Workshop baseline; `start` still checks that baseline before
+Spec generation. Plain `doctor` retains its GitHub setup scope.
+
 The legacy test command and every named verification gate are
 repository-controlled shell text and run as the local user. A null
 `tests.command` skips only the single legacy command. In the GitHub issue
@@ -186,6 +205,16 @@ repository-controlled commands on harness-authored code immediately
 afterwards, and that controller run remains the authoritative gate. Set
 `verification.harness_may_run_gates: false` to withhold both the commands and
 (for `claude-code`) the corresponding `--allowedTools` grants.
+
+## Diagnostic output
+
+**New in the 0.15.0 release candidate:** a shared renderer bounds Git, `gh`, `glab`,
+and doctor diagnostics, strips unsafe terminal controls, and redacts recognized
+URL credentials, authorization values, and secret assignments. It preserves
+useful multiline context and marks truncation. Unrecognized secret forms can
+still appear; this is not a guarantee that arbitrary output is secret-free.
+Stored raw logs and general command output are not sanitized by this contract.
+Inspect logs and Evidence before sharing them.
 
 ## Telemetry
 

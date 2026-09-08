@@ -14,6 +14,8 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from machinist.diagnostics import sanitize_diagnostic
+
 Runner = Callable[..., subprocess.CompletedProcess]
 
 # gh list commands default to 30 items.  A solo-developer queue can still
@@ -371,7 +373,9 @@ class GitHubClient:
             ) from exc
         if result.returncode != 0:
             raise GitHubError(
-                f"gh {' '.join(args[:2])} failed: {result.stderr.strip()}"
+                sanitize_diagnostic(
+                    f"gh {' '.join(args[:2])} failed: {result.stderr.strip()}"
+                )
             )
         return result.stdout
 
@@ -404,7 +408,9 @@ class GitHubClient:
                 f"gh api timed out after {_COMMAND_TIMEOUT_SECONDS} seconds"
             ) from exc
         if result.returncode != 0:
-            raise GitHubError(f"gh api failed: {result.stderr.strip()}")
+            raise GitHubError(
+                sanitize_diagnostic(f"gh api failed: {result.stderr.strip()}")
+            )
         return result.stdout
 
     def _gh_api_json(self, *args: str) -> Any:

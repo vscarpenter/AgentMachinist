@@ -7,8 +7,10 @@ may subsequently select different supported adapters. “Spec and Review control
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-AgentMachinist 0.14.0 includes the guided local workflow and optional GitLab
-publication. The CI column below describes the existing GitHub Actions Spec
+This matrix covers the **0.15.0 release candidate / source checkout; publication
+pending**. The published 0.14.0 release already includes the local workflow and
+GitLab publication; optional local readiness is new in 0.15.0. The CI column
+below describes the existing GitHub Actions Spec
 workflow, not GitLab CI.
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
@@ -44,9 +46,11 @@ gate run afterwards stays authoritative.
 Runs use the Harness's existing provider authentication. Local setup checks
 installed executables and Phase support; it does not run the provider's login
 probe or validate model access. Use the checks below before your first Task.
-The legacy GitHub `doctor` checks the installed version, parses configured
-Spec and Execute invocations, and checks Review when `review.enabled: true`.
-It uses the adapter's read-only authentication probe when one is available;
+Plain `doctor` checks the installed version, parses configured Spec and Execute
+invocations, and checks Review when `review.enabled: true` for the GitHub
+workflow. **New in the 0.15.0 release candidate:** optional `doctor --local` uses the
+same probes with the local settings that `start` resolves, including mandatory
+Review. These diagnostics use the adapter's read-only authentication probe when one is available;
 plugins without a probe require manual verification. A successful probe
 confirms configured credentials, not subscription quotas or access to every
 possible model.
@@ -133,8 +137,16 @@ machinist doctor
 The compatibility rows execute `--help` against the configured Spec and Execute
 argv, plus Review when enabled, without starting a Harness Task. If an argument
 changes, update the adapter, its exact argv test, this matrix, and the changelog together.
-`doctor` reads root `machinist.yaml` and checks GitHub setup; it does not inspect
-`.machinist/runs/local/config.yaml`. For foreground Tasks, inspect that file via
+Plain `doctor` reads root `machinist.yaml` and checks GitHub setup. The
+0.15.0 candidate's `machinist doctor --local` reads saved local settings or previews
+first-start discovery without saving it. Install the current source checkout
+with `uv tool install --editable .` to use that option; published 0.14.0 does
+not include it. It runs no model, forge, release-update probe, or Verification
+Gate by default. `--run-gates` explicitly runs project commands in the
+controller checkout, where they may write or download; passing does not prove
+the isolated Workshop baseline. See [local readiness](local-workflow.md#optional-local-readiness).
+
+For foreground Tasks, inspect the saved configuration via
 `machinist config show --path .machinist/runs/local/config.yaml`, check the
 selected Harness's authentication, and use `machinist rehearse --harness` only
 when you intend to invoke its configured profiles in a disposable repository.

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -57,8 +58,8 @@ class LocalWorkspace:
             raise WorkspaceError("invalid local commit reference")
         return self._workspace._resolve_commit(self.repo_root, ref)
 
-    def ensure_runtime_ignored(self) -> None:
-        """Exclude runtime records locally before any Workshop is provisioned."""
+    def runtime_exclusion_needs_update(self) -> bool:
+        """Read-only setup preflight; pending ignore precedence is verified on write."""
         self._controller_custody()
         if self._workspace._git(self.repo_root, "ls-files", ".machinist/runs/"):
             raise WorkspaceError("controller runtime files must not be tracked by Git")
@@ -68,11 +69,29 @@ class LocalWorkspace:
             ).returncode
             == 0
         ):
-            return
+            return False
         if any(path != self.repo_root for path in self._workspace._custody):
             raise WorkspaceError(
                 "configure runtime exclusion before provisioning Workshops"
             )
+        common = self._workspace._resolve_git_layout_raw(self.repo_root)[1]
+        try:
+            read_managed_text(common, "info/exclude", max_bytes=1024 * 1024)
+        except ManagedPathError as exc:
+            raise WorkspaceError(f"cannot safely exclude local runtime: {exc}") from exc
+        parent = common / "info"
+        if not parent.exists():
+            parent = common
+        if not os.access(parent, os.W_OK | os.X_OK):
+            raise WorkspaceError(
+                f"cannot safely exclude local runtime: directory is not writable: {parent}"
+            )
+        return True
+
+    def ensure_runtime_ignored(self) -> None:
+        """Exclude runtime records locally before any Workshop is provisioned."""
+        if not self.runtime_exclusion_needs_update():
+            return
         common = self._workspace._resolve_git_layout_raw(self.repo_root)[1]
         try:
             content = (

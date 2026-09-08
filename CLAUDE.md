@@ -16,7 +16,8 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.14.0).
+hatchling, published to PyPI as `agentmachinist`. This checkout is the **0.15.0
+release candidate; publication pending**. The published release remains 0.14.0.
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -51,7 +52,12 @@ never-merges rule only for that human-directed local operation.
   revision-checked updates, operation Claims, reports, and external provenance
   under `.machinist/runs/local/`. These IDs never alias legacy issue numbers.
 - `local_setup.py` — minimal foreground configuration in local runtime storage,
-  installed Harness and verification discovery, and local Git exclusion.
+  shared read-only resolution for start/readiness, installed Harness and
+  verification discovery, and local Git exclusion only during setup.
+- `local_doctor.py` — optional `doctor --local` checks Git, resolved local
+  configuration, Harness probes, and verification availability without forge
+  setup, update checks, or runtime writes. `--run-gates` explicitly executes
+  Verification in the controller checkout, not an isolated Workshop.
 - `local_workflow.py` — guided local Spec, exact-SHA Approval, Execute, Review,
   amendment/recovery, and explicit integration. Task Run construction still
   belongs to `dispatch.py`; verification belongs to `verification.py`.
@@ -165,7 +171,12 @@ never-merges rule only for that human-directed local operation.
   into managed `.github/workflows/` files (`machinist-spec.yml`,
   `machinist-approve.yml`); drift detection for `--check`/doctor.
 - `doctor.py` — read-only diagnostics (git/gh/harness on PATH, gh auth, test
-  gate configured, workflow drift, failed/abandoned Task Runs).
+  gate configured, workflow drift, failed/abandoned Task Runs), shared report
+  rendering and Harness/Verification probes for local readiness.
+- `diagnostics.py` — bounded controller diagnostic text: recognized credential
+  redaction and terminal-control removal before truncation. Workspace errors,
+  forge invocation failures, and doctor details use this boundary; successful
+  Git/forge payloads remain exact. This does not sanitize arbitrary raw logs.
 - `updates.py` — advisory release-update checks: reads the latest published
   version from PyPI's JSON API (bounded read, https-only, injectable opener),
   compares it with a PEP 440 subset parser (`parse_version`/`is_newer`; never
@@ -291,7 +302,14 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current checkout (2026-09-07)
 
-- Version 0.14.0 includes the guided local workflow and GitLab intake/publication.
+- **0.15.0 release candidate / source checkout; publication pending.** New in this
+  version: optional `doctor --local`, exact remote-base validation for new legacy
+  Workshops, and shared bounded diagnostic rendering. See ADR 0004. Published
+  installation remains 0.14.0; use `uv tool install --editable .` for this source.
+  A version bump and push do not authorize a GitHub Release or PyPI publication.
+
+- The guided local workflow and GitLab intake/publication introduced in 0.14.0
+  continue in this candidate.
   `start` stops at a saved
   Spec; `approve --task T1 --spec-sha <sha>` continues the foreground Phases;
   `integrate T1` and `publish T1 --provider github|gitlab` are separate explicit

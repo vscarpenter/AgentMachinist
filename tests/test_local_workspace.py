@@ -249,6 +249,24 @@ def test_runtime_exclusion_is_local_idempotent_and_preserves_source(
     assert exclude.count("/.machinist/runs/") == 1
 
 
+def test_runtime_exclusion_preflight_is_read_only_and_shared_with_setup(
+    local_repo, tmp_path
+):
+    (local_repo / ".gitignore").write_text("*.cache\n")
+    git(local_repo, "add", ".gitignore")
+    git(local_repo, "commit", "-qm", "no runtime exclusion")
+    source = workshop(local_repo, tmp_path)
+    exclude = local_repo / ".git/info/exclude"
+    before = exclude.read_bytes()
+
+    assert source.runtime_exclusion_needs_update()
+    assert exclude.read_bytes() == before
+    assert not (local_repo / ".machinist").exists()
+    source.ensure_runtime_ignored()
+    assert not source.runtime_exclusion_needs_update()
+    assert exclude.read_text().count("/.machinist/runs/") == 1
+
+
 def test_read_at_commit_reads_exact_bounded_regular_file(local_repo, tmp_path):
     source = workshop(local_repo, tmp_path)
     sha = source.resolve_commit()

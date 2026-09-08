@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from machinist.config import MachinistConfig
+from machinist.diagnostics import sanitize_diagnostic
 from machinist.github import github_command_environment
 from machinist.harness import get_harness, get_harness_descriptor
 from machinist.lifecycle import RunStatus, TaskLifecycle
@@ -165,6 +166,11 @@ class DoctorCheck:
     name: str
     detail: str
 
+    def __post_init__(self) -> None:
+        # One boundary covers failures, successful probe output, and both CLI
+        # renderings. Never shorten raw output before credential redaction.
+        object.__setattr__(self, "detail", sanitize_diagnostic(self.detail))
+
 
 @dataclass(frozen=True)
 class DoctorReport:
@@ -224,8 +230,7 @@ def _run_read_only(
 
 
 def _command_failure(result) -> str:
-    detail = (getattr(result, "stderr", "") or "").strip() or "command failed"
-    return detail.splitlines()[0][:300]
+    return (getattr(result, "stderr", "") or "").strip() or "command failed"
 
 
 def _enum_value(value: object) -> str:
@@ -282,6 +287,11 @@ def _workspace_check(root: Path, repo_root: Path) -> DoctorCheck:
             "workspace root is inside the repository; use a separate directory to avoid Git pollution",
         )
 
+    return _workspace_writability_check(workspace_root)
+
+
+def _workspace_writability_check(workspace_root: Path) -> DoctorCheck:
+    """Check a resolved Workshop root using existing ancestors without writing."""
     existing = workspace_root
     while not existing.exists() and existing != existing.parent:
         existing = existing.parent
@@ -300,7 +310,7 @@ def _workspace_check(root: Path, repo_root: Path) -> DoctorCheck:
     return DoctorCheck(
         CheckLevel.PASS,
         "workspace",
-        f"{workspace_root} is safely contained; existing parent {existing} is writable",
+        f"{workspace_root}; existing parent {existing} is writable",
     )
 
 
@@ -752,8 +762,8 @@ def _add_harness_checks(checks, root, config, which, runner) -> None:
                         )
                     )
                 else:
-                    output = (result.stdout or result.stderr or "").strip().splitlines()
-                    detail = output[0][:200] if output else "version probe succeeded"
+                    output = (result.stdout or result.stderr or "").strip()
+                    detail = output or "version probe succeeded"
                     checks.append(
                         DoctorCheck(CheckLevel.PASS, f"{harness.name} version", detail)
                     )

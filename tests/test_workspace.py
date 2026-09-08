@@ -48,6 +48,43 @@ def make_workspace(repo, tmp_path, **overrides):
     return Workspace(repo_root=repo, config=config)
 
 
+def test_git_failure_diagnostic_redacts_credentials_and_preserves_context(tmp_path):
+    def failed(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            128,
+            stdout="",
+            stderr=(
+                "\x1b[31mfatal: https://user:synthetic-secret@example.test/team/repo\n"
+                "Authorization: Bearer synthetic-token\npermission denied\x1b[0m"
+            ),
+        )
+
+    workspace = Workspace(tmp_path, WorkspaceConfig(), runner=failed)
+    with pytest.raises(WorkspaceError) as error:
+        workspace._git(tmp_path, "fetch", "origin")
+
+    detail = str(error.value)
+    assert detail.startswith("git fetch failed:")
+    assert "synthetic-" not in detail
+    assert "\x1b" not in detail
+    assert "example.test/team/repo" in detail
+    assert "\npermission denied" in detail
+
+
+def test_git_failure_diagnostic_bounds_complete_message(tmp_path):
+    def failed(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="x" * 5000)
+
+    workspace = Workspace(tmp_path, WorkspaceConfig(), runner=failed)
+    with pytest.raises(WorkspaceError) as error:
+        workspace._git(tmp_path, "fetch", "origin")
+
+    assert len(str(error.value)) <= 2000
+    assert str(error.value).startswith("git fetch failed:")
+    assert "truncated" in str(error.value)
+
+
 def test_default_git_runner_honors_task_cancellation(repo, tmp_path, monkeypatch):
     workspace = make_workspace(repo, tmp_path)
     workspace.cancel_check = lambda: True
@@ -70,6 +107,170 @@ def test_provision_worktree_creates_branch_from_base(repo, tmp_path):
     assert path == tmp_path / "ws" / "repo-issue-7"
     assert (path / "README.md").read_text() == "hello\n"
     assert git(path, "branch", "--show-current") == "agent/issue-7"
+
+
+@pytest.mark.parametrize("strategy", list(WorkspaceStrategy))
+@pytest.mark.parametrize("renamed", [False, True], ids=["deleted", "renamed"])
+def test_provision_rejects_missing_remote_base_with_stale_tracking_ref(
+    repo, tmp_path, strategy, renamed
+):
+    origin = tmp_path / "origin.git"
+    cached_sha = git(repo, "rev-parse", "refs/remotes/origin/main")
+    if renamed:
+        git(origin, "update-ref", "refs/heads/trunk", cached_sha)
+        git(origin, "symbolic-ref", "HEAD", "refs/heads/trunk")
+    git(origin, "update-ref", "-d", "refs/heads/main")
+    assert git(repo, "rev-parse", "refs/remotes/origin/main") == cached_sha
+    workspace = make_workspace(repo, tmp_path, strategy=strategy)
+
+    with pytest.raises(WorkspaceError, match="remote base.*main"):
+        workspace.provision("issue-7", "agent/issue-7", "origin/main")
+
+    assert not workspace.workspace_for_task("issue-7").exists()
+    assert git(repo, "for-each-ref", "refs/heads/agent/issue-7") == ""
+
+
+@pytest.mark.parametrize("base_ref", ["main", "origin/main~1"])
+def test_provision_rejects_local_or_expression_bases(repo, tmp_path, base_ref):
+    workspace = make_workspace(repo, tmp_path)
+
+    with pytest.raises(WorkspaceError):
+        workspace.provision("issue-7", "agent/issue-7", base_ref)
+
+    assert not workspace.workspace_for_task("issue-7").exists()
+
+
+def test_provision_preserves_remote_base_fetch_cancellation(
+    repo, tmp_path, monkeypatch
+):
+    workspace = make_workspace(repo, tmp_path)
+    original_git = workspace._git
+
+    def cancel_fetch(cwd, *args, **kwargs):
+        if args[0] == "fetch":
+            raise WorkspaceCancelledError("git fetch was cancelled")
+        return original_git(cwd, *args, **kwargs)
+
+    monkeypatch.setattr(workspace, "_git", cancel_fetch)
+
+    with pytest.raises(WorkspaceCancelledError, match="git fetch was cancelled"):
+        workspace.provision("issue-7", "agent/issue-7", "origin/main")
+
+    assert not workspace.workspace_for_task("issue-7").exists()
+
+
+@pytest.mark.parametrize("strategy", list(WorkspaceStrategy))
+@pytest.mark.parametrize(
+    "base_ref", ["origin/release/next", "refs/remotes/origin/release/next"]
+)
+def test_provision_fetches_base_outside_narrow_clone_refspec(
+    repo, tmp_path, strategy, base_ref
+):
+    git(repo, "checkout", "-b", "release/next")
+    (repo / "next.md").write_text("next release base\n")
+    git(repo, "add", "next.md")
+    git(repo, "commit", "-m", "next release")
+    git(repo, "push", "origin", "release/next")
+    expected_sha = git(repo, "rev-parse", "HEAD")
+    narrow = tmp_path / "narrow"
+    git(
+        tmp_path,
+        "clone",
+        "--single-branch",
+        "--branch",
+        "main",
+        str(tmp_path / "origin.git"),
+        str(narrow),
+    )
+    assert git(narrow, "for-each-ref", "refs/remotes/origin/release/next") == ""
+    workspace = make_workspace(narrow, tmp_path, strategy=strategy)
+
+    path = workspace.provision("issue-7", "agent/issue-7", base_ref)
+
+    assert workspace.head_sha(path) == expected_sha
+    assert (path / "next.md").read_text() == "next release base\n"
+
+
+@pytest.mark.parametrize("strategy", list(WorkspaceStrategy))
+def test_provision_pins_fetched_base_when_remote_and_tracking_ref_advance(
+    repo, tmp_path, strategy, monkeypatch
+):
+    cached_sha = git(repo, "rev-parse", "origin/main")
+    producer = tmp_path / "producer"
+    git(tmp_path, "clone", str(tmp_path / "origin.git"), str(producer))
+    git(producer, "config", "user.name", "Producer")
+    git(producer, "config", "user.email", "producer@example.com")
+    (producer / "README.md").write_text("fresh base\n")
+    git(producer, "commit", "-am", "fresh base")
+    git(producer, "push", "origin", "main")
+    expected_sha = git(producer, "rev-parse", "HEAD")
+    assert expected_sha != cached_sha
+    assert git(repo, "rev-parse", "origin/main") == cached_sha
+    (producer / "README.md").write_text("later base\n")
+    git(producer, "commit", "-am", "later base")
+    later_sha = git(producer, "rev-parse", "HEAD")
+    workspace = make_workspace(repo, tmp_path, strategy=strategy)
+    original_git = workspace._git
+    advanced = False
+
+    def advance_before_checkout(cwd, *args, **kwargs):
+        nonlocal advanced
+        if not advanced and (args[:2] == ("worktree", "add") or args[0] == "clone"):
+            advanced = True
+            git(producer, "push", "origin", "main")
+            git(repo, "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main")
+        return original_git(cwd, *args, **kwargs)
+
+    monkeypatch.setattr(workspace, "_git", advance_before_checkout)
+
+    path = workspace.provision("issue-7", "agent/issue-7", "origin/main")
+
+    assert advanced
+    assert git(repo, "rev-parse", "origin/main") == later_sha
+    assert workspace.head_sha(path) == expected_sha
+    assert (path / "README.md").read_text() == "fresh base\n"
+
+
+@pytest.mark.parametrize("strategy", list(WorkspaceStrategy))
+@pytest.mark.parametrize("attempt", [None, 2])
+def test_provision_recovers_remote_task_head_when_old_base_is_deleted(
+    repo, tmp_path, strategy, attempt
+):
+    git(repo, "checkout", "-b", "agent/issue-7")
+    (repo / "spec.md").write_text("existing remote Spec\n")
+    git(repo, "add", "spec.md")
+    git(repo, "commit", "-m", "Spec")
+    git(repo, "push", "origin", "agent/issue-7")
+    expected_sha = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "main")
+    git(repo, "branch", "-D", "agent/issue-7")
+    git(tmp_path / "origin.git", "update-ref", "-d", "refs/heads/main")
+    workspace = make_workspace(repo, tmp_path, strategy=strategy)
+
+    path = workspace.provision(
+        "issue-7", "agent/issue-7", "origin/main", attempt=attempt
+    )
+
+    assert workspace.head_sha(path) == expected_sha
+    assert (path / "spec.md").read_text() == "existing remote Spec\n"
+    assert git(path, "branch", "--show-current") == (
+        "agent/issue-7" if attempt is None else ""
+    )
+
+
+def test_preview_rejects_deleted_remote_base_without_mutating_controller_refs(
+    repo, tmp_path
+):
+    git(tmp_path / "origin.git", "update-ref", "-d", "refs/heads/main")
+    before = git(repo, "for-each-ref", "--format=%(refname) %(objectname)")
+    workspace = make_workspace(repo, tmp_path)
+    task = "preview-issue-7-deadbeef"
+
+    with pytest.raises(WorkspaceError):
+        workspace.provision_preview(task, "agent/issue-7", "origin/main")
+
+    assert not workspace.workspace_for_task(task).exists()
+    assert git(repo, "for-each-ref", "--format=%(refname) %(objectname)") == before
 
 
 def test_preview_clone_reads_remote_task_head_without_mutating_controller_refs(

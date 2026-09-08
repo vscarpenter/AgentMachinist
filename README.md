@@ -16,12 +16,26 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
+**0.15.0 release candidate / source checkout; publication pending.** This version
+adds optional local readiness, exact remote-base validation, and bounded
+diagnostic rendering.
+
 Current release: [AgentMachinist 0.14.0 on PyPI](https://pypi.org/project/agentmachinist/0.14.0/).
 
 ## Install
 
+For the 0.15.0 release candidate, run this from its AgentMachinist source checkout,
+then enter the repository you want to work on:
+
 ```sh
-uv tool install agentmachinist
+uv tool install --editable .
+machinist --version
+```
+
+Publication of 0.15.0 is pending. To install the published 0.14.0 release instead:
+
+```sh
+uv tool install "agentmachinist==0.14.0"
 ```
 
 You also need `git` and one supported Harness executable (`claude`, `opencode`,
@@ -48,9 +62,10 @@ never appears in `update-check --json`.
 
 ## Start
 
-Version 0.14.0 includes the guided local workflow and optional GitLab support.
-If you already installed AgentMachinist with uv, upgrade with
-`uv tool upgrade agentmachinist`. The existing GitHub workflow remains available.
+The guided local workflow and optional GitLab support introduced in 0.14.0
+continue in the 0.15.0 release candidate. `uv tool upgrade agentmachinist`
+installs published releases; use the source installation above for this candidate.
+The existing GitHub workflow remains available.
 Start on a clean named branch with an initial commit, configured Git author,
 and an installed, authenticated Harness. Replace the example's Python test
 command with verification appropriate to your project.
@@ -84,6 +99,14 @@ your working repository are not copied. Use a self-preparing command such as
 Spec Harness. Correct the Gate in `.machinist/runs/local/config.yaml` or its
 dependency setup, then run `machinist retry --task T1 --phase spec`.
 
+**New in the 0.15.0 release candidate:** `machinist doctor --local` is an optional
+readiness check using the same configuration resolution as first start or your
+saved local settings. It checks Git, Harness probes, and verification command
+availability without creating a Task or requiring a forge. Add `--json` for
+structured output. Add `--run-gates` only to execute project commands in your
+current checkout; this does not prove dependencies are ready in a fresh Workshop.
+Plain `machinist doctor` retains its GitHub setup checks.
+
 You can publish the same reviewed candidate when collaboration is useful:
 
 ```sh
@@ -104,6 +127,10 @@ issues, amendments, recovery, and use by a solo developer or small team.
 
 Existing GitHub issue commands, trusted workflow Approval, and watcher operation
 remain available. Configure that integration separately:
+
+Managed workflows pin the installed controller version. Until 0.15.0 is
+published, use the released 0.14.0 controller for consumer GitHub Actions setup.
+This repository's development workflows use `github.spec_install: checkout`.
 
 ```sh
 cd your-repository
@@ -235,6 +262,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
 | `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |
 | `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). |
+| `machinist doctor --local [--run-gates] [--json]` | New in 0.15.0 release candidate: optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |
@@ -284,6 +312,10 @@ reduce risk, but local harnesses still execute with the operating-system access
 of the user who launched them. Read the trust model before unattended use.
 
 ## Releasing
+
+The current 0.15.0 version bump and push prepare a release candidate. They do
+not publish a GitHub Release or a PyPI package; publication remains a separate
+operation.
 
 Releases use PyPI Trusted Publishing. Bump `pyproject.toml`, update the
 changelog, and publish a GitHub Release tagged `v<version>`. The release job

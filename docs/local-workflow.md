@@ -5,13 +5,13 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This workflow is available in AgentMachinist 0.14.0. Install it with
-`uv tool install agentmachinist`, or upgrade an existing tool installation with
-`uv tool upgrade agentmachinist`; then run the commands below in the repository
-you want to change. The existing
+**0.15.0 release candidate / source checkout; publication pending.** Install this
+source with `uv tool install --editable .`, then run the commands below in the
+repository you want to change. The published release remains 0.14.0 and includes
+this local workflow; install it with `uv tool install "agentmachinist==0.14.0"`.
+Optional local readiness is new in 0.15.0. The existing
 [GitHub issue workflow](getting-started.md#github-setup-and-automation)
-remains available. See [installation](getting-started.md#install) for an optional
-editable source setup.
+remains available. See [installation](getting-started.md#install) for both choices.
 
 ## Complete one Task
 
@@ -120,6 +120,50 @@ base and reviewed candidate commits, and fast-forward ancestry. A changed base,
 changed candidate, or dirty checkout stops integration. Intent is recorded
 before the update so a retry can reconcile an interrupted integration without
 silently discarding edits. The command does not push or merge a remote PR/MR.
+
+## Optional local readiness
+
+**New in the 0.15.0 release candidate:** `machinist doctor --local` adds an optional
+readiness check. Install the current AgentMachinist source checkout with
+`uv tool install --editable .`, then return to your project to use it. The
+published 0.14.0 package does not include this option. You can still begin with
+`start` directly; this check adds no required onboarding step.
+
+```sh
+machinist doctor --local
+machinist doctor --local --json
+```
+
+It uses the same configuration resolution as `start`: saved local settings
+win, otherwise it previews applicable root settings and discovery without
+saving them. It checks a committed named Git branch, Git identity, clean
+checkout, Workshop location, Harness executables and Phase support, and
+required Verification Gates and their command entry points. Adapter-supported
+version, compatibility, and authentication probes run without a model call;
+plugins without authentication probes need manual verification. Authentication
+readiness does not establish quotas or access to a particular model.
+
+Identity checks respect the controller's existing commit-author fallback. An
+unsafe runtime-exclusion path fails readiness. If exclusion is not established,
+the check warns that `start` must still apply and verify it against your ignore
+rules; it does not modify those rules to test them.
+
+By default, the controller creates no Task, Claim, Workshop, runtime/config
+file, Git exclusion, or ref. It makes no forge or release-update request and
+does not run Verification Gates. A configured command being available does
+not mean its tests passed.
+
+To explicitly execute the configured Gates:
+
+```sh
+machinist doctor --local --run-gates
+```
+
+This uses the existing Verification engine in your **controller checkout**;
+project commands can write files or download dependencies. It does not prove
+the isolated Workshop baseline, which `start` still checks before Spec work.
+Resolve reported readiness failures before running Gates. Plain `doctor`
+continues to check the existing GitHub setup.
 
 ## Provide existing context
 
@@ -268,7 +312,8 @@ Local records, Phase history, configuration, and reports live under
 The Spec itself is committed at `.machinist/specs/task-1-spec.md`. Preserve
 runtime records for recovery; do not commit them or edit Task JSON manually.
 
-`doctor` remains the root GitHub setup preflight. `runs`, `inspect`, `explain`,
+Plain `doctor` remains the root GitHub setup preflight; the 0.15.0 candidate's
+`doctor --local` checks local readiness as described above. `runs`, `inspect`, `explain`,
 `report`, and portfolio `status --all` read the legacy issue-run namespace under
 `.machinist/runs/`; they do not aggregate the nested local Task namespace.
 `status --local` is an offline view of legacy issue runs only when no local

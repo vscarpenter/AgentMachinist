@@ -79,6 +79,7 @@ from machinist.local_cli import (
     register_local_commands,
     retry_local,
 )
+from machinist.local_doctor import local_fix_hint_for_check_name, run_local_doctor
 from machinist.local_setup import detect_test_command, find_repository_root
 from machinist.managed_paths import (
     ManagedPathError,
@@ -1362,22 +1363,28 @@ def sync_labels_command(ctx: click.Context, check: bool, apply: bool) -> None:
     click.echo("Required GitHub labels are present.")
 
 
-def _doctor_fix_hints(report: DoctorReport) -> list[str]:
+def _doctor_fix_hints(report: DoctorReport, *, local_only: bool = False) -> list[str]:
     """Return one remediation line per failing check, attributed to that check.
 
     Hints are keyed on the canonical check name rather than matched against
     rendered text, so a new check without a fix fails a test instead of
     silently degrading to generic advice.
     """
+    lookup = local_fix_hint_for_check_name if local_only else fix_hint_for_check_name
     return [
         f"  → fix ({check.name}): {hint}"
         for check in report.checks
-        if check.level is CheckLevel.FAIL
-        and (hint := fix_hint_for_check_name(check.name))
+        if check.level is CheckLevel.FAIL and (hint := lookup(check.name))
     ]
 
 
 @main.command()
+@click.option(
+    "--local",
+    "local_only",
+    is_flag=True,
+    help="Check local Task readiness without requiring a forge.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
 @click.option(
     "--run-gates",
@@ -1385,16 +1392,21 @@ def _doctor_fix_hints(report: DoctorReport) -> list[str]:
     help="Execute configured verification gates in the controller checkout.",
 )
 @click.pass_context
-def doctor(ctx: click.Context, as_json: bool, run_gates: bool) -> None:
+def doctor(
+    ctx: click.Context, as_json: bool, run_gates: bool, local_only: bool
+) -> None:
     """Diagnose installation readiness; gate execution is opt-in."""
     try:
-        config = load_config()
-        report = run_doctor(
-            Path.cwd(),
-            config,
-            installed_version=_installed_version(),
-            run_gates=run_gates,
-        )
+        if local_only:
+            report = run_local_doctor(Path.cwd(), run_gates=run_gates)
+        else:
+            config = load_config()
+            report = run_doctor(
+                Path.cwd(),
+                config,
+                installed_version=_installed_version(),
+                run_gates=run_gates,
+            )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     if as_json:
@@ -1403,7 +1415,7 @@ def doctor(ctx: click.Context, as_json: bool, run_gates: bool) -> None:
         for check in report.checks:
             click.echo(f"{check.level.value:<4} {check.name:<28} {check.detail}")
         if not report.ok:
-            for hint in _doctor_fix_hints(report):
+            for hint in _doctor_fix_hints(report, local_only=local_only):
                 click.echo(hint)
     if not report.ok:
         ctx.exit(1)

@@ -125,6 +125,7 @@ def test_static_type_gate_is_zero_error_core_with_explicit_expansion_debt():
     mypy = config["tool"]["mypy"]
     expected_core = {
         "src/machinist/config.py",
+        "src/machinist/diagnostics.py",
         "src/machinist/gitconfig.py",
         "src/machinist/lifecycle.py",
         "src/machinist/workspace.py",
@@ -135,6 +136,7 @@ def test_static_type_gate_is_zero_error_core_with_explicit_expansion_debt():
         "src/machinist/forge.py",
         "src/machinist/gitlab.py",
         "src/machinist/local_cli.py",
+        "src/machinist/local_doctor.py",
         "src/machinist/local_setup.py",
         "src/machinist/local_tasks.py",
         "src/machinist/local_workflow.py",
