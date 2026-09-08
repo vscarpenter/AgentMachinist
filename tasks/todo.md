@@ -1,3 +1,22 @@
+# Version 0.15.0 publication (IN PROGRESS)
+
+User asked to release 0.15.0 to PyPI. Findings before any change: PyPI latest is
+0.14.0, no `v0.15.0` GitHub Release exists, and PR #43 merged with the Ubuntu
+CI jobs failing. Two `tests/test_local_doctor.py` tests hard-code PASS for a
+missing `user.name`; Git derives that name from the OS account's GECOS field,
+which is set on developer macOS accounts and empty for GitHub's `runner`
+account, so `git var GIT_AUTHOR_IDENT` fails there and the doctor correctly
+reports FAIL. The implementation is right; the tests assumed the environment.
+The guides also still describe 0.15.0 as a release candidate with publication
+pending.
+
+- [x] Make the Git-author doctor tests deterministic across platforms.
+- [x] Convert release-candidate wording to published-release wording in the
+      changelog, README, CLAUDE.md, and every current guide; adapt the docs test.
+- [ ] Run `bash scripts/verify.sh`; commit on `release/0.15.0-publication`.
+- [ ] Push, open the PR, wait for Linux and macOS CI to pass.
+- [ ] Human go-ahead, merge, `gh release create v0.15.0`, verify PyPI.
+
 # Version 0.15.0 bump and origin push (COMPLETE)
 
 User requested the version bump and push to origin. Package metadata and the

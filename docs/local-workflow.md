@@ -5,13 +5,13 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-**0.15.0 release candidate / source checkout; publication pending.** Install this
-source with `uv tool install --editable .`, then run the commands below in the
-repository you want to change. The published release remains 0.14.0 and includes
-this local workflow; install it with `uv tool install "agentmachinist==0.14.0"`.
-Optional local readiness is new in 0.15.0. The existing
+This workflow is available in AgentMachinist 0.15.0. Install it with
+`uv tool install agentmachinist`, or upgrade an existing tool installation with
+`uv tool upgrade agentmachinist`; then run the commands below in the repository
+you want to change. Optional local readiness is new in 0.15.0. The existing
 [GitHub issue workflow](getting-started.md#github-setup-and-automation)
-remains available. See [installation](getting-started.md#install) for both choices.
+remains available. See [installation](getting-started.md#install) for an optional
+editable source setup.
 
 ## Complete one Task
 
@@ -123,11 +123,9 @@ silently discarding edits. The command does not push or merge a remote PR/MR.
 
 ## Optional local readiness
 
-**New in the 0.15.0 release candidate:** `machinist doctor --local` adds an optional
-readiness check. Install the current AgentMachinist source checkout with
-`uv tool install --editable .`, then return to your project to use it. The
-published 0.14.0 package does not include this option. You can still begin with
-`start` directly; this check adds no required onboarding step.
+**New in 0.15.0:** `machinist doctor --local` adds an optional readiness check.
+You can still begin with `start` directly; this check adds no required
+onboarding step.
 
 ```sh
 machinist doctor --local

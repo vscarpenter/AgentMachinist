@@ -4,8 +4,7 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-This model covers the **0.15.0 release candidate / source checkout; publication
-pending**. The published release remains 0.14.0; new 0.15.0 controls are identified
+This model covers AgentMachinist 0.15.0; controls new in 0.15.0 are identified
 below.
 
 ## Trusted inputs and principals
@@ -170,7 +169,7 @@ run record or an error message.
 
 ## Verification commands
 
-**New in the 0.15.0 release candidate:** optional `machinist doctor --local` resolves
+**New in 0.15.0:** optional `machinist doctor --local` resolves
 the settings `start` would use and checks local Git readiness, Harness
 availability and supported version/help/authentication probes, and required
 Gate command entry points. By default the controller writes no Task, Workshop,
@@ -208,7 +207,7 @@ afterwards, and that controller run remains the authoritative gate. Set
 
 ## Diagnostic output
 
-**New in the 0.15.0 release candidate:** a shared renderer bounds Git, `gh`, `glab`,
+**New in 0.15.0:** a shared renderer bounds Git, `gh`, `glab`,
 and doctor diagnostics, strips unsafe terminal controls, and redacts recognized
 URL credentials, authorization values, and secret assignments. It preserves
 useful multiline context and marks truncation. Unrecognized secret forms can
