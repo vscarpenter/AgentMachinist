@@ -268,6 +268,10 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   from the OS account's GECOS field, which developer macOS accounts set and
   GitHub's Ubuntu runner account leaves empty, so a test that expects
   derivation passes locally and fails in CI.
+- Test fixtures that snapshot `.git` after a commit must set
+  `maintenance.auto=false`: Git 2.55 detaches `git maintenance run --auto`
+  after every commit and its `.git/objects/maintenance.lock` races the
+  snapshot on slow macOS runners (a rotating set of failures is the sign).
 - Harness adapters have exact-argv tests (`tests/test_harness.py`). Changing
   an adapter means updating its argv test, `docs/harnesses.md`, and the
   changelog together. New pass-through options go in
