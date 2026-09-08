@@ -1,3 +1,23 @@
+# Version 0.15.0 bump and origin push (COMPLETE)
+
+User requested the version bump and push to origin. Package metadata and the
+lockfile now report 0.15.0. Current guides identify the source as a release
+candidate with publication pending; published 0.14.0 remains clearly separate.
+Historical release records are preserved. Managed workflows already matched
+because this repository installs the controller from its checkout.
+
+`bash scripts/verify.sh` passed on version commit `46a7d0c`: 1,508 tests in
+730.75 seconds, 87.80% coverage, formatting/lint, 22 typed modules, lockfile and
+workflow checks, and installed wheel/sdist smoke tests reporting 0.15.0.
+The installed local-readiness smoke covered no-origin/read-only behavior and
+explicit Gate execution. All 32 documentation tests and 15 HTML Copy payload
+comparisons passed; independent review found no remaining preparation blocker.
+
+Pushed `46a7d0c6d1c9226570b0aad51cbdf284d2bdaa36` to
+`origin/codex/local-readiness-hardening` and confirmed its exact remote SHA.
+This follow-up commit records verification and delivery only. No GitHub Release,
+tag, main-branch merge, or PyPI publication was requested or performed.
+
 # Local readiness and controller hardening (COMPLETE)
 
 Approved scope: `tasks/spec.md`; plan: `tasks/local-readiness-plan.md`.
