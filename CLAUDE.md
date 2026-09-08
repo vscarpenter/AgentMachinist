@@ -16,8 +16,7 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist`. This checkout is the **0.15.0
-release candidate; publication pending**. The published release remains 0.14.0.
+hatchling, published to PyPI as `agentmachinist` (current release: 0.15.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -264,6 +263,11 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   config schema, pipeline states must match `PIPELINE_STATES`, and stale
   milestone/release claims are blocked. If you change the CLI, config, or
   states, update README/docs in the same change or the suite fails.
+- Tests that exercise Git identity must configure it explicitly or disable
+  auto-detection with `user.useConfigOnly`. Git derives a missing `user.name`
+  from the OS account's GECOS field, which developer macOS accounts set and
+  GitHub's Ubuntu runner account leaves empty, so a test that expects
+  derivation passes locally and fails in CI.
 - Harness adapters have exact-argv tests (`tests/test_harness.py`). Changing
   an adapter means updating its argv test, `docs/harnesses.md`, and the
   changelog together. New pass-through options go in
@@ -302,14 +306,14 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current checkout (2026-09-07)
 
-- **0.15.0 release candidate / source checkout; publication pending.** New in this
-  version: optional `doctor --local`, exact remote-base validation for new legacy
-  Workshops, and shared bounded diagnostic rendering. See ADR 0004. Published
-  installation remains 0.14.0; use `uv tool install --editable .` for this source.
-  A version bump and push do not authorize a GitHub Release or PyPI publication.
+- **0.15.0 is the current published release.** New in this version: optional
+  `doctor --local`, exact remote-base validation for new legacy Workshops, and
+  shared bounded diagnostic rendering. See ADR 0004. A version bump and push do
+  not authorize a GitHub Release or PyPI publication; releasing is a separate
+  explicit human operation.
 
 - The guided local workflow and GitLab intake/publication introduced in 0.14.0
-  continue in this candidate.
+  continue in this release.
   `start` stops at a saved
   Spec; `approve --task T1 --spec-sha <sha>` continues the foreground Phases;
   `integrate T1` and `publish T1 --provider github|gitlab` are separate explicit
@@ -321,6 +325,9 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Published history (through 2026-09-07)
 
+- v0.15.0 adds optional `doctor --local` readiness, exact remote-base validation
+  for new legacy Workshops, and bounded credential-redacting diagnostics (ADR
+  0004).
 - v0.14.0 adds foreground local Tasks, required verification and advisory Review,
   exact-SHA Approval, explicit local integration, optional GitHub/GitLab
   publication, resumable adoption, and amendment Review fixes. It also includes

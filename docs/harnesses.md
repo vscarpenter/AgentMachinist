@@ -7,9 +7,8 @@ may subsequently select different supported adapters. “Spec and Review control
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-This matrix covers the **0.15.0 release candidate / source checkout; publication
-pending**. The published 0.14.0 release already includes the local workflow and
-GitLab publication; optional local readiness is new in 0.15.0. The CI column
+This matrix covers AgentMachinist 0.15.0, including the local workflow, GitLab
+publication, and the optional local readiness new in 0.15.0. The CI column
 below describes the existing GitHub Actions Spec
 workflow, not GitLab CI.
 
@@ -48,7 +47,7 @@ installed executables and Phase support; it does not run the provider's login
 probe or validate model access. Use the checks below before your first Task.
 Plain `doctor` checks the installed version, parses configured Spec and Execute
 invocations, and checks Review when `review.enabled: true` for the GitHub
-workflow. **New in the 0.15.0 release candidate:** optional `doctor --local` uses the
+workflow. **New in 0.15.0:** optional `doctor --local` uses the
 same probes with the local settings that `start` resolves, including mandatory
 Review. These diagnostics use the adapter's read-only authentication probe when one is available;
 plugins without a probe require manual verification. A successful probe
@@ -138,10 +137,8 @@ The compatibility rows execute `--help` against the configured Spec and Execute
 argv, plus Review when enabled, without starting a Harness Task. If an argument
 changes, update the adapter, its exact argv test, this matrix, and the changelog together.
 Plain `doctor` reads root `machinist.yaml` and checks GitHub setup. The
-0.15.0 candidate's `machinist doctor --local` reads saved local settings or previews
-first-start discovery without saving it. Install the current source checkout
-with `uv tool install --editable .` to use that option; published 0.14.0 does
-not include it. It runs no model, forge, release-update probe, or Verification
+0.15.0 `machinist doctor --local` option reads saved local settings or previews
+first-start discovery without saving it. It runs no model, forge, release-update probe, or Verification
 Gate by default. `--run-gates` explicitly runs project commands in the
 controller checkout, where they may write or download; passing does not prove
 the isolated Workshop baseline. See [local readiness](local-workflow.md#optional-local-readiness).

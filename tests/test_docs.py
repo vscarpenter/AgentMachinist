@@ -696,7 +696,6 @@ def test_release_docs_describe_current_package_version():
             flags=re.DOTALL,
         )
         assert "unreleased" not in html, path
-        assert "machinist doctor --local" not in html, path
         assert re.search(
             rf'uv tool install ["\x27]?agentmachinist(?:=={re.escape(published_version)})?(?:["\x27\s<])',
             unescape(html),
@@ -729,7 +728,16 @@ def test_release_docs_describe_current_package_version():
     assert release_text.index("publishes") < release_text.index("attach")
 
 
-def test_local_readiness_examples_are_optional_and_identified_as_source_only():
+def test_source_only_examples_are_isolated_until_published():
+    version = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"][
+        "version"
+    ]
+    published = re.search(
+        r"\[AgentMachinist (?P<version>\d+\.\d+\.\d+) on PyPI\]",
+        _README_PATH.read_text(),
+    )
+    assert published
+    pending = version != published["version"]
     for path in (_FIRST_RUN_GUIDE_PATH, _JOB_CARD_PATH):
         html = path.read_text().lower()
         blocks = re.findall(
@@ -737,6 +745,9 @@ def test_local_readiness_examples_are_optional_and_identified_as_source_only():
             html,
             flags=re.DOTALL,
         )
+        if not pending:
+            assert not blocks, path
+            continue
         assert blocks, path
         for block in blocks:
             assert "source checkout" in block, path

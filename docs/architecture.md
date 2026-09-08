@@ -4,10 +4,10 @@ AgentMachinist coordinates Git, a coding Harness, and the repository's
 verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
-deployment remain outside the controller. This document covers the **0.15.0
-release candidate / source checkout; publication pending**. The published
-0.14.0 release includes the local workflow and GitLab collaboration; 0.15.0 adds
-local readiness, exact remote-base validation, and bounded diagnostics.
+deployment remain outside the controller. This document covers AgentMachinist
+0.15.0. The 0.14.0 release added the local workflow and GitLab collaboration;
+0.15.0 adds local readiness, exact remote-base validation, and bounded
+diagnostics.
 
 ## Ownership
 
@@ -75,7 +75,7 @@ See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
 
 ## Deep policy seams
 
-**New in the 0.15.0 release candidate:** `local_doctor.py` adds optional
+**New in 0.15.0:** `local_doctor.py` adds optional
 `machinist doctor --local` using the read-only `local_setup.py` configuration
 resolver shared with `start`. Saved local settings take precedence; first-run
 discovery is previewed without adoption. It combines local Git/author/checkout
@@ -377,7 +377,7 @@ See [the trust model](trust-model.md) for the full key list and
 
 ## Push safety
 
-**New in the 0.15.0 release candidate:** legacy `Workspace.provision` fetches the
+**New in 0.15.0:** legacy `Workspace.provision` fetches the
 intended remote base explicitly for new Tasks, resolves the freshly fetched
 ref, and constructs the Workshop from that immutable SHA. Missing or deleted
 remote bases fail even when a stale tracking ref remains; a narrow fetch
@@ -402,7 +402,7 @@ to coding harnesses or verification gates.
 
 ## Diagnostic rendering
 
-**New in the 0.15.0 release candidate:** `diagnostics.py` owns bounded rendering for
+**New in 0.15.0:** `diagnostics.py` owns bounded rendering for
 Git, GitHub, GitLab, and doctor diagnostics. It redacts recognized URL userinfo,
 authorization values, and secret assignments and strips unsafe terminal
 controls before truncation. Exception categories and useful context remain

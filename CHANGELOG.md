@@ -2,10 +2,7 @@
 
 ## Unreleased
 
-## 0.15.0 — release candidate
-
-Publication pending. This version is prepared in source; 0.14.0 remains the
-published package until the GitHub Release workflow publishes 0.15.0.
+## 0.15.0 — 2026-09-07
 
 - Add optional `machinist doctor --local [--json] [--run-gates]` readiness for
   new and existing local projects. Reuse start's configuration resolution,

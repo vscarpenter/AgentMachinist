@@ -1,10 +1,10 @@
 # Operator runbook
 
-**0.15.0 release candidate / source checkout; publication pending.** Install this
-source with `uv tool install --editable .` for the new readiness, remote-base,
-and diagnostic behavior below. The published release remains 0.14.0 and includes
-the foreground workflow and GitLab integration. See the
-[installation instructions](getting-started.md#install) for both choices.
+AgentMachinist 0.15.0 includes the foreground local workflow, optional GitLab
+integration, and the readiness, remote-base, and diagnostic behavior below.
+Install with `uv tool install agentmachinist`, or upgrade with
+`uv tool upgrade agentmachinist`. See the
+[installation instructions](getting-started.md#install) for other setups.
 
 ## Local foreground operation
 
@@ -41,9 +41,8 @@ can use a cloud model; it does not establish offline inference.
 
 ### Optional local readiness
 
-**New in the 0.15.0 release candidate:** install the current source with
-`uv tool install --editable .` to use these optional diagnostics; published
-0.14.0 does not include `doctor --local`.
+**New in 0.15.0:** these diagnostics are optional and need no forge setup or
+saved local Task state.
 
 ```sh
 machinist doctor --local
@@ -314,7 +313,7 @@ per-repository errors, and does not include the foreground Task namespace.
 
 ## Recover a failed GitHub issue Task
 
-**New in the 0.15.0 release candidate:** new remote Workshops fetch the intended base
+**New in 0.15.0:** new remote Workshops fetch the intended base
 branch explicitly and pin its resulting commit. A deleted or renamed remote
 base fails before Workshop creation even if a stale tracking ref survives.
 Check origin and the repository's current default branch, then use the normal
@@ -420,7 +419,7 @@ which generates a new Spec and requires its Approval before Execute.
 
 ## Diagnostic output
 
-**New in the 0.15.0 release candidate:** controller Git, `gh`, `glab`, and doctor
+**New in 0.15.0:** controller Git, `gh`, `glab`, and doctor
 diagnostics redact recognized URL credentials, authorization values, and
 secret assignments, remove unsafe terminal controls, and bound rendered text.
 A truncation notice means the displayed diagnostic is incomplete. This is not
