@@ -16,7 +16,7 @@ from machinist.local_doctor import (
     run_local_doctor,
 )
 from machinist.local_setup import ensure_local_config
-from machinist.workspace import Workspace
+from machinist.workspace import Workspace, WorkspaceError
 
 
 def git(root, *args):
@@ -270,33 +270,54 @@ def test_empty_repository_and_detached_head_have_distinct_fixes(repo):
     assert checks_by_name(empty)["local branch"].level is CheckLevel.PASS
 
 
-@pytest.mark.parametrize(
-    "field, expected", [("user.name", CheckLevel.PASS), ("user.email", CheckLevel.WARN)]
-)
-def test_missing_author_configuration_matches_controller_fallback(
-    repo, field, expected
-):
-    git(repo, "config", "--unset", field)
+def test_missing_email_uses_controller_identity_fallback(repo):
+    git(repo, "config", "--unset", "user.email")
     report = run_local_doctor(repo, which=which, runner=probe_runner([]))
-    assert checks_by_name(report)["Git author"].level is expected
+    assert checks_by_name(report)["Git author"].level is CheckLevel.WARN
     assert "git config" in local_fix_hint_for_check_name("Git author")
 
 
 def test_configured_email_without_name_matches_git_commit_identity(repo):
+    # Git derives a missing user.name from the OS account's GECOS field, which
+    # developer macOS accounts set and GitHub's Ubuntu runner account leaves
+    # empty. The verdict must predict the controller's commit, not a fixed level.
     git(repo, "config", "--unset", "user.name")
     before = tree(repo)
     report = run_local_doctor(repo, which=which, runner=probe_runner([]))
-    assert report.ok, report.to_dict()
-    assert checks_by_name(report)["Git author"].level is CheckLevel.PASS
     assert tree(repo) == before
+    author = checks_by_name(report)["Git author"]
 
     workspace = Workspace(repo, WorkspaceConfig(root=repo.parent / "workshops"))
-    (repo / "identity-proof").write_text("Git can derive the name\n")
-    workspace.commit_all(repo, "prove effective identity")
-    assert workspace._git(repo, "log", "-1", "--format=%an").strip()
-    assert (
-        workspace._git(repo, "log", "-1", "--format=%ae").strip() == "local@example.com"
-    )
+    (repo / "identity-proof").write_text("Git may derive the name\n")
+    try:
+        workspace.commit_all(repo, "prove effective identity")
+    except WorkspaceError as exc:
+        assert "git commit failed" in str(exc)
+        committed = False
+    else:
+        committed = True
+        assert workspace._git(repo, "log", "-1", "--format=%an").strip()
+        assert (
+            workspace._git(repo, "log", "-1", "--format=%ae").strip()
+            == "local@example.com"
+        )
+    assert author.level is (CheckLevel.PASS if committed else CheckLevel.FAIL)
+    assert report.ok == committed
+
+
+def test_name_git_cannot_derive_fails_before_the_controller_commit(repo):
+    git(repo, "config", "--unset", "user.name")
+    git(repo, "config", "user.useConfigOnly", "true")
+    report = run_local_doctor(repo, which=which, runner=probe_runner([]))
+    author = checks_by_name(report)["Git author"]
+    assert author.level is CheckLevel.FAIL
+    assert "identity" in author.detail
+    assert not report.ok
+
+    workspace = Workspace(repo, WorkspaceConfig(root=repo.parent / "workshops"))
+    (repo / "identity-proof").write_text("Git cannot derive the name\n")
+    with pytest.raises(WorkspaceError, match="git commit failed"):
+        workspace.commit_all(repo, "prove effective identity")
 
 
 def test_explicit_empty_author_name_is_rejected_by_diagnostic_and_git(repo):
