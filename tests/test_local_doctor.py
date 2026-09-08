@@ -49,6 +49,10 @@ def repo(tmp_path, monkeypatch):
     root = tmp_path / "repo"
     root.mkdir()
     git(root, "init", "-q", "-b", "main")
+    # Git 2.55 detaches `git maintenance run --auto` after every commit, and
+    # that background process briefly holds .git/objects/maintenance.lock. The
+    # tree() snapshots below must not race it, which they did on macOS runners.
+    git(root, "config", "maintenance.auto", "false")
     git(root, "config", "user.name", "Local Developer")
     git(root, "config", "user.email", "local@example.com")
     (root / "pyproject.toml").write_text(
