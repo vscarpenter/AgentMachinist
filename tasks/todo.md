@@ -4,7 +4,7 @@
 > [September 18 documentation review](#documentation-follow-up-2026-09-18) and
 > [CHANGELOG.md](../CHANGELOG.md) for the current checkout.
 
-# Version 0.15.0 publication (IN PROGRESS)
+# Version 0.15.0 publication (COMPLETE)
 
 User asked to release 0.15.0 to PyPI. Findings before any change: PyPI latest is
 0.14.0, no `v0.15.0` GitHub Release exists, and PR #43 merged with the Ubuntu
@@ -19,9 +19,36 @@ pending.
 - [x] Make the Git-author doctor tests deterministic across platforms.
 - [x] Convert release-candidate wording to published-release wording in the
       changelog, README, CLAUDE.md, and every current guide; adapt the docs test.
-- [ ] Run `bash scripts/verify.sh`; commit on `release/0.15.0-publication`.
-- [ ] Push, open the PR, wait for Linux and macOS CI to pass.
-- [ ] Human go-ahead, merge, `gh release create v0.15.0`, verify PyPI.
+- [x] Run `bash scripts/verify.sh`; commit on `release/0.15.0-publication`.
+- [x] Push, open the PR, wait for Linux and macOS CI to pass.
+- [x] Human go-ahead, merge, `gh release create v0.15.0`, verify PyPI.
+
+A second macOS-only failure appeared on the PR: Git 2.55 detaches
+`git maintenance run --auto` after every commit, and its
+`.git/objects/maintenance.lock` was still present when the doctor tests took
+their pre-run repository snapshot on slow runners. The `repo` fixture now sets
+`maintenance.auto=false`; a rotating set of snapshot failures across macOS jobs
+is the signature of this race.
+
+### Resuming From Here
+
+Done: PR #44 merged to `main` as `2b701f9` with every check green on Linux and
+macOS (Python 3.12–3.14, coverage, minimum dependencies, package, CodeQL).
+`bash scripts/verify.sh` passed on `fb35c6a` and `270efbf`: 1,508 tests at
+88% coverage, wheel and sdist smoke tests reporting 0.15.0. GitHub Release
+`v0.15.0` targets `2b701f9`; release run 34179377505 passed build, publish,
+release-assets, and verify-published. PyPI lists 0.15.0 as latest with the
+wheel and sdist un-yanked, and an uncached `uv tool run --from
+agentmachinist==0.15.0 machinist --version` prints 0.15.0.
+
+Next: carry this ledger note into the next change's PR. Consider whether the
+controller's `_SAFE_GIT_CONFIG` should also disable auto maintenance so
+Workshop commits never leave a detached Git process behind, and whether the
+doctor's `Git author` FAIL detail should include Git's stderr (it printed only
+the generic "configured repository identity is incomplete or invalid" on the
+Ubuntu runner).
+
+Blockers: none.
 
 # Version 0.15.0 bump and origin push (COMPLETE)
 
