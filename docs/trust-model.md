@@ -4,7 +4,7 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-This model describes the current implementation. Local readiness and bounded
+This model describes AgentMachinist 0.16.0. Local readiness and bounded
 diagnostic rendering were introduced in 0.15.0.
 
 ## Trusted inputs and principals
@@ -30,7 +30,7 @@ changing its Spec does not carry valid Approval. Local records remain editable
 by the same OS account; they are workflow Evidence, not an authentication
 boundary against hostile local processes. Forge review buttons and GitLab
 comments do not mint local Approval.
-The Unreleased source checkout expands printed next-step commands. These are
+AgentMachinist 0.16.0 expands printed next-step commands. These are
 guidance only. A Spec receipt asks the operator
 to inspect the Spec before approving; an Approval request in the GitHub
 workflow still needs the trusted workflow marker and label before Execute.

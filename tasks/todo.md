@@ -918,3 +918,16 @@ Blockers: none. Publication and release remain separate operations.
 Done: all documentation review slices are complete, with 32 documentation tests
 passing and browser checks covering all five HTML pages. Production code was
 unchanged. Publication and release remain separate operations.
+
+## 0.16.0 release preparation (2026-09-12)
+
+- [x] Align package metadata, lockfile, changelog, and current release guides.
+- [x] Promote completion guidance from Unreleased to 0.16.0 documentation.
+- [x] Verify generated workflows and review the complete release diff.
+- [x] Pass the canonical release gate: 1,528 tests, 88.15% coverage, formatting,
+  lint, types, wheel/sdist builds, and installed-package smoke checks.
+
+The user authorized pushing all changes and publishing 0.16.0 to PyPI. The
+release procedure verifies CI at the exact PR head, merges to main, and creates
+`v0.16.0` at that merge commit. The GitHub release workflow supplies the
+publication, artifact-checksum, and isolated public-install evidence.

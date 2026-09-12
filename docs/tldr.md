@@ -11,11 +11,11 @@ The controller owns Git and durable Evidence; the Harness writes the Spec, edits
 
 ## One-time setup
 
-Install AgentMachinist 0.15.0 with `uv tool install agentmachinist`, or upgrade with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
+Install AgentMachinist 0.16.0 with `uv tool install agentmachinist`, or upgrade with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
 Enter a clean named branch with an initial Git commit, configured author, an installed and authenticated Harness,
 and an executable required Verification Gate. No forge or origin is required.
 
-New in 0.15.0: optional `machinist doctor --local` checks readiness without adoption or model/forge calls.
+Available since 0.15.0: optional `machinist doctor --local` checks readiness without adoption or model/forge calls.
 `--run-gates` explicitly runs project commands in your controller checkout; they may write/download and do not prove the isolated baseline.
 
 ## First local Task

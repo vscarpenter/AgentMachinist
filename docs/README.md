@@ -1,15 +1,16 @@
 # AgentMachinist documentation
 
-This is the current operating documentation for **AgentMachinist 0.15.0**,
+This is the current operating documentation for **AgentMachinist 0.16.0**,
 including the guided local workflow and optional GitHub/GitLab collaboration.
-Changes available only in the source checkout are marked **Unreleased**.
 Install it with `uv tool install agentmachinist`, or upgrade with
 `uv tool upgrade agentmachinist`. Start with the
 [local workflow guide](local-workflow.md) for your first Task.
 
-**New in 0.15.0:** optional `machinist doctor --local` previews
-local readiness without adoption, model work, or forge setup. This release also
-hardens remote-base validation and diagnostic rendering. See
+**New in 0.16.0:** completion output suggests the next activity and command
+after issue creation, Spec, Approval requests, Execute, and Review. It explains
+GitHub workflow waits and offers optional publication after local integration.
+Optional `machinist doctor --local`, introduced in 0.15.0, previews local
+readiness without adoption, model work, or forge setup. See
 [local readiness](local-workflow.md#optional-local-readiness)
 and the [operator runbook](operator-runbook.md).
 

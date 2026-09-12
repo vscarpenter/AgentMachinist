@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 — 2026-09-12
 
 - Add completion guidance with the next activity and copyable commands for
   issue creation, Spec review, asynchronous GitHub Approval, and completed
@@ -13,6 +13,10 @@
   inspection and integration. Completed local integration presents publication
   as optional, with explicit GitHub and GitLab provider commands. JSON output
   remains structured with the existing fields.
+- Review all operating documentation, HTML guides, architecture decisions, and
+  historical plans against the current implementation. Correct command
+  examples, recovery conditions, Harness profile inheritance, and status/diff
+  inspection instructions; retain historical context with dated status notes.
 
 ## 0.15.0 — 2026-09-07
 

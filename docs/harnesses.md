@@ -7,10 +7,10 @@ may subsequently select different supported adapters. “Spec and Review control
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-This matrix describes the current adapters, including the local workflow,
-GitLab publication, and local readiness introduced in 0.15.0. The CI column
-below describes the existing GitHub Actions Spec
-workflow, not GitLab CI.
+This matrix describes the adapters in AgentMachinist 0.16.0. It covers the local
+workflow and GitLab publication, plus local readiness introduced in 0.15.0.
+The CI column below describes the existing GitHub Actions Spec workflow, not
+GitLab CI.
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
 | --- | --- | --- | --- | --- |

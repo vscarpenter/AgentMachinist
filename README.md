@@ -16,10 +16,11 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-AgentMachinist 0.15.0 adds optional local readiness, exact remote-base
-validation, and bounded diagnostic rendering.
+AgentMachinist 0.16.0 adds next-step CLI guidance after issue creation and Phase
+completion. It explains Approval waits, points to human review, and keeps
+publication optional.
 
-Current release: [AgentMachinist 0.15.0 on PyPI](https://pypi.org/project/agentmachinist/0.15.0/).
+Current release: [AgentMachinist 0.16.0 on PyPI](https://pypi.org/project/agentmachinist/0.16.0/).
 
 ## Install
 
@@ -57,7 +58,7 @@ never appears in `update-check --json`.
 ## Start
 
 The guided local workflow and optional GitLab support introduced in 0.14.0
-continue in 0.15.0. The existing GitHub workflow remains available.
+continue in 0.16.0. The existing GitHub workflow remains available.
 Start on a clean named branch with an initial commit, configured Git author,
 and an installed, authenticated Harness. Replace the example's Python test
 command with verification appropriate to your project.
@@ -83,7 +84,7 @@ machinist status T1
 machinist integrate T1
 ```
 
-**Unreleased:** Completion output explains the next activity and includes a
+**New in 0.16.0:** Completion output explains the next activity and includes a
 command using your Task or issue ID. Local integration reports completion;
 publication is an optional follow-up with an explicit forge selection.
 
@@ -101,7 +102,7 @@ your working repository are not copied. Use a self-preparing command such as
 Spec Harness. Correct the Gate in `.machinist/runs/local/config.yaml` or its
 dependency setup, then run `machinist retry --task T1 --phase spec`.
 
-**New in 0.15.0:** `machinist doctor --local` is an optional
+**Available since 0.15.0:** `machinist doctor --local` is an optional
 readiness check using the same configuration resolution as first start or your
 saved local settings. It checks Git, Harness probes, and verification command
 availability without creating a Task or requiring a forge. Add `--json` for
@@ -196,7 +197,7 @@ Managed CI installs the selected Spec adapter and reads its declared secret
 name; built-ins support Claude Code, Codex, OpenCode, and Pi.
 
 Create a focused issue with `machinist task new --title "Handle an invalid
-timezone without crashing"`. The unreleased completion guidance points to
+timezone without crashing"`. The completion guidance points to
 `machinist spec 57` for local Spec generation, or a command applying the
 configured trigger label when GitHub Actions owns Spec generation. Add
 `--dispatch` during creation to apply that label immediately; the next command
@@ -274,7 +275,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
 | `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |
 | `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). |
-| `machinist doctor --local [--run-gates] [--json]` | New in 0.15.0: optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
+| `machinist doctor --local [--run-gates] [--json]` | Available since 0.15.0: optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |

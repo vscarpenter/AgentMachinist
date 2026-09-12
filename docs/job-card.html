@@ -339,7 +339,7 @@
 </head>
 <body>
 <main class="shell" id="main">
-  <header><p class="kicker">AgentMachinist · Job card · v0.15.0</p><h1>Machinist Job Card</h1><p class="lede">One local Task, an exact Spec to approve, and a verified candidate with independent advisory Review. You choose local integration and optional publication.</p><p><strong>AgentMachinist 0.15.0 adds optional local readiness, remote-base validation, and bounded diagnostics.</strong> Install from PyPI. The separate GitHub issue workflow remains supported.</p></header>
+  <header><p class="kicker">AgentMachinist · Job card · v0.16.0</p><h1>Machinist Job Card</h1><p class="lede">One local Task, an exact Spec to approve, and a verified candidate with independent advisory Review. You choose local integration and optional publication.</p><p><strong>AgentMachinist 0.16.0 adds clearer next-step guidance after issue creation, Spec generation, Approval requests, and Review.</strong> Install from PyPI. The separate GitHub issue workflow remains supported.</p></header>
   <div class="pipeline-scroll" tabindex="0" role="region" aria-label="Local Task sequence"><div class="pipeline">
     <span class="step">Task T1</span><span class="arrow">→</span><span class="step">baseline + Spec commit</span><span class="arrow">→</span><span class="gate">approve exact SHA</span><span class="arrow">→</span><span class="step">Execute + gates</span><span class="arrow">→</span><span class="step">advisory Review</span><span class="arrow">→</span><span class="gate">you integrate</span>
   </div></div>
@@ -394,8 +394,8 @@ machinist start --from-issue https://github.com/team/project/issues/42
     <div class="rail"><strong>Local is not offline inference</strong><span>The Harness may use a cloud model. Offline inference needs a local provider, cached models and dependencies, and separate network-denied validation.</span></div>
     <div class="rail"><strong>One runner checkout</strong><span>Small teams can share issues and PRs/MRs while one operator owns local Tasks. Claims do not coordinate separate checkouts. Watcher Task Run budgets do not limit foreground local Tasks.</span></div>
   </div></section>
-  <p class="note">New in 0.15.0: optional <code>machinist doctor --local</code> checks readiness without forge setup or local Task state. Add <code>--run-gates</code> only to execute project commands in the controller checkout; isolated Workshop baseline verification still runs at start.</p>
-  <p class="note" data-release="unreleased">Current source checkout (unreleased): completion messages suggest the next activity and command after issue creation, Spec generation, Approval requests, and Review. Follow <code>machinist explain 7</code> while waiting for GitHub Actions; <code>watch --once</code> also prints completion guidance. Integrated local Tasks show optional publication commands. Published 0.15.0 uses the same workflow with different completion wording.</p>
+  <p class="note">Available since 0.15.0: optional <code>machinist doctor --local</code> checks readiness without forge setup or local Task state. Add <code>--run-gates</code> only to execute project commands in the controller checkout; isolated Workshop baseline verification still runs at start.</p>
+  <p class="note"><strong>New in 0.16.0:</strong> completion messages suggest the next activity and command after issue creation, Spec generation, Approval requests, and Review. Follow <code>machinist explain 7</code> while waiting for GitHub Actions; <code>watch --once</code> also prints completion guidance. Integrated local Tasks show optional publication commands.</p>
   <footer><code>machinist status T1</code> for local next actions · <code>machinist doctor --run-gates</code> for existing GitHub adoption · <a href="first-run-guide.html">visual first-run guide</a> · <a href="local-workflow.md">local workflow reference</a> · <a href="trust-model.md">trust model</a></footer>
 </main>
 </body>

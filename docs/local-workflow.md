@@ -5,10 +5,11 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This workflow is available in AgentMachinist 0.15.0. Install it with
+This guide describes AgentMachinist 0.16.0. Install it with
 `uv tool install agentmachinist`, or upgrade an existing tool installation with
 `uv tool upgrade agentmachinist`; then run the commands below in the repository
-you want to change. Optional local readiness is new in 0.15.0. The existing
+you want to change. Optional local readiness was introduced in 0.15.0. The
+existing
 [GitHub issue workflow](getting-started.md#github-setup-and-automation)
 remains available. See [installation](getting-started.md#install) for an optional
 editable source setup.
@@ -131,7 +132,7 @@ changed candidate, or dirty checkout stops integration. Intent is recorded
 before the update so a retry can reconcile an interrupted integration without
 silently discarding edits. The command does not push or merge a remote PR/MR.
 
-**Unreleased completion guidance:** Local status and completion receipts name
+**New in 0.16.0:** Local status and completion receipts name
 the next human activity and supply commands with the saved Task ID and exact
 Spec SHA where needed. The short path is `start`, read and approve the Spec, inspect the
 candidate and Review report through `status T1`, then `integrate T1`.

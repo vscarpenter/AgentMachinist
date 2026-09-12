@@ -36,10 +36,11 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.15.0 includes the guided local workflow, optional GitHub/GitLab
-intake and publication, the existing GitHub issue automation, and optional local
-readiness with hardened remote-base validation and diagnostics. Install it, then
-change into the repository you want to work on:
+AgentMachinist 0.16.0 includes the guided local workflow, optional GitHub/GitLab
+intake and publication, existing GitHub issue automation, and next-step CLI
+guidance. Local readiness, exact remote-base validation, and bounded diagnostics
+introduced in 0.15.0 remain available. Install it, then change into the repository
+you want to work on:
 
 ```sh
 uv tool install agentmachinist
@@ -53,9 +54,10 @@ uv tool upgrade agentmachinist
 machinist --version
 ```
 
-Confirm that `machinist --version` reports 0.15.0 or newer before using
-`machinist doctor --local`. For contributing to AgentMachinist, an editable
-installation is optional: run `uv tool install --editable .` from its source
+Confirm that `machinist --version` reports 0.16.0 or newer for the completion
+guidance described here. `machinist doctor --local` is available since 0.15.0.
+For contributing to AgentMachinist, an editable installation is optional:
+run `uv tool install --editable .` from its source
 checkout, then enter the repository you want to change. An editable install
 tracks that checkout instead of the published package; use its Git and `uv sync`
 workflow to update it.
@@ -107,7 +109,7 @@ machinist status T1
 machinist integrate T1
 ```
 
-**Unreleased:** Completion output supplies the next activity and a command
+**New in 0.16.0:** Completion output supplies the next activity and a command
 using your saved Task ID. Read the Spec before copying its exact Approval
 command, and inspect the candidate and Review report before integration.
 Successful integration reports completion and presents publication as optional,
@@ -301,7 +303,7 @@ machinist task new --title "Make authentication recovery actionable"
 
 The managed form captures objective, acceptance checkboxes, constraints,
 verification, and context. `task new` creates an unlabeled issue by default;
-the unreleased completion guidance prints the next command using the created
+the completion guidance prints the next command using the created
 issue. With `github.spec_source: local`, generate its Spec directly:
 
 ```sh
@@ -396,7 +398,7 @@ visible without trusted SHA Evidence, as can happen briefly on the manual-label
 path.
 
 Wait for `machinist explain 7` to report `approved` before starting Execute.
-The unreleased Approval completion prints that check and explains the wait.
+The Approval completion prints that check and explains the wait.
 The command reads the legacy GitHub pipeline even when this checkout also has
 local Tasks; plain `machinist status` selects local Tasks in that case.
 
