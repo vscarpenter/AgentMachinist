@@ -122,8 +122,19 @@ def _render_status(
     ):
         if payload.get(key):
             click.echo(f"{label}: {payload[key]}")
+    if payload["state"] == "awaiting approval":
+        click.echo("Read the Spec before approving it.")
+    elif payload["state"] == "ready to integrate":
+        click.echo("Inspect the Review report and candidate diff before integrating.")
     if payload.get("next_action"):
         click.echo(f"Next: {payload['next_action']}")
+    if payload["state"] == "integrated":
+        click.echo(
+            "Optional: share this candidate through your chosen forge:\n"
+            f"  machinist publish {payload['id']} --provider github\n"
+            "Or, for GitLab:\n"
+            f"  machinist publish {payload['id']} --provider gitlab"
+        )
 
 
 def _existing_workflow() -> LocalWorkflow:

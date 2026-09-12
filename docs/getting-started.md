@@ -107,6 +107,12 @@ machinist status T1
 machinist integrate T1
 ```
 
+**Unreleased:** Completion output supplies the next activity and a command
+using your saved Task ID. Read the Spec before copying its exact Approval
+command, and inspect the candidate and Review report before integration.
+Successful integration reports completion and presents publication as optional,
+with an explicit `--provider github` or `--provider gitlab` command.
+
 First start uses configured Harness profiles and required Verification Gates
 when present, otherwise it discovers an installed Harness with support for
 Spec, Execute, and Review and a manifest-backed verification command. It writes
@@ -284,21 +290,45 @@ local alternative.
 For the local journey, use `machinist start` as shown above. The following
 commands create Tasks for the existing GitHub integration.
 
-Create and lint a focused Task before paying for agent work:
+Create a focused Task; creation validates the body before opening the issue:
 
 ```sh
 machinist task new --title "Make authentication recovery actionable"
-machinist task lint 7
-machinist task new --title "Add export recovery" --dispatch
 ```
 
 The managed form captures objective, acceptance checkboxes, constraints,
 verification, and context. `task new` creates an unlabeled issue by default;
-`--dispatch` applies `agent-task` only after the same local lint passes. With
-`github.spec_source: local`, start one GitHub watcher pass:
+the unreleased completion guidance prints the next command using the created
+issue. With `github.spec_source: local`, generate its Spec directly:
 
 ```sh
-machinist watch --once
+machinist spec 7
+```
+
+With `github.spec_source: github-actions`, the completion instead prints a
+`gh issue edit` command with the issue URL and configured trigger label to
+start hosted Spec generation. Follow it with the printed `machinist explain 7`
+command to check progress.
+
+Add `--dispatch` during creation to apply the trigger label after validation:
+
+```sh
+machinist task new --title "Add export recovery" --dispatch
+```
+
+With `github.spec_source: local`, the completion points to one watcher pass
+to process queued Tasks:
+
+```sh
+machinist watch --once -v
+```
+
+If a watcher is already running, use `machinist explain 7` to check progress.
+With `github.spec_source: github-actions`, the hosted workflow owns Spec
+generation. Follow the printed command to check the issue while it runs:
+
+```sh
+machinist explain 7
 ```
 
 Use `--body-file task.md` or `--body-file -` on `machinist task new` for file
@@ -306,6 +336,7 @@ or stdin input. Invalid input and failed creation preserve a draft and print a
 recovery command. Required sections accept `##` and GitHub issue forms' `###`
 headings; deeper headings stay within their field. Objectives need at least six
 words, and acceptance checkboxes cannot be empty or placeholder text.
+Use `machinist task lint 7` to recheck an issue after editing its body.
 
 Or address a specific issue directly:
 
@@ -319,6 +350,8 @@ commit, push, or PR. The normal command reads issue 7, provisions an isolated
 workspace, runs the harness in its spec mode, rejects repository mutations,
 writes `.machinist/specs/issue-7-spec.md`, commits and pushes `agent/issue-7`,
 and opens a draft PR.
+Its completion output points to the draft PR for human Spec review and prints
+`machinist approve --issue 7` as the action to take after reading it.
 
 ## Review and approve
 
@@ -359,6 +392,7 @@ visible without trusted SHA Evidence, as can happen briefly on the manual-label
 path.
 
 Wait for `machinist explain 7` to report `approved` before starting Execute.
+The unreleased Approval completion prints that check and explains the wait.
 The command reads the legacy GitHub pipeline even when this checkout also has
 local Tasks; plain `machinist status` selects local Tasks in that case.
 
@@ -412,8 +446,9 @@ When `review.enabled` is true, Execute leaves the implementation draft. Review
 checks the exact delivered head in read-only mode against the approved Spec,
 diff, and verification evidence; it posts versioned structured findings and
 then marks the PR ready. Findings are advisory in this release: they do not
-trigger an autonomous fix or merge. If Review fails or the head changes, the
-PR stays draft:
+trigger an autonomous fix or merge. Successful Review prints a command to open
+the PR so you can inspect its diff and report before deciding whether to merge.
+If Review fails or the head changes, the PR stays draft:
 
 ```sh
 machinist review 42

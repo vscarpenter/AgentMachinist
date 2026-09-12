@@ -137,5 +137,7 @@ def _dispatch_priority(row: StatusRow) -> int:
     return transition_for(row.state, issue=row.issue_number).priority
 
 
-def next_action_for_status(row: StatusRow) -> str | None:
-    return transition_for(row.state, issue=row.issue_number).next_action
+def next_action_for_status(row: StatusRow, *, spec_source: str = "local") -> str | None:
+    return transition_for(
+        row.state, issue=row.issue_number, spec_source=spec_source
+    ).next_action

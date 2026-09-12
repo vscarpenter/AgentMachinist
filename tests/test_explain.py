@@ -3,7 +3,7 @@
 from machinist.cancellation import CancellationStore
 from machinist.config import MachinistConfig
 from machinist.explain import explain_task
-from machinist.github import PullRequest
+from machinist.github import Issue, PullRequest
 from machinist.lifecycle import Phase, TaskLifecycle
 
 
@@ -91,3 +91,48 @@ def test_explain_rejects_issue_not_in_open_pipeline(tmp_path):
             lifecycle=TaskLifecycle(tmp_path / "runs"),
             cancellation=CancellationStore(tmp_path / "runs"),
         )
+
+
+def test_explain_hosted_spec_waits_for_actions_instead_of_local_dispatch(tmp_path):
+    class PendingSpecGitHub(FakeGitHub):
+        def issues_with_label(self, label):
+            return [
+                Issue(
+                    number=42,
+                    title="Explain pending hosted Spec",
+                    body="Generate the configured hosted Spec.",
+                    url="https://github.com/x/y/issues/42",
+                )
+            ]
+
+        def open_machinist_prs(self, prefix):
+            return []
+
+    explanation = explain_task(
+        42,
+        MachinistConfig.model_validate({"github": {"spec_source": "github-actions"}}),
+        PendingSpecGitHub(),
+        lifecycle=TaskLifecycle(tmp_path / "runs"),
+        cancellation=CancellationStore(tmp_path / "runs"),
+    ).to_dict()
+
+    assert explanation["state"] == "awaiting spec"
+    assert explanation["next_action"] == "machinist explain 42"
+    assert explanation["dispatch"]["spec_source"] == "github-actions"
+
+
+def test_explain_pending_approval_checks_progress_without_resubmitting(tmp_path):
+    class PendingApprovalGitHub(FakeGitHub):
+        def approval_sha(self, number):
+            return None
+
+    explanation = explain_task(
+        42,
+        MachinistConfig(),
+        PendingApprovalGitHub(),
+        lifecycle=TaskLifecycle(tmp_path / "runs"),
+        cancellation=CancellationStore(tmp_path / "runs"),
+    ).to_dict()
+
+    assert explanation["state"] == "approval pending"
+    assert explanation["next_action"] == "machinist explain 42"

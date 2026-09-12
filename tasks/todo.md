@@ -882,3 +882,27 @@ publish the prepared package to PyPI.
 Blockers: branch protection on `main` still requires two status contexts the CI
 matrix no longer emits (`test (ubuntu-latest)`, `test (macos-latest)`), so every
 merge needs `--admin` until the required-checks list is replaced with `CI gate`.
+
+## CLI completion guidance (2026-09-12)
+
+- [x] Inspect the current local and GitHub journeys and write `cli-guidance-plan.md`.
+- [x] Add failing contracts before completion and status guidance changes.
+- [x] Print configured next commands after issue creation, Spec, and Approval.
+- [x] Guide human review, one-pass watcher completion, and optional publication.
+- [x] Preserve dispatch eligibility, exact-SHA Approval, and structured output.
+- [x] Update user documentation and resolve independent review findings.
+- [x] Complete the final canonical verification gate.
+
+### Resuming From Here
+
+Done: completion guidance, documentation, and independent review are complete.
+The canonical gate passed all 1,528 tests at 88.15% coverage, workflow projection,
+formatting, lint, types, wheel and source builds, and clean package installation
+checks. The live CLI rehearsal also passed with the deterministic fake Harness.
+No new commands, configuration, or execution controls were introduced.
+
+Next: review the local change for eventual publication; no implementation work
+remains. The earlier interrupted verification run was superseded by the complete
+passing gate.
+
+Blockers: none. Publication and release remain separate operations.

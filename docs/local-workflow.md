@@ -121,6 +121,15 @@ changed candidate, or dirty checkout stops integration. Intent is recorded
 before the update so a retry can reconcile an interrupted integration without
 silently discarding edits. The command does not push or merge a remote PR/MR.
 
+**Unreleased completion guidance:** Local status and completion receipts name
+the next human activity and supply commands with the saved Task ID and exact
+Spec SHA where needed. The short path is `start`, read and approve the Spec, inspect the
+candidate and Review report through `status T1`, then `integrate T1`.
+After integration, the CLI reports that local work is complete and offers
+optional publication commands with `--provider github` or `--provider gitlab`.
+Choose one only when you want to share the candidate. Text guidance is kept
+out of JSON output; the existing structured fields remain available.
+
 ## Optional local readiness
 
 **New in 0.15.0:** `machinist doctor --local` adds an optional readiness check.

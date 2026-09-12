@@ -74,8 +74,18 @@ machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 ```
 
 Approval continues implementation, verification, and independent Review. Use
-`machinist status T1` to find the report and diff; inspect them before running
-`machinist integrate T1`.
+status to find the report and candidate, inspect the report and diff, then
+integrate the reviewed change:
+
+```sh
+machinist status T1
+# Read the report and inspect the candidate diff before accepting it.
+machinist integrate T1
+```
+
+**Unreleased:** Completion output explains the next activity and includes a
+command using your Task or issue ID. Local integration reports completion;
+publication is an optional follow-up with an explicit forge selection.
 
 First start reuses applicable root settings, discovering an installed Harness
 and verification command when those settings are absent. Its local
@@ -184,6 +194,16 @@ Choose `github-actions` and run `machinist sync-workflows` if CI should own that
 phase instead. Exactly one source is active, preventing duplicate spec runs.
 Managed CI installs the selected Spec adapter and reads its declared secret
 name; built-ins support Claude Code, Codex, OpenCode, and Pi.
+
+Create a focused issue with `machinist task new --title "Handle an invalid
+timezone without crashing"`. The unreleased completion guidance points to
+`machinist spec 57` for local Spec generation, or a command applying the
+configured trigger label when GitHub Actions owns Spec generation. Add
+`--dispatch` during creation to apply that label immediately; the next command
+processes queued Tasks with `machinist watch --once -v` for local dispatch, or
+checks hosted Spec progress with `machinist explain 57`. The CLI uses your
+actual issue number. Once the Spec is ready, read its draft PR and follow the
+printed Approval command.
 
 Approval is bound to the exact PR head commit. Use either:
 

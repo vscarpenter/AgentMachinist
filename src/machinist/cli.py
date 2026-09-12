@@ -23,6 +23,7 @@ from machinist.config import (
     ConfigError,
     MachinistConfig,
     NotificationEvent,
+    SpecSource,
     load_config,
     strict_yaml_load,
 )
@@ -103,7 +104,12 @@ from machinist.phases.execute import (
 )
 from machinist.phases.review import ReviewPhaseError, run_review_phase
 from machinist.phases.spec import SpecPhaseError, preview_spec_phase, run_spec_phase
-from machinist.phases.status import StatusRow, next_action_for_status, pipeline_status
+from machinist.phases.status import (
+    StatusRow,
+    _issue_number_from_branch,
+    next_action_for_status,
+    pipeline_status,
+)
 from machinist.phases.watch import WatchResult, WatchState, plan_watch_tasks, watch_once
 from machinist.portfolio import (
     DEFAULT_REGISTRY_PATH,
@@ -842,6 +848,12 @@ def _print_task_explanation(result: TaskExplanation) -> None:
     click.echo(f"Issue #{result.issue}: {result.state}")
     click.echo(f"  {result.url}")
     click.echo(f"  Next: {result.next_action or 'Human review or no action required'}")
+    if result.state == "awaiting approval":
+        click.echo(
+            "  If you already requested Approval, wait for the workflow "
+            "instead of submitting it again. Check progress:\n"
+            f"    machinist explain {result.issue}"
+        )
     dispatch = result.dispatch
     managed = "managed" if dispatch["managed_workflows"] else "external"
     click.echo(
@@ -1181,8 +1193,35 @@ def task_new(title: str, dispatch: bool, body_file: str | None = None) -> None:
                 f"Resume dispatch: {command}\nDraft saved: {draft}"
             ) from exc
         click.echo(f"Dispatched with label {config.github.labels.trigger!r}.")
+    if config.github.spec_source is SpecSource.GITHUB_ACTIONS:
+        if not dispatch:
+            command = shlex.join(
+                [
+                    "gh",
+                    "issue",
+                    "edit",
+                    issue.url,
+                    "--add-label",
+                    config.github.labels.trigger,
+                ]
+            )
+            click.echo(f"\nNext: ask GitHub Actions to generate the Spec:\n  {command}")
+            click.echo(f"Then check progress:\n  machinist explain {issue.number}")
+        else:
+            click.echo(
+                "\nNext: wait for GitHub Actions to generate the Spec. Check progress:\n"
+                f"  machinist explain {issue.number}"
+            )
+    elif dispatch:
+        click.echo(
+            "\nNext: let the watcher generate the Spec. To process eligible queued Tasks now:\n"
+            "  machinist watch --once -v\n"
+            f"If the watcher is already running, check this Task:\n  machinist explain {issue.number}"
+        )
     else:
-        click.echo(f"Next: machinist task lint {issue.number}")
+        click.echo(
+            f"\nNext: generate the Spec for this Task:\n  machinist spec {issue.number}"
+        )
 
 
 def _prompt_task_body() -> str:
@@ -1563,6 +1602,16 @@ def approve(
         f"Requested approval for PR #{pr.number} at {pr.head_sha[:12]}. "
         "The approval workflow will verify the current head and record Evidence."
     )
+    issue = _issue_number_from_branch(pr.branch, config.workspace.branch_prefix)
+    command = (
+        f"machinist explain {issue}"
+        if issue is not None
+        else shlex.join(["gh", "pr", "view", pr.url, "--web"])
+    )
+    click.echo(
+        "\nNext: Wait for the approval workflow before Execute. "
+        f"Check for the approved state:\n  {command}"
+    )
 
 
 @main.command()
@@ -1736,18 +1785,13 @@ def spec(
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
-    prefix = "Revised draft" if revise else "Draft"
-    click.echo(f"{prefix} PR #{pr.number}: {pr.url}")
-    spec_sha = pr.head_sha
-    approval_hint = (
-        "Review the spec, then approve with "
-        f"'machinist approve --issue {issue_number}' or the "
-        f"'{config.github.labels.approved}' label"
+    _report_phase_outcome(
+        config,
+        Phase.SPEC,
+        issue_number,
+        pr,
+        verb="Revised draft" if revise else "Draft",
     )
-    if isinstance(spec_sha, str):
-        approval_hint += f", or comment '/machinist-execute {spec_sha}'"
-    click.echo(f"{approval_hint}.")
-    _report_phase_outcome(config, Phase.SPEC, issue_number, pr, notify_only=True)
 
 
 @main.command()
@@ -1852,19 +1896,25 @@ def watch(
     def dispatch_spec(issue_number: int):
         click.echo(f"Dispatching Spec Task Run for issue #{issue_number}...")
         pr = dispatcher.run_spec(issue_number)
-        _report_phase_outcome(config, Phase.SPEC, issue_number, pr, notify_only=True)
+        _report_phase_outcome(
+            config, Phase.SPEC, issue_number, pr, notify_only=not once
+        )
         return pr
 
     def dispatch_execute(issue_number: int):
         click.echo(f"Dispatching Execute Task Run for issue #{issue_number}...")
         pr = dispatcher.run_execute(issue_number)
-        _report_phase_outcome(config, Phase.EXECUTE, issue_number, pr, notify_only=True)
+        _report_phase_outcome(
+            config, Phase.EXECUTE, issue_number, pr, notify_only=not once
+        )
         return pr
 
     def dispatch_review(issue_number: int):
         click.echo(f"Dispatching Review Task Run for issue #{issue_number}...")
         pr = dispatcher.run_review(issue_number)
-        _report_phase_outcome(config, Phase.REVIEW, issue_number, pr, notify_only=True)
+        _report_phase_outcome(
+            config, Phase.REVIEW, issue_number, pr, notify_only=not once
+        )
         return pr
 
     state = WatchState()
@@ -2121,13 +2171,19 @@ def _report_phase_outcome(
 ) -> None:
     """Render and notify one Phase outcome the same way from every command.
 
-    `watch` prints its own event lines, so it asks for notifications only.
+    Continuous `watch` prints its own event lines and asks for notifications only.
+    A foreground `watch --once` also shows completion guidance.
     An Execute outcome is "ready" only when Review is disabled; with Review
     enabled the PR stays draft and the next action is the Review command.
     """
     if phase is Phase.SPEC:
         if not notify_only:
-            click.echo(f"Draft PR #{pr.number}: {pr.url}")
+            prefix = "Revised draft" if verb == "Revised draft" else "Draft"
+            click.echo(f"{prefix} PR #{pr.number}: {pr.url}")
+            click.echo(
+                "\nNext: Read the Spec in the draft PR. If it matches your intent:\n"
+                f"  machinist approve --issue {issue}"
+            )
         _deliver_notification(
             config,
             NotificationEvent.SPEC_READY,
@@ -2153,6 +2209,11 @@ def _report_phase_outcome(
                 f"PR #{pr.number} advisory review complete{findings}; "
                 f"ready for human review: {pr.url}"
             )
+        command = shlex.join(["gh", "pr", "view", pr.url, "--web"])
+        click.echo(
+            "\nNext: inspect the diff, verification, and any Review findings "
+            f"before deciding whether to merge:\n  {command}"
+        )
     _deliver_notification(
         config,
         NotificationEvent.PR_READY,
@@ -2715,7 +2776,8 @@ def status(
                 state=row["state"],
                 url=row["url"],
                 issue_number=row["issue_number"],
-            )
+            ),
+            spec_source=config.github.spec_source.value,
         )
         if next_action is not None:
             click.echo(f"      Next: {next_action}")
@@ -2775,7 +2837,9 @@ def _watch_status(interval: float, *, as_json: bool) -> None:
             else:
                 if not first and sys.stdout.isatty():
                     click.clear()
-                _render_status_snapshot(snapshot)
+                _render_status_snapshot(
+                    snapshot, spec_source=config.github.spec_source.value
+                )
             first = False
     except KeyboardInterrupt:
         click.echo("status watch stopped.")
@@ -2783,7 +2847,9 @@ def _watch_status(interval: float, *, as_json: bool) -> None:
         raise click.ClickException(str(exc)) from exc
 
 
-def _render_status_snapshot(snapshot: StatusSnapshot) -> None:
+def _render_status_snapshot(
+    snapshot: StatusSnapshot, *, spec_source: str = "local"
+) -> None:
     click.echo(f"Pipeline at {snapshot.observed_at}")
     if not snapshot.rows:
         click.echo("  No open pipeline items.")
@@ -2792,7 +2858,7 @@ def _render_status_snapshot(snapshot: StatusSnapshot) -> None:
         kind = "issue" if row["kind"] == "issue" else "PR"
         click.echo(f"  {kind} #{row['number']}: {row['state']} · {row['title']}")
         status_row = StatusRow(**row)
-        action = next_action_for_status(status_row)
+        action = next_action_for_status(status_row, spec_source=spec_source)
         if action:
             click.echo(f"    Next: {action}")
 
