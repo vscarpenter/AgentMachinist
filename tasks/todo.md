@@ -906,3 +906,15 @@ remains. The earlier interrupted verification run was superseded by the complete
 passing gate.
 
 Blockers: none. Publication and release remain separate operations.
+
+## Documentation directory review (2026-09-12)
+
+- [x] Review all 26 files under `docs/` against the current implementation.
+- [x] Correct operating guides, HTML wording, and source-only release labels.
+- [x] Preserve historical plans with current-status notes; verify all four ADRs.
+- [x] Verify documentation tests, CLI/config examples, and rendered HTML guides.
+- [x] Record the complete inventory in `docs-review-2026-09-12.md`.
+
+Done: all documentation review slices are complete, with 32 documentation tests
+passing and browser checks covering all five HTML pages. Production code was
+unchanged. Publication and release remain separate operations.

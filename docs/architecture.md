@@ -4,10 +4,10 @@ AgentMachinist coordinates Git, a coding Harness, and the repository's
 verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
-deployment remain outside the controller. This document covers AgentMachinist
-0.15.0. The 0.14.0 release added the local workflow and GitLab collaboration;
-0.15.0 adds local readiness, exact remote-base validation, and bounded
-diagnostics.
+deployment remain outside the controller. This document describes the current
+implementation. The 0.14.0 release added the local workflow and GitLab
+collaboration; 0.15.0 added local readiness, exact remote-base validation, and
+bounded diagnostics.
 
 ## Ownership
 
@@ -75,7 +75,7 @@ See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
 
 ## Deep policy seams
 
-**New in 0.15.0:** `local_doctor.py` adds optional
+`local_doctor.py` supplies optional
 `machinist doctor --local` using the read-only `local_setup.py` configuration
 resolver shared with `start`. Saved local settings take precedence; first-run
 discovery is previewed without adoption. It combines local Git/author/checkout
@@ -84,8 +84,7 @@ existing doctor report contract. It creates no Task, Claim, Workshop, runtime
 file, configuration, exclusion, or ref and makes no model, forge, or update
 request by default. Explicit `--run-gates` reuses `verification.py` in the
 controller checkout, where commands may write or download; this does not prove
-the isolated baseline. Plain `doctor` keeps its GitHub setup behavior. These
-additions are not included in the published 0.14.0 package.
+the isolated baseline. Plain `doctor` keeps its GitHub setup behavior.
 
 The controller keeps one authoritative implementation for each policy that can
 change custody, spend Harness time, or interpret durable state:
@@ -212,6 +211,10 @@ neither recovery flag is supplied. Foreground
 `machinist retry --task T1 --phase execute` immediately resumes retained edits
 by default; `--fresh` selects a new Workshop. Successful committed work is
 reconciled from Evidence rather than repeating the Harness or successful Gates.
+Local Execute resume also requires the retained bytes to match the failure
+checkpoint and the Task, input SHA, Verification, limits, and instructions to
+match its saved request. Changes to those inputs require a fresh attempt;
+manually editing a retained local Workshop is not a supported resume path.
 
 Cancellation requests and legacy watcher queue controls are separate durable
 records. Local cancellation is namespaced under `.machinist/runs/local/` and
@@ -296,6 +299,18 @@ Run construction.
 claiming Phase 1. `sync-workflows` deterministically projects config and the
 installed package version into managed workflow files; `--check` and `doctor`
 report drift without writing.
+Managed ownership markers also prevent synchronization from replacing or
+removing modified or unrecognized workflow files. Review and preserve such
+edits before restoring a recognized projection and synchronizing.
+
+**Unreleased source checkout:** expanded command completion guidance lives in
+`cli.py` and `local_cli.py`. It names the
+next action for the completed operation: local Spec generation or hosted
+dispatch after issue creation, exact human Approval after Spec, independent
+Review after Execute when enabled, and human inspection after Review. A
+foreground `watch --once` prints the same Phase receipts. Local status adds
+optional forge publication commands after local integration.
+These suggestions do not dispatch the next command or grant Approval.
 
 Watcher admission combines durable queue pause/deferral state, optional allowed
 hours, optional daily Task Run/runtime budgets, and a per-pass maximum.
@@ -311,7 +326,7 @@ independently; one missing or corrupt repository does not erase healthy
 repository results. It does not include foreground `T1` records. A checkout with
 local configuration routes default `status` to local Tasks; `runs`, `inspect`,
 `explain`, plain `doctor`, `clean`, and aggregate reports retain legacy scope.
-The 0.15.0 candidate's `doctor --local` selects readiness for the local workflow.
+`doctor --local` selects readiness for the local workflow.
 `config` defaults to root `machinist.yaml`, with `--path` required to inspect or
 change the foreground local configuration.
 
@@ -319,8 +334,9 @@ On macOS, the managed service is one per-repository LaunchAgent. It schedules
 `machinist watch --once`, sets the repository working directory, uses an
 absolute controller executable, and retains stdout/stderr under
 `.machinist/runs/service/`. Each completed pass atomically records a heartbeat
-used by `service status`; lifecycle actions refuse an active Task Claim unless
-the operator explicitly forces termination. Stop preserves the plist;
+used by `service status`. Install, restart, stop, and uninstall refuse an active
+legacy issue Task Claim unless `--force` is supplied; `service start` starts an
+installed watcher without replacing an active process. Stop preserves the plist;
 uninstall removes only the managed plist and retains logs. A locked, atomically
 replaced, bounded ledger under `.machinist/runs` deduplicates successful
 notification deliveries across one-shot watcher processes for 24 hours;

@@ -202,7 +202,10 @@ The default rehearsal runs the production local Phases with real Git,
 verification, Review, and explicit integration. Its fake Harness is deterministic
 and uses no model or API; it invokes no external Harness process.
 `machinist rehearse --harness` is the explicit opt-in to run configured
-profiles in the disposable repository.
+profiles in the disposable repository. It selects saved local Harness profiles
+when available, otherwise root configuration. Rehearsal uses its own fixture
+verification command, not your project's Gates or instruction overlays, so it
+does not establish that your project's isolated baseline passes.
 
 In a terminal, GitHub `onboard` walks you through the choices that matter on the first
 run, each with a one-line explanation and a safe default — `init` is the same
@@ -338,7 +341,8 @@ headings; deeper headings stay within their field. Objectives need at least six
 words, and acceptance checkboxes cannot be empty or placeholder text.
 Use `machinist task lint 7` to recheck an issue after editing its body.
 
-Or address a specific issue directly:
+For local Spec dispatch, you can address a specific issue directly without a
+trigger label:
 
 ```sh
 machinist spec 7 --dry-run
@@ -452,8 +456,11 @@ If Review fails or the head changes, the PR stays draft:
 
 ```sh
 machinist review 42
-machinist retry 42 --phase review
+machinist retry 42 --phase review --run
 ```
+
+`--run` performs the retry immediately; without it, retry only makes the failed
+Phase eligible for a later command or watcher pass.
 
 `machinist run <issue> --force` is an intentional rework path for a ready PR.
 It does not bypass immutable approval: approve that PR's current head again

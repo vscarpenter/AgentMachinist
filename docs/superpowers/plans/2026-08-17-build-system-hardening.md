@@ -8,6 +8,20 @@
 > Build and release decisions remain historical. GitHub setup is optional for
 > current local Tasks, and explicit local integration is now available.
 
+## Current status (2026-09-12)
+
+Workflow projection, checkout Spec installation, versioned wheel smoke tests,
+and distribution checks are implemented. Several details below have since
+changed: the sdist uses an explicit include allowlist; CI covers Python
+3.12–3.14 on Linux and macOS with a separate minimum-dependency job.
+`scripts/verify.sh` owns the Ruff, mypy, coverage, workflow, and package gates.
+Actions are SHA-pinned and Dependabot is configured. Release assets and a
+published-package smoke check are implemented; no TestPyPI workflow is present.
+Hosted Spec installation and
+credentials now follow the selected Harness descriptor. The unchecked steps,
+version literals, and workflow snippets below are historical. Use the
+[release procedure](../../operator-runbook.md) for current commands.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close identity drift between package version, checked-in workflows, and smoke tests; dogfood Phase 1 from this checkout; and make the next version bump a single, test-enforced process.

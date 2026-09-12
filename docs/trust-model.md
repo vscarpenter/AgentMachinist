@@ -4,8 +4,8 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-This model covers AgentMachinist 0.15.0; controls new in 0.15.0 are identified
-below.
+This model describes the current implementation. Local readiness and bounded
+diagnostic rendering were introduced in 0.15.0.
 
 ## Trusted inputs and principals
 
@@ -21,8 +21,8 @@ approval automation never checks out or executes PR-head code.
 
 ## Local Approval, integration, and publication
 
-The foreground local workflow and GitLab intake/publication are available in
-AgentMachinist 0.14.0 alongside the existing GitHub issue workflow.
+The foreground local workflow and GitLab intake/publication have been available
+since AgentMachinist 0.14.0 alongside the existing GitHub issue workflow.
 
 The local journey records an explicit human Approval tied to repository, Task,
 exact Spec SHA, actor, and time. Copying a Task record to another repository or
@@ -30,6 +30,10 @@ changing its Spec does not carry valid Approval. Local records remain editable
 by the same OS account; they are workflow Evidence, not an authentication
 boundary against hostile local processes. Forge review buttons and GitLab
 comments do not mint local Approval.
+The Unreleased source checkout expands printed next-step commands. These are
+guidance only. A Spec receipt asks the operator
+to inspect the Spec before approving; an Approval request in the GitHub
+workflow still needs the trusted workflow marker and label before Execute.
 
 Every local candidate requires at least one configured required Verification
 Gate and completed independent Review
@@ -78,8 +82,8 @@ verification, Task Run persistence, and read-only Review apply to both paths.
   owner, and repository, then checks the expected same-repository PR number,
   base, head, state, and draft status before a Phase changes it.
 - Codex read-only sandbox, Pi read-tool allowlist, and Claude plan/read-tool
-  arguments during spec generation.
-- Rejection of any dirty repository after spec generation.
+  arguments during Spec and Review.
+- Rejection of working-tree changes after Spec or Review.
 - Post-implementation checks for Harness-created commits and edits under
   `.machinist/`. Local Phases also compare controller/Workshop HEAD, branch,
   local refs, and custody. Live remote-head checks belong to legacy GitHub
@@ -176,7 +180,7 @@ Gate command entry points. By default the controller writes no Task, Workshop,
 runtime/config file, exclusion, or ref and invokes no model, forge, update
 probe, or Gate. Installed adapters and their probe commands remain trusted
 local code; a successful authentication check does not establish model access
-or quota. This option is not included in published 0.14.0.
+or quota.
 
 `machinist doctor --local --run-gates` explicitly executes configured project
 commands through the shared Verification engine in the controller checkout.

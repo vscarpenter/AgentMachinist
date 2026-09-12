@@ -8,6 +8,17 @@
 > The original GitHub-only identity, label Approval, and three-step pipeline
 > below are superseded by exact-SHA Approval, required local Review, and optional publication.
 
+## Current status (2026-09-12)
+
+The M0–M3 commands below are implemented. The current machine Phases are Spec,
+Execute, and Review; Approval is a human Gate. Legacy GitHub Approval requires
+both the label and a matching workflow-authored SHA marker. Both managed
+Approval paths check write or admin access; repository association alone is
+insufficient. Hosted Spec selects installation and credentials from the Harness
+descriptor. Tests include real local Git repositories, while Harness and forge
+calls use injected runners. Treat the schema, module map, and milestones below
+as the original design; use the linked operating guides for current contracts.
+
 **Date:** 2026-08-16
 **Status:** Approved (stack: Python + Click; spec-gen: local + CI from day one)
 

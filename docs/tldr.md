@@ -31,7 +31,8 @@ machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 ```
 
 Approval continues implementation, verification, and independent Review. Use
-`machinist status T1` to find the report and diff; inspect them before `machinist integrate T1`.
+`machinist status T1` to find the report path and exact Spec/Candidate SHAs.
+Read the report and compare those commits with `git diff` before `machinist integrate T1`.
 
 First start saves local settings in `.machinist/runs/local/config.yaml`, copying applicable root settings once.
 Inspect them with `machinist config show --path .machinist/runs/local/config.yaml`.
@@ -82,9 +83,9 @@ the selected Spec adapter's declared secret. Execute and optional Review run loc
 machinist approve --issue <issue>
 ```
 
-Wait for the managed Approval workflow to succeed and check the configured approval label on the PR.
-Use `machinist inspect <issue> --json` to confirm `github_pr` has matching full
-`approval_sha` and `head_sha`, then run:
+For the first Execute on a draft Spec PR, wait for `machinist explain <issue>`
+to report `approved`: the managed workflow must record the trusted exact-SHA
+Evidence before execution. Then run:
 
 ```sh
 machinist run <issue>

@@ -108,8 +108,18 @@ configuration; `machinist status T1 --watch --interval 2` shows changed
 snapshots. Local status does not query the forge.
 
 The candidate is retained on `<branch_prefix>task-1` (`agent/task-1` by
-default). Inspect the report at the printed path and the diff from your recorded
-base to the candidate before accepting it. To integrate it locally:
+default). Status prints the report path and commits; it does not display the
+diff. Read that report and compare the full Spec SHA with the Candidate SHA
+printed by status to inspect the implementation:
+
+```sh
+git diff <full-spec-commit-sha> <full-candidate-commit-sha>
+```
+
+Replace both placeholders with the displayed commits. This is the same diff
+used by independent Review. For an amended Task, also compare the original base
+branch with the candidate to inspect the accumulated change. To integrate the
+accepted candidate locally:
 
 ```sh
 machinist integrate T1
@@ -306,7 +316,7 @@ Local Tasks and legacy issue numbers have separate records and recovery paths:
 
 | Operation | Local Task workflow | Existing GitHub issue workflow |
 | --- | --- | --- |
-| Create | `start` with text or explicit issue import | `task new`, trigger label, then `spec` or `watch` |
+| Create | `start` with text or explicit issue import | `task new`; local Spec source: `spec` directly or trigger label plus `watch`; hosted Spec source: trigger label starts GitHub Actions |
 | Approve | `approve --task T1 --spec-sha <sha>` continues in foreground | `approve --issue 42` or `--pr 8` requests trusted workflow Evidence; wait for `explain 42` to report `approved` before the first Execute |
 | Resume | `continue T1`; failure requires `retry --task T1 --phase execute` | `retry 42 --phase execute --run --resume` explicitly reuses edits |
 | Inspect | `status T1`, `status T1 --json`, printed report | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42`, `report` for Evidence |
@@ -319,9 +329,9 @@ Local records, Phase history, configuration, and reports live under
 The Spec itself is committed at `.machinist/specs/task-1-spec.md`. Preserve
 runtime records for recovery; do not commit them or edit Task JSON manually.
 
-Plain `doctor` remains the root GitHub setup preflight; the 0.15.0 candidate's
-`doctor --local` checks local readiness as described above. `runs`, `inspect`, `explain`,
-`report`, and portfolio `status --all` read the legacy issue-run namespace under
+Plain `doctor` remains the root GitHub setup preflight;
+`doctor --local`, available since 0.15.0, checks local readiness as described
+above. `runs`, `inspect`, `explain`, `report`, and portfolio `status --all` read the legacy issue-run namespace under
 `.machinist/runs/`; they do not aggregate the nested local Task namespace.
 `status --local` is an offline view of legacy issue runs only when no local
 configuration is present. In a mixed checkout, default status selects local

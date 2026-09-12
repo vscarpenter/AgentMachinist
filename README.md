@@ -130,9 +130,9 @@ issues, amendments, recovery, and use by a solo developer or small team.
 Existing GitHub issue commands, trusted workflow Approval, and watcher operation
 remain available. Configure that integration separately:
 
-Managed workflows pin the installed controller version. Until 0.15.0 is
-published, use the released 0.14.0 controller for consumer GitHub Actions setup.
-This repository's development workflows use `github.spec_install: checkout`.
+Managed workflows pin the installed controller version. Upgrade the controller
+before regenerating them; a package upgrade does not update checked-in workflow
+files. This repository's development workflows use `github.spec_install: checkout`.
 
 ```sh
 cd your-repository

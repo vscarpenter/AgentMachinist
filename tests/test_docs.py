@@ -738,22 +738,27 @@ def test_source_only_examples_are_isolated_until_published():
     )
     assert published
     pending = version != published["version"]
-    for path in (_FIRST_RUN_GUIDE_PATH, _JOB_CARD_PATH):
+    unreleased = re.search(
+        r"^## Unreleased\s*\n(.*?)(?=^## |\Z)",
+        _CHANGELOG_PATH.read_text(),
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    for path in sorted((_REPO_ROOT / "docs").glob("*.html")):
         html = path.read_text().lower()
         blocks = re.findall(
             r'<(?:details|p)\b[^>]*data-release="unreleased"[^>]*>(.*?)</(?:details|p)>',
             html,
             flags=re.DOTALL,
         )
-        if not pending:
-            assert not blocks, path
-            continue
-        assert blocks, path
+        if pending and path in (_FIRST_RUN_GUIDE_PATH, _JOB_CARD_PATH):
+            assert blocks, path
+        if blocks:
+            # Source changes can precede a version bump. They must still be
+            # recorded in the changelog and visibly labeled for source users.
+            assert pending or (unreleased and unreleased[1].strip()), path
         for block in blocks:
             assert "source checkout" in block, path
             assert "unreleased" in block or "publication pending" in block, path
-            assert "optional" in block, path
-            assert "machinist doctor --local" in block, path
 
 
 def test_workflow_drift_advisory_is_documented_where_operators_read():
