@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 — 2026-09-12
+
+- Add completion guidance with the next activity and copyable commands for
+  issue creation, Spec review, asynchronous GitHub Approval, and completed
+  Review. Issue creation points to direct local Spec generation or the
+  configured hosted trigger label; dispatched issues point to local watcher
+  execution or hosted Spec progress as configured. One-pass watcher completion
+  includes the same guidance; continuous watcher output stays concise. Status
+  respects hosted Spec generation and explains how to wait for GitHub Approval.
+- Clarify local completion guidance from exact-SHA Approval through candidate
+  inspection and integration. Completed local integration presents publication
+  as optional, with explicit GitHub and GitLab provider commands. JSON output
+  remains structured with the existing fields.
+- Review all operating documentation, HTML guides, architecture decisions, and
+  historical plans against the current implementation. Correct command
+  examples, recovery conditions, Harness profile inheritance, and status/diff
+  inspection instructions; retain historical context with dated status notes.
 
 ## 0.15.0 — 2026-09-07
 

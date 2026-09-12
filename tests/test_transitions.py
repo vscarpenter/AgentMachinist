@@ -30,6 +30,7 @@ def record(phase: Phase, status: RunStatus, *, evidence=None) -> RunRecord:
         (PipelineState.APPROVED, 1, Phase.EXECUTE, "machinist watch --once -v"),
         (PipelineState.AWAITING_SPEC, 2, Phase.SPEC, "machinist watch --once -v"),
         (PipelineState.AWAITING_APPROVAL, 3, None, "machinist approve --issue 42"),
+        (PipelineState.APPROVAL_PENDING, 3, None, "machinist explain 42"),
         (PipelineState.SPEC_FAILED, 3, None, "machinist retry 42 --phase spec"),
         (PipelineState.IN_REVIEW, 3, None, None),
     ],
@@ -49,6 +50,35 @@ def test_issue_transition_projects_retryable_back_to_awaiting_spec():
 
     assert decision.state is PipelineState.AWAITING_SPEC
     assert decision.dispatch_phase is Phase.SPEC
+
+
+def test_hosted_spec_guidance_checks_progress_without_changing_dispatch():
+    decision = transition_for(
+        PipelineState.AWAITING_SPEC, issue=42, spec_source="github-actions"
+    )
+
+    assert decision.state is PipelineState.AWAITING_SPEC
+    assert decision.priority == 2
+    assert decision.dispatch_phase is Phase.SPEC
+    assert decision.next_action == "machinist explain 42"
+
+
+def test_hosted_guidance_does_not_change_local_execute_dispatch():
+    decision = transition_for(
+        PipelineState.APPROVED, issue=42, spec_source="github-actions"
+    )
+
+    assert decision.next_action == "machinist watch --once -v"
+    assert decision.dispatch_phase is Phase.EXECUTE
+
+
+@pytest.mark.parametrize(
+    "state", [PipelineState.AWAITING_SPEC, PipelineState.APPROVAL_PENDING]
+)
+def test_waiting_guidance_does_not_invent_an_issue_number(state):
+    decision = transition_for(state, spec_source="github-actions")
+
+    assert decision.next_action is None
 
 
 def test_issue_transition_distinguishes_running_from_interrupted_claim():
@@ -126,6 +156,50 @@ def test_local_stale_approval_always_displays_new_exact_sha(tmp_path):
     )
     assert decision.state == "awaiting approval"
     assert decision.next_action == f"machinist approve --task T1 --spec-sha {'b' * 40}"
+
+
+def test_integrated_local_task_reports_completion_without_incomplete_command(tmp_path):
+    from dataclasses import replace
+
+    from machinist.local_tasks import LocalTaskStore
+    from machinist.transitions import classify_local_task
+
+    store = LocalTaskStore(tmp_path)
+    task = store.create("Intent", "Detailed intent", "main", "a" * 40, "agent/")
+    task = replace(
+        task,
+        spec_sha="b" * 40,
+        candidate_sha="c" * 40,
+        approval={
+            "repository": task.repository,
+            "task_id": task.id,
+            "spec_sha": "b" * 40,
+        },
+        review_report={"completed": True, "reviewed_sha": "c" * 40},
+        integration={"observed_sha": "c" * 40},
+    )
+    decision = classify_local_task(
+        task,
+        records={
+            Phase.SPEC: record(Phase.SPEC, RunStatus.SUCCEEDED),
+            Phase.EXECUTE: record(
+                Phase.EXECUTE,
+                RunStatus.SUCCEEDED,
+                evidence={"approved_sha": "b" * 40, "implementation_sha": "c" * 40},
+            ),
+            Phase.REVIEW: record(
+                Phase.REVIEW,
+                RunStatus.SUCCEEDED,
+                evidence={"reviewed_sha": "c" * 40},
+            ),
+        },
+        claim_held=False,
+    )
+
+    assert decision.state == "integrated"
+    assert (
+        decision.next_action == "Local integration complete. Publication is optional."
+    )
 
 
 def _record(status, *, phase=Phase.SPEC):

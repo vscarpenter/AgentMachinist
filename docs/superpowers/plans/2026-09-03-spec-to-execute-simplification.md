@@ -8,6 +8,17 @@
 > The legacy GitHub simplification is retained. ADR 0003 now permits explicit
 > local integration; historical worker instructions and scratchpad references below are archival.
 
+## Current status (2026-09-12)
+
+The 0.13.0 implementation includes workflow-authored Approval, shared Harness
+arguments, Workshop-owned custody, dispatcher-owned Spec preview, reduced
+Evidence, required Claims, and `retry --run` with the shared outcome renderer.
+Task 10's proposed `watch --dry-run` fold remains deferred: dry-run admission
+still has a separate CLI path. The later
+[resume-push and Approval plan](2026-09-03-resume-push-and-approve-flags.md)
+shipped in 0.14.0. The unchecked steps, line numbers, and scratchpad references
+below describe the original plan, not a current implementation worklist.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the top recommendation and every Strong card of the 2026-09-03 adversarial simplification review of the Spec → Approval → Execute path.

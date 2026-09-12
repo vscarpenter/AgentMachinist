@@ -36,10 +36,11 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.15.0 includes the guided local workflow, optional GitHub/GitLab
-intake and publication, the existing GitHub issue automation, and optional local
-readiness with hardened remote-base validation and diagnostics. Install it, then
-change into the repository you want to work on:
+AgentMachinist 0.16.0 includes the guided local workflow, optional GitHub/GitLab
+intake and publication, existing GitHub issue automation, and next-step CLI
+guidance. Local readiness, exact remote-base validation, and bounded diagnostics
+introduced in 0.15.0 remain available. Install it, then change into the repository
+you want to work on:
 
 ```sh
 uv tool install agentmachinist
@@ -53,9 +54,10 @@ uv tool upgrade agentmachinist
 machinist --version
 ```
 
-Confirm that `machinist --version` reports 0.15.0 or newer before using
-`machinist doctor --local`. For contributing to AgentMachinist, an editable
-installation is optional: run `uv tool install --editable .` from its source
+Confirm that `machinist --version` reports 0.16.0 or newer for the completion
+guidance described here. `machinist doctor --local` is available since 0.15.0.
+For contributing to AgentMachinist, an editable installation is optional:
+run `uv tool install --editable .` from its source
 checkout, then enter the repository you want to change. An editable install
 tracks that checkout instead of the published package; use its Git and `uv sync`
 workflow to update it.
@@ -106,6 +108,12 @@ machinist status T1
 # Inspect the candidate diff and report, then:
 machinist integrate T1
 ```
+
+**New in 0.16.0:** Completion output supplies the next activity and a command
+using your saved Task ID. Read the Spec before copying its exact Approval
+command, and inspect the candidate and Review report before integration.
+Successful integration reports completion and presents publication as optional,
+with an explicit `--provider github` or `--provider gitlab` command.
 
 First start uses configured Harness profiles and required Verification Gates
 when present, otherwise it discovers an installed Harness with support for
@@ -196,7 +204,10 @@ The default rehearsal runs the production local Phases with real Git,
 verification, Review, and explicit integration. Its fake Harness is deterministic
 and uses no model or API; it invokes no external Harness process.
 `machinist rehearse --harness` is the explicit opt-in to run configured
-profiles in the disposable repository.
+profiles in the disposable repository. It selects saved local Harness profiles
+when available, otherwise root configuration. Rehearsal uses its own fixture
+verification command, not your project's Gates or instruction overlays, so it
+does not establish that your project's isolated baseline passes.
 
 In a terminal, GitHub `onboard` walks you through the choices that matter on the first
 run, each with a one-line explanation and a safe default — `init` is the same
@@ -284,21 +295,45 @@ local alternative.
 For the local journey, use `machinist start` as shown above. The following
 commands create Tasks for the existing GitHub integration.
 
-Create and lint a focused Task before paying for agent work:
+Create a focused Task; creation validates the body before opening the issue:
 
 ```sh
 machinist task new --title "Make authentication recovery actionable"
-machinist task lint 7
-machinist task new --title "Add export recovery" --dispatch
 ```
 
 The managed form captures objective, acceptance checkboxes, constraints,
 verification, and context. `task new` creates an unlabeled issue by default;
-`--dispatch` applies `agent-task` only after the same local lint passes. With
-`github.spec_source: local`, start one GitHub watcher pass:
+the completion guidance prints the next command using the created
+issue. With `github.spec_source: local`, generate its Spec directly:
 
 ```sh
-machinist watch --once
+machinist spec 7
+```
+
+With `github.spec_source: github-actions`, the completion instead prints a
+`gh issue edit` command with the issue URL and configured trigger label to
+start hosted Spec generation. Follow it with the printed `machinist explain 7`
+command to check progress.
+
+Add `--dispatch` during creation to apply the trigger label after validation:
+
+```sh
+machinist task new --title "Add export recovery" --dispatch
+```
+
+With `github.spec_source: local`, the completion points to one watcher pass
+to process queued Tasks:
+
+```sh
+machinist watch --once -v
+```
+
+If a watcher is already running, use `machinist explain 7` to check progress.
+With `github.spec_source: github-actions`, the hosted workflow owns Spec
+generation. Follow the printed command to check the issue while it runs:
+
+```sh
+machinist explain 7
 ```
 
 Use `--body-file task.md` or `--body-file -` on `machinist task new` for file
@@ -306,8 +341,10 @@ or stdin input. Invalid input and failed creation preserve a draft and print a
 recovery command. Required sections accept `##` and GitHub issue forms' `###`
 headings; deeper headings stay within their field. Objectives need at least six
 words, and acceptance checkboxes cannot be empty or placeholder text.
+Use `machinist task lint 7` to recheck an issue after editing its body.
 
-Or address a specific issue directly:
+For local Spec dispatch, you can address a specific issue directly without a
+trigger label:
 
 ```sh
 machinist spec 7 --dry-run
@@ -319,6 +356,8 @@ commit, push, or PR. The normal command reads issue 7, provisions an isolated
 workspace, runs the harness in its spec mode, rejects repository mutations,
 writes `.machinist/specs/issue-7-spec.md`, commits and pushes `agent/issue-7`,
 and opens a draft PR.
+Its completion output points to the draft PR for human Spec review and prints
+`machinist approve --issue 7` as the action to take after reading it.
 
 ## Review and approve
 
@@ -359,6 +398,7 @@ visible without trusted SHA Evidence, as can happen briefly on the manual-label
 path.
 
 Wait for `machinist explain 7` to report `approved` before starting Execute.
+The Approval completion prints that check and explains the wait.
 The command reads the legacy GitHub pipeline even when this checkout also has
 local Tasks; plain `machinist status` selects local Tasks in that case.
 
@@ -412,13 +452,17 @@ When `review.enabled` is true, Execute leaves the implementation draft. Review
 checks the exact delivered head in read-only mode against the approved Spec,
 diff, and verification evidence; it posts versioned structured findings and
 then marks the PR ready. Findings are advisory in this release: they do not
-trigger an autonomous fix or merge. If Review fails or the head changes, the
-PR stays draft:
+trigger an autonomous fix or merge. Successful Review prints a command to open
+the PR so you can inspect its diff and report before deciding whether to merge.
+If Review fails or the head changes, the PR stays draft:
 
 ```sh
 machinist review 42
-machinist retry 42 --phase review
+machinist retry 42 --phase review --run
 ```
+
+`--run` performs the retry immediately; without it, retry only makes the failed
+Phase eligible for a later command or watcher pass.
 
 `machinist run <issue> --force` is an intentional rework path for a ready PR.
 It does not bypass immutable approval: approve that PR's current head again

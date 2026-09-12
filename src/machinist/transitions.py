@@ -92,7 +92,7 @@ def classify_local_task(
         )
     if task.integration and task.integration.get("observed_sha") == task.candidate_sha:
         return LocalTransitionDecision(
-            "integrated", f"machinist publish {task.id} (optional)"
+            "integrated", "Local integration complete. Publication is optional."
         )
     return LocalTransitionDecision(
         "ready to integrate", f"machinist integrate {task.id}"
@@ -185,6 +185,7 @@ def transition_for(
     state: PipelineState | str,
     *,
     issue: int | None = None,
+    spec_source: str = "local",
 ) -> TransitionDecision:
     """Return canonical behavior for one pipeline state."""
     try:
@@ -193,7 +194,7 @@ def transition_for(
         raise ValueError(f"unknown pipeline state {state!r}") from exc
     dispatch_phase = _DISPATCH_PHASE.get(resolved)
     priority = _priority(resolved)
-    action = _next_action(resolved, issue)
+    action = _next_action(resolved, issue, spec_source=spec_source)
     return TransitionDecision(resolved, priority, dispatch_phase, action)
 
 
@@ -351,12 +352,17 @@ def _priority(state: PipelineState) -> int:
     return 3
 
 
-def _next_action(state: PipelineState, issue: int | None) -> str | None:
+def _next_action(
+    state: PipelineState, issue: int | None, *, spec_source: str
+) -> str | None:
+    if state is PipelineState.APPROVAL_PENDING or (
+        state is PipelineState.AWAITING_SPEC and spec_source == "github-actions"
+    ):
+        return None if issue is None else f"machinist explain {issue}"
     if state in {PipelineState.AWAITING_SPEC, PipelineState.APPROVED}:
         return "machinist watch --once -v"
     if state in {
         PipelineState.AWAITING_APPROVAL,
-        PipelineState.APPROVAL_PENDING,
         PipelineState.APPROVAL_STALE,
     }:
         return None if issue is None else f"machinist approve --issue {issue}"

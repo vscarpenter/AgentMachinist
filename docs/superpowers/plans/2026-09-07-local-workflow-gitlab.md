@@ -8,7 +8,19 @@
 > This completed plan records source implementation and local verification.
 > It does not establish a published release, deployed documentation, or live GitLab validation.
 
-Approved direction: [Task specification](../../../tasks/spec.md), September 7, 2026.
+## Current status (2026-09-12)
+
+The local Task workflow and GitLab issue intake/MR publication are implemented
+and recorded under 0.14.0 in the [changelog](../../../CHANGELOG.md). `start`
+stops at the saved Spec; local Approval continues Execute and mandatory
+independent Review. Integration and publication remain separate explicit
+commands. Version 0.15.0 adds optional local readiness through `doctor --local`;
+see [ADR 0004](../../adr/0004-local-readiness-and-diagnostic-boundaries.md).
+The verification totals below are the September 7 implementation snapshot.
+GitLab hosted Spec CI and remote Approval are outside the implemented scope.
+
+Approved direction: [Task specification at f1c9190](https://github.com/vscarpenter/AgentMachinist/blob/f1c91900e12158bb7d9ca5ff126fcdb53e8277f1/tasks/spec.md),
+September 7, 2026. The working `tasks/spec.md` now describes later readiness work.
 
 Completed September 7, 2026. All seven steps below are implemented and verified.
 The canonical gate passed 1,411 tests with 87.52% coverage, twenty typed modules,

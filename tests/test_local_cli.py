@@ -334,6 +334,95 @@ def test_legacy_task_new_reads_stdin_without_prompts(legacy_intake):
     assert "5 prompts" not in result.output
 
 
+@pytest.mark.parametrize("source", ["local", "github-actions"])
+@pytest.mark.parametrize("dispatch", [False, True])
+def test_new_issue_suggests_the_configured_next_activity(
+    legacy_intake, source, dispatch
+):
+    (legacy_intake.root / "machinist.yaml").write_text(
+        f"version: 1\ngithub:\n  spec_source: {source}\n"
+    )
+    labels = []
+    legacy_intake.fake.add_issue_label = lambda *args: labels.append(args)
+    result = CliRunner().invoke(
+        main,
+        ["task", "new", "--title", "Improve recovery", "--body-file", "-"]
+        + (["--dispatch"] if dispatch else []),
+        input=legacy_intake.body,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Next:" in result.output
+    assert "machinist task lint" not in result.output
+    assert len(legacy_intake.created) == 1
+    assert labels == ([(42, "agent-task")] if dispatch else [])
+    if source == "local":
+        command = "machinist watch --once -v" if dispatch else "machinist spec 42"
+        assert command in result.output
+    else:
+        assert "GitHub Actions" in result.output
+        assert "machinist explain 42" in result.output
+        assert "machinist spec 42" not in result.output
+        assert "machinist watch" not in result.output
+        if not dispatch:
+            assert (
+                "gh issue edit https://github.com/example/project/issues/42 "
+                "--add-label agent-task"
+            ) in result.output
+
+
+def test_hosted_dispatch_hint_quotes_custom_label_and_binds_issue_url(legacy_intake):
+    label = "team: ready for spec"
+    (legacy_intake.root / "machinist.yaml").write_text(
+        "version: 1\ngithub:\n  spec_source: github-actions\n"
+        f"  labels:\n    trigger: {json.dumps(label)}\n"
+    )
+    result = CliRunner().invoke(
+        main,
+        ["task", "new", "--title", "Improve recovery", "--body-file", "-"],
+        input=legacy_intake.body,
+    )
+
+    assert result.exit_code == 0, result.output
+    command = next(
+        line.strip() for line in result.output.splitlines() if "gh issue edit" in line
+    )
+    assert shlex.split(command) == [
+        "gh",
+        "issue",
+        "edit",
+        "https://github.com/example/project/issues/42",
+        "--add-label",
+        label,
+    ]
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_integrated_status_offers_optional_complete_publication_commands(
+    local_cli, monkeypatch, as_json
+):
+    payload = {
+        "id": "T1",
+        "title": "Improve recovery",
+        "state": "integrated",
+        "next_action": "Local integration complete. Publication is optional.",
+    }
+    monkeypatch.setattr(local_cli.workflow, "status", lambda task_id: payload)
+    result = CliRunner().invoke(
+        main, ["status", "T1"] + (["--json"] if as_json else [])
+    )
+
+    assert result.exit_code == 0, result.output
+    assert local_cli.events == []
+    if as_json:
+        assert json.loads(result.output) == payload
+    else:
+        assert "Local integration complete" in result.output
+        assert "Optional" in result.output
+        assert "machinist publish T1 --provider github" in result.output
+        assert "machinist publish T1 --provider gitlab" in result.output
+
+
 def test_legacy_intake_lint_failure_retains_exact_draft(legacy_intake):
     body = "## Objective\nIncomplete task\n"
     result = CliRunner().invoke(

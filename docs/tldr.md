@@ -11,11 +11,11 @@ The controller owns Git and durable Evidence; the Harness writes the Spec, edits
 
 ## One-time setup
 
-Install AgentMachinist 0.15.0 with `uv tool install agentmachinist`, or upgrade with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
+Install AgentMachinist 0.16.0 with `uv tool install agentmachinist`, or upgrade with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
 Enter a clean named branch with an initial Git commit, configured author, an installed and authenticated Harness,
 and an executable required Verification Gate. No forge or origin is required.
 
-New in 0.15.0: optional `machinist doctor --local` checks readiness without adoption or model/forge calls.
+Available since 0.15.0: optional `machinist doctor --local` checks readiness without adoption or model/forge calls.
 `--run-gates` explicitly runs project commands in your controller checkout; they may write/download and do not prove the isolated baseline.
 
 ## First local Task
@@ -31,7 +31,8 @@ machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 ```
 
 Approval continues implementation, verification, and independent Review. Use
-`machinist status T1` to find the report and diff; inspect them before `machinist integrate T1`.
+`machinist status T1` to find the report path and exact Spec/Candidate SHAs.
+Read the report and compare those commits with `git diff` before `machinist integrate T1`.
 
 First start saves local settings in `.machinist/runs/local/config.yaml`, copying applicable root settings once.
 Inspect them with `machinist config show --path .machinist/runs/local/config.yaml`.
@@ -82,9 +83,9 @@ the selected Spec adapter's declared secret. Execute and optional Review run loc
 machinist approve --issue <issue>
 ```
 
-Wait for the managed Approval workflow to succeed and check the configured approval label on the PR.
-Use `machinist inspect <issue> --json` to confirm `github_pr` has matching full
-`approval_sha` and `head_sha`, then run:
+For the first Execute on a draft Spec PR, wait for `machinist explain <issue>`
+to report `approved`: the managed workflow must record the trusted exact-SHA
+Evidence before execution. Then run:
 
 ```sh
 machinist run <issue>

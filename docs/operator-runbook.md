@@ -1,7 +1,8 @@
 # Operator runbook
 
-AgentMachinist 0.15.0 includes the foreground local workflow, optional GitLab
-integration, and the readiness, remote-base, and diagnostic behavior below.
+This runbook describes AgentMachinist 0.16.0, including the foreground
+local workflow, optional GitLab intake/publication, and the readiness,
+remote-base, and diagnostic behavior introduced in 0.15.0.
 Install with `uv tool install agentmachinist`, or upgrade with
 `uv tool upgrade agentmachinist`. See the
 [installation instructions](getting-started.md#install) for other setups.
@@ -16,6 +17,8 @@ fetching forge state. Inspect the local report/diff before `machinist integrate 
 
 Start requires a clean named branch, initial commit, configured Git author,
 installed/authenticated Harnesses, and at least one required Verification Gate.
+Setup checks executables and Phase support; it does not probe authentication.
+Use optional `doctor --local` for the available authentication checks.
 Baseline verification runs in an isolated committed checkout before the Spec
 Harness; ignored dependencies must be prepared by the Gate command or provided
 externally. Local Review always runs.
@@ -23,7 +26,12 @@ externally. Local Review always runs.
 Failed Phases require `machinist retry --task T1 --phase execute` (or
 `--phase spec`/`--phase review`). Local retry runs immediately, clears
 cancellation, and resumes Execute edits by default; `--fresh` chooses a fresh
-Workshop. `continue T1` does not replace explicit retry or exact-SHA Approval. `machinist amend --task T1 --feedback <text>`
+Workshop. Local Execute resume requires the retained bytes to match the failure
+checkpoint. If you change the configured Gates, limits, or instructions, use
+`machinist retry --task T1 --phase execute --fresh`; those inputs invalidate
+the matching recovery checkpoint. Inspect retained local edits without changing
+them when you intend to resume. `machinist continue T1` does not replace explicit
+retry or exact-SHA Approval. `machinist amend --task T1 --feedback <text>`
 requires a completed reviewed candidate, generates a new Spec, and invalidates
 Approval. Recover a failed Phase with retry first. Local amendment cannot revise
 an initial Spec awaiting Approval; start a new Task with corrected intent if
@@ -112,7 +120,7 @@ continue reading `.machinist/runs/` issue records; they do not aggregate local
 Tasks. `status --local` reads legacy records only when local configuration is
 absent. Use `runs` and `inspect` for legacy Evidence in a mixed checkout.
 
-Plain `doctor` remains a GitHub setup preflight; the 0.15.0 candidate's `doctor --local`
+Plain `doctor` remains a GitHub setup preflight; `doctor --local`
 checks local readiness. `watch`, `queue`, service
 scheduling, admission budgets, and notifications belong to the legacy workflow;
 they do not govern foreground Tasks. `clean` manages legacy Workshops and has
@@ -124,8 +132,8 @@ stated otherwise.
 
 ## GitHub preflight
 
-Managed workflows pin the installed controller version. Until 0.15.0 is
-published, use the released 0.14.0 controller for consumer GitHub Actions setup.
+Managed workflows pin the installed controller version. Consumer repositories
+using `github.spec_install: pypi` need that exact version available on PyPI.
 This repository's development workflows use `github.spec_install: checkout`.
 
 Run from the configured repository root:
@@ -168,6 +176,16 @@ and explicitly retried.
   `machinist review <issue>` when `review.enabled: true` in root
   `machinist.yaml`. With Review disabled, Execute marks the PR ready itself;
   invoking `review` fails.
+
+**New in 0.16.0:** expanded completion output prints the next
+action and a sample command. After
+`machinist task new`, the suggestion follows `github.spec_source` and whether
+`--dispatch` was used: generate the Spec manually, process eligible Tasks with
+the watcher, add the trigger label for GitHub Actions, or wait for hosted Spec
+generation. A completed Spec points to Approval; Execute points to independent
+Review when enabled; completed delivery points to human PR inspection.
+`watch --once` prints these Phase receipts too. Follow the receipt for the
+completed operation; it does not run the suggested command automatically.
 
 GitHub `machinist approve --issue <issue>` requests Approval asynchronously.
 Before a manual `run`, wait for the managed approval workflow to succeed and

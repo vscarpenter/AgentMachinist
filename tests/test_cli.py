@@ -732,6 +732,65 @@ def test_watch_once_prints_dispatch_events(monkeypatch):
         assert "dispatch" in result.output.lower()
 
 
+@pytest.mark.parametrize("once", [True, False])
+def test_foreground_watcher_shows_the_next_approval_command(monkeypatch, once):
+    from types import SimpleNamespace
+
+    pr = PullRequest(
+        97, "Spec", "https://github.com/x/y/pull/97", "agent/issue-7", True
+    )
+    monkeypatch.setattr(
+        "machinist.cli._task_dispatcher",
+        lambda *a, **kw: SimpleNamespace(run_spec=lambda number: pr),
+    )
+    monkeypatch.setattr("machinist.cli._deliver_notification", lambda *a, **kw: None)
+    monkeypatch.setattr("machinist.cli.time.sleep", lambda seconds: None)
+    calls = []
+
+    def poll(*args, run_spec, **kwargs):
+        if calls:
+            raise KeyboardInterrupt
+        calls.append(run_spec(7))
+        return WatchResult(events=("spec: issue #7 ready",))
+
+    monkeypatch.setattr("machinist.cli.watch_once", poll)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        result = runner.invoke(main, ["watch"] + (["--once"] if once else []))
+
+    assert result.exit_code == 0, result.output
+    assert calls == [pr]
+    assert ("machinist approve --issue 7" in result.output) is once
+
+
+def test_explain_accounts_for_an_approval_request_before_its_label_arrives(monkeypatch):
+    from types import SimpleNamespace
+
+    pr = PullRequest(
+        18, "Spec", "https://github.com/x/y/pull/18", "agent/issue-42", True
+    )
+    github = SimpleNamespace(
+        issues_with_label=lambda label: [],
+        open_machinist_prs=lambda prefix: [pr],
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(main, ["init", "--no-workflows"])
+        monkeypatch.setattr(
+            "machinist.cli._bound_github_client", lambda *a, **kw: github
+        )
+        result = runner.invoke(main, ["explain", "42"])
+        structured = runner.invoke(main, ["explain", "42", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert "awaiting approval" in result.output
+    assert "already requested Approval" in result.output
+    assert "wait for the workflow" in result.output
+    assert "machinist explain 42" in result.output
+    assert json.loads(structured.output)["state"] == "awaiting approval"
+
+
 def test_watch_once_wires_notifier_with_watch_title(monkeypatch):
     from machinist.notify import NotificationResult, NotificationStatus
 
@@ -1766,7 +1825,8 @@ def test_spec_wires_config_and_reports_pr_url(monkeypatch):
             "cancel_check": True,
         }
         assert "pull/57" in result.output
-        assert f"/machinist-execute {'a' * 40}" in result.output
+        assert "Read the Spec" in result.output
+        assert "machinist approve --issue 42" in result.output
 
 
 def test_spec_refuses_configured_repo_that_mismatches_controller_origin(monkeypatch):
@@ -2234,6 +2294,9 @@ def test_approve_resolves_issue_number(monkeypatch):
         assert result.exit_code == 0, result.output
         assert "Requested approval for PR #18" in result.output
         assert "workflow will verify the current head" in result.output
+        assert "machinist explain 42" in result.output
+        assert "Wait" in result.output
+        assert "machinist run" not in result.output
         assert approved_prs == [(18, "0123456789abcdef0123456789abcdef01234567")]
 
 
@@ -2287,6 +2350,8 @@ def test_approve_takes_exactly_one_of_issue_or_pr(monkeypatch):
 
         by_pr = runner.invoke(main, ["approve", "--pr", "42"])
         assert by_pr.exit_code == 0, by_pr.output
+        assert "machinist explain 9" in by_pr.output
+        assert "machinist explain 42" not in by_pr.output
         by_issue = runner.invoke(main, ["approve", "--issue", "42"])
         assert by_issue.exit_code == 0, by_issue.output
         assert approved_prs == [(42, "1" * 40), (57, "2" * 40)]
@@ -3231,3 +3296,29 @@ def test_review_outcome_reports_observed_finding_counts(tmp_path, monkeypatch, c
     assert "3 findings (2 high, 1 medium, 0 low)" in output
     assert "ready for human review" in output
     assert "passed" not in output
+    assert "gh pr view pr --web" in output
+
+
+@pytest.mark.parametrize("notify_only", [False, True])
+def test_shared_spec_receipt_guides_human_approval(monkeypatch, capsys, notify_only):
+    from machinist.cli import _report_phase_outcome
+    from machinist.lifecycle import Phase
+
+    monkeypatch.setattr("machinist.cli._deliver_notification", lambda *a, **kw: None)
+    _report_phase_outcome(
+        MachinistConfig(),
+        Phase.SPEC,
+        42,
+        PullRequest(
+            18, "Task", "https://github.com/x/y/pull/18", "agent/issue-42", True
+        ),
+        notify_only=notify_only,
+    )
+
+    output = capsys.readouterr().out
+    if notify_only:
+        assert output == ""
+    else:
+        assert "Read the Spec" in output
+        assert "machinist approve --issue 42" in output
+        assert "machinist run" not in output

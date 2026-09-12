@@ -8,6 +8,14 @@
 > The issue/PR flags and push recovery remain the legacy GitHub contract.
 > Local Tasks additionally use `approve --task T1 --spec-sha FULL_SHA` and separate publication.
 
+## Current status (2026-09-12)
+
+Both implementation cards are complete and recorded under 0.14.0 in the
+[changelog](../../../CHANGELOG.md). The unchecked steps and old file line
+numbers below preserve the original plan, rather than an outstanding worklist.
+See the [specification's current status](../specs/2026-09-03-resume-push-and-approve-flags.md#current-status-2026-09-12)
+for the implemented recovery and Approval contracts.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Implement cards 7 and 14 of the 2026-09-03 review in one PR.

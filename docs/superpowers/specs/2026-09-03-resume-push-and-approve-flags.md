@@ -8,6 +8,16 @@
 > The issue/PR flags and push recovery remain the legacy GitHub contract.
 > Local Tasks additionally use `approve --task T1 --spec-sha FULL_SHA` and separate publication.
 
+## Current status (2026-09-12)
+
+Implemented in the 0.14.0 release history. Execute now reconciles a prior push
+against the remote branch when the PR listing lags and resumes after the
+implementation commit through the shared leased push step without rerunning
+the Harness or gates. The positional Approval selector is removed. The
+exactly-one-of-issue/PR rule below applies to legacy GitHub Tasks; local Approval
+uses the separate Task/SHA selector pair. Recovery commands are documented in
+the [operator runbook](../../operator-runbook.md).
+
 Status: approved by the user on 2026-09-03 (cards 7 and 14 of the adversarial
 review; supersedes the completed Spec → Execute simplification spec).
 

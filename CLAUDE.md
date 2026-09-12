@@ -16,7 +16,7 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.15.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.16.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -304,11 +304,13 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current checkout (2026-09-07)
+## Current checkout (2026-09-12)
 
-- **0.15.0 is the current published release.** New in this version: optional
-  `doctor --local`, exact remote-base validation for new legacy Workshops, and
-  shared bounded diagnostic rendering. See ADR 0004. A version bump and push do
+- **0.16.0 is the current release.** New in this version: completion guidance
+  with next activities and sample commands after issue creation, Spec,
+  asynchronous GitHub Approval, and Review; one-pass watcher receipts and
+  optional local publication guidance. The documentation has been reviewed
+  against the implementation. A version bump and push do
   not authorize a GitHub Release or PyPI publication; releasing is a separate
   explicit human operation.
 
@@ -323,8 +325,12 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
   disabled optional Review. Do not claim a live GitLab or offline-model run from
   injected transport/Harness tests.
 
-## Published history (through 2026-09-07)
+## Published history (through 2026-09-12)
 
+- v0.16.0 adds command completion guidance for local and legacy GitHub
+  workflows while preserving exact-SHA Approval, dispatch eligibility, and
+  structured output. Operating guides and historical applicability notes now
+  reflect the current implementation.
 - v0.15.0 adds optional `doctor --local` readiness, exact remote-base validation
   for new legacy Workshops, and bounded credential-redacting diagnostics (ADR
   0004).

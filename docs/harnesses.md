@@ -7,10 +7,10 @@ may subsequently select different supported adapters. “Spec and Review control
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-This matrix covers AgentMachinist 0.15.0, including the local workflow, GitLab
-publication, and the optional local readiness new in 0.15.0. The CI column
-below describes the existing GitHub Actions Spec
-workflow, not GitLab CI.
+This matrix describes the adapters in AgentMachinist 0.16.0. It covers the local
+workflow and GitLab publication, plus local readiness introduced in 0.15.0.
+The CI column below describes the existing GitHub Actions Spec workflow, not
+GitLab CI.
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
 | --- | --- | --- | --- | --- |
@@ -88,7 +88,20 @@ prompting. This is credential reduction, not credential isolation; see the
 ## Model and additional arguments
 
 `harness.model` passes one model selection to the adapter. `harness.extra_args`
-is an advanced option applied to Spec, Execute, and Review. For the four built-in
+supplies additional argv entries. Spec, Execute, and Review inherit these base
+settings unless their `harness.spec`, `harness.execute`, or `harness.review`
+profile overrides them. Selecting a different adapter in a Phase resets
+inherited `command`, `model`, and `extra_args`; specify that adapter's values
+in its profile. An explicit `model: null` clears an inherited model, and
+`extra_args: []` clears inherited additional arguments.
+
+Spec and Review default to `harness.spec_timeout_minutes` (10 minutes, maximum
+60); Execute defaults to `harness.timeout_minutes` (30 minutes, maximum 240).
+Each Phase can set `timeout_minutes` in its own profile, subject to the same
+Phase limit. Review inherits the base read-only timeout, not a timeout override
+under `harness.spec`.
+
+For the four built-in
 adapters, AgentMachinist rejects reserved sandbox, permission, model, session,
 and tool flags, including duplicate forms that could override its controls.
 Third-party adapters do not inherit that reserved-argument map and must validate

@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="How AgentMachinist works: a local Task, exact Spec Approval, verified implementation, advisory Review, and optional GitHub or GitLab publication. Available in AgentMachinist 0.15.0.">
+  <meta name="description" content="How AgentMachinist works: a local Task, exact Spec Approval, verified implementation, advisory Review, and optional GitHub or GitLab publication. Available in AgentMachinist 0.16.0.">
   <meta name="theme-color" content="#f3f1eb">
   <meta property="og:title" content="How AgentMachinist works">
-  <meta property="og:description" content="A guided local workflow from Task to reviewed candidate. Integrate explicitly; publish to GitHub or GitLab when useful. Available in AgentMachinist 0.15.0.">
+  <meta property="og:description" content="A guided local workflow from Task to reviewed candidate. Integrate explicitly; publish to GitHub or GitLab when useful. Available in AgentMachinist 0.16.0.">
   <meta name="twitter:card" content="summary">
   <title>How AgentMachinist works</title>
   <style>
@@ -232,7 +232,7 @@
       <p class="kicker">How AgentMachinist works · 2 minutes</p>
       <h1>One Task. A reviewed local change.</h1>
       <p class="lede">Start with a bounded objective. Approve its exact Spec, then let the controller coordinate implementation, verification, and independent Review. Inspect the result and integrate it locally. Publish a GitHub PR or GitLab MR whenever sharing helps.</p>
-      <p><strong>AgentMachinist 0.15.0</strong> adds optional local readiness, exact remote-base validation, and bounded diagnostics to the local workflow and GitLab support from 0.14.0. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
+      <p><strong>AgentMachinist 0.16.0</strong> adds clearer next-step guidance throughout the local workflow and GitHub issue automation. Exact Spec Approval, verification, independent Review, and optional GitHub or GitLab publication remain part of the workflow. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
@@ -254,6 +254,7 @@
         <p class="kicker">The local loop</p>
         <h2>A clear handoff at each decision.</h2>
         <p>The foreground command shows progress and a next action. Your original branch stays unchanged until you explicitly integrate the reviewed candidate.</p>
+        <p><strong>New in 0.16.0:</strong> completion prompts suggest the next activity and a sample command after issue creation, Spec generation, Approval requests, and Review. They guide GitHub workflow waits, human review, and optional publication after local integration.</p>
       </header>
       <div class="loop-grid">
         <div>
@@ -266,7 +267,7 @@
           <article class="step" data-step="1">
             <span class="who">STATION 02 · MACHINE</span>
             <h3>Check the baseline. Save the plan.</h3>
-            <p>The controller discovers local settings and verifies the committed baseline in an isolated Workshop. A read-only Harness writes a Spec; the controller commits it and retains its exact SHA. The command prints the Spec and stops for you.</p>
+            <p>The controller discovers local settings and verifies the committed baseline in an isolated Workshop. A read-only Harness returns a Spec; the controller writes and commits it and retains its exact SHA. The command prints the Spec and stops for you.</p>
             <span class="cmd">machinist status T1</span>
           </article>
           <article class="step you" data-step="2">
@@ -451,7 +452,7 @@
   </main>
   <footer class="site-footer shell">
     <div class="footer-row">
-      <span>AgentMachinist 0.15.0 · local Task → exact Approval → verified candidate → your decision</span>
+      <span>AgentMachinist 0.16.0 · local Task → exact Approval → verified candidate → your decision</span>
       <nav aria-label="Documentation">
         <a href="local-workflow.md">Local workflow</a>
         <a href="first-run-guide.html">Field guide</a>

@@ -71,7 +71,9 @@ def explain_task(
         issue=issue,
         state=row.state,
         url=row.url,
-        next_action=next_action_for_status(row),
+        next_action=next_action_for_status(
+            row, spec_source=config.github.spec_source.value
+        ),
         profiles=_profiles(config),
         dispatch=_dispatch_policy(config),
         instructions=_instructions(config),

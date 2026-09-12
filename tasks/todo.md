@@ -882,3 +882,52 @@ publish the prepared package to PyPI.
 Blockers: branch protection on `main` still requires two status contexts the CI
 matrix no longer emits (`test (ubuntu-latest)`, `test (macos-latest)`), so every
 merge needs `--admin` until the required-checks list is replaced with `CI gate`.
+
+## CLI completion guidance (2026-09-12)
+
+- [x] Inspect the current local and GitHub journeys and write `cli-guidance-plan.md`.
+- [x] Add failing contracts before completion and status guidance changes.
+- [x] Print configured next commands after issue creation, Spec, and Approval.
+- [x] Guide human review, one-pass watcher completion, and optional publication.
+- [x] Preserve dispatch eligibility, exact-SHA Approval, and structured output.
+- [x] Update user documentation and resolve independent review findings.
+- [x] Complete the final canonical verification gate.
+
+### Resuming From Here
+
+Done: completion guidance, documentation, and independent review are complete.
+The canonical gate passed all 1,528 tests at 88.15% coverage, workflow projection,
+formatting, lint, types, wheel and source builds, and clean package installation
+checks. The live CLI rehearsal also passed with the deterministic fake Harness.
+No new commands, configuration, or execution controls were introduced.
+
+Next: review the local change for eventual publication; no implementation work
+remains. The earlier interrupted verification run was superseded by the complete
+passing gate.
+
+Blockers: none. Publication and release remain separate operations.
+
+## Documentation directory review (2026-09-12)
+
+- [x] Review all 26 files under `docs/` against the current implementation.
+- [x] Correct operating guides, HTML wording, and source-only release labels.
+- [x] Preserve historical plans with current-status notes; verify all four ADRs.
+- [x] Verify documentation tests, CLI/config examples, and rendered HTML guides.
+- [x] Record the complete inventory in `docs-review-2026-09-12.md`.
+
+Done: all documentation review slices are complete, with 32 documentation tests
+passing and browser checks covering all five HTML pages. Production code was
+unchanged. Publication and release remain separate operations.
+
+## 0.16.0 release preparation (2026-09-12)
+
+- [x] Align package metadata, lockfile, changelog, and current release guides.
+- [x] Promote completion guidance from Unreleased to 0.16.0 documentation.
+- [x] Verify generated workflows and review the complete release diff.
+- [x] Pass the canonical release gate: 1,528 tests, 88.16% coverage, formatting,
+  lint, types, wheel/sdist builds, and installed-package smoke checks.
+
+The user authorized pushing all changes and publishing 0.16.0 to PyPI. The
+release procedure verifies CI at the exact PR head, merges to main, and creates
+`v0.16.0` at that merge commit. The GitHub release workflow supplies the
+publication, artifact-checksum, and isolated public-install evidence.

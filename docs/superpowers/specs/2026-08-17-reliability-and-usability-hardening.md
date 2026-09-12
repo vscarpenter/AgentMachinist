@@ -8,6 +8,17 @@
 > Positional Approval and direct-label authorization below are superseded.
 > Local Tasks use `--task` plus an exact Spec SHA; GitHub retains its trusted workflow Gate.
 
+## Current status (2026-09-12)
+
+The lifecycle, workflow projection, custody, retry, and diagnostic capabilities
+below are implemented. Legacy GitHub Approval now uses `approve --issue NUMBER`
+or `approve --pr NUMBER` to request the managed workflow's exact-SHA Approval;
+the positional form is removed. Local Tasks use
+`approve --task T1 --spec-sha FULL_SHA` and need no GitHub setup. Optional
+`doctor --local` checks that path without creating runtime state; its
+`--run-gates` option explicitly runs project commands in the controller
+checkout. See [ADR 0004](../../adr/0004-local-readiness-and-diagnostic-boundaries.md).
+
 **Date:** 2026-08-17
 **Status:** Complete
 
