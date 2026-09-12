@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>How AgentMachinist works</title>
+  <meta name="description" content="Swimlane diagram of the local AgentMachinist workflow, showing who acts at each step from Task to integrated candidate.">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-paper:       #fbfaf6;
+      --color-paper-2:     #f3f1eb;
+      --color-ink:         #17212a;
+      --color-muted:       #34434f;
+      --color-soft:        #65727c;
+      --color-rule:        rgba(23,33,42,0.12);
+      --color-rule-solid:  #c8c7c1;
+      --color-accent:      #c84f24;
+      --color-accent-tint: #f4ded4;
+      --color-link:        #285f78;
+      --font-serif: 'Instrument Serif', Georgia, serif;
+      --font-sans:  'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif;
+      --font-mono:  ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    .header { margin-bottom: 2rem; }
+
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-soft);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(2.25rem, 3vw + 1.25rem, 3.25rem);
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      line-height: 1.05;
+      margin-bottom: 0.75rem;
+    }
+
+    .subtitle {
+      font-size: 1.05rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 60ch;
+    }
+
+    .diagram-container { overflow-x: auto; }
+
+    svg { width: 100%; min-width: 960px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 0.9fr;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid var(--color-rule-solid);
+      border-radius: 6px;
+      padding: 1.25rem;
+    }
+
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-soft);
+      margin-bottom: 0.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.875rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid var(--color-rule);
+    }
+
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.ink   { background: var(--color-ink); }
+    .card-dot.muted { background: var(--color-muted); }
+
+    .card h2 { font-size: 0.95rem; font-weight: 600; line-height: 1.3; }
+
+    .card p, .card li { color: var(--color-muted); font-size: 0.875rem; line-height: 1.55; }
+    .card p + p { margin-top: 0.6rem; }
+    .card ul { list-style: none; }
+    .card li { position: relative; padding-left: 0.875rem; margin-bottom: 0.45rem; }
+    .card li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.8em;
+      width: 6px;
+      height: 1px;
+      background: var(--color-rule-solid);
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.82em;
+      color: var(--color-ink);
+      background: var(--color-paper-2);
+      border-radius: 4px;
+      padding: 0.05em 0.3em;
+    }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--color-rule);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .footer a { color: var(--color-link); text-underline-offset: 0.2em; }
+    .footer a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+
+    @media (max-width: 860px) {
+      body { padding: 2rem 1rem; }
+      .cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="header">
+      <p class="header-eyebrow">Local workflow · Swimlane</p>
+      <h1>How AgentMachinist works</h1>
+      <p class="subtitle">You describe a Task and make two decisions. AgentMachinist runs the coding Harness, checks its work, and makes every commit.</p>
+    </header>
+
+    <main>
+      <figure class="diagram-container">
+        <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="how-it-works-title how-it-works-desc">
+          <title id="how-it-works-title">How AgentMachinist works</title>
+          <desc id="how-it-works-desc">Swimlane showing who acts at each step of a local Task: Spec, exact Approval, verified commit, Review, integration, and an optional PR or MR.</desc>
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#34434f"/></marker>
+            <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#c84f24"/></marker>
+            <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#285f78"/></marker>
+          </defs>
+
+          <rect width="100%" height="100%" fill="#fbfaf6"/>
+
+          <!-- Command band: the four commands you type, each over the steps it drives -->
+          <text x="40" y="64" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace">$ machinist</text>
+
+          <path d="M 196 72 L 196 80 M 196 76 L 544 76 M 544 72 L 544 80" fill="none" stroke="#c8c7c1" stroke-width="1"/>
+          <text x="196" y="64" fill="#17212a" font-size="9" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace">start</text>
+          <text x="236" y="64" fill="#65727c" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">SPEC</text>
+
+          <path d="M 552 72 L 552 80 M 552 76 L 992 76 M 992 72 L 992 80" fill="none" stroke="#c8c7c1" stroke-width="1"/>
+          <text x="552" y="64" fill="#17212a" font-size="9" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace">approve</text>
+          <text x="604" y="64" fill="#65727c" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">EXECUTE + REVIEW</text>
+
+          <path d="M 1000 72 L 1000 80 M 1000 76 L 1104 76 M 1104 72 L 1104 80" fill="none" stroke="#c8c7c1" stroke-width="1"/>
+          <text x="1000" y="64" fill="#17212a" font-size="9" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace">integrate</text>
+
+          <path d="M 1112 72 L 1112 80 M 1112 76 L 1236 76 M 1236 72 L 1236 80" fill="none" stroke="#c8c7c1" stroke-width="1"/>
+          <text x="1112" y="64" fill="#17212a" font-size="9" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace">publish</text>
+          <text x="1164" y="64" fill="#65727c" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">OPTIONAL</text>
+
+          <!-- Lanes -->
+          <line x1="40" y1="88" x2="1240" y2="88" stroke="#c8c7c1" stroke-width="1"/>
+          <line x1="40" y1="232" x2="1240" y2="232" stroke="rgba(23,33,42,0.12)" stroke-width="1"/>
+          <line x1="40" y1="376" x2="1240" y2="376" stroke="rgba(23,33,42,0.12)" stroke-width="1"/>
+          <line x1="40" y1="520" x2="1240" y2="520" stroke="rgba(23,33,42,0.12)" stroke-width="1"/>
+          <line x1="40" y1="624" x2="1240" y2="624" stroke="#c8c7c1" stroke-width="1"/>
+          <line x1="180" y1="88" x2="180" y2="624" stroke="rgba(23,33,42,0.12)" stroke-width="1"/>
+
+          <text x="40" y="156" fill="#34434f" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">YOU</text>
+          <text x="40" y="172" fill="#65727c" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">intent and decisions</text>
+
+          <text x="40" y="300" fill="#34434f" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">AGENTMACHINIST</text>
+          <text x="40" y="316" fill="#65727c" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">makes every commit</text>
+
+          <text x="40" y="444" fill="#34434f" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">HARNESS</text>
+          <text x="40" y="460" fill="#65727c" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">works in a Workshop</text>
+
+          <text x="40" y="568" fill="#34434f" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">FORGE</text>
+          <text x="40" y="584" fill="#65727c" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">optional</text>
+
+          <!-- Handoffs: drawn before nodes so boxes paint over line ends -->
+          <path d="M 268 192 L 268 440 Q 268 448 276 448 L 308 448" fill="none" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <path d="M 380 416 L 380 312 Q 380 304 388 304 L 420 304" fill="none" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <path d="M 492 272 L 492 168 Q 492 160 500 160 L 532 160" fill="none" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <path d="M 604 192 L 604 440 Q 604 448 612 448 L 644 448" fill="none" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <path d="M 716 416 L 716 312 Q 716 304 724 304 L 756 304" fill="none" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <path d="M 828 336 L 828 440 Q 828 448 836 448 L 868 448" fill="none" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <path d="M 940 416 L 940 168 Q 940 160 948 160 L 980 160" fill="none" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <path d="M 1052 192 L 1052 564 Q 1052 572 1060 572 L 1092 572" fill="none" stroke="#285f78" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow-link)"/>
+
+          <!-- Handoff labels: beside vertical segments, 8px clear of the stroke -->
+          <rect x="500" y="208" width="52" height="12" rx="2" fill="#fbfaf6"/>
+          <text x="526" y="217" fill="#65727c" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">SPEC SHA</text>
+
+          <rect x="836" y="352" width="60" height="12" rx="2" fill="#fbfaf6"/>
+          <text x="866" y="361" fill="#65727c" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">CANDIDATE</text>
+
+          <rect x="948" y="296" width="48" height="12" rx="2" fill="#fbfaf6"/>
+          <text x="972" y="305" fill="#65727c" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">REPORT</text>
+
+          <!-- 01 · You · input -->
+          <rect x="196" y="128" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="196" y="128" width="144" height="64" rx="6" fill="rgba(52,67,79,0.10)" stroke="#65727c" stroke-width="1"/>
+          <rect x="204" y="136" width="24" height="12" rx="2" fill="none" stroke="rgba(101,114,124,0.45)" stroke-width="0.8"/>
+          <text x="216" y="145" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">01</text>
+          <text x="268" y="164" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Describe the Task</text>
+          <text x="268" y="180" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">Task T1</text>
+
+          <!-- 02 · Harness · external -->
+          <rect x="308" y="416" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="308" y="416" width="144" height="64" rx="6" fill="rgba(23,33,42,0.03)" stroke="rgba(23,33,42,0.30)" stroke-width="1"/>
+          <rect x="316" y="424" width="24" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.22)" stroke-width="0.8"/>
+          <text x="328" y="433" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">02</text>
+          <text x="380" y="452" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Draft the Spec</text>
+          <text x="380" y="468" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">read-only</text>
+
+          <!-- 03 · AgentMachinist · backend -->
+          <rect x="420" y="272" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="420" y="272" width="144" height="64" rx="6" fill="#ffffff" stroke="#17212a" stroke-width="1"/>
+          <rect x="428" y="280" width="24" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.40)" stroke-width="0.8"/>
+          <text x="440" y="289" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">03</text>
+          <text x="492" y="308" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Save the Spec</text>
+          <text x="492" y="324" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">git commit</text>
+
+          <!-- 04 · You · focal -->
+          <rect x="532" y="128" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="532" y="128" width="144" height="64" rx="6" fill="#f4ded4" stroke="#c84f24" stroke-width="1"/>
+          <rect x="540" y="136" width="24" height="12" rx="2" fill="none" stroke="rgba(200,79,36,0.50)" stroke-width="0.8"/>
+          <text x="552" y="145" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">04</text>
+          <text x="604" y="164" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Approve the Spec</text>
+          <text x="604" y="180" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">--spec-sha &lt;sha&gt;</text>
+
+          <!-- 05 · Harness · external -->
+          <rect x="644" y="416" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="644" y="416" width="144" height="64" rx="6" fill="rgba(23,33,42,0.03)" stroke="rgba(23,33,42,0.30)" stroke-width="1"/>
+          <rect x="652" y="424" width="24" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.22)" stroke-width="0.8"/>
+          <text x="664" y="433" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">05</text>
+          <text x="716" y="452" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Implement</text>
+          <text x="716" y="468" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">edits files</text>
+
+          <!-- 06 · AgentMachinist · backend -->
+          <rect x="756" y="272" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="756" y="272" width="144" height="64" rx="6" fill="#ffffff" stroke="#17212a" stroke-width="1"/>
+          <rect x="764" y="280" width="24" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.40)" stroke-width="0.8"/>
+          <text x="776" y="289" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">06</text>
+          <text x="828" y="308" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Verify and commit</text>
+          <text x="828" y="324" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">gates · custody</text>
+
+          <!-- 07 · Harness · external -->
+          <rect x="868" y="416" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="868" y="416" width="144" height="64" rx="6" fill="rgba(23,33,42,0.03)" stroke="rgba(23,33,42,0.30)" stroke-width="1"/>
+          <rect x="876" y="424" width="24" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.22)" stroke-width="0.8"/>
+          <text x="888" y="433" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">07</text>
+          <text x="940" y="452" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Review candidate</text>
+          <text x="940" y="468" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">read-only · advisory</text>
+
+          <!-- 08 · You · focal -->
+          <rect x="980" y="128" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="980" y="128" width="144" height="64" rx="6" fill="#f4ded4" stroke="#c84f24" stroke-width="1"/>
+          <rect x="988" y="136" width="24" height="12" rx="2" fill="none" stroke="rgba(200,79,36,0.50)" stroke-width="0.8"/>
+          <text x="1000" y="145" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">08</text>
+          <text x="1052" y="164" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Integrate</text>
+          <text x="1052" y="180" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">fast-forward only</text>
+
+          <!-- 09 · Forge · optional -->
+          <rect x="1092" y="540" width="144" height="64" rx="6" fill="#fbfaf6"/>
+          <rect x="1092" y="540" width="144" height="64" rx="6" fill="rgba(23,33,42,0.02)" stroke="rgba(23,33,42,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+          <rect x="1100" y="548" width="24" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.22)" stroke-width="0.8"/>
+          <text x="1112" y="557" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">09</text>
+          <text x="1164" y="576" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif" text-anchor="middle">Open a PR or MR</text>
+          <text x="1164" y="592" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" text-anchor="middle">gh · glab</text>
+
+          <!-- Legend -->
+          <line x1="40" y1="660" x2="1240" y2="660" stroke="rgba(23,33,42,0.12)" stroke-width="0.8"/>
+          <text x="40" y="693" fill="#34434f" font-size="8" font-weight="500" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.18em">LEGEND</text>
+
+          <rect x="120" y="684" width="16" height="12" rx="2" fill="#f4ded4" stroke="#c84f24" stroke-width="1"/>
+          <text x="144" y="693" fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Your decision</text>
+
+          <rect x="252" y="684" width="16" height="12" rx="2" fill="rgba(52,67,79,0.10)" stroke="#65727c" stroke-width="1"/>
+          <text x="276" y="693" fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Your input</text>
+
+          <rect x="364" y="684" width="16" height="12" rx="2" fill="#ffffff" stroke="#17212a" stroke-width="1"/>
+          <text x="388" y="693" fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">AgentMachinist step</text>
+
+          <rect x="532" y="684" width="16" height="12" rx="2" fill="rgba(23,33,42,0.03)" stroke="rgba(23,33,42,0.30)" stroke-width="1"/>
+          <text x="556" y="693" fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Harness step</text>
+
+          <rect x="660" y="684" width="16" height="12" rx="2" fill="rgba(23,33,42,0.02)" stroke="rgba(23,33,42,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="684" y="693" fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Optional step</text>
+
+          <line x1="772" y1="690" x2="800" y2="690" stroke="#34434f" stroke-width="1.2" marker-end="url(#arrow)"/>
+          <text x="808" y="693" fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Handoff</text>
+
+          <line x1="884" y1="690" x2="912" y2="690" stroke="#285f78" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow-link)"/>
+          <text x="920" y="693" fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Forge call</text>
+        </svg>
+      </figure>
+
+      <div class="cards">
+        <section class="card">
+          <p class="eyebrow">Your two decisions</p>
+          <div class="card-header"><span class="card-dot coral"></span><h2>Approval and integration stay with you</h2></div>
+          <p>Approval names one exact Spec commit. If the Spec changes, you approve the new commit before anything runs.</p>
+          <p>Integration moves your branch to the reviewed candidate by fast-forward only. A dirty checkout or a moved base stops it.</p>
+        </section>
+
+        <section class="card">
+          <p class="eyebrow">Custody</p>
+          <div class="card-header"><span class="card-dot ink"></span><h2>AgentMachinist makes every commit</h2></div>
+          <ul>
+            <li>The Harness drafts, edits, and reviews. AgentMachinist commits.</li>
+            <li>After each Harness run, AgentMachinist checks HEAD, local refs, and protected Git metadata for changes.</li>
+            <li>Required verification gates must pass before AgentMachinist commits a candidate.</li>
+            <li>This is detection plus reduced credentials, not a sandbox.</li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <p class="eyebrow">When plans change</p>
+          <div class="card-header"><span class="card-dot muted"></span><h2>Amend, retry, or publish</h2></div>
+          <ul>
+            <li><code>machinist amend</code> turns feedback on a reviewed candidate into a new Spec, which needs a fresh Approval.</li>
+            <li><code>machinist retry</code> resumes a failed Execute with its retained edits. Add <code>--fresh</code> to start in a new Workshop.</li>
+            <li><code>machinist publish</code> pushes the candidate and opens a GitHub PR or GitLab MR without rerunning any Phase.</li>
+          </ul>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span>AgentMachinist · how it works</span>
+      <a href="index.html">AgentMachinist home</a>
+    </footer>
+
+  </div>
+</body>
+</html>

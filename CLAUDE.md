@@ -291,9 +291,10 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 - `docs/superpowers/` — historical specifications and implementation plans,
   each linked to current operating references.
 - `docs/` — getting-started, architecture, operator-runbook, trust-model,
-  harnesses matrix, local workflow, and five HTML pages: index, first-run guide,
-  job card, animated explainer, and the onboarding redirect. Documentation tests
-  validate commands, configuration, version identity, links, and control targets.
+  harnesses matrix, local workflow, and six HTML pages: index, first-run guide,
+  job card, animated explainer, the how-it-works swimlane diagram, and the
+  onboarding redirect. Documentation tests validate commands, configuration,
+  version identity, links, and control targets.
 - `AgentMachinist-Prompt.md` — the original kickoff prompt, historical.
 
 ## Releasing
