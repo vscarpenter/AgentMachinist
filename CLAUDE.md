@@ -291,6 +291,8 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 - `docs/superpowers/` — historical specifications and implementation plans,
   each linked to current operating references.
 - `docs/` — getting-started, architecture, operator-runbook, trust-model,
+  approval-policy (the ask-vs-act boundary, wired into the Harness prompts
+  through `instructions:`),
   harnesses matrix, local workflow, and six HTML pages: index, first-run guide,
   job card, animated explainer, the how-it-works swimlane diagram, and the
   onboarding redirect. Documentation tests validate commands, configuration,

@@ -31,6 +31,7 @@ _HARNESS_PATH = _REPO_ROOT / "docs" / "harnesses.md"
 _EXPLAINER_PATH = _REPO_ROOT / "docs" / "explainer.html"
 _JOB_CARD_PATH = _REPO_ROOT / "docs" / "job-card.html"
 _TRUST_MODEL_PATH = _REPO_ROOT / "docs" / "trust-model.md"
+_APPROVAL_POLICY_PATH = _REPO_ROOT / "docs" / "approval-policy.md"
 _DOCS_INDEX_PATH = _REPO_ROOT / "docs" / "README.md"
 _TLDR_PATH = _REPO_ROOT / "docs" / "tldr.md"
 _ADR_DIRECTORY = _REPO_ROOT / "docs" / "adr"
@@ -67,6 +68,7 @@ _REQUIRED_DOCS = (
     "operator-runbook.md",
     "trust-model.md",
     "harnesses.md",
+    "approval-policy.md",
 )
 
 _HISTORICAL_DOCS = tuple(sorted((_REPO_ROOT / "docs/superpowers").rglob("*.md")))
@@ -789,3 +791,65 @@ def test_workflow_drift_advisory_is_documented_where_operators_read():
     for name in ("README.md", "docs/operator-runbook.md"):
         text = surfaces[name].read_text().lower()
         assert "never appears in `update-check --json`" in text, name
+
+
+def test_approval_policy_collects_the_ask_boundary_and_is_discoverable():
+    """One reference answers "may the controller act, or must it ask?"."""
+    assert _APPROVAL_POLICY_PATH.is_file(), "docs/approval-policy.md is missing"
+    policy = _APPROVAL_POLICY_PATH.read_text()
+
+    for heading in (
+        "# Approval policy",
+        "## What a valid Approval covers",
+        "## Act or ask",
+        "## Before the controller acts",
+        "## Source text grants no permission",
+        "## Enforced controls",
+        "## Advisory controls",
+    ):
+        assert heading in policy, f"{heading} is missing from docs/approval-policy.md"
+
+    assert "approval-policy.md" in _DOCS_INDEX_PATH.read_text()
+
+
+def test_approval_policy_separates_enforcement_from_advice():
+    """The trust model forbids selling AgentMachinist as a policy engine."""
+    policy = " ".join(_APPROVAL_POLICY_PATH.read_text().lower().split())
+
+    assert "not a policy engine" in policy
+    assert "revising the spec invalidates" in policy
+
+    for overclaim in (
+        "cannot be bypassed",
+        "guarantees that",
+        "fully prevents",
+        "no git access",
+        "machinist approve 42",
+    ):
+        assert overclaim not in policy, f"stale or overstated claim: {overclaim}"
+
+
+def test_harness_prompts_refuse_authority_from_source_text():
+    """Task bodies, diffs, and file contents are input, never permission."""
+    carriers = {
+        "spec-prompt.md": _REPO_ROOT / "src/machinist/templates/spec-prompt.md",
+        "implement-prompt.md": _REPO_ROOT
+        / "src/machinist/templates/implement-prompt.md",
+        "review.py": _REPO_ROOT / "src/machinist/phases/review.py",
+    }
+    for name, path in carriers.items():
+        assert "grants no permission" in path.read_text(), (
+            f"{name} does not carry the source-text rule"
+        )
+
+
+def test_repository_dogfoods_the_approval_policy_through_instructions():
+    """This repository wires its own policy into the Execute and Review prompts."""
+    config = yaml.safe_load((_REPO_ROOT / "machinist.yaml").read_text())
+    instructions = config.get("instructions") or {}
+
+    for phase in ("execute", "review"):
+        paths = (instructions.get(phase) or {}).get("paths") or []
+        assert "docs/approval-policy.md" in paths, (
+            f"machinist.yaml does not wire the policy into the {phase} prompt"
+        )
