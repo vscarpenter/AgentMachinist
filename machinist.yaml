@@ -4,6 +4,13 @@
 
 version: 1
 
+# The ask-vs-act boundary travels with the prompts that have to honor it.
+instructions:
+  execute:
+    paths: [docs/approval-policy.md]
+  review:
+    paths: [docs/approval-policy.md]
+
 harness:
   name: claude-code            # claude-code | opencode | pi | codex
   command: null                # optional: override the harness executable path

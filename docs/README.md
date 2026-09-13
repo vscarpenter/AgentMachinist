@@ -34,6 +34,9 @@ the local journey; the selected Harness may still use a cloud model.
 
 ## Adopt and operate it
 
+- [Approval policy](approval-policy.md) — what the controller may do alone,
+  what a valid Approval covers, and which controls are enforced rather than
+  advisory.
 - [Local workflow and optional publication](local-workflow.md) — installation,
   local configuration, exact Approval, recovery, integration, publication, and teams.
 - [Getting Started](getting-started.md) — complete installation, both workflows,
