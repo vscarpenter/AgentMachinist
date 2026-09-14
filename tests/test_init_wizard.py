@@ -1,5 +1,6 @@
 """First-run Harness selection follows installed adapter capabilities."""
 
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -64,13 +65,19 @@ def test_wizard_excludes_plugin_without_hosted_spec_support_for_actions(monkeypa
 
 
 def install_plugin_fixture(monkeypatch, tmp_path):
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     entry = SimpleNamespace(
         name="local-plugin", value="example:LocalPlugin", load=lambda: LocalPlugin
     )
     monkeypatch.setattr(
         "machinist.harness._selected_entry_points", lambda supplied: (entry,)
     )
-    monkeypatch.setattr("machinist.cli._repository_root", lambda cwd: tmp_path)
     monkeypatch.setattr(
         "machinist.cli._bound_github_client",
         lambda *a, **k: SimpleNamespace(ensure_label=lambda *a, **k: None),
