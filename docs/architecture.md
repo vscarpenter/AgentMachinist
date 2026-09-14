@@ -5,7 +5,8 @@ verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
 deployment remain outside the controller. This document describes the
-AgentMachinist 0.16.0 implementation. The 0.14.0 release added the local
+AgentMachinist 0.17.0 release candidate implementation (publication pending;
+PyPI remains at 0.16.0). The 0.14.0 release added the local
 workflow and GitLab collaboration; 0.15.0 added local readiness, exact
 remote-base validation, and bounded diagnostics.
 
@@ -303,7 +304,7 @@ Managed ownership markers also prevent synchronization from replacing or
 removing modified or unrecognized workflow files. Review and preserve such
 edits before restoring a recognized projection and synchronizing.
 
-**New in 0.16.0:** expanded command completion guidance lives in
+**Available since 0.16.0:** expanded command completion guidance lives in
 `cli.py` and `local_cli.py`. It names the
 next action for the completed operation: local Spec generation or hosted
 dispatch after issue creation, exact human Approval after Spec, independent

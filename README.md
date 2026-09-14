@@ -16,11 +16,14 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-AgentMachinist 0.16.0 adds next-step CLI guidance after issue creation and Phase
-completion. It explains Approval waits, points to human review, and keeps
-publication optional.
+The AgentMachinist 0.17.0 release candidate adds an
+[Approval policy](docs/approval-policy.md) and
+advisory source-text guidance in all three Harness prompts. The
+[workflow diagram](docs/how-it-works.html) shows who owns each step from Task
+through optional publication.
 
-Current release: [AgentMachinist 0.16.0 on PyPI](https://pypi.org/project/agentmachinist/0.16.0/).
+Publication pending. Current release:
+[AgentMachinist 0.16.0 on PyPI](https://pypi.org/project/agentmachinist/0.16.0/).
 
 ## Install
 
@@ -58,7 +61,7 @@ never appears in `update-check --json`.
 ## Start
 
 The guided local workflow and optional GitLab support introduced in 0.14.0
-continue in 0.16.0. The existing GitHub workflow remains available.
+continue in the 0.17.0 release candidate. The existing GitHub workflow remains available.
 Start on a clean named branch with an initial commit, configured Git author,
 and an installed, authenticated Harness. Replace the example's Python test
 command with verification appropriate to your project.
@@ -84,7 +87,7 @@ machinist status T1
 machinist integrate T1
 ```
 
-**New in 0.16.0:** Completion output explains the next activity and includes a
+**Available since 0.16.0:** Completion output explains the next activity and includes a
 command using your Task or issue ID. Local integration reports completion;
 publication is an optional follow-up with an explicit forge selection.
 

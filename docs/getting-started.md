@@ -36,10 +36,11 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.16.0 includes the guided local workflow, optional GitHub/GitLab
+The AgentMachinist 0.17.0 release candidate includes the guided local workflow, optional GitHub/GitLab
 intake and publication, existing GitHub issue automation, and next-step CLI
 guidance. Local readiness, exact remote-base validation, and bounded diagnostics
-introduced in 0.15.0 remain available. Install it, then change into the repository
+introduced in 0.15.0 remain available. Publication pending; PyPI remains at
+0.16.0. Install the published package, then change into the repository
 you want to work on:
 
 ```sh
@@ -109,7 +110,7 @@ machinist status T1
 machinist integrate T1
 ```
 
-**New in 0.16.0:** Completion output supplies the next activity and a command
+**Available since 0.16.0:** Completion output supplies the next activity and a command
 using your saved Task ID. Read the Spec before copying its exact Approval
 command, and inspect the candidate and Review report before integration.
 Successful integration reports completion and presents publication as optional,

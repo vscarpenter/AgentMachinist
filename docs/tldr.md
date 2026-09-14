@@ -11,7 +11,7 @@ The controller owns Git and durable Evidence; the Harness writes the Spec, edits
 
 ## One-time setup
 
-Install AgentMachinist 0.16.0 with `uv tool install agentmachinist`, or upgrade with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
+This guide covers the AgentMachinist 0.17.0 release candidate; publication pending. Install the published AgentMachinist 0.16.0 with `uv tool install agentmachinist`, or upgrade with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
 Enter a clean named branch with an initial Git commit, configured author, an installed and authenticated Harness,
 and an executable required Verification Gate. No forge or origin is required.
 
