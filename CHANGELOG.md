@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 — 2026-09-13
 
 - Add `docs/approval-policy.md`, one operating reference for the ask-vs-act
   boundary: what a valid Approval covers, which work the controller may do
@@ -15,6 +15,8 @@
 - Wire this repository's own `instructions:` to the policy so the Execute and
   Review prompts carry it, dogfooding the mechanism documented for other
   projects.
+- Add the how-it-works swimlane diagram and link it from the documentation
+  landing page, showing human decisions, controller work, and Harness Phases.
 
 ## 0.16.0 — 2026-09-12
 

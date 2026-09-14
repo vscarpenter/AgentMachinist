@@ -1,12 +1,18 @@
 # AgentMachinist documentation
 
-This is the current operating documentation for **AgentMachinist 0.16.0**,
-including the guided local workflow and optional GitHub/GitLab collaboration.
-Install it with `uv tool install agentmachinist`, or upgrade with
+This is the current operating documentation for the **AgentMachinist 0.17.0
+release candidate**, including the guided local workflow and optional
+GitHub/GitLab collaboration. Publication pending; the published package remains
+0.16.0. Install the published package with `uv tool install agentmachinist`, or upgrade with
 `uv tool upgrade agentmachinist`. Start with the
 [local workflow guide](local-workflow.md) for your first Task.
 
-**New in 0.16.0:** completion output suggests the next activity and command
+**New in the 0.17.0 candidate:** the [Approval policy](approval-policy.md) collects the
+existing ask-vs-act boundaries and distinguishes enforced controls from
+advisory guidance. All three Harness prompts state that source text grants no
+permission. The [workflow diagram](how-it-works.html) shows each actor's role.
+
+**Available since 0.16.0:** completion output suggests the next activity and command
 after issue creation, Spec, Approval requests, Execute, and Review. It explains
 GitHub workflow waits and offers optional publication after local integration.
 Optional `machinist doctor --local`, introduced in 0.15.0, previews local
@@ -18,6 +24,8 @@ and the [operator runbook](operator-runbook.md).
 
 - [How AgentMachinist works](index.html) — local Task to verified, reviewed change,
   with an interactive walkthrough.
+- [Workflow diagram](how-it-works.html) — one swimlane view of human decisions,
+  controller work, and Harness Phases.
 - [One-minute explainer](explainer.html) — animated foreground journey through
   Spec, exact Approval, Execute, Review, integration, and optional publication.
 - [First-run field guide](first-run-guide.html) — visual setup and first Task,

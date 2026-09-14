@@ -1,6 +1,7 @@
 # Operator runbook
 
-This runbook describes AgentMachinist 0.16.0, including the foreground
+This runbook describes the AgentMachinist 0.17.0 release candidate (publication
+pending; PyPI remains at 0.16.0), including the foreground
 local workflow, optional GitLab intake/publication, and the readiness,
 remote-base, and diagnostic behavior introduced in 0.15.0.
 Install with `uv tool install agentmachinist`, or upgrade with
@@ -177,7 +178,7 @@ and explicitly retried.
   `machinist.yaml`. With Review disabled, Execute marks the PR ready itself;
   invoking `review` fails.
 
-**New in 0.16.0:** expanded completion output prints the next
+**Available since 0.16.0:** expanded completion output prints the next
 action and a sample command. After
 `machinist task new`, the suggestion follows `github.spec_source` and whether
 `--dispatch` was used: generate the Spec manually, process eligible Tasks with
