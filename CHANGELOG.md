@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.1 — 2026-09-13
+
+- Fix the manual setup receipt for `machinist init` and `machinist onboard`:
+  explicitly stage the managed workflow files so newly generated workflows
+  are included in the setup commit. Include tracked workflow removals when
+  changing dispatch mode or disabling management, and leave unrelated
+  workflow changes unstaged. Keep staged-diff review before the commit.
+- Update setup examples and publish the Approval policy, Harness source-text
+  guidance, and workflow diagram prepared for 0.17.0 alongside this fix.
+
 ## 0.17.0 — 2026-09-13
 
 - Add `docs/approval-policy.md`, one operating reference for the ask-vs-act

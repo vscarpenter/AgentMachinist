@@ -16,14 +16,15 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-The AgentMachinist 0.17.0 release candidate adds an
+AgentMachinist 0.17.1 fixes setup instructions to stage new managed workflow
+files before committing. It also includes an
 [Approval policy](docs/approval-policy.md) and
 advisory source-text guidance in all three Harness prompts. The
 [workflow diagram](docs/how-it-works.html) shows who owns each step from Task
 through optional publication.
 
-Publication pending. Current release:
-[AgentMachinist 0.16.0 on PyPI](https://pypi.org/project/agentmachinist/0.16.0/).
+Current release:
+[AgentMachinist 0.17.1 on PyPI](https://pypi.org/project/agentmachinist/0.17.1/).
 
 ## Install
 
@@ -61,7 +62,7 @@ never appears in `update-check --json`.
 ## Start
 
 The guided local workflow and optional GitLab support introduced in 0.14.0
-continue in the 0.17.0 release candidate. The existing GitHub workflow remains available.
+continue in 0.17.1. The existing GitHub workflow remains available.
 Start on a clean named branch with an initial commit, configured Git author,
 and an installed, authenticated Harness. Replace the example's Python test
 command with verification appropriate to your project.
@@ -145,11 +146,19 @@ machinist onboard
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows   # review each hunk
+git add -- .github/workflows/machinist-approve.yml
+# With github.spec_source: github-actions, also stage:
+# git add -- .github/workflows/machinist-spec.yml
 git diff --cached              # verify what will be committed
 git commit -m "chore: configure AgentMachinist"
 git push
 ```
+
+When switching Spec modes or disabling workflow management, also stage any
+removed managed workflow path shown by `git status --short` with
+`git add -- <path>`. Omit the workflow commands
+when no managed workflow files were generated or removed. Review the full
+staged diff before committing.
 
 Review and merge setup into the repository's default branch, then check out
 that branch and pull the merged changes. Once it is up to date:

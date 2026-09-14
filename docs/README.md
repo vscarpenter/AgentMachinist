@@ -1,13 +1,13 @@
 # AgentMachinist documentation
 
-This is the current operating documentation for the **AgentMachinist 0.17.0
-release candidate**, including the guided local workflow and optional
-GitHub/GitLab collaboration. Publication pending; the published package remains
-0.16.0. Install the published package with `uv tool install agentmachinist`, or upgrade with
+This is the current operating documentation for **AgentMachinist 0.17.1**,
+including the guided local workflow and optional GitHub/GitLab collaboration.
+Install the published package with `uv tool install agentmachinist`, or upgrade with
 `uv tool upgrade agentmachinist`. Start with the
 [local workflow guide](local-workflow.md) for your first Task.
 
-**New in the 0.17.0 candidate:** the [Approval policy](approval-policy.md) collects the
+**Included in 0.17.1:** setup receipts stage new managed workflow files by their
+exact paths. The [Approval policy](approval-policy.md) collects the
 existing ask-vs-act boundaries and distinguishes enforced controls from
 advisory guidance. All three Harness prompts state that source text grants no
 permission. The [workflow diagram](how-it-works.html) shows each actor's role.

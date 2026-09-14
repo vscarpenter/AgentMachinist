@@ -5,8 +5,7 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This guide describes the AgentMachinist 0.17.0 release candidate; publication
-pending. Install the published 0.16.0 package with
+This guide describes AgentMachinist 0.17.1. Install the published package with
 `uv tool install agentmachinist`, or upgrade an existing tool installation with
 `uv tool upgrade agentmachinist`; then run the commands below in the repository
 you want to change. Optional local readiness was introduced in 0.15.0. The
