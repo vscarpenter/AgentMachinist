@@ -160,6 +160,8 @@ from machinist.updates import (
 )
 from machinist.workflows import (
     WorkflowDriftError,
+    expected_workflows,
+    managed_workflow_paths,
     preflight_workflow_paths,
     preflight_workflow_projection,
 )
@@ -223,6 +225,7 @@ def _print_init_receipt(
     *,
     labels_ready: bool,
     suggested_test_command: str | None,
+    workflow_paths: tuple[str, ...],
 ) -> None:
     gates = config.resolved_verification_gates()
     trigger = config.github.labels.trigger
@@ -285,8 +288,8 @@ def _print_init_receipt(
     click.echo("       git status --short")
     click.echo("       git add machinist.yaml .machinist/specs/.gitkeep .gitignore")
     click.echo("       git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml")
-    if config.github.manage_workflows:
-        click.echo("       git add -p .github/workflows   # review each hunk")
+    for path in workflow_paths:
+        click.echo(f"       git add -- {shlex.quote(path)}")
     click.echo("       git diff --cached              # verify what will be committed")
     click.echo('       git commit -m "chore: configure AgentMachinist"')
     click.echo("       git push")
@@ -311,6 +314,33 @@ def _print_init_receipt(
     click.echo(
         "  Visual walkthrough: https://agentmachinist.vinny.dev/first-run-guide.html"
     )
+
+
+def _setup_receipt_workflow_paths(
+    repo_root: Path, config: MachinistConfig
+) -> tuple[str, ...]:
+    """Name projected files and tracked removals without staging unrelated work."""
+    paths = {
+        f".github/workflows/{name}"
+        for name in expected_workflows(config, installed_version=_installed_version())
+    }
+    removed_paths = {str(path) for path in managed_workflow_paths()} - paths
+    if removed_paths:
+        try:
+            result = subprocess.run(
+                ["git", "ls-files", "-z", "--", *sorted(removed_paths)],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=_SUBPROCESS_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise click.ClickException(
+                "cannot inspect removed workflows in the Git index"
+            ) from exc
+        paths.update(removed_paths.intersection(result.stdout.split("\0")))
+    return tuple(sorted(paths))
 
 
 def _repository_root(cwd: Path) -> Path:
@@ -760,6 +790,7 @@ def _complete_onboarding_files(
             config,
             labels_ready=labels_ready,
             suggested_test_command=suggested_test_command,
+            workflow_paths=_setup_receipt_workflow_paths(repo_root, config),
         )
 
 

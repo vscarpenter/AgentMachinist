@@ -36,11 +36,11 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-The AgentMachinist 0.17.0 release candidate includes the guided local workflow, optional GitHub/GitLab
+AgentMachinist 0.17.1 includes the guided local workflow, optional GitHub/GitLab
 intake and publication, existing GitHub issue automation, and next-step CLI
 guidance. Local readiness, exact remote-base validation, and bounded diagnostics
-introduced in 0.15.0 remain available. Publication pending; PyPI remains at
-0.16.0. Install the published package, then change into the repository
+introduced in 0.15.0 remain available. Setup receipts stage new managed workflow
+files explicitly. Install the published package, then change into the repository
 you want to work on:
 
 ```sh
@@ -55,7 +55,7 @@ uv tool upgrade agentmachinist
 machinist --version
 ```
 
-Confirm that `machinist --version` reports 0.16.0 or newer for the completion
+Confirm that `machinist --version` reports 0.17.1 or newer for the setup
 guidance described here. `machinist doctor --local` is available since 0.15.0.
 For contributing to AgentMachinist, an editable installation is optional:
 run `uv tool install --editable .` from its source
@@ -263,11 +263,18 @@ your repository's normal process:
 git status --short
 git add machinist.yaml .machinist/specs/.gitkeep .gitignore
 git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -p .github/workflows   # review each hunk
+git add -- .github/workflows/machinist-approve.yml
+# With github.spec_source: github-actions, also stage:
+# git add -- .github/workflows/machinist-spec.yml
 git diff --cached              # verify what will be committed
 git commit -m "chore: configure AgentMachinist"
 git push
 ```
+
+When switching Spec modes or disabling workflow management, also stage any
+removed managed workflow path shown by `git status --short` with
+`git add -- <path>`. Omit the workflow commands
+when no managed workflow files were generated or removed.
 
 If your repository already ignored `.machinist/runs/`, the initializer leaves
 that rule unchanged. Omit an unchanged `.gitignore` from the staged files. Do

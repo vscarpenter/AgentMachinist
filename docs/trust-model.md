@@ -4,8 +4,7 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-This model describes the AgentMachinist 0.17.0 release candidate (publication
-pending; PyPI remains at 0.16.0). Local readiness and bounded
+This model describes AgentMachinist 0.17.1. Local readiness and bounded
 diagnostic rendering were introduced in 0.15.0.
 
 ## Trusted inputs and principals

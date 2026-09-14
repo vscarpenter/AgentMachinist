@@ -32,6 +32,11 @@ class WorkflowSyncReport:
     removed: tuple[str, ...] = ()
 
 
+def managed_workflow_paths() -> tuple[Path, ...]:
+    """Return repository-relative paths owned by workflow projection in every mode."""
+    return tuple(Path(".github") / "workflows" / name for name in _MANAGED)
+
+
 def expected_workflows(
     config: MachinistConfig, *, installed_version: str
 ) -> dict[str, str]:

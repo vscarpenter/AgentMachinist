@@ -397,7 +397,12 @@ def test_setup_docs_require_review_commit_and_push():
     html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
     for text in (readme, guide, html):
         assert ".machinist/runs/" in text
-        assert "git add -p .github/workflows" in text
+        assert "git add -- .github/workflows/machinist-approve.yml" in text
+        assert "git add -- .github/workflows/machinist-spec.yml" in text
+        assert "removed managed workflow" in text
+        assert "omit" in text and "no managed workflow" in text
+        assert "git add -p .github/workflows" not in text
+        assert not re.search(r"git add (?:-- )?\.github/workflows(?:\s|<|$)", text)
         assert "git diff --cached" in text
         assert "git commit" in text
         assert "git push" in text
@@ -690,6 +695,9 @@ def test_release_docs_describe_current_package_version():
         if pending:
             assert "release candidate" in html and "publication pending" in html, path
             assert published_version in html, path
+        else:
+            assert "release candidate" not in html, path
+            assert "publication pending" not in html, path
         # Source-only additions must be visibly isolated from released commands.
         html = re.sub(
             r'<(?P<tag>details|p)\b[^>]*data-release="unreleased"[^>]*>.*?</(?P=tag)>',
@@ -716,6 +724,9 @@ def test_release_docs_describe_current_package_version():
     if pending:
         assert "release candidate" in readme.lower()
         assert "publication pending" in readme.lower()
+    else:
+        assert "release candidate" not in readme.lower()
+        assert "publication pending" not in readme.lower()
     claude = _CLAUDE_PATH.read_text().lower()
     assert version in claude
     assert re.search(

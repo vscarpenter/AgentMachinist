@@ -16,8 +16,7 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.16.0).
-The current checkout is the 0.17.0 release candidate; publication pending.
+hatchling, published to PyPI as `agentmachinist` (current release: 0.17.1).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, test gate
 `uv run pytest`).
@@ -310,8 +309,9 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current checkout (2026-09-13)
 
-- **0.17.0 is a release candidate; publication pending.** The published release
-  remains 0.16.0. New in this candidate: an Approval policy
+- **0.17.1 fixes manual setup staging for new managed workflows.** The setup
+  receipt lists exact generated and removed workflow paths, preserving staged
+  diff review before the commit. This release also includes an Approval policy
   that distinguishes enforced controls from advisory guidance, source-text
   guidance in all three Harness prompts, and a workflow diagram showing who
   owns each step. The documentation has been reviewed against the

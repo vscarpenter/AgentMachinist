@@ -1,6 +1,7 @@
 """Tests for the machinist CLI."""
 
 import json
+import shlex
 import subprocess
 from contextlib import contextmanager
 from importlib.resources import files
@@ -3178,14 +3179,143 @@ def test_init_no_input_still_refuses_to_enable_a_merely_detected_command():
         assert "not enabled" in result.output
 
 
-def test_init_receipt_omits_the_workflow_stage_when_workflows_are_external():
+def _setup_receipt_git(*args: str, input_text: str | None = None) -> str:
+    return subprocess.run(
+        ["git", *args],
+        input=input_text,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    ).stdout
+
+
+@pytest.fixture
+def setup_receipt_repo(monkeypatch):
+    class FakeGitHub:
+        def ensure_label(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "machinist.cli._bound_github_client", lambda *args, **kwargs: FakeGitHub()
+    )
     runner = CliRunner()
     with runner.isolated_filesystem():
-        result = runner.invoke(main, ["init", "--no-workflows", "--yes"])
+        _setup_receipt_git("config", "user.name", "Setup Test")
+        _setup_receipt_git("config", "user.email", "setup@example.test")
+        Path(".github/workflows").mkdir(parents=True)
+        Path(".github/workflows/project-ci.yml").write_text("name: Project CI\n")
+        _setup_receipt_git("add", "--", ".github/workflows/project-ci.yml")
+        _setup_receipt_git("commit", "-m", "Initial project workflow")
+        Path(".github/workflows/project-ci.yml").write_text("name: Updated CI\n")
+        Path(".github/workflows/unrelated.yml").write_text("name: Unrelated\n")
+        Path("unrelated.txt").write_text("Unrelated work\n")
+        yield runner
 
-        assert result.exit_code == 0, result.output
-        assert "git add machinist.yaml" in result.output
+
+def _stage_setup_receipt(output: str) -> set[tuple[str, str]]:
+    commands = [
+        shlex.split(line.strip(), comments=True)
+        for line in output.splitlines()
+        if line.strip().startswith("git add ")
+    ]
+    assert commands, output
+    for command in commands:
+        _setup_receipt_git(*command[1:], input_text="y\n" * 100)
+    assert output.index("git diff --cached") < output.index(
+        'git commit -m "chore: configure AgentMachinist"'
+    )
+    return {
+        tuple(line.split("\t"))
+        for line in _setup_receipt_git("diff", "--cached", "--name-status").splitlines()
+    }
+
+
+_SETUP_CORE_PATHS = {
+    "machinist.yaml",
+    ".gitignore",
+    ".machinist/specs/.gitkeep",
+    ".github/ISSUE_TEMPLATE/agentmachinist-task.yml",
+}
+_SETUP_APPROVAL_PATH = ".github/workflows/machinist-approve.yml"
+_SETUP_SPEC_PATH = ".github/workflows/machinist-spec.yml"
+
+
+@pytest.mark.parametrize("command", ["init", "onboard"])
+@pytest.mark.parametrize("source", ["local", "github-actions", "external"])
+def test_setup_receipt_stages_fresh_generated_files_only(
+    setup_receipt_repo, command, source
+):
+    args = [command, "--yes", "--test-cmd", "true"]
+    args += ["--no-workflows"] if source == "external" else ["--spec-source", source]
+    result = setup_receipt_repo.invoke(main, args)
+
+    assert result.exit_code == 0, result.output
+    paths = set(_SETUP_CORE_PATHS)
+    if source != "external":
+        paths.add(_SETUP_APPROVAL_PATH)
+    if source == "github-actions":
+        paths.add(_SETUP_SPEC_PATH)
+    assert _stage_setup_receipt(result.output) == {("A", path) for path in paths}
+    if source == "external":
         assert ".github/workflows" not in result.output
+
+
+@pytest.mark.parametrize("command", ["init", "onboard"])
+@pytest.mark.parametrize("source", ["local", "github-actions"])
+def test_setup_receipt_stages_unchanged_untracked_workflows_on_rerun(
+    setup_receipt_repo, command, source
+):
+    args = [command, "--yes", "--test-cmd", "true", "--spec-source", source]
+    first = setup_receipt_repo.invoke(main, args)
+    assert first.exit_code == 0, first.output
+    if command == "init":
+        args.append("--force")
+
+    result = setup_receipt_repo.invoke(main, args)
+
+    assert result.exit_code == 0, result.output
+    paths = _SETUP_CORE_PATHS | {_SETUP_APPROVAL_PATH}
+    if source == "github-actions":
+        paths.add(_SETUP_SPEC_PATH)
+    assert _stage_setup_receipt(result.output) == {("A", path) for path in paths}
+
+
+@pytest.mark.parametrize("committed", [False, True])
+@pytest.mark.parametrize("target", ["local", "external"])
+@pytest.mark.parametrize("repeat", [False, True])
+def test_init_receipt_stages_workflow_removals_only_when_tracked(
+    setup_receipt_repo, committed, target, repeat
+):
+    first = setup_receipt_repo.invoke(
+        main, ["init", "--yes", "--test-cmd", "true", "--spec-source", "github-actions"]
+    )
+    assert first.exit_code == 0, first.output
+    if committed:
+        _setup_receipt_git(
+            "add",
+            "--",
+            *sorted(_SETUP_CORE_PATHS | {_SETUP_APPROVAL_PATH, _SETUP_SPEC_PATH}),
+        )
+        _setup_receipt_git("commit", "-m", "Initial AgentMachinist setup")
+    args = ["init", "--force", "--yes", "--test-cmd", "true"]
+    args += ["--no-workflows"] if target == "external" else ["--spec-source", target]
+
+    result = setup_receipt_repo.invoke(main, args)
+
+    assert result.exit_code == 0, result.output
+    if repeat:
+        result = setup_receipt_repo.invoke(main, args)
+        assert result.exit_code == 0, result.output
+    if committed:
+        expected = {("M", "machinist.yaml"), ("D", _SETUP_SPEC_PATH)}
+        if target == "external":
+            expected.add(("D", _SETUP_APPROVAL_PATH))
+    else:
+        expected = {("A", path) for path in _SETUP_CORE_PATHS}
+        if target == "local":
+            expected.add(("A", _SETUP_APPROVAL_PATH))
+    assert _stage_setup_receipt(result.output) == expected
 
 
 def test_help_groups_every_registered_command_by_workflow_stage():
