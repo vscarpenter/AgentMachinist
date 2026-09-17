@@ -18,29 +18,40 @@ Older releases are not guaranteed to receive backports.
 
 ## System and Scope
 
-AgentMachinist is a local Python controller for GitHub issues, Git workspaces,
-coding harnesses, tests, and pull-request transitions. Reports may cover the
-published Python package, controller source, bundled prompts and workflows, and
-release automation maintained in this repository.
+AgentMachinist is a local Python controller for Tasks, coding Harnesses,
+isolated Git Workshops, Verification, and independent Review. It supports
+explicit local integration and optional GitHub/GitLab issue intake and PR/MR
+publication, alongside the legacy GitHub issue workflow. Reports may cover the
+published Python package, controller source, bundled prompts and workflows,
+and release automation maintained in this repository.
 
-Issue bodies and pull-request branches are untrusted input. The repository
-owner, default branch, local configuration and test command, installed harness,
-and the local user account launching AgentMachinist are trusted inputs.
+Task bodies, imported issues, and PR/MR branches are untrusted input. The
+repository owner, default branch, local configuration and Verification commands,
+installed Harness, and the local user account launching AgentMachinist are
+trusted inputs.
 
 ## Security Invariants
 
 Security-sensitive behavior should preserve these properties:
 
-- Implementation requires approval evidence bound to the current spec PR SHA.
+- Local Execute requires Approval bound to the repository, Task, and exact
+  Spec commit. Revising the Spec invalidates that Approval.
+- Legacy GitHub Execute requires both the configured approval label and a
+  trusted workflow-authored marker matching the current spec PR SHA. A forge
+  review approval does not authorize Execute in either workflow.
 - `pull_request_target` automation must not check out or execute untrusted PR
   head code.
 - Harness subprocesses must not receive controller GitHub or SSH-agent
   credentials that AgentMachinist claims to remove.
 - Concurrent remote changes must not be overwritten; pushes remain lease-bound.
+- Optional publication must bind the origin to the intended forge host and
+  repository and verify the exact PR/MR identity and reviewed candidate SHA.
 - Untrusted issue and repository data must not escape configured workspace,
   command-construction, or size boundaries.
 - Logs and errors must not disclose credentials or other avoidable secrets.
-- AgentMachinist never merges a pull request.
+- Local integration requires an explicit human command, a clean expected base,
+  and a fast-forward to the exact verified, independently reviewed candidate.
+  AgentMachinist never merges a remote PR or MR.
 
 ## Reportable Findings
 
@@ -53,9 +64,11 @@ the reachable impact and assumptions needed to reproduce the issue.
 
 AgentMachinist is not an operating-system sandbox. Harnesses, repository tests,
 hooks, and provider plugins execute with access available to the launching user.
-Local task claims are not distributed locks, and model output can be incorrect
-even when tests pass. See `docs/trust-model.md` for the complete operational
-boundary and recommended isolation.
+Local Approval records are workflow Evidence, not an authentication boundary
+against hostile processes running as the same OS user. Local Task Claims are
+not distributed locks, and model output can be incorrect even when tests pass.
+See [the trust model](docs/trust-model.md) for the complete operational boundary
+and recommended isolation.
 
 ## Out of Scope
 

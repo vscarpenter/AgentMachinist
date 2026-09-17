@@ -1,6 +1,15 @@
 # Code Standards & Agentic Guidance v18.0
 
-**Purpose.** Directives governing how LLMs approach complex, multi-step development tasks. Optimized for the Claude Code harness. Every directive applies to every coding session.
+**Purpose.** General guidance for how LLMs approach complex, multi-step
+development tasks, optimized for the author's Claude Code setup. This is a
+cross-project reference, not a declaration that every tool, hook, command, or
+skill described here is installed in AgentMachinist.
+
+**Repository scope.** [CLAUDE.md](CLAUDE.md) is authoritative for AgentMachinist.
+[CONTRIBUTING.md](CONTRIBUTING.md) describes its development workflow.
+Part 3 below distinguishes this repository's enforced checks from advisory
+conventions; references to global Claude configuration elsewhere describe the
+author's general setup.
 
 ---
 
@@ -12,7 +21,7 @@ Rules only work if the model is holding them when it matters. Load each rule at 
 |---|---|---|---|
 | Core | `CLAUDE-core.md`, the body of the global `CLAUDE.md` | Every session | Judgment rules the model must always hold (under 600 words) |
 | Ceremony | `.claude/commands/` (`qspec.md`, `tdd.md`, `qcheck.md`) and skills | On demand | Full spec, TDD, and review process text |
-| Mechanical | Biome, commitlint, coverage gate, hooks | Enforced, never prompted | Formatting, lint, commit format, size limits, coverage (Part 3) |
+| Mechanical | Project-configured verification tools (Part 3) | Enforced where configured | Formatting, lint, types, coverage |
 | Reference | This file | Never | Everything, for humans and for regenerating the layers above |
 
 **Precedence.** When directives conflict, resolve in this order: safety and irreversibility, then explicit user instructions in the session, then the approved spec, then process rules, then style. Do not improvise a tiebreaker.
@@ -85,7 +94,7 @@ Rules only work if the model is holding them when it matters. Load each rule at 
 ### Phase 3: Handoff & Delivery
 
 **1. Git Workflow**
-* Commit and branch formats are mechanical rules; see Part 3. Hooks enforce them.
+* Follow the commit and branch conventions in Part 3; AgentMachinist does not provide hooks to enforce them.
 * PRs should cover one logical concern. Split large PRs unless the split makes review less clear.
 * PR descriptions should include what changed, why it changed, how to test locally, screenshots for UI changes, and known deferred follow-ups.
 
@@ -139,22 +148,36 @@ These are judgment rules the model must apply. Anything a tool can enforce lives
 
 ---
 
-## Part 3: Mechanical Rules (Tooling-Enforced)
+## Part 3: Repository Checks and Advisory Conventions
 
-These values live in config, which is their single source of truth. Do not restate them in runtime prompts. When a hook or gate fails, fix it autonomously and immediately. Never bypass a gate.
+For AgentMachinist, [scripts/verify.sh](scripts/verify.sh) is the canonical
+verification entry point and [pyproject.toml](pyproject.toml) defines tool
+configuration. These files, not the general guidance above, determine what is
+mechanically enforced. Never bypass a failing Gate.
 
-| Rule | Value | Enforced by |
-|---|---|---|
-| Formatting & lint | Biome clean | `PostToolUse` hook |
-| Commit message | `<type>(<scope>): <description>`; types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`, `build`; imperative, lowercase, no period, max 72 chars | commitlint via `commit-msg` hook |
-| Branch name | `<type>/<short-description>` | Convention; pre-push hook optional |
-| Function length | ≤ 40 lines | Lint rule |
-| Nesting depth | ≤ 3 levels | Lint rule |
-| File length | ~400 lines | Lint rule |
-| Magic numbers | None | Lint rule |
-| Type annotations | Required on all function signatures; strict compiler settings; no `any`/`object` without a justification comment | Compiler + lint |
-| Coverage | 80% floor; 100% of spec acceptance criteria | Coverage gate + `/qcheck` |
-| Dependencies | Pinned in lockfile; audit clean | CI audit + weekly audit routine |
+| Check | Repository enforcement |
+|---|---|
+| Formatting | `ruff format --check src tests` |
+| Lint | `ruff check src tests`, with the rule selection in `pyproject.toml` |
+| Types | `mypy` for the explicit module list in `pyproject.toml`; not repository-wide strict typing |
+| Coverage | pytest-cov with an 80% floor |
+| Dependencies | `uv lock --check` and `uv sync --frozen` |
+| Managed workflows | `machinist sync-workflows --check` |
+| Packaging | Wheel/sdist build and installed-wheel smoke checks |
+
+The following remain advisory conventions, not configured lint rules or hooks:
+
+| Convention | Guidance |
+|---|---|
+| Commit message | Conventional-commit prefix with optional scope; concise, imperative description |
+| Branch name | `<type>/<short-description>` |
+| Code size | Prefer short functions, shallow nesting, and focused files; no enforced 40-line function, 3-level nesting, or 400-line file limits |
+| Magic numbers | Name values whose meaning is not evident |
+| Type annotations | Prefer explicit signatures; mechanical checking is limited to the configured mypy scope |
+| Acceptance criteria | Test each criterion; the coverage percentage alone does not establish this |
+| Dependency review | Review new dependencies deliberately; the verification script does not run a vulnerability audit |
+
+Biome, commitlint hooks, and `/qcheck` are not repository-provided enforcement.
 
 ---
 

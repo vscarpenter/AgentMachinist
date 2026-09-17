@@ -68,8 +68,8 @@ GitLab supports nested projects and self-managed hosts, without native Spec CI o
 - Rework a reviewed candidate: `machinist amend --task T1 --feedback "Also name the rejected timezone value."`
 
 Local retry runs immediately. Amendment requires a verified, reviewed candidate and generates a Spec needing fresh Approval.
-Once integration starts, use a new Task. `machinist continue T1` advances eligible
-work or reports the next action; it cannot bypass Approval or explicit retry.
+Once integration starts, amendments require a new Task. Rerun `machinist integrate T1` to reconcile an interrupted integration.
+`machinist continue T1` advances eligible work or reports the next action; it cannot bypass Approval or explicit retry.
 
 ## Existing GitHub automation
 
