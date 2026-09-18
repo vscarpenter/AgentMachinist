@@ -1,100 +1,89 @@
-# AgentMachinist TL;DR
+# Start here: your first AgentMachinist Task
 
-Start with a bounded Task and return to a reviewed local change:
+AgentMachinist turns a small coding Task into a reviewed local change. You approve
+an exact Spec before implementation, then inspect the result before integration.
+The controller owns Git; your coding Harness writes the Spec, edits, and reviews.
 
 ```text
 Task → Spec → approve exact SHA → Execute → verify → Review → you integrate
-                                                    → optional GitHub PR / GitLab MR
 ```
 
-The controller owns Git and durable Evidence; the Harness writes the Spec, edits code, and reviews the result. AgentMachinist never merges automatically or remotely; local integration is explicit.
+AgentMachinist never merges automatically or remotely; local integration is explicit.
+For the picture, read [How it works](how-it-works.html). For illustrated steps,
+use the [visual first-run guide](first-run-guide.html).
 
 ## One-time setup
 
-This guide covers AgentMachinist 0.17.1. Install the published package with `uv tool install agentmachinist`, or upgrade with `uv tool upgrade agentmachinist`, then enter the repository you want to change.
-Enter a clean named branch with an initial Git commit, configured author, an installed and authenticated Harness,
-and an executable required Verification Gate. No forge or origin is required.
+This path works with published **AgentMachinist 0.17.1**. You need Python 3.12+,
+`uv`, Git, and an installed, authenticated Harness such as Claude Code or Codex.
+See [Harness setup](harnesses.md#authentication) if yours is not ready.
 
-Available since 0.15.0: optional `machinist doctor --local` checks readiness without adoption or model/forge calls.
-`--run-gates` explicitly runs project commands in your controller checkout; they may write/download and do not prove the isolated baseline.
+```sh
+uv tool install agentmachinist
+machinist --version
+cd your-repository
+```
 
-## First local Task
+Use `uv tool upgrade agentmachinist` for an existing installation. Start on a
+clean named branch with an initial commit and configured Git author. No forge,
+origin, watcher, or root configuration file is required.
+
+## Start one small Task
+
+Use a real test command for your project. Verification runs in an isolated
+checkout, so the command must prepare missing dependencies: for example,
+`uv run pytest` for a uv project or `npm ci && npm test` with a committed lockfile.
 
 ```sh
 machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
 ```
 
-Read the saved Spec and copy its exact Approval command:
+The controller saves a Task ID such as `T1`, checks the baseline, writes a Spec,
+and stops. Read the Spec, then copy the full Approval command it prints:
 
 ```sh
 machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 ```
 
-Approval continues implementation, verification, and independent Review. Use
-`machinist status T1` to find the report path and exact Spec/Candidate SHAs.
-Read the report and compare those commits with `git diff` before `machinist integrate T1`.
+Approval continues implementation, Verification, and independent Review. Your
+current branch is unchanged until you choose to integrate. Review findings are
+advisory; a completed report does not mean every finding has been resolved.
 
-First start saves local settings in `.machinist/runs/local/config.yaml`, copying applicable root settings once.
-Inspect them with `machinist config show --path .machinist/runs/local/config.yaml`.
-Baseline verification runs in the isolated committed checkout before model work;
-the command must prepare any dependencies absent from that Workshop. Local Review always runs.
-
-Integration requires the clean expected base and exact reviewed candidate and
-permits only fast-forward. Review findings are advisory. Local orchestration
-can still use a cloud model; offline inference needs separate configuration.
-
-## Optional collaboration
+## Inspect and integrate
 
 ```sh
-machinist start --from-issue https://gitlab.com/team/project/-/issues/42
+machinist status T1
 ```
 
-Use the returned Task ID/SHA for Approval and finish Execute, verification,
-and Review before publishing. For a completed Task whose ID is `T1`:
+Read the report at the printed path and inspect the candidate diff. Use the
+Spec and candidate SHAs shown by status with `git diff <spec-sha> <candidate-sha>`.
+When you accept the change:
 
 ```sh
-machinist publish T1 --provider gitlab
-# Or: machinist publish T1 --provider github
+machinist integrate T1
 ```
 
-Authenticate `glab` or `gh` for issue import and publication. Only publication
-requires a matching origin URL; it can retry without repeating local Phases.
-GitLab supports nested projects and self-managed hosts, without native Spec CI or remote Approval.
+Integration fast-forwards only the clean expected base to the exact reviewed
+candidate. You are done; [publishing a PR or MR](local-workflow.md#publish-when-useful)
+is optional. Local orchestration can still use a cloud model; see the
+[trust model](trust-model.md) for the execution boundary.
 
-## Recovery and amendments
+## If something stops
 
-- Resume failed Execute: `machinist retry --task T1 --phase execute`.
-- Start a new Workshop instead: add `--fresh` to that retry command.
-- Rework a reviewed candidate: `machinist amend --task T1 --feedback "Also name the rejected timezone value."`
+Use `machinist status T1` and follow its next action. A failed Phase needs an
+explicit retry; inspect its Evidence first. [Recovery instructions](local-workflow.md#amend-or-recover)
+cover retries, fresh Workshops, and amendments requiring a new Approval.
 
-Local retry runs immediately. Amendment requires a verified, reviewed candidate and generates a Spec needing fresh Approval.
-Once integration starts, amendments require a new Task. Rerun `machinist integrate T1` to reconcile an interrupted integration.
-`machinist continue T1` advances eligible work or reports the next action; it cannot bypass Approval or explicit retry.
+Once integration starts, amendments require a new Task. Rerun
+`machinist integrate T1` to reconcile an interrupted integration.
 
-## Existing GitHub automation
+First start saves settings in `.machinist/runs/local/config.yaml`. Later edits to
+root `machinist.yaml` do not update that saved file. See [local settings](operator-runbook.md#local-settings-and-evidence)
+for changes and baseline failures. Bounded repair and combined reporting are
+unreleased source-checkout additions documented in the [runbook](operator-runbook.md).
 
-`machinist onboard` resumes saved setup choices.
-Review and commit/push manual setup changes. `machinist onboard --setup-pr`
-commits and pushes managed changes and opens or resumes a draft PR; review and merge it.
-Run `machinist doctor --run-gates` after setup is merged. For `github.spec_source: github-actions`, add
-the selected Spec adapter's declared secret. Execute and optional Review run locally.
+## Go further when needed
 
-```sh
-machinist approve --issue <issue>
-```
-
-For the first Execute on a draft Spec PR, wait for `machinist explain <issue>`
-to report `approved`: the managed workflow must record the trusted exact-SHA
-Evidence before execution. Then run:
-
-```sh
-machinist run <issue>
-```
-
-Only with `review.enabled: true`, follow successful Execute with `machinist review <issue>`.
-
-With local configuration present, default `status` lists local Tasks. Plain `doctor`, `runs`, `inspect`,
-`report`, `watch`, and portfolio `status --all` retain GitHub issue/configuration scope.
-Local records are separate; watcher budgets do not limit foreground Tasks.
-
-See the [local workflow](local-workflow.md), [Getting Started](getting-started.md), [operator runbook](operator-runbook.md), and [trust model](trust-model.md).
+- [GitHub automation](getting-started.md#github-setup-and-automation): issue intake, hosted Spec generation, and watcher setup.
+- [Local workflow reference](local-workflow.md): context files, settings, amendments, and GitLab/GitHub publication.
+- [All documentation](README.md) / [web directory](index.html#documentation): configuration, operation, architecture, and historical records.

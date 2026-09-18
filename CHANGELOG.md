@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Simplify documentation navigation around the workflow diagram and a short
+  first-Task guide. Add complete Markdown/web directories, group alternate
+  formats and historical records, and retain existing document URLs.
+- Include local and legacy Task history in `machinist report`, with explicit
+  source selection, separate Task namespaces, first-pass Execute and repair
+  outcomes, current local delivery snapshots, and token usage coverage. Reports
+  work without local setup or root configuration. Local/all telemetry export
+  requires an explicit endpoint; configured legacy export uses `--source legacy`.
+- Add an opt-in single repair round inside Execute after ordinary required
+  Verification failures. Persist the consumed round and extra-work deadline,
+  retain separate Evidence, recheck custody and limits, and rerun final gates.
+  Control failures stop immediately. Failed Task Runs still need explicit retry,
+  and interrupted repairs require a fresh attempt rather than replaying paid work.
+- Expand this repository's configured Verification to required, check-only
+  workflow drift, formatting, lint, types, and coverage/test gates. Existing
+  saved local configurations keep their settings until explicitly updated.
+- Align operating, visual, contributor, and architecture documentation with
+  the unreleased repair/reporting contracts. Clarify metrics, recovery,
+  telemetry consent, and release availability; correct the managed Spec
+  workflow's instructions for switching back to local dispatch.
+
 ## 0.17.1 — 2026-09-13
 
 - Fix the manual setup receipt for `machinist init` and `machinist onboard`:

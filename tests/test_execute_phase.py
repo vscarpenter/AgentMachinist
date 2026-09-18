@@ -227,6 +227,416 @@ def failing_tests(args, **kwargs):
     return subprocess.CompletedProcess(args, 1, "", "2 failed: test_x, test_y")
 
 
+def config_with_repair():
+    return MachinistConfig.model_validate(
+        {
+            "verification": {
+                "repair": {"max_attempts": 1},
+                "gates": [{"name": "tests", "command": "pytest -q"}],
+            }
+        }
+    )
+
+
+def test_execute_repairs_failed_gate_once_and_keeps_distinct_evidence(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+
+    def original_cancel():
+        return False
+
+    harness.cancel_check = original_cancel
+    claim = FakeClaim(tmp_path)
+    results = iter((1, 0))
+    gate_calls = []
+
+    def run_gate(args, **kwargs):
+        gate_calls.append(kwargs)
+        return subprocess.CompletedProcess(args, next(results), "", "test_x failed")
+
+    run_execute_phase(
+        42,
+        config_with_repair(),
+        github=FakeGitHub(prs=[make_pr()]),
+        harness=harness,
+        workspace=workspace,
+        test_runner=run_gate,
+        claim=claim,
+    )
+
+    assert len(harness.prompts) == 2
+    assert "Do the thing." in harness.prompts[1]
+    assert "test_x failed" in harness.prompts[1]
+    assert len(gate_calls) == 2
+    assert gate_calls[0]["stdout_log"] != gate_calls[1]["stdout_log"]
+    assert claim.evidence["repair"]["attempts_consumed"] == 1
+    assert claim.evidence["repair"]["initial_verification_report"]["success"] is False
+    assert claim.evidence["verification_report"]["success"] is True
+    assert Path(claim.evidence["harness_report_path"]).read_text() == "done"
+    assert Path(claim.evidence["repair_harness_report_path"]).read_text() == "done"
+    assert harness.cancel_check is original_cancel
+    assert sum(call[0] == "push" for call in workspace.calls) == 1
+
+
+def test_execute_exhausted_repair_keeps_workshop_without_delivery(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+    claim = FakeClaim(tmp_path)
+
+    with pytest.raises(ExecutePhaseError, match="test_x"):
+        run_execute_phase(
+            42,
+            config_with_repair(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=harness,
+            workspace=workspace,
+            test_runner=failing_tests,
+            claim=claim,
+        )
+
+    assert len(harness.prompts) == 2
+    assert claim.evidence["repair"]["attempts_consumed"] == 1
+    assert claim.evidence["verification_report"]["success"] is False
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+    assert ("cleanup", False) in workspace.calls
+
+
+def test_execute_repair_cancellation_retains_budget_without_delivery(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness()
+    claim = FakeClaim(tmp_path)
+    cancelled = False
+
+    def check_cancelled():
+        return cancelled
+
+    harness.cancel_check = check_cancelled
+
+    def implement(cwd):
+        nonlocal cancelled
+        touch_file(workspace)(cwd)
+        if len(harness.prompts) == 2:
+            assert harness.cancel_check is not check_cancelled
+            cancelled = True
+
+    harness.on_implement = implement
+    with pytest.raises(ExecutePhaseCancelled, match="cancelled"):
+        run_execute_phase(
+            42,
+            config_with_repair(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=harness,
+            workspace=workspace,
+            test_runner=failing_tests,
+            claim=claim,
+            cancel_check=check_cancelled,
+        )
+
+    assert len(harness.prompts) == 2
+    assert harness.cancel_check is check_cancelled
+    assert claim.evidence["repair"]["attempts_consumed"] == 1
+    assert claim.evidence["repair"]["status"] == "cancelled"
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+
+
+@pytest.mark.parametrize("returncode", [126, 127])
+def test_execute_never_repairs_unavailable_verification_command(tmp_path, returncode):
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+
+    with pytest.raises(ExecutePhaseError):
+        run_execute_phase(
+            42,
+            config_with_repair(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=harness,
+            workspace=workspace,
+            test_runner=lambda args, **kwargs: subprocess.CompletedProcess(
+                args, returncode, "", "command unavailable"
+            ),
+            claim=FakeClaim(tmp_path),
+        )
+
+    assert len(harness.prompts) == 1
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+
+
+@pytest.mark.parametrize("violation", ["head", "test_deletion"])
+def test_execute_repair_enforces_custody_and_limits_even_on_harness_error(
+    tmp_path, violation
+):
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness()
+
+    def original_cancel():
+        return False
+
+    harness.cancel_check = original_cancel
+
+    def implement(cwd):
+        touch_file(workspace)(cwd)
+        if len(harness.prompts) == 2:
+            if violation == "head":
+                workspace._head_override = "d" * 40
+            else:
+                workspace._changed_files = ["tests/test_removed.py"]
+            raise RuntimeError("repair process crashed")
+
+    harness.on_implement = implement
+    with pytest.raises(ExecutePhaseError, match="custody|deleted test"):
+        run_execute_phase(
+            42,
+            config_with_repair(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=harness,
+            workspace=workspace,
+            test_runner=failing_tests,
+            claim=FakeClaim(tmp_path),
+        )
+
+    assert len(harness.prompts) == 2
+    assert harness.cancel_check is original_cancel
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+
+
+def test_execute_interrupted_repair_resume_never_replays_paid_work(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    harness = FakeHarness()
+    claim = FakeClaim(tmp_path)
+
+    def implement(cwd):
+        touch_file(workspace)(cwd)
+        if len(harness.prompts) == 2:
+            raise RuntimeError("repair process interrupted")
+
+    harness.on_implement = implement
+    with pytest.raises(RuntimeError, match="interrupted"):
+        run_execute_phase(
+            42,
+            config_with_repair(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=harness,
+            workspace=workspace,
+            test_runner=failing_tests,
+            claim=claim,
+        )
+
+    resumed_harness = FakeHarness(error=AssertionError("must not repeat paid work"))
+    retry_claim = FakeClaim(tmp_path, attempt=2, previous_evidence=claim.evidence)
+    with pytest.raises(ExecutePhaseError, match="repair.*interrupted"):
+        run_execute_phase(
+            42,
+            config_with_repair(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=resumed_harness,
+            workspace=workspace,
+            test_runner=passing_tests,
+            claim=retry_claim,
+            resume=True,
+        )
+    assert resumed_harness.prompts == []
+    assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+
+
+def test_execute_fresh_retry_resets_exhausted_repair_budget(tmp_path):
+    workspace = FakeWorkspace(tmp_path)
+    claim = FakeClaim(tmp_path)
+    with pytest.raises(ExecutePhaseError):
+        run_execute_phase(
+            42,
+            config_with_repair(),
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=FakeHarness(on_implement=touch_file(workspace)),
+            workspace=workspace,
+            test_runner=failing_tests,
+            claim=claim,
+        )
+
+    retry_claim = FakeClaim(tmp_path, attempt=2, previous_evidence=claim.evidence)
+    harness = FakeHarness(on_implement=touch_file(workspace))
+    results = iter((1, 0))
+    run_execute_phase(
+        42,
+        config_with_repair(),
+        github=FakeGitHub(prs=[make_pr()]),
+        harness=harness,
+        workspace=workspace,
+        test_runner=lambda args, **kwargs: subprocess.CompletedProcess(
+            args, next(results), "", "test failure"
+        ),
+        claim=retry_claim,
+    )
+
+    assert len(harness.prompts) == 2
+    assert retry_claim.evidence["repair"]["attempts_consumed"] == 1
+    assert retry_claim.evidence["verification_report"]["success"] is True
+
+
+@pytest.mark.parametrize("repair_attempts", [0, 1])
+@pytest.mark.parametrize("overlay", ["missing", "changed"])
+def test_post_harness_resume_preserves_consumed_instructions_without_rereading(
+    tmp_path, repair_attempts, overlay
+):
+    workspace = FakeWorkspace(tmp_path)
+    retained = tmp_path / "retained-implementation"
+    workspace._prepare_path(retained)
+    (retained / "impl.py").write_text("retained code\n")
+    if overlay == "changed":
+        (retained / "AGENTS.md").write_text("new instructions not consumed\n")
+    workspace._dirty = True
+    workspace._changed_files = ["impl.py", "AGENTS.md"]
+    config = MachinistConfig.model_validate(
+        {
+            "instructions": {"execute": {"paths": ["AGENTS.md"]}},
+            "verification": {
+                "gates": [{"name": "tests", "command": "pytest -q"}],
+                "repair": {"max_attempts": repair_attempts},
+            },
+        }
+    )
+    consumed_instructions = config.instructions.evidence(
+        "execute", "approved original instructions\n"
+    )
+    claim = FakeClaim(
+        tmp_path,
+        attempt=2,
+        previous_evidence={
+            "approved_sha": "a" * 40,
+            "workspace_path": str(retained),
+            "harness_completed": True,
+            **consumed_instructions,
+        },
+    )
+    harness = FakeHarness(error=AssertionError("must not repeat paid work"))
+
+    run_execute_phase(
+        42,
+        config,
+        github=FakeGitHub(prs=[make_pr()]),
+        harness=harness,
+        workspace=workspace,
+        test_runner=passing_tests,
+        claim=claim,
+        resume=True,
+    )
+
+    assert harness.prompts == []
+    assert all(
+        claim.evidence[key] == value for key, value in consumed_instructions.items()
+    )
+    assert not any("instructions_sha256" in update for update in claim.checkpoints)
+    assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
+
+
+@pytest.mark.parametrize("overlay", ["missing", "changed", "unchanged"])
+def test_post_harness_repair_requires_original_instruction_digest(tmp_path, overlay):
+    workspace = FakeWorkspace(tmp_path)
+    retained = tmp_path / "retained-implementation"
+    workspace._prepare_path(retained)
+    (retained / "impl.py").write_text("retained code\n")
+    original = "approved original instructions\n"
+    if overlay != "missing":
+        (retained / "AGENTS.md").write_text(
+            original if overlay == "unchanged" else "changed instructions\n"
+        )
+    workspace._dirty = True
+    config = MachinistConfig.model_validate(
+        {
+            "instructions": {"execute": {"paths": ["AGENTS.md"]}},
+            "verification": {
+                "gates": [{"name": "tests", "command": "pytest -q"}],
+                "repair": {"max_attempts": 1},
+            },
+        }
+    )
+    consumed_instructions = config.instructions.evidence("execute", original)
+    claim = FakeClaim(
+        tmp_path,
+        attempt=2,
+        previous_evidence={
+            "approved_sha": "a" * 40,
+            "workspace_path": str(retained),
+            "harness_completed": True,
+            **consumed_instructions,
+        },
+    )
+    harness = FakeHarness(on_implement=touch_file(workspace))
+    results = iter((1, 0))
+
+    def resume():
+        return run_execute_phase(
+            42,
+            config,
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=harness,
+            workspace=workspace,
+            test_runner=lambda args, **kwargs: subprocess.CompletedProcess(
+                args, next(results), "", "test failure"
+            ),
+            claim=claim,
+            resume=True,
+        )
+
+    if overlay == "unchanged":
+        resume()
+        assert len(harness.prompts) == 1
+        assert original in harness.prompts[0]
+    else:
+        with pytest.raises(ExecutePhaseError, match="instructions.*--fresh"):
+            resume()
+        assert harness.prompts == []
+        assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+    assert all(
+        claim.evidence[key] == value for key, value in consumed_instructions.items()
+    )
+    assert not any("instructions_sha256" in update for update in claim.checkpoints)
+
+
+@pytest.mark.parametrize("gate_passes", [False, True])
+def test_post_harness_resume_needs_feedback_only_for_new_repair(tmp_path, gate_passes):
+    workspace = FakeWorkspace(tmp_path)
+    retained = tmp_path / "retained-amendment"
+    workspace._prepare_path(retained)
+    (retained / "impl.py").write_text("retained code\n")
+    workspace._dirty = True
+    config = config_with_repair()
+    claim = FakeClaim(
+        tmp_path,
+        attempt=2,
+        previous_evidence={
+            "approved_sha": "a" * 40,
+            "workspace_path": str(retained),
+            "harness_completed": True,
+            "feedback_supplied": True,
+            "feedback_characters": 10,
+            **config.instructions.evidence("execute", ""),
+        },
+    )
+    harness = FakeHarness(error=AssertionError("must not repeat paid work"))
+
+    def resume():
+        run_execute_phase(
+            42,
+            config,
+            github=FakeGitHub(prs=[make_pr()]),
+            harness=harness,
+            workspace=workspace,
+            test_runner=passing_tests if gate_passes else failing_tests,
+            claim=claim,
+            resume=True,
+        )
+
+    if gate_passes:
+        resume()
+        assert ("push", "agent/issue-42", "a" * 40) in workspace.calls
+    else:
+        with pytest.raises(ExecutePhaseError, match="feedback.*--fresh"):
+            resume()
+        assert not any(call[0] in {"commit_all", "push"} for call in workspace.calls)
+    assert harness.prompts == []
+    assert not any("instructions_sha256" in update for update in claim.checkpoints)
+
+
 def real_git(cwd: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args],

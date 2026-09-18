@@ -2,8 +2,9 @@
 # when an issue receives the configured trigger label.
 #
 # Requires the configured Harness API-key repository secret (Settings → Secrets).
-# Prefer running Phase 1 locally instead? Delete this file and let
-# `machinist watch` handle labeled issues on your machine.
+# To run Phase 1 locally, set github.spec_source: local and run
+# `machinist sync-workflows`. Review, commit, and merge the generated removal;
+# then `machinist watch` handles labeled issues on your machine.
 
 name: Machinist Spec Generation
 

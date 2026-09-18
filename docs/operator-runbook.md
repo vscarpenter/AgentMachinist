@@ -7,6 +7,9 @@ Install with `uv tool install agentmachinist`, or upgrade with
 `uv tool upgrade agentmachinist`. See the
 [installation instructions](getting-started.md#install) for other setups.
 
+The bounded repair and combined reporting options described below are
+unreleased additions available from the source checkout.
+
 ## Local foreground operation
 
 Use the [local workflow guide](local-workflow.md) for the complete no-forge
@@ -27,7 +30,8 @@ Failed Phases require `machinist retry --task T1 --phase execute` (or
 `--phase spec`/`--phase review`). Local retry runs immediately, clears
 cancellation, and resumes Execute edits by default; `--fresh` chooses a fresh
 Workshop. Local Execute resume requires the retained bytes to match the failure
-checkpoint. If you change the configured Gates, limits, or instructions, use
+checkpoint. If you change the configured Gates, limits, instruction overlays,
+or enabled repair settings, use
 `machinist retry --task T1 --phase execute --fresh`; those inputs invalidate
 the matching recovery checkpoint. Inspect retained local edits without changing
 them when you intend to resume. `machinist continue T1` does not replace explicit
@@ -98,6 +102,10 @@ enabled, local Spec source, managed workflows off, telemetry endpoint unset,
 and an absolute Workshop root outside the repository. Repair a baseline Gate
 failure here and run `machinist retry --task T1 --phase spec`. If the committed
 baseline itself needs a fix, commit it and start a new Task from the new base.
+This repository's root configuration now uses ordered workflow, format, lint,
+type, and full-suite coverage Gates. Existing saved local settings retain their
+previous Gates until explicitly updated; packaging and the OS/Python CI matrix
+remain separate verification steps.
 
 Task records and reports are in `.machinist/runs/local/tasks/`; Phase projections
 and history are under `.machinist/runs/local/`. Local setup uses Git's local
@@ -111,13 +119,53 @@ conflict requiring a new decision, not authorization to force a merge. Repeat
 an interrupted integration using its saved intent. For publication failures,
 repeat the same `publish` command; resolve pending publication before amending.
 
+### Bounded repair recovery
+
+Repair defaults off. Enable `verification.repair.max_attempts: 1` deliberately
+in the effective configuration; local Tasks use their saved local file. Root
+configuration changes do not rewrite that file. The default extra-work budget
+is `verification.repair.timeout_minutes: 10` (1–240), covering one additional
+Harness invocation and all final Gates inside the active Execute run. Failure
+Evidence is a diagnostic aid, never permission to widen scope or weaken Gates.
+Individual Harness and Gate timeouts remain in force. This repair policy applies
+only to Execute, not Spec baseline verification, readiness checks, or Review.
+
+Only ordinary required command failures with exit code 1–125 qualify. Missing
+commands (including exit 126/127), signal exits, timeouts, cancellation, output
+limits, stragglers, custody errors, forbidden mutations, and snapshot errors do
+not qualify. An abnormal advisory Gate outcome also suppresses an otherwise
+eligible repair. Exit status cannot prove whether the root cause is code or
+infrastructure. If repair or final
+Verification fails, inspect the separate reports/logs and use explicit retry.
+
+A retained interrupted repair or a repair that ended in failure, timeout, or
+cancellation requires a fresh attempt:
+
+```sh
+machinist retry --task T1 --phase execute --fresh
+# Legacy GitHub equivalent:
+machinist retry 42 --phase execute --run --fresh
+```
+
+Resume never replays an interrupted or failed paid repair or replenishes its
+consumed budget. Completed repair with valid retained state may finish Verification
+within the saved deadline without another Harness invocation. Fresh Execute
+attempts start a new budget. Recovery after a successful implementation commit
+continues to reconcile delivery without repeating paid work or successful Gates.
+
+Resumed verification does not reread or replace already-consumed instruction
+Evidence. If another repair invocation becomes necessary, its instructions must
+match the saved digest. Missing or changed instruction files require `--fresh`.
+Legacy amendment feedback is not retained as reconstructable text, so a resumed
+legacy amendment also needs `--fresh` if a new repair would require that feedback.
+
 ### Command scope in mixed checkouts
 
 With local configuration present, `status` lists local Tasks; `status T1`
 selects one, and `--watch` follows local changes. It does not query GitHub.
-Legacy `runs`, `inspect`, `explain`, `report`, and portfolio `status --all`
-continue reading `.machinist/runs/` issue records; they do not aggregate local
-Tasks. `status --local` reads legacy records only when local configuration is
+Legacy `runs`, `inspect`, `explain`, and portfolio `status --all` continue
+reading `.machinist/runs/` issue records. Aggregate `report` reads both local and
+legacy history by default; `--source local` or `--source legacy` selects one. `status --local` reads legacy records only when local configuration is
 absent. Use `runs` and `inspect` for legacy Evidence in a mixed checkout.
 
 Plain `doctor` remains a GitHub setup preflight; `doctor --local`
@@ -297,7 +345,6 @@ machinist status --watch --interval 2
 machinist status --local --json
 machinist runs --issue 42 --json
 machinist inspect 42 --offline --json
-machinist report --since 30d --json
 ```
 
 The legacy local read model includes current/history records plus orphaned, partial,
@@ -310,11 +357,33 @@ and the exact next action while showing credential names only. Live status
 prints the initial pipeline snapshot and later changes; JSON watch mode is
 newline-delimited and Ctrl-C exits successfully.
 
-`report` aggregates local outcomes, retries, cancellations, durations,
-gate-failure statuses, and safe Harness/model metadata. Export is opt-in through
-`telemetry.otlp_endpoint` or `--otlp-endpoint`; authorization comes from
-`MACHINIST_OTLP_AUTHORIZATION`. An export failure returns non-zero after the
-local report and never modifies history or prints the response body.
+`report --source all|legacy|local` aggregates stored Phase outcomes, retries,
+cancellations, durations, gate failures, and safe Harness/model metadata. The
+default is `all`; local-only reporting requires no root configuration or forge
+access. `success_rate` counts terminal Phase attempts; `first_pass_execute`
+counts first Execute attempts that succeeded without repair. `repairs` counts
+consumed rounds, final Verification outcomes, and recorded durations, without
+counting a resumed round twice. A verified repair does not prove later commit,
+push, or human acceptance. `local_delivery` counts current stored snapshots of
+Tasks updated in the window, not delivery events or live Git/forge state.
+Missing usage is unknown; `usage_coverage` accompanies known `token_totals`.
+The default `--since 30d` selects Phase attempts by their last saved update;
+positive integer `h`, `d`, and `w` windows are accepted. Rates with no eligible
+denominator are `null`. `gate_failures` counts the final authoritative report
+for each attempt; failures fixed by repair remain in the repair Evidence.
+
+```sh
+machinist report --source all --since 30d --json
+machinist report --source local --since 7d --json
+machinist report --source legacy --since 30d --json
+```
+
+The configured root `telemetry.otlp_endpoint` applies only with
+`--source legacy`; add this selector to existing legacy export scripts to keep
+that endpoint behavior. Default/all and local reports require explicit
+`--otlp-endpoint` to export and omit repository identity. Authorization comes
+from `MACHINIST_OTLP_AUTHORIZATION`. An export failure returns non-zero after
+the local report and never modifies history or prints the response body.
 
 For a solo portfolio, register canonical repository roots and read them without
 changing directories:
@@ -458,8 +527,8 @@ machinist config schema --output machinist.schema.json
 `machinist config set <dotted-key> <yaml-value>` atomically rewrites the
 validated config as canonical YAML and normalizes comments. Phase-specific
 harness profiles, instruction overlays, named verification gates, the harness
-verification feedback loop, independent Review, telemetry, the test-deletion
-guard, notifications, admission budgets, and change limits are documented in the
+verification feedback loop, bounded Execute repair, independent Review,
+telemetry, the test-deletion guard, notifications, admission budgets, and change limits are documented in the
 [getting-started reference](getting-started.md).
 
 ## GitHub Approval incidents

@@ -25,10 +25,12 @@ publication, alongside the legacy GitHub issue workflow. Reports may cover the
 published Python package, controller source, bundled prompts and workflows,
 and release automation maintained in this repository.
 
-Task bodies, imported issues, and PR/MR branches are untrusted input. The
-repository owner, default branch, local configuration and Verification commands,
-installed Harness, and the local user account launching AgentMachinist are
-trusted inputs.
+Task bodies, imported issues, PR/MR branches, and Verification failure output
+are untrusted input. The repository owner, default branch, local configuration
+and Verification commands, installed Harness, and the local user account
+launching AgentMachinist are trusted inputs. Bounded Execute repair and combined
+local/legacy reporting are unreleased source-checkout additions; the published
+baseline is 0.17.1.
 
 ## Security Invariants
 
@@ -49,6 +51,15 @@ Security-sensitive behavior should preserve these properties:
 - Untrusted issue and repository data must not escape configured workspace,
   command-construction, or size boundaries.
 - Logs and errors must not disclose credentials or other avoidable secrets.
+- Bounded diagnostics and repair prompt excerpts redact recognized credentials
+  and terminal controls. Raw logs and arbitrary output are not covered by that
+  sanitization contract and must be inspected before sharing.
+- Aggregate telemetry exports use an allowlist. Including local Task metrics
+  requires an explicit report endpoint and omits repository identity; legacy
+  endpoint configuration alone cannot export local metrics.
+- Repair stays within one active Execute attempt and its persisted budget and
+  deadline. Failed Task Runs still require explicit retry; configured
+  Verification and existing independent Review requirements remain unchanged.
 - Local integration requires an explicit human command, a clean expected base,
   and a fast-forward to the exact verified, independently reviewed candidate.
   AgentMachinist never merges a remote PR or MR.
@@ -69,6 +80,9 @@ against hostile processes running as the same OS user. Local Task Claims are
 not distributed locks, and model output can be incorrect even when tests pass.
 See [the trust model](docs/trust-model.md) for the complete operational boundary
 and recommended isolation.
+Repair instructions limiting scope and forbidding weaker tests are advisory;
+the controller cannot prove semantic compliance or that all secrets have been
+removed from arbitrary output.
 
 ## Out of Scope
 

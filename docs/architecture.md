@@ -4,8 +4,9 @@ AgentMachinist coordinates Git, a coding Harness, and the repository's
 verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
-deployment remain outside the controller. This document describes the
-AgentMachinist 0.17.1 implementation. The 0.14.0 release added the local
+deployment remain outside the controller. The published baseline is
+AgentMachinist 0.17.1. Bounded Execute repair and combined local/legacy reporting
+below are unreleased source-checkout additions. The 0.14.0 release added the local
 workflow and GitLab collaboration; 0.15.0 added local readiness, exact
 remote-base validation, and bounded diagnostics.
 
@@ -97,6 +98,7 @@ change custody, spend Harness time, or interpret durable state:
 | Pipeline transitions | `transitions.py` | State vocabulary, priority, dispatch eligibility, Task Run disposition, and next action. |
 | Repository and change custody | `repository_custody.py` for legacy GitHub; `local_workspace.py`, `publication.py`, and `forge.py` for optional delivery | Bind origin host/repository and verify exact PR/MR identity and candidate SHA. |
 | Verification Gates | `verification.py` | The sole required/advisory, timeout, cancellation, mutation, logging, and result implementation. |
+| Bounded Execute repair | `repair.py` | Shared local/legacy eligibility, persisted budget and deadline, repair prompt, and final Verification coordination; Phases retain custody and change-limit ownership. |
 | Configuration behavior | `config.py` | Validated starter and effective projections; terminal rendering and atomic persistence live in `config_cli.py`. |
 
 These are internal module seams, not persistence migrations. Version-1 Task Run
@@ -215,6 +217,11 @@ Local Execute resume also requires the retained bytes to match the failure
 checkpoint and the Task, input SHA, Verification, limits, and instructions to
 match its saved request. Changes to those inputs require a fresh attempt;
 manually editing a retained local Workshop is not a supported resume path.
+A retained interrupted repair or one that failed, timed out, or was cancelled
+requires `--fresh`; resume never replays its paid Harness invocation. If repair
+finished and its retained state is valid, resume can complete Verification
+without another repair invocation, within the saved deadline. A fresh explicit
+Execute attempt starts a new repair budget.
 
 Cancellation requests and legacy watcher queue controls are separate durable
 records. Local cancellation is namespaced under `.machinist/runs/local/` and
@@ -252,6 +259,22 @@ also enforces configured file-count, byte-count, denied-path, and binary-file
 limits, and refuses deleted test files (heuristic path patterns; renames
 count) unless `limits.allow_test_deletions` is set.
 
+Optional `verification.repair.max_attempts: 1` permits one additional Harness
+invocation after an ordinary required command failure during the active Execute
+Task Run. The default is `0`; `timeout_minutes` defaults to `10` and accepts
+1 through 240. An absolute deadline covers that invocation and all final Gates.
+The shared coordinator persists consumed budget before model work and retains
+separate initial/repair reports, logs, durations, and outcomes. The Phase checks
+custody and change limits around each invocation and all configured Gates run
+again. Only the final authoritative result permits commit and delivery.
+
+Advisory failures alone, cancellation, timeout, missing commands (including
+exit 126/127), output limits, stragglers, custody violations, forbidden mutations,
+and snapshot errors do not trigger repair. An ordinary nonzero exit is a
+conservative eligibility heuristic, not proof that the failure is a code bug.
+A failed Task Run still requires explicit retry; repair never creates a watcher
+retry loop or repairs independent Review findings.
+
 Harnesses and gates run under a process supervisor with bounded output,
 timeouts, credential reduction, process-group termination, and cooperative
 cancellation. This makes ordinary child-process failures containable; it does
@@ -260,6 +283,12 @@ not turn a local harness into a sandbox.
 Phase-specific harness profiles and repository-local instruction overlays are
 resolved before invocation. Instruction files must remain within the canonical
 repository root and pass file-count, encoding, and byte limits.
+On a resumed Execute, a new repair invocation must reconstruct the original
+instruction context and match its saved digest. Missing or changed instruction
+provenance requires `--fresh`; a resumed legacy amendment also requires
+`--fresh` if its original feedback cannot be reconstructed. Reconciliation and
+Verification after completed Harness work do not reread unused instructions or
+replace their recorded provenance.
 
 ## Adapter boundary
 
@@ -275,17 +304,25 @@ diagnostics; it is not a sandbox or permission boundary.
 
 ## Reporting boundary
 
-`machinist report` reduces locally stored legacy issue JSONL history to
-aggregate outcomes, phase/status series,
-duration percentiles, gate-failure statuses, safe Harness/model identity, and
-declared structured token counts. Network export lives in a separate module
-that accepts only the aggregate report. Its OTLP/HTTP JSON projector constructs
-an allowlist of repository, phase, status, Harness, and model attributes; it
-cannot serialize issue bodies, prompts, diffs, commands, errors, environment
-values, or arbitrary Evidence. Export is disabled without explicit config or a
-command flag. It does not aggregate the nested local Task namespace. Foreground
-Tasks instead expose status JSON, saved Phase Evidence, and a Markdown report;
-local configuration requires telemetry export to remain disabled.
+`machinist report --source all|legacy|local` reduces locally stored Phase
+history to aggregates; `all` is the default. Collection keeps legacy issue and
+local Task identities separate, so `T1` and issue 1 cannot collide. Local-only
+reporting needs no root configuration, setup writes, model work, or forge access.
+The existing `success_rate` counts terminal Phase attempts, not Task acceptance.
+`first_pass_execute` counts first Execute attempts that succeeded without repair.
+Repair rounds and durations are separate metrics. `local_delivery` counts current
+reviewed/integrated/published Task snapshots updated in the window; these are not
+acceptance rates or delivery events. `usage_coverage` identifies attempts with
+reported numeric usage; missing usage is unknown, not zero.
+
+Network export lives in a separate module accepting only the aggregate report.
+Its OTLP/HTTP JSON projector allowlists aggregate attributes and cannot serialize
+issue bodies, prompts, diffs, commands, errors, environment values, or arbitrary
+Evidence. The configured root endpoint is used only with `--source legacy`.
+The default `all` and explicit `local` require `--otlp-endpoint` for export and
+omit repository identity. Foreground local configuration still requires an
+unset telemetry endpoint. Local status JSON, Phase Evidence, and Markdown reports
+remain available for individual Task inspection.
 
 ## Dispatch sources and admission
 
@@ -325,7 +362,8 @@ The optional repository registry contains canonical local roots only.
 independently; one missing or corrupt repository does not erase healthy
 repository results. It does not include foreground `T1` records. A checkout with
 local configuration routes default `status` to local Tasks; `runs`, `inspect`,
-`explain`, plain `doctor`, `clean`, and aggregate reports retain legacy scope.
+`explain`, plain `doctor`, and `clean` retain legacy scope. Aggregate `report`
+selects both history namespaces by default or one through `--source`.
 `doctor --local` selects readiness for the local workflow.
 `config` defaults to root `machinist.yaml`, with `--path` required to inspect or
 change the foreground local configuration.

@@ -18,8 +18,8 @@ Task → Spec commit → human Approval → Execute → verification → Review
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
 hatchling, published to PyPI as `agentmachinist` (current release: 0.17.1).
 This repository dogfoods itself: the root `machinist.yaml` configures the
-pipeline for this repo (`spec_source: github-actions`, test gate
-`uv run pytest`).
+pipeline for this repo (`spec_source: github-actions`, ordered workflow,
+format, lint, type, and coverage/test gates from `scripts/verify.sh`).
 
 ## Commands
 
@@ -134,6 +134,17 @@ never-merges rule only for that human-directed local operation.
 - `verification.py` — the sole Verification Gate engine after Harness work,
   including required/advisory outcomes, mutation checks, cancellation,
   timeouts, logs, and Evidence projection.
+- `repair.py` — optional single repair round within active Execute, with
+  conservative failure eligibility, a persisted consumed budget and deadline,
+  bounded failure context, and no replay of interrupted paid repair work.
+  Phases retain custody and limit checks around every process. Verification
+  remains authoritative; failed Task Runs still require explicit retry.
+- `reporting.py` — read-only aggregation of local and legacy attempt histories,
+  with separate Task namespaces, first-pass Execute and repair outcomes, usage
+  completeness, and current local delivery snapshots. Missing usage is unknown.
+- `telemetry.py` — allowlisted aggregate OTLP export. Reports including local
+  Tasks require an explicit endpoint; configured root export applies only to
+  `report --source legacy`.
 - `harness/` — `base.py` owns subprocess mechanics, timeouts, 30s heartbeat
   callbacks, and credential scrubbing (removes `GH_TOKEN`, `GITHUB_TOKEN`,
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
@@ -150,14 +161,18 @@ never-merges rule only for that human-directed local operation.
 - `phases/execute.py` — Phase 3: approval guards (label + SHA marker match +
   draft-ness), harness with edit permissions, head/remote postconditions (the
   Workshop asserts metadata custody itself on every Git call),
-  test-deletion guard (`limits.allow_test_deletions` opts out), test gate,
+  test-deletion guard (`limits.allow_test_deletions` opts out), Verification Gates,
   commit, leased push, and mark PR ready only when legacy Review is disabled.
   With Review enabled, its Phase owns the ready transition. The implement
   prompt lists the gate commands and asks the harness to iterate until they pass
   (`verification.harness_may_run_gates` opts out); the claude-code adapter
   allows those commands and added-argument variants via
-  `Harness.allowed_commands`. Contains
+  `Harness.allowed_commands`. Optional repair uses the same Execute profile and
+  shared coordinator before final Verification. Contains
   partial-push recovery via checkpoint evidence.
+- `phases/local.py` — foreground local Spec, Execute, and Review, including
+  baseline Verification, exact Approval, local candidate Evidence, and shared
+  bounded Execute repair. Local independent Review always runs.
 - `phases/review.py` — independent read-only review of the exact delivered
   Execute head; posts a bounded structured report and marks the PR ready only
   after rechecking custody.
@@ -238,7 +253,8 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 7. **Explicit retry only**: a failed Task Run blocks re-runs until
    `machinist retry`; a crash after push is reconciled from checkpoints
    (neither the harness nor the verification gates rerun; only a crash
-   before the implementation commit reruns the gates).
+   before the implementation commit reruns the gates). Configured bounded repair
+   runs inside active Execute before it fails; it never redispatches failed runs.
 8. **Security wording**: never claim a harness "has no Git access" — the
    trust model (docs/trust-model.md, SECURITY.md) is credential *reduction*
    and detection, not OS-level isolation. `pull_request_target` automation
@@ -297,6 +313,11 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   job card, animated explainer, the how-it-works swimlane diagram, and the
   onboarding redirect. Documentation tests validate commands, configuration,
   version identity, links, and control targets.
+- Documentation entry points: `docs/how-it-works.html` is the short explainer,
+  `docs/tldr.md` is the first-Task guide, and `docs/README.md` plus
+  `docs/index.html#documentation` index every guide and historical record.
+  Keep detailed configuration in `getting-started.md` and recovery in the
+  runbook; link to those references rather than adding another introduction.
 - `AgentMachinist-Prompt.md` — the original kickoff prompt, historical.
 
 ## Releasing
@@ -307,7 +328,14 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current checkout (2026-09-13)
+## Current checkout (2026-09-18)
+
+- **Unreleased:** combined local/legacy `report --source all|legacy|local`,
+  bounded opt-in Execute repair, and this repository's expanded check-only
+  Verification Gates. Repair defaults off and is limited to one additional
+  Harness invocation plus final Verification under a persisted deadline.
+  Saved local configuration is unchanged until explicitly edited. See
+  `tasks/verification-reporting-repair-spec.md` and the operating guides.
 
 - **0.17.1 fixes manual setup staging for new managed workflows.** The setup
   receipt lists exact generated and removed workflow paths, preserving staged

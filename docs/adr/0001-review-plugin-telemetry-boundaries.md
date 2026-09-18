@@ -12,8 +12,12 @@ Deciders: Vinny Carpenter
 with local Tasks and explicit local fast-forward integration. The PR transitions
 and disabled Review compatibility default below describe legacy GitHub Tasks.
 Local Tasks always run independent Review; publication is a separate optional
-action. Telemetry still summarizes legacy Task Run journals, not local `T1`
-records. Plugin and aggregate-export boundaries remain unchanged. See the
+action. Unreleased source-checkout reporting now includes local `T1` histories
+and legacy Task Run journals by default, selectable with `--source`. Root
+telemetry configuration applies only to `--source legacy`; including local
+metrics requires an explicit endpoint and omits repository identity. The
+allowlisted aggregate-export boundary and plugin trust boundary remain intact.
+See the [reporting boundary](../architecture.md#reporting-boundary) and the
 [local workflow](../local-workflow.md) for current operating instructions.
 
 ## Context

@@ -11,6 +11,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import cast
 
 type EvidenceValue = (
@@ -29,6 +30,7 @@ _PHASE_FIELDS = {
     "feedback_characters": frozenset({"execute"}),
     "change_summary": frozenset({"execute"}),
     "verification_report": frozenset({"execute"}),
+    "repair": frozenset({"execute"}),
     "reviewed_sha": frozenset({"review"}),
     "review_report": frozenset({"review"}),
     "review_comment_id": frozenset({"review"}),
@@ -51,7 +53,14 @@ _BOOLEAN_FIELDS = frozenset(
     {"harness_completed", "feedback_supplied", "cleanup_succeeded"}
 )
 _MAPPING_FIELDS = frozenset(
-    {"harness", "usage", "change_summary", "verification_report", "review_report"}
+    {
+        "harness",
+        "usage",
+        "change_summary",
+        "verification_report",
+        "review_report",
+        "repair",
+    }
 )
 
 
@@ -157,6 +166,10 @@ class TaskEvidence:
     @property
     def verification_report(self) -> dict[str, EvidenceValue] | None:
         return self._mapping("verification_report")
+
+    @property
+    def repair(self) -> dict[str, EvidenceValue] | None:
+        return self._mapping("repair")
 
     @property
     def harness(self) -> dict[str, EvidenceValue] | None:
@@ -289,6 +302,8 @@ def _validate_known_value(key: str, value: EvidenceValue) -> None:
         raise EvidenceError(f"Task Run Evidence '{key}' must be a boolean")
     if key in _MAPPING_FIELDS and not isinstance(value, dict):
         raise EvidenceError(f"Task Run Evidence '{key}' must be an object")
+    if key == "repair":
+        validate_repair_evidence(value)
     if key == "pr_base" and not (isinstance(value, str) and _safe_ref(value)):
         raise EvidenceError("Task Run Evidence contains an invalid PR base")
 
@@ -319,3 +334,85 @@ def _safe_ref(value: str) -> bool:
         and value == value.strip()
         and not any(character in value for character in ("\0", "\n", "\r"))
     )
+
+
+def validate_repair_evidence(value: object) -> Evidence:
+    """Validate resumable repair budget without closing historical Evidence reads."""
+    error = "Task Run Evidence 'repair' has an invalid durable budget"
+    if not isinstance(value, dict):
+        raise EvidenceError(error)
+    repair = validate_evidence(value)
+    if any(
+        type(repair.get(key)) is not int or repair[key] != 1
+        for key in ("version", "max_attempts", "attempts_consumed")
+    ):
+        raise EvidenceError(error)
+    attempts = repair.get("attempts")
+    if not isinstance(attempts, list) or len(attempts) != 1:
+        raise EvidenceError(error)
+    attempt = attempts[0]
+    if (
+        not isinstance(attempt, dict)
+        or type(attempt.get("attempt")) is not int
+        or attempt["attempt"] != 1
+    ):
+        raise EvidenceError(error)
+    status = repair.get("status")
+    if status not in (
+        "running",
+        "verifying",
+        "succeeded",
+        "failed",
+        "timed_out",
+        "cancelled",
+        "interrupted",
+    ) or status != attempt.get("status"):
+        raise EvidenceError(error)
+    deadline = _repair_timestamp(repair.get("deadline_at"), error)
+    if repair["deadline_at"] != attempt.get("deadline_at"):
+        raise EvidenceError(error)
+    started = _repair_timestamp(attempt.get("started_at"), error)
+    if not timedelta(0) < deadline - started <= timedelta(minutes=240):
+        raise EvidenceError(error)
+    completed = attempt.get("harness_completed")
+    if not isinstance(completed, bool):
+        raise EvidenceError(error)
+    if status in ("verifying", "succeeded") and not completed:
+        raise EvidenceError(error)
+    if status == "running" and completed:
+        raise EvidenceError(error)
+    for key in ("duration_seconds", "harness_duration_seconds"):
+        duration = attempt.get(key)
+        if key == "harness_duration_seconds" and duration is None and not completed:
+            continue
+        if (
+            not isinstance(duration, (int, float))
+            or isinstance(duration, bool)
+            or duration < 0
+        ):
+            raise EvidenceError(error)
+    if not isinstance(repair.get("initial_verification_report"), dict):
+        raise EvidenceError(error)
+    if attempt.get("verification_report") is not None and not isinstance(
+        attempt["verification_report"], dict
+    ):
+        raise EvidenceError(error)
+    if attempt.get("harness_report_excerpt") is not None and not isinstance(
+        attempt["harness_report_excerpt"], str
+    ):
+        raise EvidenceError(error)
+    if attempt.get("ended_at") is not None:
+        _repair_timestamp(attempt["ended_at"], error)
+    return repair
+
+
+def _repair_timestamp(value: object, error: str) -> datetime:
+    if not isinstance(value, str):
+        raise EvidenceError(error)
+    try:
+        timestamp = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise EvidenceError(error) from exc
+    if timestamp.utcoffset() != timedelta(0):
+        raise EvidenceError(error)
+    return timestamp

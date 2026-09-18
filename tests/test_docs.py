@@ -188,6 +188,44 @@ def test_local_document_links_resolve():
             assert (path.parent / relative).exists(), f"broken link in {path}: {target}"
 
 
+def test_documentation_indexes_cover_all_guides_and_history():
+    docs_root = _REPO_ROOT / "docs"
+    documents = {
+        path.resolve()
+        for path in docs_root.rglob("*")
+        if path.suffix in {".md", ".html"}
+    }
+    for index in (docs_root / "README.md", docs_root / "index.html"):
+        text = index.read_text()
+        targets = (
+            re.findall(r"\[[^\]]+\]\(([^)]+)\)", text)
+            if index.suffix == ".md"
+            else re.findall(r'href="([^"]+)"', text)
+        )
+        linked = {
+            (index.parent / unquote(urlsplit(target).path)).resolve()
+            for target in targets
+            if not urlsplit(target).scheme
+            and not urlsplit(target).netloc
+            and urlsplit(target).path
+        }
+        missing = documents - {index.resolve()} - linked
+        assert not missing, (
+            f"{index.name} omits: {sorted(str(p.relative_to(docs_root)) for p in missing)}"
+        )
+
+
+def test_visual_guides_link_back_to_complete_directory():
+    for name in (
+        "first-run-guide.html",
+        "how-it-works.html",
+        "explainer.html",
+        "job-card.html",
+    ):
+        text = (_REPO_ROOT / "docs" / name).read_text()
+        assert 'href="index.html#documentation"' in text, name
+
+
 class _HtmlReferences(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -301,9 +339,9 @@ def test_tldr_is_one_short_provider_neutral_path():
     text = _TLDR_PATH.read_text()
     assert len(text.splitlines()) <= 100
     assert text.count("## One-time setup") == 1
-    assert "selected Spec adapter's declared secret" in text
-    assert "machinist run <issue>" in text
-    assert "machinist review <issue>" in text
+    assert "uv tool install agentmachinist" in text
+    assert "getting-started.md#github-setup-and-automation" in text
+    assert "index.html#documentation" in text
     assert "AgentMachinist never merges automatically" in text
     assert "local integration is explicit" in text
     for command in ("start", "approve --task T1", "status T1", "integrate T1"):

@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="How AgentMachinist works: a local Task, exact Spec Approval, verified implementation, advisory Review, and optional GitHub or GitLab publication. AgentMachinist 0.17.1.">
+  <meta name="description" content="AgentMachinist documentation: understand the local workflow, complete your first Task, and find configuration, recovery, architecture, and trust references. AgentMachinist 0.17.1.">
   <meta name="theme-color" content="#f3f1eb">
-  <meta property="og:title" content="How AgentMachinist works">
-  <meta property="og:description" content="A guided local workflow from Task to reviewed candidate. Integrate explicitly; publish to GitHub or GitLab when useful. AgentMachinist 0.17.1.">
+  <meta property="og:title" content="AgentMachinist documentation">
+  <meta property="og:description" content="Start with the workflow explainer and first-Task guide, then find every operating reference and architecture decision. AgentMachinist 0.17.1.">
   <meta name="twitter:card" content="summary">
-  <title>How AgentMachinist works</title>
+  <title>AgentMachinist documentation</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -65,6 +65,22 @@
     .hero { padding-block: clamp(4rem, 8vw, 6.5rem) clamp(2.5rem, 5vw, 4rem); }
     .hero h1 { margin: 0 0 1.5rem; max-width: 17ch; font-size: clamp(2.6rem, 6.5vw, 5.2rem); font-weight: 650; letter-spacing: -0.055em; line-height: 0.98; }
     .hero .lede { margin: 0 0 2rem; max-width: 44rem; color: var(--ink-1); font-size: clamp(1.08rem, 2vw, 1.3rem); }
+    .reading-path { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2rem; font-weight: 650; }
+    .reading-path a { display: inline-flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3.5rem; padding: 0.9rem 1.25rem; border: 1px solid var(--blueprint); border-radius: 8px; background: var(--blueprint-soft); color: var(--blueprint); font-size: 1.05rem; line-height: 1.35; text-decoration: none; box-shadow: var(--shadow-sm); transition: background-color 150ms ease, border-color 150ms ease; }
+    .reading-path a:hover { background: var(--paper-0); }
+    .reading-path a.primary { border-color: var(--signal-strong); background: var(--signal-strong); color: var(--paper-0); }
+    .reading-path a.primary:hover { border-color: var(--ink-0); background: var(--ink-0); }
+    .reading-path svg { flex: 0 0 auto; width: 1.2rem; height: 1.2rem; }
+    .documentation { scroll-margin-top: 5rem; border-top: 1px solid var(--line); }
+    .documentation .section-head { margin-bottom: 2rem; }
+    .doc-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem 4rem; }
+    .doc-group h3 { margin-bottom: 0.75rem; font-size: 1.15rem; }
+    .doc-list { margin: 0; padding-left: 1.2rem; color: var(--ink-1); }
+    .doc-list li { margin-bottom: 0.65rem; padding-left: 0.15rem; overflow-wrap: anywhere; }
+    .doc-history { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+    .doc-history summary { min-height: 2.75rem; padding-block: 0.5rem; cursor: pointer; font-weight: 650; }
+    .doc-history > p { max-width: 48rem; margin-block: 0.75rem 1.25rem; color: var(--ink-1); }
+    .doc-metadata { margin: 2rem 0 0; color: var(--ink-2); font-size: 0.85rem; }
     .legend { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
     .chip { display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 999px; padding: 0.4rem 0.9rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 750; letter-spacing: 0.06em; }
     .chip i { width: 0.6rem; height: 0.6rem; border-radius: 50%; }
@@ -110,7 +126,7 @@
     .board-row .chip { padding: 0.2rem 0.7rem; font-size: 0.68rem; gap: 0.4rem; }
     .board-note { margin: 1.1rem 0 0; color: var(--ink-2); font-size: 0.8rem; line-height: 1.45; }
     @media (max-width: 62rem) {
-      .nav-links a:not(.boxed) { display: none; }
+      .nav-links a:not(.boxed):not(.nav-keep) { display: none; }
       .strip-grid { grid-template-columns: repeat(3, 1fr); }
       .strip-cell:nth-child(3n) { border-right: 0; }
       .strip-cell:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
@@ -121,6 +137,9 @@
     @media (max-width: 40rem) {
       .shell { width: min(100% - 1.25rem, 74rem); }
       .brand span { display: none; }
+      .nav-links { gap: 0.75rem; }
+      .reading-path { flex-direction: column; }
+      .doc-groups { grid-template-columns: minmax(0, 1fr); }
       .strip-grid { grid-template-columns: 1fr; }
       .strip-cell { border-right: 0; border-bottom: 1px solid var(--line); }
       .strip-cell:last-child { border-bottom: 0; }
@@ -214,30 +233,94 @@
 <body>
   <a href="#top" class="skip-link">Skip to content</a>
   <header class="site-header">
-    <nav class="nav shell" aria-label="How it works">
+    <nav class="nav shell" aria-label="AgentMachinist documentation">
       <a class="brand" href="#top">
         <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9h20v14H6z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-        <span>AgentMachinist / how it works</span>
+        <span>AgentMachinist / documentation</span>
       </a>
       <div class="nav-links">
         <a href="#loop">The loop</a>
         <a href="#simulate">Watch it run</a>
-        <a href="#start">Get started</a>
-        <a class="boxed" href="first-run-guide.html">Field guide →</a>
+        <a class="nav-keep" href="#documentation">All documentation</a>
+        <a class="boxed" href="first-run-guide.html">First Task →</a>
       </div>
     </nav>
   </header>
   <main id="top">
     <section class="hero shell">
-      <p class="kicker">How AgentMachinist works · 2 minutes</p>
+      <p class="kicker">AgentMachinist documentation</p>
       <h1>One Task. A reviewed local change.</h1>
       <p class="lede">Start with a bounded objective. Approve its exact Spec, then let the controller coordinate implementation, verification, and independent Review. Inspect the result and integrate it locally. Publish a GitHub PR or GitLab MR whenever sharing helps.</p>
+      <nav class="reading-path" aria-label="Start here">
+        <a href="how-it-works.html">Understand the workflow <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <a class="primary" href="first-run-guide.html">Complete your first Task <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      </nav>
       <p><strong>AgentMachinist 0.17.1</strong> includes an <a href="approval-policy.md">Approval policy</a>, advisory source-text guidance in all three Harness prompts, and a <a href="how-it-works.html">workflow diagram</a>. Install 0.17.1 from PyPI. Exact Spec Approval, verification, independent Review, and optional GitHub or GitLab publication remain part of the workflow. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
         <small>No forge or server is needed for the local journey.</small>
       </div>
+    </section>
+    <section class="section shell documentation" id="documentation" aria-labelledby="documentation-title">
+      <header class="section-head">
+        <h2 id="documentation-title">All documentation</h2>
+        <p>Start with the <a href="how-it-works.html">workflow explainer</a>, then <a href="first-run-guide.html">complete your first Task</a>. Use the references below when you need more detail. The same directory is available in the <a href="README.md">repository documentation index</a>.</p>
+      </header>
+      <div class="doc-groups">
+        <section class="doc-group" aria-labelledby="reference-title">
+          <h3 id="reference-title">Operating references</h3>
+          <ul class="doc-list">
+            <li><a href="local-workflow.md">Local workflow</a>: commands, Task lifecycle, integration, and optional publication.</li>
+            <li><a href="getting-started.md">Configuration and GitHub reference</a>: installation choices, settings, and GitHub automation.</li>
+            <li><a href="operator-runbook.md">Operator runbook</a>: diagnostics, retry, repair, reporting, and recovery.</li>
+            <li><a href="harnesses.md">Harness reference</a>: supported adapters, models, and permissions.</li>
+            <li><a href="trust-model.md">Trust model</a>: guarantees, boundaries, and limitations.</li>
+            <li><a href="approval-policy.md">Approval policy</a>: what Approval authorizes and which controls are enforced.</li>
+            <li><a href="architecture.md">Architecture</a>: controller internals and module responsibilities.</li>
+          </ul>
+        </section>
+        <section class="doc-group" aria-labelledby="formats-title">
+          <h3 id="formats-title">Optional text, animated, and checklist formats</h3>
+          <ul class="doc-list">
+            <li><a href="tldr.md">Short text guide (Markdown)</a>: a concise command walkthrough.</li>
+            <li><a href="explainer.html">Animated explainer</a>: a one-minute walkthrough.</li>
+            <li><a href="job-card.html">Job card</a>: a compact checklist to keep beside your terminal.</li>
+          </ul>
+          <h3 id="decisions-title">Architecture decisions</h3>
+          <ul class="doc-list" aria-labelledby="decisions-title">
+            <li><a href="adr/0001-review-plugin-telemetry-boundaries.md">ADR 0001: Review, plugin, and telemetry boundaries</a></li>
+            <li><a href="adr/0002-deep-module-ownership.md">ADR 0002: Controller module ownership</a></li>
+            <li><a href="adr/0003-local-workflow-and-optional-publication.md">ADR 0003: Local workflow and optional publication</a></li>
+            <li><a href="adr/0004-local-readiness-and-diagnostic-boundaries.md">ADR 0004: Local readiness and diagnostics</a></li>
+          </ul>
+        </section>
+      </div>
+      <details class="doc-history">
+        <summary>Historical Specs, implementation plans, and compatibility links</summary>
+        <p>These records explain earlier decisions. Follow the operating references above for current commands and behavior.</p>
+        <div class="doc-groups">
+          <section class="doc-group" aria-labelledby="historical-specs-title">
+            <h3 id="historical-specs-title">Specs</h3>
+            <ul class="doc-list">
+              <li><a href="superpowers/specs/2026-08-16-agentmachinist-design.md">Original v0.1 design</a> · August 16, 2026</li>
+              <li><a href="superpowers/specs/2026-08-17-reliability-and-usability-hardening.md">Reliability and usability hardening</a> · August 17, 2026</li>
+              <li><a href="superpowers/specs/2026-09-03-resume-push-and-approve-flags.md">Resume-push and Approval flags</a> · September 3, 2026</li>
+            </ul>
+          </section>
+          <section class="doc-group" aria-labelledby="historical-plans-title">
+            <h3 id="historical-plans-title">Implementation plans</h3>
+            <ul class="doc-list">
+              <li><a href="superpowers/plans/2026-08-17-build-system-hardening.md">Build system hardening</a> · August 17, 2026</li>
+              <li><a href="superpowers/plans/2026-09-03-resume-push-and-approve-flags.md">Resume-push and Approval flags</a> · September 3, 2026</li>
+              <li><a href="superpowers/plans/2026-09-03-spec-to-execute-simplification.md">Spec-to-Execute simplification</a> · September 3, 2026</li>
+              <li><a href="superpowers/plans/2026-09-07-local-workflow-gitlab.md">Local workflow and GitLab</a> · September 7, 2026</li>
+            </ul>
+          </section>
+        </div>
+        <p><a href="onboarding.html">Previous onboarding URL</a> redirects to the visual first-run guide.</p>
+      </details>
+      <p class="doc-metadata"><code>CNAME</code> and <code>.nojekyll</code> configure this documentation site; they are not reading material.</p>
     </section>
     <section class="strip" aria-label="The pipeline at a glance">
       <div class="strip-grid shell">
@@ -280,7 +363,7 @@
           <article class="step" data-step="3">
             <span class="who">STATION 04 · MACHINE</span>
             <h3>Build and verify away from your checkout.</h3>
-            <p>The Harness edits in an isolated Workshop from the approved Spec. The controller owns commits and Task records, checks Git custody, and runs the configured Verification Gates. Failed verification retains the Workshop for an explicit retry.</p>
+            <p>The Harness edits in an isolated Workshop from the approved Spec. The controller owns commits and Task records, checks Git custody, and runs the configured Verification Gates. A failed Execute retains Evidence and requires explicit retry.</p>
             <span class="cmd">machinist status T1 --watch</span>
           </article>
           <article class="step" data-step="4">
@@ -407,6 +490,7 @@
         </div>
       </div>
       <p class="recover-more">Integration refuses dirty checkouts, a moved base, or a changed candidate. See the <a href="local-workflow.md">local workflow</a>, <a href="first-run-guide.html#troubleshoot">field guide</a>, and <a href="operator-runbook.md">operator runbook</a> for recovery actions.</p>
+      <p class="recover-more" data-release="unreleased"><strong>Unreleased, source checkout only:</strong> optional <a href="operator-runbook.md#bounded-repair-recovery">bounded repair</a> can make one additional Harness call for an eligible required Gate failure inside active Execute, then rerun all Gates. It defaults off; failed or interrupted repair needs explicit <code>retry --fresh</code>. Aggregate <code>report --source all</code> also includes local Task history. These additions are not in the published 0.17.1 package.</p>
     </section>
     <section class="start" id="start">
       <div class="start-grid shell">
@@ -455,6 +539,8 @@
     <div class="footer-row">
       <span>AgentMachinist 0.17.1 · local Task → exact Approval → verified candidate → your decision</span>
       <nav aria-label="Documentation">
+        <a href="#documentation">All documentation</a>
+        <a href="first-run-guide.html">Complete your first Task</a>
         <a href="local-workflow.md">Local workflow</a>
         <a href="first-run-guide.html">Field guide</a>
         <a href="explainer.html">One-minute explainer</a>

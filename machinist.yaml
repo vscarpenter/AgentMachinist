@@ -14,11 +14,11 @@ instructions:
 harness:
   name: claude-code            # claude-code | opencode | pi | codex
   command: null                # optional: override the harness executable path
-  timeout_minutes: 30          # Phase 3 implementation budget (1-240)
+  timeout_minutes: 30          # Execute Harness invocation timeout (1-240)
   spec_timeout_minutes: 10     # Phase 1 spec-writing budget (1-60)
 
 github:
-  repo: null                   # "owner/repo"; null = gh derives it from origin
+  repo: null                   # "owner/repo"; null = controller binds the exact Git origin
   spec_source: github-actions  # this repository uses CI for Phase 1
   spec_install: checkout       # Phase 1 uses this checkout, not the last PyPI pin
   labels:
@@ -32,5 +32,32 @@ workspace:
   cleanup: on_success          # always | on_success | never
   branch_prefix: agent/        # spec branches become <prefix>issue-<number>
 
-tests:
-  command: uv run pytest       # M2 test gate for this repo
+# Run the fast CI checks first; coverage runs the full suite once.
+# Packaging and the OS/Python matrix remain separate release/CI checks.
+verification:
+  gates:
+    - name: workflows
+      command: bash scripts/verify.sh workflows
+      timeout_minutes: 5
+      required: true
+      mutation_policy: forbid
+    - name: format
+      command: bash scripts/verify.sh format
+      timeout_minutes: 5
+      required: true
+      mutation_policy: forbid
+    - name: lint
+      command: bash scripts/verify.sh lint
+      timeout_minutes: 5
+      required: true
+      mutation_policy: forbid
+    - name: types
+      command: bash scripts/verify.sh types
+      timeout_minutes: 10
+      required: true
+      mutation_policy: forbid
+    - name: coverage
+      command: bash scripts/verify.sh coverage
+      timeout_minutes: 15
+      required: true
+      mutation_policy: forbid

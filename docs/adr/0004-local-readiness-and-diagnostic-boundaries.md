@@ -10,6 +10,11 @@ remote-base validation and diagnostics.
 Implementation status: included in AgentMachinist 0.15.0. The
 0.14.0 local workflow is described in [ADR 0003](0003-local-workflow-and-optional-publication.md).
 
+Current applicability: unreleased bounded Execute repair reuses the diagnostic
+sanitizer for failure context, change summaries, and repair report excerpts.
+This does not change the raw-log limitation below. See the
+[current trust model](../trust-model.md#bounded-repair-within-execute).
+
 ## Context
 
 A solo developer needs to discover local setup problems without adopting a

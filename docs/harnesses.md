@@ -40,6 +40,23 @@ commands and variants with additional arguments
 (`--allowedTools "Bash(<command>)" "Bash(<command>:*)"`). The controller's own
 gate run afterwards stays authoritative.
 
+### Bounded controller repair
+
+This is an unreleased source-checkout addition. Opt-in
+`verification.repair.max_attempts: 1` reuses the resolved Execute Harness for at
+most one additional invocation after an eligible required Gate failure. It
+defaults to `0`. The repair prompt includes the approved implementation
+instructions and bounded, sanitized failure diagnostics treated as untrusted
+data. The controller repeats all configured Gates before delivery.
+
+`verification.repair.timeout_minutes` (default 10, range 1–240) limits the
+additional Harness invocation and final controller Gates together. The resolved
+Execute Harness timeout and individual Gate timeouts also remain in force. This
+is independent of the Harness's own iterative Gate runs and does not relax
+adapter permissions, Git custody, or the approved Spec. Interrupted or failed
+paid repair work cannot be replayed on resume; see the
+[eligibility and recovery contract](getting-started.md#bounded-verification-repair).
+
 ## Authentication
 
 Runs use the Harness's existing provider authentication. Local setup checks
@@ -132,10 +149,18 @@ Adapters splice `self._passthrough_argv()` (the operator's `harness.model` and
 `harness.extra_args`) into both the read-only and the edit profile at their own
 prompt-relative position instead of restating that block. Adapter tests should
 pin exact Spec, Execute, and Review argv; prove read-only controls for
-Spec/Review; and install a fixture entry point from an isolated path. A plugin that declares structured usage must record only numeric aggregate
-token fields before `machinist report` includes them. That aggregate report
-currently reads legacy issue-run history; use the printed local Task report
-and `machinist status T1 --json` for the foreground workflow.
+Spec/Review; and install a fixture entry point from an isolated path. A plugin
+that declares structured usage must record nonnegative integer aggregate
+`input_tokens`, `output_tokens`, or `total_tokens` fields before
+`machinist report` includes them. A recorded zero is known usage; an omitted or
+invalid value remains unknown.
+
+Combined reporting is an unreleased source-checkout addition: aggregate reports
+read both local and legacy history by default; `--source local` and
+`--source legacy` select one. `usage_coverage` reports which attempts and token
+fields were observed. Token totals cover only those known fields and do not
+estimate cost. The printed local Task report and `machinist status T1 --json`
+still provide individual foreground Evidence.
 
 ## Compatibility checks
 

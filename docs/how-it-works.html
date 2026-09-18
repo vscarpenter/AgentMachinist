@@ -37,6 +37,9 @@
     .container { max-width: 1280px; margin: 0 auto; }
 
     .header { margin-bottom: 2rem; }
+    .doc-nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: 1rem; }
+    .doc-nav a { display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--color-link); text-underline-offset: 0.2em; }
+    .doc-nav a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
 
     .header-eyebrow {
       font-family: var(--font-mono);
@@ -160,6 +163,7 @@
       <p class="header-eyebrow">Local workflow · Swimlane</p>
       <h1>How AgentMachinist works</h1>
       <p class="subtitle">You describe a Task and make two decisions. AgentMachinist runs the coding Harness, checks its work, and makes every commit.</p>
+      <nav class="doc-nav" aria-label="Related documentation"><a href="first-run-guide.html">Complete your first Task</a><a href="index.html#documentation">All documentation</a></nav>
     </header>
 
     <main>
@@ -356,9 +360,10 @@
           <div class="card-header"><span class="card-dot muted"></span><h2>Amend, retry, or publish</h2></div>
           <ul>
             <li><code>machinist amend</code> turns feedback on a reviewed candidate into a new Spec, which needs a fresh Approval.</li>
-            <li><code>machinist retry</code> resumes a failed Execute with its retained edits. Add <code>--fresh</code> to start in a new Workshop.</li>
+            <li>Local <code>machinist retry</code> defaults to resuming validated retained Execute edits. Add <code>--fresh</code> to start in a new Workshop.</li>
             <li><code>machinist publish</code> pushes the candidate and opens a GitHub PR or GitLab MR without rerunning any Phase.</li>
           </ul>
+          <p data-release="unreleased">Unreleased source checkout: optional <a href="operator-runbook.md#bounded-repair-recovery">bounded repair</a> defaults off and can repeat implementation once after an eligible required Gate failure, before rerunning all Gates. It stays inside Execute and the approved Spec. Failed or interrupted repair needs explicit <code>retry --fresh</code>. This is not included in published 0.17.1.</p>
         </section>
       </div>
     </main>

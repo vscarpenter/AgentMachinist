@@ -1,3 +1,9 @@
+> Historical kickoff prompt. The proposal below predates local Tasks,
+> exact-SHA Approval, independent Review, and bounded Execute repair. It is
+> retained as project history; use [README.md](README.md),
+> [the architecture](docs/architecture.md), and
+> [the local workflow guide](docs/local-workflow.md) for current behavior.
+
 You are an expert systems engineer and developer tools architect. I want you to help me build a local-first, open-source agentic build and CI/CD system called **AgentMachinist**. 
 
 AgentMachinist enables a solo developer working on a Mac to bridge GitHub issues with local coding harnesses (like Claude Code, OpenCode, PI, or Codex). 
@@ -34,4 +40,3 @@ Please review the core architecture below and help me implement the initial proj
 3. Write the initial code for `machinist.yaml` schema, the core CLI entrypoint, and the GitHub API wrapper for handling Draft PR creation.
 
 Let's start step-by-step. Give me the project layout and the core bootstrapping code first.
-

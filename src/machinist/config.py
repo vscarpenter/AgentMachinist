@@ -750,12 +750,20 @@ class VerificationGateConfig(StrictModel):
         return self
 
 
+class VerificationRepairConfig(StrictModel):
+    """Optional single paid repair within an active Execute Task Run."""
+
+    max_attempts: int = Field(default=0, strict=True, ge=0, le=1)
+    timeout_minutes: int = Field(default=10, strict=True, ge=1, le=240)
+
+
 class VerificationConfig(StrictModel):
     gates: list[VerificationGateConfig] = Field(default_factory=list)
     # When true, Execute tells the harness about the gate commands and lets it
     # run exactly those commands to iterate before finishing. The controller's
     # own gate run afterwards remains the authoritative check either way.
     harness_may_run_gates: bool = True
+    repair: VerificationRepairConfig = Field(default_factory=VerificationRepairConfig)
 
     @field_validator("gates")
     @classmethod
@@ -1162,12 +1170,9 @@ class MachinistConfig(StrictModel):
             }
         effective["harness"] = harnesses
         effective["workspace"]["root"] = str(self.workspace.resolved_root())
-        effective["verification"] = {
-            "gates": [
-                gate.model_dump(mode="json")
-                for gate in self.resolved_verification_gates()
-            ]
-        }
+        effective["verification"]["gates"] = [
+            gate.model_dump(mode="json") for gate in self.resolved_verification_gates()
+        ]
         effective.pop("tests", None)
         return effective
 

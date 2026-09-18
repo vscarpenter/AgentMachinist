@@ -1,3 +1,9 @@
+> Historical progress ledger: entries retain the status recorded when written.
+> Older unchecked items and release snapshots are not current status. The latest
+> work is appended at the bottom; see the
+> [September 18 documentation review](#documentation-follow-up-2026-09-18) and
+> [CHANGELOG.md](../CHANGELOG.md) for the current checkout.
+
 # Version 0.15.0 publication (IN PROGRESS)
 
 User asked to release 0.15.0 to PyPI. Findings before any change: PyPI latest is
@@ -931,3 +937,87 @@ The user authorized pushing all changes and publishing 0.16.0 to PyPI. The
 release procedure verifies CI at the exact PR head, merges to main, and creates
 `v0.16.0` at that merge commit. The GitHub release workflow supplies the
 publication, artifact-checksum, and isolated public-install evidence.
+
+## Verification, reporting, and bounded repair (2026-09-18)
+
+- [x] Record the approved specification and implementation plan.
+- [x] Configure ordered check-only dogfood gates using the existing script.
+- [x] Include local and legacy histories in read-only aggregate reporting,
+  preserving namespaces and explicit consent for local telemetry export.
+- [x] Add opt-in single-round Execute repair with durable budgets/deadlines,
+  separate Evidence, custody/limit checks, and authoritative final Verification.
+- [x] Start behavior work with failing contracts; cover repaired local candidates,
+  exhaustion, cancellation, malformed budgets, and recovery without paid replay.
+- [x] Resolve independent review findings about resumed instruction provenance.
+- [x] Update operating guides, policy, reference configuration, and changelog.
+- [x] Complete the final canonical gate and record its results.
+
+Implementation, focused checks, and independent review are complete. The final
+canonical gate passed all 1,663 tests at 88.41% coverage, workflow projection,
+formatting, lint, types, wheel and source builds, and clean installation smoke
+checks for both distributions. Installed local readiness checks also passed.
+This complete run supersedes the earlier run deliberately interrupted after
+839 passing tests to address resumed instruction-provenance findings.
+
+The changes are committed locally on `codex/verification-reporting-repair`.
+No package version change, remote publication, or release is included. No live
+model or forge/CI result is claimed; real Git workflows used fake Harnesses.
+
+## Documentation follow-up (2026-09-18)
+
+- [x] Inventory current guides, HTML pages, contributor references, templates,
+  architecture decisions, and historical specifications.
+- [x] Correct stale reporting, repair/recovery, verification, and release claims
+  against the implemented source.
+- [x] Validate documentation contracts and edited HTML pages; record the complete
+  review inventory and commit the documentation update locally.
+
+Resuming from here: review complete; see `docs-review-2026-09-18.md` for the full
+inventory and corrections. All 189 focused documentation/configuration/workflow/
+packaging checks and all 13 Markdown YAML examples passed. Browser checks covered
+the four edited HTML pages, including the new recovery disclosure, with no console
+errors. Managed workflows match, and their executable content is unchanged.
+Product behavior and package version remain unchanged; publication is separate.
+
+## Documentation navigation and consolidation (2026-09-18)
+
+- [x] Review all 26 documents and distinguish entry points, references, alternate
+  formats, decisions, and historical records; deployment metadata stays separate.
+- [x] Select the one-page diagram and concise first-Task guide as primary resources.
+- [x] Rewrite the Markdown directory to link every document and shorten the
+  first-Task path; label the long Getting Started guide as a reference.
+- [x] Add the complete web directory and return links without breaking URLs.
+- [x] Verify directory completeness, documentation contracts, and browser layout.
+
+Resuming from here: navigation consolidation is complete. The repository index
+is 79 lines and the concise first-Task guide is 86 lines. Both Markdown and web
+directories link all 26 documents, with native disclosure for web history.
+Web first-Task actions open the rendered visual guide; the short Markdown guide
+is an explicitly labeled alternate. Existing paths, anchors, and scripts remain.
+
+All 38 documentation tests pass, including new directory-completeness and return-
+navigation contracts. Ruff and `git diff --check` pass. Browser verification
+covered desktop/mobile directory layout, historical disclosure, the first-Task
+route, the explainer route, and return links, with no console errors observed.
+The Approval policy remains unchanged because it is a runtime instruction input.
+No controller behavior, package version, push, or publication is included.
+
+## Origin push and documentation publication (2026-09-18)
+
+- [x] Integrate main's documentation corrections, push the complete branch, and
+  open PR #51 for the `main:/docs` GitHub Pages publication path.
+- [x] Reproduce initial CI failures: same-second, same-size fixture edits reused
+  Python bytecode; Click 8.1's test runner mixed stderr into captured JSON.
+- [x] Keep temporary fixture gates free of bytecode caches and explicitly
+  separate captured streams on older Click. Preserve behavioral assertions and
+  assert the export notice remains on stderr.
+- [ ] Complete CI on the corrected PR head, merge, and verify the live site.
+
+Resuming from here: PR #51 contains the implementation and documentation work.
+The package remains 0.17.1; this publication targets the documentation site.
+The fixed-timestamp reproduction and all 35 local-phase tests pass after the
+fixture change. All 48
+reporting/docs tests pass with current dependencies, all 10 report CLI tests
+pass with Click 8.1, and focused Ruff/format checks pass. GitHub's main-branch
+rules still name old test checks and require a review; any admin merge override
+requires explicit authorization and all current CI checks to pass first.

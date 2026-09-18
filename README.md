@@ -23,8 +23,20 @@ advisory source-text guidance in all three Harness prompts. The
 [workflow diagram](docs/how-it-works.html) shows who owns each step from Task
 through optional publication.
 
+The source checkout also includes combined local/legacy reliability reports and
+opt-in bounded repair after an ordinary required Verification failure. These
+additions are unreleased; see the [Verification](docs/getting-started.md#verification-gates-and-change-limits)
+and [reporting](docs/getting-started.md#local-evidence-and-repository-portfolio) guidance.
+
 Current release:
 [AgentMachinist 0.17.1 on PyPI](https://pypi.org/project/agentmachinist/0.17.1/).
+
+This repository's source checkout uses ordered required check-only Gates for workflow
+drift, formatting, lint, types, and coverage. Existing saved local configuration
+is not updated automatically. Repair defaults off; configuring
+`verification.repair.max_attempts: 1` permits one additional Harness invocation
+and final Gates within an active Execute run. Failed runs still need explicit
+retry, and final Review and human integration remain unchanged.
 
 ## Install
 
@@ -299,7 +311,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist spec <issue> --revise` | Regenerate a successful Spec on its existing branch and PR. |
 | `machinist spec <issue> --abandon [--reason <text>]` | Record rejection and close the open draft PR. |
 | `machinist approve [--issue <issue>\|--pr <pr>]` | Request asynchronous workflow Approval for the current PR head; wait for trusted Evidence before Execute. |
-| `machinist run <issue>` | Implement an approved spec and run the test gate. |
+| `machinist run <issue>` | Implement an approved Spec and run the configured Verification Gates. |
 | `machinist review <issue>` | When legacy Review is enabled, independently review the exact implemented draft and mark it ready. |
 | `machinist amend <issue> --feedback <text>` | Rework a ready PR from explicit feedback after fresh approval. |
 | `machinist cancel <issue> [--reason <text>\|--clear]` | Cooperatively stop or block an issue's dispatch. |
@@ -310,7 +322,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist status [--local\|--all] [--json]` | With local configuration, default status and `--local` show local Tasks. Otherwise, default status shows the GitHub board and `--local` reads legacy Run Evidence. `--all` shows the registered GitHub portfolio. |
 | `machinist status --watch [--interval <seconds>] [--json]` | Emit changed-only live pipeline snapshots until Ctrl-C. |
 | `machinist runs [--issue <issue>] [--json]` | Read current, historical, orphaned, and corrupt local run records. |
-| `machinist report [--since 30d] [--json] [--otlp-endpoint <url>]` | Aggregate local reliability metrics and optionally export allowlisted OTLP/HTTP JSON. |
+| `machinist report [--source all\|legacy\|local] [--since 30d] [--json] [--otlp-endpoint <url>]` | Source checkout (unreleased): aggregate both history namespaces by default; local/all export requires an explicit endpoint. |
 | `machinist retry <issue> [--phase spec\|execute\|review]` | Re-enable one failed Task Run. |
 | `machinist retry <issue> --phase execute --run [--resume\|--fresh]` | Reuse a retained workspace or start a fresh Execute attempt; fresh is the default. |
 | `machinist inspect <issue> [--offline] [--json]` | Show GitHub, workspace, and complete Task Run diagnostics. |
@@ -319,17 +331,17 @@ closes the open draft PR. Choose the operation that matches your decision.
 
 ## Documentation
 
-- [TL;DR](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/tldr.md)
-- [Getting started](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md)
-- [Local workflow and optional publication](docs/local-workflow.md)
-- [Visual first-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
-- [Architecture and lifecycle](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md)
-- [Operator runbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md)
-- [Trust model](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md)
-- [Harness support](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/harnesses.md)
-- [Architecture decisions](https://github.com/vscarpenter/AgentMachinist/tree/main/docs/adr)
-- [Contributing](https://github.com/vscarpenter/AgentMachinist/blob/main/CONTRIBUTING.md)
-- [Changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md)
+1. [Understand the workflow](docs/how-it-works.html): one diagram of your decisions
+   and the controller's work.
+2. [Complete your first Task](docs/tldr.md): the short installation-to-integration
+   guide. Prefer illustrated instructions? Use the
+   [visual first-run guide](https://agentmachinist.vinny.dev/first-run-guide.html).
+
+The [complete documentation index](docs/README.md) links every guide, reference,
+architecture decision, and historical plan. For detailed settings, use the
+[configuration and GitHub reference](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md).
+Contributor and release information lives in [CONTRIBUTING.md](CONTRIBUTING.md)
+and the [changelog](CHANGELOG.md).
 
 The trust model is deliberately narrower than “the agent cannot use git.”
 Harness flags, credential reduction, repository postconditions, and push leases
