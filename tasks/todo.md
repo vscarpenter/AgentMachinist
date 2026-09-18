@@ -1,3 +1,9 @@
+> Historical progress ledger: entries retain the status recorded when written.
+> Older unchecked items and release snapshots are not current status. The latest
+> work is appended at the bottom; see the
+> [September 18 documentation review](#documentation-follow-up-2026-09-18) and
+> [CHANGELOG.md](../CHANGELOG.md) for the current checkout.
+
 # Version 0.15.0 publication (IN PROGRESS)
 
 User asked to release 0.15.0 to PyPI. Findings before any change: PyPI latest is
@@ -956,3 +962,19 @@ This complete run supersedes the earlier run deliberately interrupted after
 The changes are committed locally on `codex/verification-reporting-repair`.
 No package version change, remote publication, or release is included. No live
 model or forge/CI result is claimed; real Git workflows used fake Harnesses.
+
+## Documentation follow-up (2026-09-18)
+
+- [x] Inventory current guides, HTML pages, contributor references, templates,
+  architecture decisions, and historical specifications.
+- [x] Correct stale reporting, repair/recovery, verification, and release claims
+  against the implemented source.
+- [x] Validate documentation contracts and edited HTML pages; record the complete
+  review inventory and commit the documentation update locally.
+
+Resuming from here: review complete; see `docs-review-2026-09-18.md` for the full
+inventory and corrections. All 189 focused documentation/configuration/workflow/
+packaging checks and all 13 Markdown YAML examples passed. Browser checks covered
+the four edited HTML pages, including the new recovery disclosure, with no console
+errors. Managed workflows match, and their executable content is unchanged.
+Product behavior and package version remain unchanged; publication is separate.

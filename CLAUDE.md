@@ -139,6 +139,12 @@ never-merges rule only for that human-directed local operation.
   bounded failure context, and no replay of interrupted paid repair work.
   Phases retain custody and limit checks around every process. Verification
   remains authoritative; failed Task Runs still require explicit retry.
+- `reporting.py` — read-only aggregation of local and legacy attempt histories,
+  with separate Task namespaces, first-pass Execute and repair outcomes, usage
+  completeness, and current local delivery snapshots. Missing usage is unknown.
+- `telemetry.py` — allowlisted aggregate OTLP export. Reports including local
+  Tasks require an explicit endpoint; configured root export applies only to
+  `report --source legacy`.
 - `harness/` — `base.py` owns subprocess mechanics, timeouts, 30s heartbeat
   callbacks, and credential scrubbing (removes `GH_TOKEN`, `GITHUB_TOKEN`,
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
@@ -155,14 +161,18 @@ never-merges rule only for that human-directed local operation.
 - `phases/execute.py` — Phase 3: approval guards (label + SHA marker match +
   draft-ness), harness with edit permissions, head/remote postconditions (the
   Workshop asserts metadata custody itself on every Git call),
-  test-deletion guard (`limits.allow_test_deletions` opts out), test gate,
+  test-deletion guard (`limits.allow_test_deletions` opts out), Verification Gates,
   commit, leased push, and mark PR ready only when legacy Review is disabled.
   With Review enabled, its Phase owns the ready transition. The implement
   prompt lists the gate commands and asks the harness to iterate until they pass
   (`verification.harness_may_run_gates` opts out); the claude-code adapter
   allows those commands and added-argument variants via
-  `Harness.allowed_commands`. Contains
+  `Harness.allowed_commands`. Optional repair uses the same Execute profile and
+  shared coordinator before final Verification. Contains
   partial-push recovery via checkpoint evidence.
+- `phases/local.py` — foreground local Spec, Execute, and Review, including
+  baseline Verification, exact Approval, local candidate Evidence, and shared
+  bounded Execute repair. Local independent Review always runs.
 - `phases/review.py` — independent read-only review of the exact delivered
   Execute head; posts a bounded structured report and marks the PR ready only
   after rechecking custody.
@@ -313,7 +323,14 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current checkout (2026-09-13)
+## Current checkout (2026-09-18)
+
+- **Unreleased:** combined local/legacy `report --source all|legacy|local`,
+  bounded opt-in Execute repair, and this repository's expanded check-only
+  Verification Gates. Repair defaults off and is limited to one additional
+  Harness invocation plus final Verification under a persisted deadline.
+  Saved local configuration is unchanged until explicitly edited. See
+  `tasks/verification-reporting-repair-spec.md` and the operating guides.
 
 - **0.17.1 fixes manual setup staging for new managed workflows.** The setup
   receipt lists exact generated and removed workflow paths, preserving staged

@@ -14,11 +14,11 @@ instructions:
 harness:
   name: claude-code            # claude-code | opencode | pi | codex
   command: null                # optional: override the harness executable path
-  timeout_minutes: 30          # Phase 3 implementation budget (1-240)
+  timeout_minutes: 30          # Execute Harness invocation timeout (1-240)
   spec_timeout_minutes: 10     # Phase 1 spec-writing budget (1-60)
 
 github:
-  repo: null                   # "owner/repo"; null = gh derives it from origin
+  repo: null                   # "owner/repo"; null = controller binds the exact Git origin
   spec_source: github-actions  # this repository uses CI for Phase 1
   spec_install: checkout       # Phase 1 uses this checkout, not the last PyPI pin
   labels:

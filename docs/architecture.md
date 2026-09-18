@@ -4,8 +4,9 @@ AgentMachinist coordinates Git, a coding Harness, and the repository's
 verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
-deployment remain outside the controller. This document describes the
-AgentMachinist 0.17.1 implementation. The 0.14.0 release added the local
+deployment remain outside the controller. The published baseline is
+AgentMachinist 0.17.1. Bounded Execute repair and combined local/legacy reporting
+below are unreleased source-checkout additions. The 0.14.0 release added the local
 workflow and GitLab collaboration; 0.15.0 added local readiness, exact
 remote-base validation, and bounded diagnostics.
 
@@ -282,6 +283,12 @@ not turn a local harness into a sandbox.
 Phase-specific harness profiles and repository-local instruction overlays are
 resolved before invocation. Instruction files must remain within the canonical
 repository root and pass file-count, encoding, and byte limits.
+On a resumed Execute, a new repair invocation must reconstruct the original
+instruction context and match its saved digest. Missing or changed instruction
+provenance requires `--fresh`; a resumed legacy amendment also requires
+`--fresh` if its original feedback cannot be reconstructed. Reconciliation and
+Verification after completed Harness work do not reread unused instructions or
+replace their recorded provenance.
 
 ## Adapter boundary
 

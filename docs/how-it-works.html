@@ -356,9 +356,10 @@
           <div class="card-header"><span class="card-dot muted"></span><h2>Amend, retry, or publish</h2></div>
           <ul>
             <li><code>machinist amend</code> turns feedback on a reviewed candidate into a new Spec, which needs a fresh Approval.</li>
-            <li><code>machinist retry</code> resumes a failed Execute with its retained edits. Add <code>--fresh</code> to start in a new Workshop.</li>
+            <li>Local <code>machinist retry</code> defaults to resuming validated retained Execute edits. Add <code>--fresh</code> to start in a new Workshop.</li>
             <li><code>machinist publish</code> pushes the candidate and opens a GitHub PR or GitLab MR without rerunning any Phase.</li>
           </ul>
+          <p data-release="unreleased">Unreleased source checkout: optional <a href="operator-runbook.md#bounded-repair-recovery">bounded repair</a> defaults off and can repeat implementation once after an eligible required Gate failure, before rerunning all Gates. It stays inside Execute and the approved Spec. Failed or interrupted repair needs explicit <code>retry --fresh</code>. This is not included in published 0.17.1.</p>
         </section>
       </div>
     </main>

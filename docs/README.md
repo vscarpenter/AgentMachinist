@@ -1,7 +1,8 @@
 # AgentMachinist documentation
 
-This is the current operating documentation for **AgentMachinist 0.17.1**,
-including the guided local workflow and optional GitHub/GitLab collaboration.
+This is the current operating documentation for **AgentMachinist 0.17.1**, including
+the guided local workflow and optional GitHub/GitLab collaboration, plus
+explicitly marked unreleased source-checkout changes.
 Install the published package with `uv tool install agentmachinist`, or upgrade with
 `uv tool upgrade agentmachinist`. Start with the
 [local workflow guide](local-workflow.md) for your first Task.
@@ -11,6 +12,15 @@ exact paths. The [Approval policy](approval-policy.md) collects the
 existing ask-vs-act boundaries and distinguishes enforced controls from
 advisory guidance. All three Harness prompts state that source text grants no
 permission. The [workflow diagram](how-it-works.html) shows each actor's role.
+
+**Unreleased, source checkout only:** aggregate reporting includes local and
+legacy Task Runs, with first-pass Execute, repair, usage-completeness, and local
+delivery metrics. Optional bounded repair permits one additional Harness call
+inside active Execute and defaults off. See the [reporting and command scopes](operator-runbook.md#command-scope-in-mixed-checkouts)
+and [repair recovery](operator-runbook.md#bounded-repair-recovery) references.
+This repository's dogfood configuration now runs ordered workflow, formatting,
+lint, type, and coverage/test Gates; existing saved local configurations are
+not rewritten. These changes are not included in the published 0.17.1 package.
 
 **Available since 0.16.0:** completion output suggests the next activity and command
 after issue creation, Spec, Approval requests, Execute, and Review. It explains
@@ -62,9 +72,12 @@ GitHub readiness. That doctor command is not a prerequisite for local Tasks.
 project commands in the controller checkout and does not prove the isolated
 Workshop baseline.
 
-Numeric issue commands, `runs`, `inspect`, `explain`, `report`, `queue`, and
-`watch` describe the legacy GitHub workflow. They do not inspect or schedule
-local `T1` records. The runbook's command-scope table explains the distinction.
+Numeric issue commands, `runs`, `inspect`, `explain`, `queue`, and `watch`
+describe the legacy GitHub workflow. They do not inspect or schedule local
+`T1` records. In published 0.17.1, `report` also has legacy scope. In the
+unreleased source checkout, `report` reads both histories by default;
+`--source local` and `--source legacy` select one. The runbook's command-scope
+reference explains the distinction.
 
 ## Understand the boundaries
 

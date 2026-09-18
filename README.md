@@ -31,7 +31,7 @@ and [reporting](docs/getting-started.md#local-evidence-and-repository-portfolio)
 Current release:
 [AgentMachinist 0.17.1 on PyPI](https://pypi.org/project/agentmachinist/0.17.1/).
 
-Source checkout Verification uses ordered required check-only Gates for workflow
+This repository's source checkout uses ordered required check-only Gates for workflow
 drift, formatting, lint, types, and coverage. Existing saved local configuration
 is not updated automatically. Repair defaults off; configuring
 `verification.repair.max_attempts: 1` permits one additional Harness invocation
@@ -311,7 +311,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist spec <issue> --revise` | Regenerate a successful Spec on its existing branch and PR. |
 | `machinist spec <issue> --abandon [--reason <text>]` | Record rejection and close the open draft PR. |
 | `machinist approve [--issue <issue>\|--pr <pr>]` | Request asynchronous workflow Approval for the current PR head; wait for trusted Evidence before Execute. |
-| `machinist run <issue>` | Implement an approved spec and run the test gate. |
+| `machinist run <issue>` | Implement an approved Spec and run the configured Verification Gates. |
 | `machinist review <issue>` | When legacy Review is enabled, independently review the exact implemented draft and mark it ready. |
 | `machinist amend <issue> --feedback <text>` | Rework a ready PR from explicit feedback after fresh approval. |
 | `machinist cancel <issue> [--reason <text>\|--clear]` | Cooperatively stop or block an issue's dispatch. |
@@ -322,7 +322,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist status [--local\|--all] [--json]` | With local configuration, default status and `--local` show local Tasks. Otherwise, default status shows the GitHub board and `--local` reads legacy Run Evidence. `--all` shows the registered GitHub portfolio. |
 | `machinist status --watch [--interval <seconds>] [--json]` | Emit changed-only live pipeline snapshots until Ctrl-C. |
 | `machinist runs [--issue <issue>] [--json]` | Read current, historical, orphaned, and corrupt local run records. |
-| `machinist report [--source all\|legacy\|local] [--since 30d] [--json] [--otlp-endpoint <url>]` | Aggregate both history namespaces by default; local/all export requires an explicit endpoint. |
+| `machinist report [--source all\|legacy\|local] [--since 30d] [--json] [--otlp-endpoint <url>]` | Source checkout (unreleased): aggregate both history namespaces by default; local/all export requires an explicit endpoint. |
 | `machinist retry <issue> [--phase spec\|execute\|review]` | Re-enable one failed Task Run. |
 | `machinist retry <issue> --phase execute --run [--resume\|--fresh]` | Reuse a retained workspace or start a fresh Execute attempt; fresh is the default. |
 | `machinist inspect <issue> [--offline] [--json]` | Show GitHub, workspace, and complete Task Run diagnostics. |

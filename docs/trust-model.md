@@ -221,6 +221,10 @@ Custody, change limits, test-deletion checks, exact final Review, and publicatio
 requirements still apply. Failed Task Runs require explicit retry. Interrupted
 or failed repair cannot be replayed by resuming; a fresh explicit attempt is
 required, including after repair timeout or cancellation.
+If a resumed run needs a new repair invocation, the original instruction digest
+must still match. Missing or changed instruction provenance, or unrecoverable
+feedback on a legacy amendment, requires `--fresh`. Completed Harness work can
+be reverified without rereading unused instructions or replacing its provenance.
 
 Only ordinary required command failures are eligible. Cancellation, timeouts,
 missing commands or exit 126/127, output limits, stragglers, custody violations,
@@ -254,8 +258,9 @@ duration statistics, and repository identity only for legacy-only export.
 Issue bodies, prompts, source/diffs, commands, error
 messages, arbitrary Evidence, environment values, and credential values are
 not export inputs. Authorization is read only from
-`MACHINIST_OTLP_AUTHORIZATION` and is rejected on malformed or credentialed
-endpoint URLs.
+`MACHINIST_OTLP_AUTHORIZATION`; oversized values and values containing line
+breaks are rejected. Endpoint validation rejects malformed URLs, embedded
+credentials, and fragments.
 
 Foreground local configuration requires its telemetry endpoint unset. The
 root `telemetry.otlp_endpoint` applies only to `report --source legacy`.

@@ -22,6 +22,12 @@ credentials now follow the selected Harness descriptor. The unchecked steps,
 version literals, and workflow snippets below are historical. Use the
 [release procedure](../../operator-runbook.md) for current commands.
 
+The unreleased source checkout now uses ordered workflow, format, lint, type,
+and coverage/test Gates in its root `machinist.yaml`. That supersedes this
+plan's original choice to keep lint outside Execute. The package gate remains
+part of full release verification. Existing saved local settings are not
+automatically replaced; see the [operator runbook](../../operator-runbook.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close identity drift between package version, checked-in workflows, and smoke tests; dogfood Phase 1 from this checkout; and make the next version bump a single, test-enforced process.

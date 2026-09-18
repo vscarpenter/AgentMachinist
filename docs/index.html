@@ -280,7 +280,7 @@
           <article class="step" data-step="3">
             <span class="who">STATION 04 · MACHINE</span>
             <h3>Build and verify away from your checkout.</h3>
-            <p>The Harness edits in an isolated Workshop from the approved Spec. The controller owns commits and Task records, checks Git custody, and runs the configured Verification Gates. Failed verification retains the Workshop for an explicit retry.</p>
+            <p>The Harness edits in an isolated Workshop from the approved Spec. The controller owns commits and Task records, checks Git custody, and runs the configured Verification Gates. A failed Execute retains Evidence and requires explicit retry.</p>
             <span class="cmd">machinist status T1 --watch</span>
           </article>
           <article class="step" data-step="4">
@@ -407,6 +407,7 @@
         </div>
       </div>
       <p class="recover-more">Integration refuses dirty checkouts, a moved base, or a changed candidate. See the <a href="local-workflow.md">local workflow</a>, <a href="first-run-guide.html#troubleshoot">field guide</a>, and <a href="operator-runbook.md">operator runbook</a> for recovery actions.</p>
+      <p class="recover-more" data-release="unreleased"><strong>Unreleased, source checkout only:</strong> optional <a href="operator-runbook.md#bounded-repair-recovery">bounded repair</a> can make one additional Harness call for an eligible required Gate failure inside active Execute, then rerun all Gates. It defaults off; failed or interrupted repair needs explicit <code>retry --fresh</code>. Aggregate <code>report --source all</code> also includes local Task history. These additions are not in the published 0.17.1 package.</p>
     </section>
     <section class="start" id="start">
       <div class="start-grid shell">

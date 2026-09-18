@@ -14,6 +14,10 @@ existing
 remains available. See [installation](getting-started.md#install) for an optional
 editable source setup.
 
+Bounded Execute repair and combined local/legacy reporting, described below,
+are unreleased source-checkout additions and are not in the published 0.17.1
+package.
+
 ## Complete one Task
 
 Start on a named branch in a clean Git repository with an initial commit, a
@@ -109,9 +113,12 @@ Set `verification.repair.max_attempts: 1` in the saved local configuration to
 permit one additional Harness invocation after an ordinary required Gate failure
 inside the active Execute run. It defaults to `0`. The extra invocation and all
 final Gates share `verification.repair.timeout_minutes` (default 10, range 1–240).
-Control or infrastructure failures do not trigger repair; see the
+The Harness and individual Gate timeouts still apply. Detected control errors
+and abnormal Gate outcomes disqualify repair; an ordinary nonzero exit cannot
+establish whether its cause is code or infrastructure. See the
 [repair contract](getting-started.md#bounded-verification-repair). Failed runs
-still require explicit retry.
+still require explicit retry. Spec baseline verification and readiness checks
+do not invoke repair.
 
 Status shows the Spec text, exact commits, report path, and one next action.
 `status T1 --json` also includes saved publication and integration results.
@@ -279,6 +286,11 @@ repair work.
 A completed repair with valid retained state can resume Verification only within
 its saved deadline. Fresh Execute attempts receive a new repair budget; ordinary
 resume does not replenish it.
+Changing configured Gates, limits, instruction overlays, or enabled repair
+settings requires a fresh Execute attempt. If retained implementation work
+already consumed its instructions, passing verification does not reread them.
+A new repair invocation on resume must reconstruct those instructions and
+match their saved digest; missing or changed files require `--fresh`.
 
 ```sh
 machinist cancel --task T1 --reason "Requirements changed"
@@ -337,7 +349,8 @@ Local Tasks and legacy issue numbers have separate records and recovery paths:
 | Create | `start` with text or explicit issue import | `task new`; local Spec source: `spec` directly or trigger label plus `watch`; hosted Spec source: trigger label starts GitHub Actions |
 | Approve | `approve --task T1 --spec-sha <sha>` continues in foreground | `approve --issue 42` or `--pr 8` requests trusted workflow Evidence; wait for `explain 42` to report `approved` before the first Execute |
 | Resume | `continue T1`; failure requires `retry --task T1 --phase execute` | `retry 42 --phase execute --run --resume` explicitly reuses edits |
-| Inspect | `status T1`, `status T1 --json`, printed report | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42`, `report` for Evidence |
+| Inspect | `status T1`, `status T1 --json`, printed report | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42` for Evidence |
+| Aggregate (unreleased) | `report --source local` | `report --source legacy`; the default `report` combines both namespaces |
 | Configure | `config show --path .machinist/runs/local/config.yaml` | `config show` reads `machinist.yaml` by default |
 | Schedule | Foreground commands | `watch`, `queue`, and macOS `service` |
 | Deliver | Explicit `integrate T1` and/or `publish T1 --provider gitlab` (or `github`) | Ready GitHub PR; human remote merge |
@@ -350,20 +363,24 @@ runtime records for recovery; do not commit them or edit Task JSON manually.
 Plain `doctor` remains the root GitHub setup preflight;
 `doctor --local`, available since 0.15.0, checks local readiness as described
 above. `runs`, `inspect`, `explain`, and portfolio `status --all` read the legacy
-issue-run namespace under `.machinist/runs/`. Aggregate `report` reads both
-namespaces by default; use `machinist report --source local --since 30d --json`
+issue-run namespace under `.machinist/runs/`. In the source checkout, aggregate
+`report` reads both namespaces by default; use
+`machinist report --source local --since 30d --json`
 for foreground Tasks only, without root configuration or forge access.
 `status --local` is an offline view of legacy issue runs only when no local
 configuration is present. In a mixed checkout, default status selects local
 Tasks; use `runs`/`inspect` for legacy Evidence.
 
 Report `success_rate` measures terminal Phase attempts. `first_pass_execute`
-measures first Execute attempts that succeeded without repair. Local delivery
-counts are current stored snapshots of Tasks updated in the window, not delivery
+measures terminal first Execute attempts that succeeded without repair. Phase
+attempts enter `--since` windows by their last saved update, not their start.
+Local delivery counts are current stored snapshots of Tasks updated in the window, not delivery
 events or acceptance rates. Missing token usage is unknown; inspect
 `usage_coverage` before interpreting totals. Local/all reports remain local
 unless `--otlp-endpoint` is explicitly supplied; those exports omit repository
-identity.
+identity. See the
+[reporting reference](getting-started.md#local-evidence-and-repository-portfolio)
+for repair metrics, window semantics, and export behavior.
 
 Watcher queue windows, daily Task Run budgets, notifications, and the managed
 service do not govern foreground local Tasks. `clean` manages legacy Workshops;

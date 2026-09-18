@@ -8,9 +8,10 @@ same entry point, and it must not restate rules that could drift from it.
 ## Commands
 
 - `uv sync` — install (creates `.venv`)
-- `uv run pytest` — full suite (~5s, no network)
+- `uv run pytest` — full suite, including real Git lifecycle tests (no network)
 - `uv run machinist --help` — run the CLI from source
-- `bash scripts/verify.sh` — the gates CI runs (format, lint, types, coverage)
+- `bash scripts/verify.sh` — canonical local gate: workflow drift, format, lint,
+  types, coverage, package builds, and installed-package smoke checks
 
 ## Code map
 

@@ -2,6 +2,12 @@
 
 **Purpose.** Directives governing how LLMs approach complex, multi-step development tasks. Optimized for the Claude Code harness. Every directive applies to every coding session.
 
+**Repository applicability.** This is a shared engineering reference.
+[`CLAUDE.md`](CLAUDE.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md) describe
+AgentMachinist's actual tools and checks. Its Python gates use Ruff, mypy, and
+pytest through `scripts/verify.sh`; the generic tooling table below does not
+mean Biome or the listed hooks are installed in this repository.
+
 ---
 
 ## Part 0: Runtime Loading Architecture

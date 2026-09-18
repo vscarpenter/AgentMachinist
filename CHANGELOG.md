@@ -15,6 +15,10 @@
 - Expand this repository's configured Verification to required, check-only
   workflow drift, formatting, lint, types, and coverage/test gates. Existing
   saved local configurations keep their settings until explicitly updated.
+- Align operating, visual, contributor, and architecture documentation with
+  the unreleased repair/reporting contracts. Clarify metrics, recovery,
+  telemetry consent, and release availability; correct the managed Spec
+  workflow's instructions for switching back to local dispatch.
 
 ## 0.17.1 — 2026-09-13
 

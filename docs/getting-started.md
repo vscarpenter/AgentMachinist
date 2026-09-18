@@ -57,6 +57,9 @@ machinist --version
 
 Confirm that `machinist --version` reports 0.17.1 or newer for the setup
 guidance described here. `machinist doctor --local` is available since 0.15.0.
+The bounded repair and combined reporting sections below describe unreleased
+source-checkout additions; installing the published 0.17.1 package does not
+enable them.
 For contributing to AgentMachinist, an editable installation is optional:
 run `uv tool install --editable .` from its source
 checkout, then enter the repository you want to change. An editable install
@@ -164,7 +167,8 @@ Local setup and the existing GitHub setup use separate configuration and run
 namespaces. Plain `doctor`, `watch`, `queue`, `runs`, `inspect`, `explain`,
 `clean`, and portfolio `status --all` retain their legacy scope. They do not
 manage or aggregate `T1` records. Aggregate `report` reads both namespaces by
-default; `--source local` selects foreground Tasks without root configuration. See the [command and storage
+default in the source checkout; `--source local` selects foreground Tasks without
+root configuration. See the [command and storage
 boundaries](local-workflow.md#command-and-storage-boundaries) before operating
 both workflows in one checkout.
 
@@ -760,9 +764,13 @@ oversized combined overlay before invoking a harness.
 
 This repository's root `machinist.yaml` now uses ordered required check-only
 Gates for workflow drift, formatting, lint, types, and coverage. Packaging and
-the OS/Python CI matrix remain separate checks. Changing the root file does
-not update existing `.machinist/runs/local/config.yaml`; inspect and edit the
-effective configuration for the workflow you run.
+the OS/Python CI matrix remain separate checks. The coverage Gate runs the full
+test suite once; these Gate commands use the corresponding `scripts/verify.sh`
+subcommands and check formatting without rewriting it. This is the repository's
+dogfood configuration, not a new default imposed on projects using AgentMachinist.
+Changing the root file does not update existing
+`.machinist/runs/local/config.yaml`; inspect and edit the effective configuration
+for the workflow you run.
 
 For one legacy gate, keep `tests.command`. For ordered, separately reported
 checks, set `tests.command: null` and configure named gates instead:
@@ -822,6 +830,7 @@ also refused. When an approved Spec legitimately removes or renames tests,
 set `limits.allow_test_deletions: true` for that run and turn it back off
 afterwards. Modified tests are not flagged — updating tests is normal Spec
 work — so weakened assertions still need human review in the local diff or PR/MR.
+
 ### Bounded Verification repair
 
 This option is available in the source checkout and is unreleased. Repair is
@@ -835,8 +844,8 @@ verification:
 ```
 
 `max_attempts` accepts only `0` or `1`. With `1`, an ordinary required Gate
-failure may trigger one additional invocation of the Execute Harness while the
-Task Run is still active. The Harness receives the approved implementation
+failure with exit code 1–125 may trigger one additional invocation of the Execute
+Harness while the Task Run is still active. The Harness receives the approved implementation
 prompt, a bounded change summary, and bounded sanitized failure Evidence.
 Failure text is untrusted input; it cannot authorize scope changes, new
 permissions, Git operations, or weaker tests or Gates. All configured Gates run
@@ -848,12 +857,18 @@ deadline covers the additional Harness invocation and final Verification.
 The controller persists the consumed budget and absolute deadline before model
 work, and saves separate initial/repair reports, logs, durations, and outcomes.
 The repair budget is separate from the initial Execute Harness timeout.
+The configured Execute Harness timeout and each Gate's own timeout still apply;
+the shared repair deadline can stop either one sooner. Repair does not run for
+Spec baseline checks, standalone readiness checks, or Review.
 
-Advisory failures alone do not trigger repair. Cancellation, timeouts, missing
-commands (including exit 126/127), output limits, stragglers, custody violations,
-forbidden mutations, and snapshot errors stop the run without repair. An
-ordinary nonzero exit is only an eligibility heuristic: even exit 1 cannot
-prove that the root cause is a code defect.
+Advisory failures alone do not trigger repair. If Verification blocks delivery,
+any abnormal Gate outcome, even from an advisory Gate, disqualifies repair:
+timeouts, missing commands (including exit 126/127), signal exits, output limits,
+stragglers, cancellation, forbidden mutations, and snapshot errors. Custody
+violations also stop the run without repair. The ordinary advisory-failure
+policy still applies when no blocking failure occurs. An ordinary nonzero exit
+is only an eligibility heuristic: even exit 1 cannot prove that the root cause
+is a code defect.
 
 If the run fails, use explicit `machinist retry`; no watcher retry loop is
 introduced. An interrupted repair, or one that failed, timed out, or was
@@ -865,6 +880,11 @@ Resume never replays paid repair work or replenishes that budget. A completed
 repair with valid retained state can resume
 Verification within its saved deadline without another Harness invocation.
 Recovery after a successful implementation commit repeats no paid work.
+If a resumed attempt needs its first repair invocation, reconstructed repository
+instructions must match the saved digest; missing or changed instruction files
+require `--fresh`. A resumed legacy amendment also requires `--fresh` if that
+invocation needs feedback text no longer available from its saved Evidence.
+See [repair recovery](operator-runbook.md#bounded-repair-recovery).
 
 ## Choosing a harness
 
@@ -1054,7 +1074,6 @@ machinist status --watch --interval 2
 machinist runs --issue 42 --json
 machinist inspect 42 --offline --json
 machinist explain 42 --json
-machinist report --since 30d --json
 ```
 
 These reports include current and historical attempts plus orphaned, partial,
@@ -1069,6 +1088,7 @@ only changed snapshots; `--json` produces one compact JSON object per line.
 The source checkout adds unreleased combined reporting:
 
 ```sh
+machinist report --since 30d --json
 machinist report --source all --since 30d --json
 machinist report --source local --since 30d --json
 machinist report --source legacy --since 30d --json
@@ -1077,8 +1097,11 @@ machinist report --source legacy --since 30d --json
 `all` is the default. Reporting keeps local and legacy identities separate,
 reads stored history without model or forge calls, and needs no root
 configuration for local-only repositories. It writes no setup or runtime state.
+`--since` defaults to `30d` and accepts a positive integer followed by `h`, `d`,
+or `w`. Phase attempts enter the window by their saved `updated_at`, not their
+start time; a resumed attempt may therefore appear in a later window.
 `by_source` separates Phase-attempt totals; `task_counts` counts distinct Task
-identities within each selected namespace and window.
+identities with at least one selected Phase attempt in each namespace and window.
 
 `success_rate` remains successful terminal Phase attempts divided by all
 terminal Phase attempts. `first_pass_execute.success_rate` considers terminal
@@ -1087,15 +1110,22 @@ Task acceptance rate. `repairs` counts consumed rounds, verified/unsuccessful/
 incomplete outcomes, and recorded durations, without double counting resumed
 Evidence. A verified repair means final Verification passed; later commit,
 push, and human acceptance are separate events.
+Rates with no eligible denominator are `null`, not zero. `gate_failures` reads
+each attempt's final authoritative Verification report; initial failures that
+a repair fixed remain in the attempt's repair Evidence rather than this count.
 
 `local_delivery` contains current stored Task snapshots updated in the window:
-reviewed candidates, integration, and publication. These are not counts of
+reviewed candidates, integration, and publication. A counted candidate needs
+matching stored Approval and successful Execute and Review for its exact SHA;
+integration and publication counts must also match that candidate. These are not counts of
 historical delivery events or live Git/forge verification. `usage_coverage`
 shows which attempts and token fields have reported numeric usage. Missing
 usage is unknown, not zero; `token_totals` includes only known fields and does
 not estimate cost.
 
 The root `telemetry.otlp_endpoint` is used only with `--source legacy`.
+Existing legacy export scripts must add that selector to retain configured
+endpoint behavior.
 `--source all` (the default) and `--source local` require an explicit
 `--otlp-endpoint` to export and omit repository identity. OTLP/HTTP JSON contains
 allowlisted aggregates and never Task text, prompts, diffs, commands, or raw

@@ -17,6 +17,9 @@ integration after the human Gate. It narrowly supersedes this record's blanket
 statement that merging is outside AgentMachinist. Remote and automatic merges
 remain outside the product. See the [current module map](../architecture.md)
 and [local workflow](../local-workflow.md) for both execution paths.
+Unreleased bounded Execute repair adds `repair.py` as the shared owner of
+eligibility, consumed budget, deadline, and repair coordination. Verification
+remains in `verification.py`; Phases retain custody and change-limit checks.
 
 ## Context
 
