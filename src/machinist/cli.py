@@ -67,7 +67,13 @@ from machinist.init_wizard import (
     run_init_wizard,
     validate_setup_harness,
 )
-from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
+from machinist.lifecycle import (
+    LifecycleError,
+    Phase,
+    RunRecord,
+    RunStatus,
+    TaskLifecycle,
+)
 from machinist.live_status import StatusSnapshot, iter_status_snapshots
 from machinist.local_cli import (
     amend_local,
@@ -82,6 +88,7 @@ from machinist.local_cli import (
 )
 from machinist.local_doctor import local_fix_hint_for_check_name, run_local_doctor
 from machinist.local_setup import detect_test_command, find_repository_root
+from machinist.local_tasks import LocalTask, LocalTaskError, LocalTaskStore
 from machinist.managed_paths import (
     ManagedPathError,
     managed_file_exists,
@@ -1313,26 +1320,52 @@ def _print_task_lint(report: TaskLintReport, *, as_json: bool) -> None:
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
 @click.option(
-    "--otlp-endpoint",
-    help="Export redacted aggregate metrics to this OTLP/HTTP JSON endpoint.",
+    "--source",
+    type=click.Choice(["all", "legacy", "local"]),
+    default="all",
+    show_default=True,
+    help="Task histories to include. Configured telemetry applies only to legacy.",
 )
-def report(since_text: str, as_json: bool, otlp_endpoint: str | None) -> None:
-    """Summarize local Task Run reliability and optionally export metrics."""
+@click.option(
+    "--otlp-endpoint",
+    help="Export aggregates to this endpoint; required for local/all export.",
+)
+def report(
+    since_text: str, as_json: bool, source: str, otlp_endpoint: str | None
+) -> None:
+    """Summarize Task Run reliability without configuring or adopting a repo."""
     try:
         window = parse_since_duration(since_text)
-        config = load_config()
+        root = find_repository_root(Path.cwd())
+        # A legacy telemetry preference must never silently export local Tasks.
+        # Reading reports does not resolve/adopt or create local configuration.
+        config = (
+            load_config(root / "machinist.yaml")
+            if source == "legacy" and managed_file_exists(root, Path("machinist.yaml"))
+            else MachinistConfig()
+        )
         endpoint = otlp_endpoint or config.telemetry.otlp_endpoint
         if endpoint is not None:
             validate_otlp_endpoint(endpoint)
-        lifecycle = TaskLifecycle(Path(".machinist/runs"), repo_root=Path.cwd())
-        history = build_run_report(lifecycle).history
+        history: tuple[RunRecord, ...] = ()
+        local_history: tuple[RunRecord, ...] = ()
+        local_tasks: tuple[LocalTask, ...] = ()
+        if source != "local":
+            lifecycle = TaskLifecycle(root / ".machinist/runs", repo_root=root)
+            history = build_run_report(lifecycle).history
+        if source != "legacy":
+            lifecycle = TaskLifecycle(root / ".machinist/runs/local", repo_root=root)
+            local_history = build_run_report(lifecycle).history
+            local_tasks = LocalTaskStore(root).list()
         generated_at = datetime.now(UTC)
         metrics = build_metrics_report(
             history,
+            local_records=local_history,
+            local_tasks=local_tasks,
             since=generated_at - window,
             generated_at=generated_at,
         )
-    except _MACHINIST_ERRORS as exc:
+    except (*_MACHINIST_ERRORS, LocalTaskError) as exc:
         raise click.ClickException(str(exc)) from exc
     if as_json:
         click.echo(json.dumps(metrics.to_dict(), indent=2, sort_keys=True))
@@ -1341,9 +1374,11 @@ def report(since_text: str, as_json: bool, otlp_endpoint: str | None) -> None:
     if endpoint is None:
         return
     try:
-        repository = Workspace(
-            repo_root=Path.cwd(), config=config.workspace
-        ).repository_identity()
+        repository = (
+            Workspace(repo_root=root, config=config.workspace).repository_identity()
+            if source == "legacy"
+            else None
+        )
         export_otlp(
             endpoint,
             build_otlp_payload(metrics, repository=repository),
@@ -1355,13 +1390,14 @@ def report(since_text: str, as_json: bool, otlp_endpoint: str | None) -> None:
 
 
 def _print_metrics_report(report: MetricsReport) -> None:
-    click.echo(f"Local Task Run report since {report.since}:")
+    click.echo(f"Task Run report since {report.since}:")
     if not report.attempts:
         click.echo("  No Task Run attempts in this window.")
-        return
+        if not report.local_delivery["tasks_updated"]:
+            return
     success = "n/a" if report.success_rate is None else f"{report.success_rate:.1%}"
     click.echo(
-        f"  Attempts: {report.attempts} · success: {success} · "
+        f"  Phase attempts: {report.attempts} · terminal Phase success: {success} · "
         f"retries: {report.retry_count} · cancellations: {report.cancellation_count}"
     )
     durations = report.duration_seconds
@@ -1373,6 +1409,31 @@ def _print_metrics_report(report: MetricsReport) -> None:
     for phase, statuses in report.by_phase.items():
         summary = ", ".join(f"{status} {count}" for status, count in statuses.items())
         click.echo(f"  {phase}: {summary}")
+    click.echo(
+        f"  Tasks with attempts: legacy {report.task_counts['legacy']} · "
+        f"local {report.task_counts['local']}"
+    )
+    first = report.first_pass_execute
+    click.echo(
+        f"  First Execute without repair: {first['succeeded_without_repair']}/"
+        f"{first['terminal_attempts']} terminal first attempts"
+    )
+    repairs = report.repairs
+    click.echo(
+        f"  Repair rounds: {repairs['attempted_rounds']} · "
+        f"verified: {repairs['verified_rounds']}"
+    )
+    delivery = report.local_delivery
+    click.echo(
+        "  Local delivery snapshots (Tasks updated in window): "
+        f"reviewed {delivery['reviewed_candidates']} · "
+        f"integrated {delivery['integrated']} · published {delivery['published']}"
+    )
+    usage = report.usage_coverage
+    click.echo(
+        f"  Usage coverage: {usage['attempts_with_usage']}/{report.attempts} "
+        "attempts; missing usage is unknown"
+    )
 
 
 @main.command("sync-workflows")

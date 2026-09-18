@@ -11,7 +11,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from machinist.evidence import TaskEvidence
-from machinist.lifecycle import RunRecord, RunStatus
+from machinist.lifecycle import Phase, RunRecord, RunStatus
+from machinist.local_tasks import LocalTask
 
 _DURATION = re.compile(r"^([1-9][0-9]*)([hdw])$")
 _EXCEPTION_TYPE = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*):")
@@ -67,6 +68,12 @@ class MetricsReport:
     harnesses: tuple[dict[str, str | int | None], ...]
     token_totals: dict[str, int]
     series: tuple[MetricSeries, ...]
+    by_source: dict[str, int]
+    task_counts: dict[str, int]
+    first_pass_execute: dict[str, int | float | None]
+    repairs: dict[str, Any]
+    usage_coverage: dict[str, Any]
+    local_delivery: dict[str, int]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +92,12 @@ class MetricsReport:
             "harnesses": list(self.harnesses),
             "token_totals": self.token_totals,
             "series": [item.to_dict() for item in self.series],
+            "by_source": self.by_source,
+            "task_counts": self.task_counts,
+            "first_pass_execute": self.first_pass_execute,
+            "repairs": self.repairs,
+            "usage_coverage": self.usage_coverage,
+            "local_delivery": self.local_delivery,
         }
 
 
@@ -109,12 +122,30 @@ def build_metrics_report(
     *,
     since: datetime,
     generated_at: datetime | None = None,
+    local_records: Iterable[RunRecord] = (),
+    local_tasks: Iterable[LocalTask] = (),
 ) -> MetricsReport:
-    """Build a content-free aggregate from immutable Task Run attempts."""
+    """Aggregate Phase attempts while preserving legacy/local Task namespaces.
+
+    ``success_rate`` is successful terminal Phase attempts / terminal Phase
+    attempts, not whole-Task acceptance. Local delivery counts are current
+    stored snapshots of Tasks updated in the window, not delivery events.
+    """
     generated = generated_at or datetime.now(UTC)
     if since.tzinfo is None or generated.tzinfo is None:
         raise ReportingError("report timestamps must include a timezone")
-    selected = tuple(record for record in records if _updated_at(record) >= since)
+    local_history = _unique_attempts(local_records)
+    sources = {
+        "legacy": tuple(
+            record
+            for record in _unique_attempts(records)
+            if _updated_at(record) >= since
+        ),
+        "local": tuple(
+            record for record in local_history if _updated_at(record) >= since
+        ),
+    }
+    selected = sources["legacy"] + sources["local"]
     outcome_counts = Counter(record.status.value for record in selected)
     by_phase = _phase_counts(selected)
     durations = sorted(
@@ -150,10 +181,183 @@ def build_metrics_report(
         harnesses=_harness_breakdown(series),
         token_totals=_token_totals(selected),
         series=series,
+        by_source={source: len(attempts) for source, attempts in sources.items()},
+        task_counts={
+            source: len({record.issue for record in attempts})
+            for source, attempts in sources.items()
+        },
+        first_pass_execute=_first_pass_execute(selected),
+        repairs=_repair_metrics(sources),
+        usage_coverage=_usage_coverage(selected),
+        local_delivery=_local_delivery(local_tasks, local_history, since=since),
     )
 
 
-def _updated_at(record: RunRecord) -> datetime:
+def _unique_attempts(records: Iterable[RunRecord]) -> tuple[RunRecord, ...]:
+    """Choose the latest snapshot of each attempt inside one identity namespace."""
+    latest: dict[tuple[int, Phase, int], RunRecord] = {}
+    for record in records:
+        key = (record.issue, record.phase, record.attempt)
+        previous = latest.get(key)
+        if previous is None or _updated_at(record) >= _updated_at(previous):
+            latest[key] = record
+    return tuple(latest.values())
+
+
+def _first_pass_execute(
+    records: tuple[RunRecord, ...],
+) -> dict[str, int | float | None]:
+    first = tuple(
+        record
+        for record in records
+        if record.phase is Phase.EXECUTE
+        and record.attempt == 1
+        and record.status in _TERMINAL
+    )
+    successes = sum(
+        record.status is RunStatus.SUCCEEDED
+        and TaskEvidence.load(record.evidence).repair is None
+        for record in first
+    )
+    return {
+        "terminal_attempts": len(first),
+        "succeeded_without_repair": successes,
+        "success_rate": successes / len(first) if first else None,
+    }
+
+
+def _repair_metrics(sources: dict[str, tuple[RunRecord, ...]]) -> dict[str, Any]:
+    # Explicit resumed attempts can carry the same repair Evidence. Count each
+    # consumed round once, using its latest durable snapshot within the window.
+    rounds: dict[tuple[str, int, str, int], tuple[datetime, dict[str, Any]]] = {}
+    for source, records in sources.items():
+        for record in records:
+            if record.phase is not Phase.EXECUTE:
+                continue
+            repair = TaskEvidence.load(record.evidence).repair
+            attempts = repair.get("attempts") if repair is not None else None
+            if not isinstance(attempts, list):
+                continue
+            for attempt in attempts:
+                if not isinstance(attempt, dict):
+                    continue
+                started = attempt.get("started_at")
+                number = attempt.get("attempt")
+                if not isinstance(started, str) or type(number) is not int:
+                    continue
+                key = (source, record.issue, started, number)
+                updated = _updated_at(record)
+                if key not in rounds or updated >= rounds[key][0]:
+                    rounds[key] = (updated, attempt)
+    statuses = Counter(
+        status
+        for _, attempt in rounds.values()
+        if isinstance(status := attempt.get("status"), str)
+    )
+    durations = sorted(
+        float(value)
+        for _, attempt in rounds.values()
+        if isinstance(value := attempt.get("duration_seconds"), (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
+    verified = statuses["succeeded"]
+    unsuccessful = sum(
+        statuses[status]
+        for status in ("failed", "timed_out", "cancelled", "interrupted")
+    )
+    return {
+        "attempted_rounds": len(rounds),
+        "verified_rounds": verified,
+        "unsuccessful_rounds": unsuccessful,
+        "incomplete_rounds": len(rounds) - verified - unsuccessful,
+        "success_rate": verified / len(rounds) if rounds else None,
+        "duration_seconds": {
+            "total": sum(durations) if durations else None,
+            "median": _median(durations),
+            "p95": _percentile_95(durations),
+        },
+    }
+
+
+def _local_delivery(
+    tasks: Iterable[LocalTask],
+    records: tuple[RunRecord, ...],
+    *,
+    since: datetime,
+) -> dict[str, int]:
+    counts = {
+        "tasks_updated": 0,
+        "reviewed_candidates": 0,
+        "integrated": 0,
+        "published": 0,
+    }
+    latest: dict[tuple[int, Phase], RunRecord] = {}
+    for record in records:
+        key = (record.issue, record.phase)
+        if key not in latest or record.attempt > latest[key].attempt:
+            latest[key] = record
+    for task in tasks:
+        if _updated_at(task) < since:
+            continue
+        counts["tasks_updated"] += 1
+        if not _has_reviewed_candidate(task, latest):
+            continue
+        counts["reviewed_candidates"] += 1
+        if task.integration and all(
+            task.integration.get(key) == task.candidate_sha
+            for key in ("candidate_sha", "observed_sha")
+        ):
+            counts["integrated"] += 1
+        if (
+            task.publication
+            and task.publication.get("stage") == "published"
+            and task.publication.get("published_sha") == task.candidate_sha
+        ):
+            counts["published"] += 1
+    return counts
+
+
+def _has_reviewed_candidate(
+    task: LocalTask, latest: dict[tuple[int, Phase], RunRecord]
+) -> bool:
+    if not task.candidate_sha or not task.spec_sha:
+        return False
+    if not task.approval or any(
+        task.approval.get(key) != value
+        for key, value in {
+            "repository": task.repository,
+            "task_id": task.id,
+            "spec_sha": task.spec_sha,
+        }.items()
+    ):
+        return False
+    if (
+        not task.review_report
+        or task.review_report.get("completed") is not True
+        or task.review_report.get("reviewed_sha") != task.candidate_sha
+    ):
+        return False
+    execute = latest.get((task.number, Phase.EXECUTE))
+    review = latest.get((task.number, Phase.REVIEW))
+    if (
+        execute is None
+        or review is None
+        or execute.status is not RunStatus.SUCCEEDED
+        or review.status is not RunStatus.SUCCEEDED
+    ):
+        return False
+    implementation = TaskEvidence.load(execute.evidence)
+    inspection = TaskEvidence.load(review.evidence)
+    return (
+        implementation.implementation_sha == task.candidate_sha
+        and implementation.approved_sha == task.spec_sha
+        and inspection.reviewed_sha == task.candidate_sha
+    )
+
+
+def _updated_at(record: RunRecord | LocalTask) -> datetime:
     try:
         value = datetime.fromisoformat(record.updated_at)
     except ValueError as exc:
@@ -256,18 +460,30 @@ def _harness_breakdown(
 def _token_totals(records: tuple[RunRecord, ...]) -> dict[str, int]:
     totals: Counter[str] = Counter()
     for record in records:
-        evidence = TaskEvidence.load(record.evidence)
-        harness = evidence.harness
-        usage = evidence.usage
-        if harness is None or harness.get("structured_usage") is not True:
-            continue
-        if usage is None:
-            continue
-        for key in _USAGE_KEYS:
-            value = usage.get(key)
-            if type(value) is int and value >= 0:
-                totals[key] += value
+        totals.update(_known_usage(record))
     return {key: totals[key] for key in _USAGE_KEYS if key in totals}
+
+
+def _known_usage(record: RunRecord) -> dict[str, int]:
+    evidence = TaskEvidence.load(record.evidence)
+    harness, usage = evidence.harness, evidence.usage
+    if harness is None or harness.get("structured_usage") is not True or usage is None:
+        return {}
+    return {
+        key: value
+        for key in _USAGE_KEYS
+        if type(value := usage.get(key)) is int and value >= 0
+    }
+
+
+def _usage_coverage(records: tuple[RunRecord, ...]) -> dict[str, Any]:
+    known = tuple(_known_usage(record) for record in records)
+    count = sum(bool(usage) for usage in known)
+    return {
+        "attempts_with_usage": count,
+        "attempts_without_usage": len(records) - count,
+        "by_token": {key: sum(key in usage for usage in known) for key in _USAGE_KEYS},
+    }
 
 
 def _median(values: list[float]) -> float | None:

@@ -59,7 +59,9 @@ be combined. Local commands require at least one required Gate,
 absolute Workshop root outside the repository. Generic config validation
 checks the shared schema; local commands also check these local constraints.
 Later `start --harness` or `--test-cmd` flags must agree with the saved settings;
-change the local file to change them.
+change the local file to change them. Changes to root `machinist.yaml`, including
+this repository's workflow, format, lint, type, and coverage Gates, do not update
+an already saved local configuration.
 
 The verification command must work in an isolated checkout of committed files.
 An existing `node_modules/`, `.venv/`, or other ignored dependency directory in
@@ -101,6 +103,15 @@ every finding is resolved or that the change is safe to merge.
 machinist status T1
 machinist status T1 --json
 ```
+
+Optional bounded repair is available in the source checkout and is unreleased.
+Set `verification.repair.max_attempts: 1` in the saved local configuration to
+permit one additional Harness invocation after an ordinary required Gate failure
+inside the active Execute run. It defaults to `0`. The extra invocation and all
+final Gates share `verification.repair.timeout_minutes` (default 10, range 1–240).
+Control or infrastructure failures do not trigger repair; see the
+[repair contract](getting-started.md#bounded-verification-repair). Failed runs
+still require explicit retry.
 
 Status shows the Spec text, exact commits, report path, and one next action.
 `status T1 --json` also includes saved publication and integration results.
@@ -261,7 +272,13 @@ new Workshop. It clears a cancellation marker and validates retained Workshop
 custody before reuse. Recovery after the implementation
 commit uses the saved result instead of repeating successful implementation or
 verification. `machinist continue T1` advances eligible work or reports the next
-human action; it does not grant Approval or replace explicit retry.
+human action; it does not grant Approval or replace explicit retry. If a repair
+was interrupted or ended in failure, timeout, or cancellation, use
+`machinist retry --task T1 --phase execute --fresh`: resume cannot replay paid
+repair work.
+A completed repair with valid retained state can resume Verification only within
+its saved deadline. Fresh Execute attempts receive a new repair budget; ordinary
+resume does not replenish it.
 
 ```sh
 machinist cancel --task T1 --reason "Requirements changed"
@@ -332,11 +349,21 @@ runtime records for recovery; do not commit them or edit Task JSON manually.
 
 Plain `doctor` remains the root GitHub setup preflight;
 `doctor --local`, available since 0.15.0, checks local readiness as described
-above. `runs`, `inspect`, `explain`, `report`, and portfolio `status --all` read the legacy issue-run namespace under
-`.machinist/runs/`; they do not aggregate the nested local Task namespace.
+above. `runs`, `inspect`, `explain`, and portfolio `status --all` read the legacy
+issue-run namespace under `.machinist/runs/`. Aggregate `report` reads both
+namespaces by default; use `machinist report --source local --since 30d --json`
+for foreground Tasks only, without root configuration or forge access.
 `status --local` is an offline view of legacy issue runs only when no local
 configuration is present. In a mixed checkout, default status selects local
 Tasks; use `runs`/`inspect` for legacy Evidence.
+
+Report `success_rate` measures terminal Phase attempts. `first_pass_execute`
+measures first Execute attempts that succeeded without repair. Local delivery
+counts are current stored snapshots of Tasks updated in the window, not delivery
+events or acceptance rates. Missing token usage is unknown; inspect
+`usage_coverage` before interpreting totals. Local/all reports remain local
+unless `--otlp-endpoint` is explicitly supplied; those exports omit repository
+identity.
 
 Watcher queue windows, daily Task Run budgets, notifications, and the managed
 service do not govern foreground local Tasks. `clean` manages legacy Workshops;

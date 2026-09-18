@@ -134,6 +134,11 @@ never-merges rule only for that human-directed local operation.
 - `verification.py` — the sole Verification Gate engine after Harness work,
   including required/advisory outcomes, mutation checks, cancellation,
   timeouts, logs, and Evidence projection.
+- `repair.py` — optional single repair round within active Execute, with
+  conservative failure eligibility, a persisted consumed budget and deadline,
+  bounded failure context, and no replay of interrupted paid repair work.
+  Phases retain custody and limit checks around every process. Verification
+  remains authoritative; failed Task Runs still require explicit retry.
 - `harness/` — `base.py` owns subprocess mechanics, timeouts, 30s heartbeat
   callbacks, and credential scrubbing (removes `GH_TOKEN`, `GITHUB_TOKEN`,
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
@@ -238,7 +243,8 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 7. **Explicit retry only**: a failed Task Run blocks re-runs until
    `machinist retry`; a crash after push is reconciled from checkpoints
    (neither the harness nor the verification gates rerun; only a crash
-   before the implementation commit reruns the gates).
+   before the implementation commit reruns the gates). Configured bounded repair
+   runs inside active Execute before it fails; it never redispatches failed runs.
 8. **Security wording**: never claim a harness "has no Git access" — the
    trust model (docs/trust-model.md, SECURITY.md) is credential *reduction*
    and detection, not OS-level isolation. `pull_request_target` automation

@@ -133,9 +133,19 @@ Adapters splice `self._passthrough_argv()` (the operator's `harness.model` and
 prompt-relative position instead of restating that block. Adapter tests should
 pin exact Spec, Execute, and Review argv; prove read-only controls for
 Spec/Review; and install a fixture entry point from an isolated path. A plugin that declares structured usage must record only numeric aggregate
-token fields before `machinist report` includes them. That aggregate report
-currently reads legacy issue-run history; use the printed local Task report
-and `machinist status T1 --json` for the foreground workflow.
+token fields before `machinist report` includes them. Aggregate reports read
+both local and legacy history by default; `--source local` and `--source legacy`
+select one. Missing usage remains unknown, and `usage_coverage` reports which
+attempts and token fields were observed. The printed local Task report and
+`machinist status T1 --json` still provide individual foreground Evidence.
+
+Opt-in `verification.repair.max_attempts: 1` reuses the resolved Execute Harness
+for at most one additional invocation after an eligible required Gate failure.
+The repair prompt includes the approved implementation instructions and bounded
+untrusted diagnostics. Its additional deadline also covers the final controller
+Gates. This is independent of the Harness's own iterative gate runs and does
+not relax adapter permissions, Git custody, or the approved Spec. Repair and
+combined reporting are unreleased source-checkout additions.
 
 ## Compatibility checks
 

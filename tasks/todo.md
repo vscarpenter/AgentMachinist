@@ -931,3 +931,22 @@ The user authorized pushing all changes and publishing 0.16.0 to PyPI. The
 release procedure verifies CI at the exact PR head, merges to main, and creates
 `v0.16.0` at that merge commit. The GitHub release workflow supplies the
 publication, artifact-checksum, and isolated public-install evidence.
+
+## Verification, reporting, and bounded repair (2026-09-18)
+
+- [x] Record the approved specification and implementation plan.
+- [x] Configure ordered check-only dogfood gates using the existing script.
+- [x] Include local and legacy histories in read-only aggregate reporting,
+  preserving namespaces and explicit consent for local telemetry export.
+- [x] Add opt-in single-round Execute repair with durable budgets/deadlines,
+  separate Evidence, custody/limit checks, and authoritative final Verification.
+- [x] Start behavior work with failing contracts; cover repaired local candidates,
+  exhaustion, cancellation, malformed budgets, and recovery without paid replay.
+- [x] Resolve independent review findings about resumed instruction provenance.
+- [x] Update operating guides, policy, reference configuration, and changelog.
+- [ ] Complete the final canonical gate and record its results.
+
+Implementation and focused checks are complete. The first canonical run was
+deliberately interrupted after 839 passing tests to address review findings.
+The replacement run must pass before this work is reported as verified.
+No package version change, remote publication, or release is included.

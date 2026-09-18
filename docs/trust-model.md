@@ -4,8 +4,9 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-This model describes AgentMachinist 0.17.1. Local readiness and bounded
-diagnostic rendering were introduced in 0.15.0.
+The published baseline is AgentMachinist 0.17.1. Bounded Execute repair and
+combined local/legacy reporting below are unreleased source-checkout additions.
+Local readiness and bounded diagnostic rendering were introduced in 0.15.0.
 
 ## Trusted inputs and principals
 
@@ -209,6 +210,28 @@ afterwards, and that controller run remains the authoritative gate. Set
 `verification.harness_may_run_gates: false` to withhold both the commands and
 (for `claude-code`) the corresponding `--allowedTools` grants.
 
+### Bounded repair within Execute
+
+Repair is off by default. `verification.repair.max_attempts: 1` authorizes one
+additional Harness invocation inside an active approved Execute Task Run,
+followed by all configured Gates. `verification.repair.timeout_minutes` defaults
+to 10 (range 1–240); its deadline covers both extra model work and final
+Verification. Consumed budget and deadline are persisted before paid work.
+Custody, change limits, test-deletion checks, exact final Review, and publication
+requirements still apply. Failed Task Runs require explicit retry. Interrupted
+or failed repair cannot be replayed by resuming; a fresh explicit attempt is
+required, including after repair timeout or cancellation.
+
+Only ordinary required command failures are eligible. Cancellation, timeouts,
+missing commands or exit 126/127, output limits, stragglers, custody violations,
+forbidden mutations, and snapshot failures stop the run without repair. A
+nonzero exit alone cannot establish that a defect is in the code. The repair
+prompt carries bounded, sanitized failure Evidence as untrusted input alongside
+the approved implementation prompt and a bounded change summary. Failure text
+never authorizes broader scope, new permissions, Git operations, or weakening
+tests or Gates. Sanitization reduces recognized secret and terminal-control
+exposure; it does not make arbitrary logs trustworthy or secret-free.
+
 ## Diagnostic output
 
 **New in 0.15.0:** a shared renderer bounds Git, `gh`, `glab`,
@@ -221,21 +244,28 @@ Inspect logs and Evidence before sharing them.
 
 ## Telemetry
 
-`machinist report` reads legacy issue Task Run history but emits aggregates
-rather than raw Evidence. OTLP export is disabled by default and constructs its payload from an
-allowlist: repository identity, phase, status, Harness, model, counts, rates,
-and duration statistics. Issue bodies, prompts, source/diffs, commands, error
+`machinist report` reads local and legacy Phase histories by default;
+`--source all|legacy|local` selects the histories. It emits aggregates rather
+than raw Evidence. Phase success, first-pass Execute success, repair outcomes,
+usage coverage, and current local delivery snapshots have separate meanings;
+none is a human acceptance rate. Missing usage is unknown. OTLP constructs its
+payload from an allowlist: phase, status, Harness, model, counts, rates,
+duration statistics, and repository identity only for legacy-only export.
+Issue bodies, prompts, source/diffs, commands, error
 messages, arbitrary Evidence, environment values, and credential values are
 not export inputs. Authorization is read only from
 `MACHINIST_OTLP_AUTHORIZATION` and is rejected on malformed or credentialed
 endpoint URLs.
 
-Foreground local configuration requires telemetry export disabled. Its status
-and Markdown report remain on disk; the aggregate report command does not
-include that local Task namespace.
+Foreground local configuration requires its telemetry endpoint unset. The
+root `telemetry.otlp_endpoint` applies only to `report --source legacy`.
+Reports with `--source all` (the default) or `--source local` export only when
+`--otlp-endpoint` is explicitly supplied and omit repository identity. Merely
+configuring legacy telemetry cannot start exporting local Task metrics.
 
-An operator who configures an endpoint is trusting that collector with the
-allowlisted repository identity and usage aggregates. Use HTTPS and the same
+An operator who selects an endpoint is trusting that collector with the
+allowlisted usage aggregates and, for legacy-only exports, repository identity.
+Use HTTPS and the same
 network isolation expected for other observability traffic.
 
 ## Recommended deployment boundary
@@ -253,8 +283,8 @@ merge protection and required CI reviews on the repository.
 - A harness-side remote effect can be detected without being reversible.
 - Model output can be wrong while tests pass.
 - Independent Review can miss a defect or produce a false-positive advisory.
-- An explicitly configured telemetry collector learns repository identity and
-  aggregate operational behavior.
+- An explicitly selected telemetry collector learns aggregate operational
+  behavior; legacy-only exports may also include repository identity.
 - Under `workspace.strategy: worktree`, Git metadata custody covers a
   directory you also edit, so the guard reports your own changes as well as
   a harness's.

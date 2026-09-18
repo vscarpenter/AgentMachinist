@@ -23,8 +23,20 @@ advisory source-text guidance in all three Harness prompts. The
 [workflow diagram](docs/how-it-works.html) shows who owns each step from Task
 through optional publication.
 
+The source checkout also includes combined local/legacy reliability reports and
+opt-in bounded repair after an ordinary required Verification failure. These
+additions are unreleased; see the [Verification](docs/getting-started.md#verification-gates-and-change-limits)
+and [reporting](docs/getting-started.md#local-evidence-and-repository-portfolio) guidance.
+
 Current release:
 [AgentMachinist 0.17.1 on PyPI](https://pypi.org/project/agentmachinist/0.17.1/).
+
+Source checkout Verification uses ordered required check-only Gates for workflow
+drift, formatting, lint, types, and coverage. Existing saved local configuration
+is not updated automatically. Repair defaults off; configuring
+`verification.repair.max_attempts: 1` permits one additional Harness invocation
+and final Gates within an active Execute run. Failed runs still need explicit
+retry, and final Review and human integration remain unchanged.
 
 ## Install
 
@@ -310,7 +322,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist status [--local\|--all] [--json]` | With local configuration, default status and `--local` show local Tasks. Otherwise, default status shows the GitHub board and `--local` reads legacy Run Evidence. `--all` shows the registered GitHub portfolio. |
 | `machinist status --watch [--interval <seconds>] [--json]` | Emit changed-only live pipeline snapshots until Ctrl-C. |
 | `machinist runs [--issue <issue>] [--json]` | Read current, historical, orphaned, and corrupt local run records. |
-| `machinist report [--since 30d] [--json] [--otlp-endpoint <url>]` | Aggregate local reliability metrics and optionally export allowlisted OTLP/HTTP JSON. |
+| `machinist report [--source all\|legacy\|local] [--since 30d] [--json] [--otlp-endpoint <url>]` | Aggregate both history namespaces by default; local/all export requires an explicit endpoint. |
 | `machinist retry <issue> [--phase spec\|execute\|review]` | Re-enable one failed Task Run. |
 | `machinist retry <issue> --phase execute --run [--resume\|--fresh]` | Reuse a retained workspace or start a fresh Execute attempt; fresh is the default. |
 | `machinist inspect <issue> [--offline] [--json]` | Show GitHub, workspace, and complete Task Run diagnostics. |

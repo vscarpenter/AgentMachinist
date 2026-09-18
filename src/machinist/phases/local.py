@@ -10,13 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-from machinist.config import MachinistConfig
-from machinist.evidence import TaskEvidence
+from machinist.config import InstructionResolutionError, MachinistConfig
+from machinist.evidence import EvidenceError, TaskEvidence, validate_repair_evidence
 from machinist.harness import harness_evidence
 from machinist.lifecycle import Phase, RunStatus, TaskLifecycle
 from machinist.local_tasks import LocalTask, LocalTaskStore
@@ -26,6 +27,7 @@ from machinist.phases.execute import (
     _capture_harness_report,
     _enforce_change_limits,
     _run_verification,
+    _run_verification_report,
     _verification_resume_blocker,
     render_implement_prompt,
 )
@@ -38,7 +40,13 @@ from machinist.phases.review import (
 from machinist.phases.spec import render_spec_prompt
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
 from machinist.process import run_supervised
-from machinist.verification import VerificationFailed, run_verification_gates
+from machinist.repair import RepairCancelled, RepairError, verify_with_repair
+from machinist.verification import (
+    GateStatus,
+    VerificationError,
+    VerificationFailed,
+    run_verification_gates,
+)
 
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
 
@@ -175,6 +183,11 @@ def run_local_execute(
         spec_sha,
         cancel_check,
     )
+    if resume and previous.get("repair") is not None:
+        try:
+            validate_repair_evidence(previous["repair"])
+        except EvidenceError as exc:
+            raise LocalPhaseError(f"{exc}; use an explicit fresh retry") from exc
     claim.checkpoint(approved_sha=spec_sha)
     spec = workspace.read_at_commit(
         spec_sha, spec_path(task), max_bytes=config.limits.max_spec_chars * 4
@@ -245,14 +258,16 @@ def run_local_execute(
             harness_completed=False,
             verification_report=None,
             local_verified_snapshot=None,
+            repair=None,
         )
     if _read_spec(path, task, config) != spec:
         raise LocalPhaseError(
             "retained Workshop does not contain the exact approved Spec"
         )
-    instructions = config.resolve_instructions("execute", path)
-    claim.checkpoint(**config.instructions.evidence("execute", instructions))
+    instructions = None
     if previous.get("harness_completed") is not True:
+        instructions = config.resolve_instructions("execute", path)
+        claim.checkpoint(**config.instructions.evidence("execute", instructions))
         allowed = (
             config.resolved_verification_gates()
             if config.verification.harness_may_run_gates
@@ -288,7 +303,7 @@ def run_local_execute(
         )
     if not workspace.has_changes(path):
         raise LocalPhaseError("no implementation changes remain to verify")
-    _enforce_change_limits(path, workspace=workspace, config=config)
+    summary = _enforce_change_limits(path, workspace=workspace, config=config)
     verified = (
         previous.get("harness_completed") is True
         and isinstance(previous.get("verification_report"), dict)
@@ -299,11 +314,17 @@ def run_local_execute(
         before = workspace.capture_harness_state(path)
         _cancel(cancel_check, "before Verification")
         try:
-            _run_verification(
+            _verify_local_implementation(
                 path,
                 config=config,
                 workspace=workspace,
                 claim=claim,
+                harness=harness,
+                task=task,
+                spec=spec,
+                instructions=instructions,
+                previous=previous,
+                change_summary=summary,
                 test_runner=test_runner,
                 cancel_check=cancel_check,
             )
@@ -338,6 +359,136 @@ def run_local_execute(
     claim.checkpoint(local_delivery_completed=True)
     _cleanup(workspace, path, claim)
     return delivered
+
+
+def _verify_local_implementation(
+    path,
+    *,
+    config,
+    workspace,
+    claim,
+    harness,
+    task,
+    spec,
+    instructions,
+    previous,
+    change_summary,
+    test_runner,
+    cancel_check,
+):
+    """Bind the shared repair coordinator to local custody and retained bytes."""
+    if not config.verification.repair.max_attempts and previous.get("repair") is None:
+        return _run_verification(
+            path,
+            config=config,
+            workspace=workspace,
+            claim=claim,
+            test_runner=test_runner,
+            cancel_check=cancel_check,
+        )
+
+    gates = (
+        config.resolved_verification_gates()
+        if config.verification.harness_may_run_gates
+        else ()
+    )
+
+    def prompt():
+        resolved = instructions
+        if resolved is None:
+            try:
+                resolved = config.resolve_instructions("execute", path)
+            except InstructionResolutionError as exc:
+                raise LocalPhaseError(
+                    "retained implementation instructions cannot be read for repair; "
+                    "use --fresh to start a new approved Execute attempt"
+                ) from exc
+            digest = config.instructions.evidence("execute", resolved)[
+                "instructions_sha256"
+            ]
+            if digest != previous.get("instructions_sha256"):
+                raise LocalPhaseError(
+                    "retained implementation instructions changed or lack saved "
+                    "provenance; use --fresh to start a new approved Execute attempt"
+                )
+        return render_implement_prompt(
+            task.number, spec, task.feedback, resolved, gates=gates
+        ).replace(f"GitHub issue #{task.number}", f"Local Task {task.id}")
+
+    def guarded_runner(*args, **kwargs):
+        before = workspace.capture_harness_state(path)
+        _enforce_change_limits(path, workspace=workspace, config=config)
+        runner = run_supervised if test_runner is subprocess.run else test_runner
+        try:
+            return runner(*args, **kwargs)
+        finally:
+            workspace.assert_harness_state(path, before)
+            _enforce_change_limits(path, workspace=workspace, config=config)
+
+    def verify(round_number, bounded_cancel):
+        before = workspace.capture_harness_state(path)
+        try:
+            return _run_verification_report(
+                path,
+                config=config,
+                workspace=workspace,
+                claim=claim,
+                test_runner=guarded_runner,
+                cancel_check=bounded_cancel,
+                round=round_number,
+            )
+        finally:
+            workspace.assert_harness_state(path, before)
+            summary = _enforce_change_limits(path, workspace=workspace, config=config)
+            claim.checkpoint(
+                change_summary=summary,
+                local_changes_snapshot=workspace.change_snapshot(path),
+            )
+
+    def implement(repair_prompt, bounded_cancel):
+        before = workspace.capture_harness_state(path)
+        old_cancel = getattr(harness, "cancel_check", None)
+        old_progress = getattr(harness, "on_progress", None)
+        harness.cancel_check = bounded_cancel
+        harness.allowed_commands = tuple(gate.command for gate in gates)
+        report_progress(claim, "repair local implementation", task.id)
+        bind_harness_progress(harness, claim, stage="repair")
+        try:
+            output = harness.implement(repair_prompt, cwd=path)
+        finally:
+            harness.cancel_check = old_cancel
+            harness.on_progress = old_progress
+            workspace.assert_harness_state(path, before)
+            summary = _enforce_change_limits(path, workspace=workspace, config=config)
+            claim.checkpoint(
+                change_summary=summary,
+                local_changes_snapshot=workspace.change_snapshot(path),
+            )
+        _capture_harness_report(claim, output, repair=True)
+        return "" if output is None else str(output)
+
+    try:
+        report = verify_with_repair(
+            policy=config.verification.repair,
+            evidence=TaskEvidence.load(previous),
+            checkpoint=lambda values: claim.checkpoint(**values),
+            verify=verify,
+            implement=implement,
+            approved_prompt=prompt,
+            change_summary=change_summary,
+            cancel_check=cancel_check,
+        )
+    except RepairCancelled as exc:
+        raise LocalPhaseCancelled(str(exc)) from exc
+    except RepairError as exc:
+        raise LocalPhaseError(str(exc)) from exc
+    except VerificationFailed as exc:
+        if any(gate.status is GateStatus.CANCELLED for gate in exc.report.gates):
+            raise LocalPhaseCancelled(str(exc)) from exc
+        raise LocalPhaseError(str(exc)) from exc
+    except VerificationError as exc:
+        raise LocalPhaseError(f"verification could not run safely: {exc}") from exc
+    return report.as_dict()
 
 
 def run_local_review(
@@ -463,6 +614,12 @@ def _begin(
                 "verification": [gate.model_dump(mode="json") for gate in gates],
                 "limits": config.limits.model_dump(mode="json"),
                 "instructions": config.instructions.model_dump(mode="json"),
+                **(
+                    {"repair": config.verification.repair.model_dump(mode="json")}
+                    if phase is Phase.EXECUTE
+                    and config.verification.repair.max_attempts
+                    else {}
+                ),
             },
             sort_keys=True,
         )
@@ -488,6 +645,7 @@ def _begin(
                 verification_report=None,
                 harness_completed=False,
                 change_summary=None,
+                repair=None,
             )
         else:
             clearing.update(reviewed_sha=None, review_report=None, finding_counts=None)

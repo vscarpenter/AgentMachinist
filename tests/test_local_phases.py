@@ -125,7 +125,7 @@ def local(tmp_path):
                     workspace=LocalWorkspace(root, env.config.workspace),
                     harness=env.harness,
                     claim=claim,
-                    cancel_check=None,
+                    cancel_check=kwargs.pop("cancel_check", None),
                     **kwargs,
                 ),
             )
@@ -178,6 +178,284 @@ def test_baseline_gate_failure_stops_before_spec_harness(local):
     assert local.harness.calls == []
     evidence = local.lifecycle.record(local.task.number, Phase.SPEC).evidence
     assert evidence["baseline_report"]["success"] is False
+
+
+def _enable_repair(local):
+    payload = local.config.model_dump(mode="json")
+    payload["verification"]["repair"] = {"max_attempts": 1, "timeout_minutes": 10}
+    local.config = MachinistConfig.model_validate(payload)
+
+
+def _fail_initial_implementation(local):
+    def effect(path):
+        if local.harness.calls.count("execute") == 1:
+            (path / "feature.py").write_text("def answer():\n    return 0\n")
+
+    local.harness.execute_effect = effect
+
+
+def test_local_repair_verifies_and_reviews_exact_repaired_candidate(local):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+    _fail_initial_implementation(local)
+    task = local.run(Phase.EXECUTE)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    evidence = local.lifecycle.record(task.number, Phase.EXECUTE).evidence
+    assert evidence["verification_report"]["success"] is True
+    assert evidence["repair"]
+    assert git(local.root, "show", f"{task.candidate_sha}:feature.py").endswith(
+        "return 2"
+    )
+    task = local.run(Phase.REVIEW)
+    assert task.review_report["reviewed_sha"] == task.candidate_sha
+    assert task.approval["spec_sha"] == task.spec_sha
+
+
+def test_local_repair_exhaustion_never_delivers_or_replenishes_on_resume(local):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+    local.harness.execute_effect = lambda path: (path / "feature.py").write_text(
+        "def answer():\n    return 0\n"
+    )
+    with pytest.raises(Exception, match="verification"):
+        local.run(Phase.EXECUTE)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+    local.lifecycle.retry(local.task.number, Phase.EXECUTE)
+    with pytest.raises(Exception, match="verification|repair"):
+        local.run(Phase.EXECUTE, resume=True)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+
+
+@pytest.mark.parametrize("violation", ["commit", "delete_test"])
+def test_local_repair_rechecks_custody_and_change_limits(local, violation):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+
+    def effect(path):
+        if local.harness.calls.count("execute") == 1:
+            (path / "feature.py").write_text("def answer():\n    return 0\n")
+        elif violation == "commit":
+            git(path, "add", ".")
+            git(path, "commit", "-qm", "unauthorized repair")
+        else:
+            (path / "tests/test_feature.py").unlink()
+
+    local.harness.execute_effect = effect
+    with pytest.raises(Exception, match="HEAD|head|custody|deleted test"):
+        local.run(Phase.EXECUTE)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+
+
+def test_local_interrupted_repair_cannot_replay_paid_work_on_resume(local):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+
+    def effect(path):
+        (path / "feature.py").write_text("def answer():\n    return 0\n")
+        if local.harness.calls.count("execute") == 2:
+            raise RuntimeError("repair process interrupted")
+
+    local.harness.execute_effect = effect
+    with pytest.raises(RuntimeError, match="repair process interrupted"):
+        local.run(Phase.EXECUTE)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    local.lifecycle.retry(local.task.number, Phase.EXECUTE)
+    with pytest.raises(Exception, match="repair|fresh retry"):
+        local.run(Phase.EXECUTE, resume=True)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+
+
+def test_local_repaired_commit_recovery_does_not_repeat_harness_or_gates(
+    local, monkeypatch
+):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+    _fail_initial_implementation(local)
+    original = local.store.update
+
+    def fail_delivery(task, **changes):
+        if changes.get("candidate_sha"):
+            raise RuntimeError("interrupted before repaired Task delivery")
+        return original(task, **changes)
+
+    monkeypatch.setattr(local.store, "update", fail_delivery)
+    with pytest.raises(RuntimeError, match="Task delivery"):
+        local.run(Phase.EXECUTE)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    monkeypatch.setattr(local.store, "update", original)
+    local.lifecycle.retry(local.task.number, Phase.EXECUTE)
+
+    def no_gates(*args, **kwargs):
+        pytest.fail("successful repaired Verification repeated after commit")
+
+    task = local.run(Phase.EXECUTE, resume=True, test_runner=no_gates)
+    assert task.candidate_sha
+    assert local.harness.calls == ["spec", "execute", "execute"]
+
+
+def test_local_repair_reruns_all_gates_and_keeps_distinct_logs(local):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+    payload = local.config.model_dump(mode="json")
+    payload["tests"]["command"] = None
+    payload["verification"]["gates"] = [
+        {"name": "one", "command": "check-one"},
+        {"name": "two", "command": "check-two"},
+    ]
+    local.config = MachinistConfig.model_validate(payload)
+    commands = []
+
+    def gates(argv, **kwargs):
+        commands.append(argv)
+        kwargs["stdout_log"].write_text("check output")
+        return subprocess.CompletedProcess(
+            argv, 1 if len(commands) == 1 else 0, stdout="check output", stderr=""
+        )
+
+    local.run(Phase.EXECUTE, test_runner=gates)
+    assert commands == ["check-one", "check-two", "check-one", "check-two"]
+    evidence = local.lifecycle.record(local.task.number, Phase.EXECUTE).evidence
+    repair = evidence["repair"]
+    initial_log = repair["initial_verification_report"]["gates"][0]["stdout_log"]
+    final_log = evidence["verification_report"]["gates"][0]["stdout_log"]
+    assert initial_log != final_log
+    from pathlib import Path
+
+    assert Path(initial_log).read_text() == "check output"
+    assert Path(final_log).read_text() == "check output"
+
+
+@pytest.mark.parametrize("failure", ["missing_command", "mutation"])
+def test_local_control_failures_never_start_repair(local, failure):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+    payload = local.config.model_dump(mode="json")
+    payload["tests"]["command"] = None
+    payload["verification"]["gates"] = [{"name": "check", "command": "check"}]
+    local.config = MachinistConfig.model_validate(payload)
+
+    def gate(argv, **kwargs):
+        if failure == "mutation":
+            (kwargs["cwd"] / "feature.py").write_text("unauthorized mutation")
+        return subprocess.CompletedProcess(
+            argv, 127 if failure == "missing_command" else 1, stdout="", stderr="failed"
+        )
+
+    with pytest.raises(Exception, match="verification"):
+        local.run(Phase.EXECUTE, test_runner=gate)
+    assert local.harness.calls == ["spec", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+
+
+def test_local_cancellation_during_repair_never_delivers(local):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+    cancelled = False
+
+    def effect(path):
+        nonlocal cancelled
+        if local.harness.calls.count("execute") == 1:
+            (path / "feature.py").write_text("def answer():\n    return 0\n")
+        else:
+            cancelled = True
+
+    local.harness.execute_effect = effect
+    with pytest.raises(Exception, match="cancel"):
+        local.run(Phase.EXECUTE, cancel_check=lambda: cancelled)
+    assert local.harness.calls == ["spec", "execute", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+
+
+@pytest.mark.parametrize("malformed", [{}, [], ""])
+def test_local_resume_rejects_malformed_repair_even_when_disabled(local, malformed):
+    local.run(Phase.SPEC)
+    local.approve()
+
+    def failed_gate(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="failed")
+
+    with pytest.raises(Exception, match="verification"):
+        local.run(Phase.EXECUTE, test_runner=failed_gate)
+    path = local.lifecycle._path(local.task.number, Phase.EXECUTE)
+    payload = json.loads(path.read_text())
+    payload["evidence"]["repair"] = malformed
+    path.write_text(json.dumps(payload))
+    local.lifecycle.retry(local.task.number, Phase.EXECUTE)
+    with pytest.raises(Exception, match="repair.*budget"):
+        local.run(Phase.EXECUTE, resume=True)
+    assert local.harness.calls == ["spec", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+
+
+def test_local_resume_keeps_instruction_provenance_when_no_new_harness_runs(local):
+    local.run(Phase.SPEC)
+    local.approve()
+    payload = local.config.model_dump(mode="json")
+    payload["instructions"]["execute"] = {"paths": ["feature.py"]}
+    local.config = MachinistConfig.model_validate(payload)
+
+    def failed_gate(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="failed")
+
+    with pytest.raises(Exception, match="verification"):
+        local.run(Phase.EXECUTE, test_runner=failed_gate)
+    consumed = local.lifecycle.record(local.task.number, Phase.EXECUTE).evidence[
+        "instructions_sha256"
+    ]
+    local.lifecycle.retry(local.task.number, Phase.EXECUTE)
+    local.run(Phase.EXECUTE, resume=True)
+    assert local.harness.calls == ["spec", "execute"]
+    assert (
+        local.lifecycle.record(local.task.number, Phase.EXECUTE).evidence[
+            "instructions_sha256"
+        ]
+        == consumed
+    )
+
+
+def test_local_resumed_repair_refuses_changed_instructions_before_paid_work(local):
+    _enable_repair(local)
+    local.run(Phase.SPEC)
+    local.approve()
+    payload = local.config.model_dump(mode="json")
+    payload["instructions"]["execute"] = {"paths": ["feature.py"]}
+    local.config = MachinistConfig.model_validate(payload)
+
+    def interrupted_gate(command, **kwargs):
+        raise RuntimeError("gate process vanished")
+
+    with pytest.raises(RuntimeError, match="gate process vanished"):
+        local.run(Phase.EXECUTE, test_runner=interrupted_gate)
+    consumed = local.lifecycle.record(local.task.number, Phase.EXECUTE).evidence[
+        "instructions_sha256"
+    ]
+    local.lifecycle.retry(local.task.number, Phase.EXECUTE)
+
+    def failed_gate(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="failed")
+
+    with pytest.raises(LocalPhaseError, match="instructions.*--fresh"):
+        local.run(Phase.EXECUTE, resume=True, test_runner=failed_gate)
+    assert local.harness.calls == ["spec", "execute"]
+    assert local.store.get(local.task.id).candidate_sha is None
+    assert (
+        local.lifecycle.record(local.task.number, Phase.EXECUTE).evidence[
+            "instructions_sha256"
+        ]
+        == consumed
+    )
 
 
 def test_spec_read_only_contract_catches_harness_edits(local):

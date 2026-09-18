@@ -17,15 +17,21 @@ from collections.abc import Callable, Mapping, Sequence
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from string import Template
-from typing import Any
+from typing import Any, NoReturn
 
-from machinist.config import MachinistConfig, VerificationGateConfig
+from machinist.config import (
+    InstructionResolutionError,
+    MachinistConfig,
+    VerificationGateConfig,
+)
 from machinist.evidence import EvidenceError, TaskEvidence
 from machinist.github import PullRequest
 from machinist.harness import harness_evidence
 from machinist.managed_paths import ManagedPathError, read_managed_text
 from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
+from machinist.process import run_supervised
+from machinist.repair import RepairCancelled, RepairError, verify_with_repair
 from machinist.repository_custody import (
     PullRequestExpectation,
     RepositoryCustodyError,
@@ -132,6 +138,41 @@ def normalize_operator_feedback(feedback: str | None) -> str | None:
             f"maximum {MAX_FEEDBACK_CHARS})"
         )
     return normalized
+
+
+def _render_resumed_implement_prompt(
+    issue_number: int,
+    spec_text: str,
+    *,
+    path: Path,
+    config: MachinistConfig,
+    previous: TaskEvidence,
+    gates: Sequence[VerificationGateConfig],
+) -> str:
+    """Reconstruct consumed prompt context only when another Harness must run."""
+    if previous.feedback_supplied:
+        raise ExecutePhaseError(
+            "retained operator feedback cannot be reconstructed for repair; "
+            "use --fresh to start a new approved Execute attempt"
+        )
+    try:
+        instructions = config.resolve_instructions("execute", path)
+    except InstructionResolutionError as exc:
+        raise ExecutePhaseError(
+            "retained implementation instructions cannot be read for repair; "
+            "use --fresh to start a new approved Execute attempt"
+        ) from exc
+    resolved_digest = config.instructions.evidence("execute", instructions)[
+        "instructions_sha256"
+    ]
+    if resolved_digest != previous.as_dict().get("instructions_sha256"):
+        raise ExecutePhaseError(
+            "retained implementation instructions differ from the consumed prompt "
+            "or lack saved provenance; use --fresh to start a new approved Execute attempt"
+        )
+    return render_implement_prompt(
+        issue_number, spec_text, instructions=instructions, gates=gates
+    )
 
 
 def run_execute_phase(
@@ -290,12 +331,6 @@ def run_execute_phase(
             harness_report_excerpt = previous.harness_report_excerpt
         else:
             _assert_head(workspace, path, branch=branch, expected_sha=approval_sha)
-            instructions = ""
-            if resume_stage != "post_harness":
-                instructions = config.resolve_instructions("execute", path)
-                claim.checkpoint(
-                    **config.instructions.evidence("execute", instructions)
-                )
             if not resume:
                 _reset_fresh_execution_evidence(claim)
             spec_relative = (
@@ -321,42 +356,57 @@ def run_execute_phase(
                     f"{config.limits.max_spec_chars}"
                 )
 
+            gates = (
+                config.resolved_verification_gates()
+                if config.verification.harness_may_run_gates
+                else ()
+            )
+            harness.allowed_commands = tuple(gate.command for gate in gates)
+            approved_prompt: str | Callable[[], str]
+
             if resume_stage != "post_harness":
+                instructions = config.resolve_instructions("execute", path)
+                claim.checkpoint(
+                    **config.instructions.evidence("execute", instructions)
+                )
+                approved_prompt = render_implement_prompt(
+                    issue_number, spec_text, feedback, instructions, gates=gates
+                )
                 harness_details = _harness_details(harness)
-                harness_report_excerpt: str | None
                 claim.checkpoint(
                     harness=harness_details,
                 )
-                gates = (
-                    config.resolved_verification_gates()
-                    if config.verification.harness_may_run_gates
-                    else ()
-                )
-                harness.allowed_commands = tuple(gate.command for gate in gates)
                 report_progress(claim, "implement", harness.name)
                 bind_harness_progress(harness, claim, stage="implement")
-                harness_report = harness.implement(
-                    render_implement_prompt(
-                        issue_number,
-                        spec_text,
-                        feedback,
-                        instructions,
-                        gates=gates,
-                    ),
-                    cwd=path,
-                )
+                try:
+                    harness_report = harness.implement(approved_prompt, cwd=path)
+                finally:
+                    _assert_head(
+                        workspace,
+                        path,
+                        branch=branch,
+                        expected_sha=approval_sha,
+                        actor=harness.name,
+                    )
+                    _enforce_change_limits(path, workspace=workspace, config=config)
                 harness_report_excerpt = _capture_harness_report(
                     claim,
                     harness_report,
                 )
-                _assert_head(
-                    workspace,
-                    path,
-                    branch=branch,
-                    expected_sha=approval_sha,
-                    actor=harness.name,
-                )
             else:
+                # A successful revalidation consumes no prompt. The implementation
+                # may legitimately have removed or changed its instruction files.
+                def resumed_prompt() -> str:
+                    return _render_resumed_implement_prompt(
+                        issue_number,
+                        spec_text,
+                        path=path,
+                        config=config,
+                        previous=previous,
+                        gates=gates,
+                    )
+
+                approved_prompt = resumed_prompt
                 harness_details = previous.harness or _harness_details(harness)
                 harness_report_excerpt = previous.harness_report_excerpt
 
@@ -377,13 +427,19 @@ def run_execute_phase(
 
             try:
                 report_progress(claim, "verification", "starting configured gates")
-                verification_report = _run_verification(
+                verification_report = _verify_implementation(
                     path,
                     config=config,
                     workspace=workspace,
+                    harness=harness,
                     claim=claim,
                     test_runner=test_runner,
                     cancel_check=cancel_check,
+                    branch=branch,
+                    approval_sha=approval_sha,
+                    approved_prompt=approved_prompt,
+                    change_summary=change_summary,
+                    previous=previous if resume else TaskEvidence.load({}),
                 )
             except ExecutePhaseError:
                 _assert_head(
@@ -513,11 +569,17 @@ def _provision_fresh_workspace(
 
 def _reset_fresh_execution_evidence(claim) -> None:
     """Clear stale stage evidence only after the approved head is revalidated."""
+    repair_reset = {
+        key: None
+        for key in ("repair", "repair_harness_report_path")
+        if key in claim.previous_evidence
+    }
     claim.checkpoint(
         harness_completed=False,
         harness=None,
         harness_report_path=None,
         harness_report_excerpt=None,
+        **repair_reset,
         verification_report=None,
         change_summary=None,
         implementation_sha=None,
@@ -562,6 +624,19 @@ def _resume_workspace(
     else:
         expected_sha = approval_sha
         stage = "harness"
+
+    repair = previous.as_dict().get("repair")
+    if (
+        stage != "push"
+        and isinstance(repair, dict)
+        and (
+            repair.get("status") in {"running", "interrupted"}
+            or not previous.harness_completed
+        )
+    ):
+        raise ExecutePhaseError(
+            "retained Workshop has an interrupted repair; use a fresh retry"
+        )
 
     try:
         path = workspace.resume(
@@ -623,20 +698,25 @@ def _raise_if_cancelled(cancel_check, stage: str) -> None:
         raise ExecutePhaseCancelled(f"execute cancelled {stage}")
 
 
-def _capture_harness_report(claim, report: Any) -> str:
+def _capture_harness_report(claim, report: Any, *, repair: bool = False) -> str:
     text = "" if report is None else str(report)
     excerpt = text[-_MAX_HARNESS_REPORT_CHARS:]
-    path = claim.log_path("harness-report.txt")
+    path = claim.log_path(
+        "repair-harness-report.txt" if repair else "harness-report.txt"
+    )
     try:
         write_text_file(path, text)
     except (OSError, RuntimePathError) as exc:
         raise ExecutePhaseError(
             f"could not persist harness report at {path}: {exc}"
         ) from exc
-    claim.checkpoint(
-        harness_report_path=str(path),
-        harness_report_excerpt=excerpt,
-    )
+    if repair:
+        claim.checkpoint(repair_harness_report_path=str(path))
+    else:
+        claim.checkpoint(
+            harness_report_path=str(path),
+            harness_report_excerpt=excerpt,
+        )
     return excerpt
 
 
@@ -750,6 +830,123 @@ def _enforce_change_limits(
     }
 
 
+def _verify_implementation(
+    path: Path,
+    *,
+    config: MachinistConfig,
+    workspace,
+    harness,
+    claim,
+    test_runner,
+    cancel_check,
+    branch: str,
+    approval_sha: str,
+    approved_prompt: str | Callable[[], str],
+    change_summary: Mapping[str, object],
+    previous: TaskEvidence,
+) -> dict[str, Any]:
+    """Adapt one shared repair coordinator to the legacy Workshop contract."""
+
+    def guard(actor: str) -> None:
+        _assert_head(
+            workspace, path, branch=branch, expected_sha=approval_sha, actor=actor
+        )
+        _enforce_change_limits(path, workspace=workspace, config=config)
+
+    def guarded_runner(*args, **kwargs):
+        guard("before verification gate")
+        runner = run_supervised if test_runner is subprocess.run else test_runner
+        try:
+            return runner(*args, **kwargs)
+        finally:
+            guard("verification gate")
+
+    def verify(round_number: int, bounded_check) -> VerificationReport:
+        guard("before verification")
+        try:
+            return _run_verification_report(
+                path,
+                config=config,
+                workspace=workspace,
+                claim=claim,
+                test_runner=guarded_runner,
+                cancel_check=bounded_check,
+                round=round_number,
+            )
+        finally:
+            guard("verification gate")
+
+    def implement(prompt: str, bounded_check) -> str:
+        guard("before repair Harness")
+        report_progress(claim, "repair implementation", harness.name)
+        bind_harness_progress(harness, claim, stage="repair implementation")
+        original_cancel = getattr(harness, "cancel_check", None)
+        harness.cancel_check = bounded_check
+        try:
+            try:
+                report = harness.implement(prompt, cwd=path)
+            finally:
+                guard("repair Harness")
+        finally:
+            harness.cancel_check = original_cancel
+        _capture_harness_report(claim, report, repair=True)
+        return "" if report is None else str(report)
+
+    try:
+        report = verify_with_repair(
+            policy=config.verification.repair,
+            evidence=previous,
+            checkpoint=lambda updates: claim.checkpoint(**updates),
+            verify=verify,
+            implement=implement,
+            approved_prompt=approved_prompt,
+            change_summary=change_summary,
+            cancel_check=cancel_check,
+        )
+    except VerificationFailed as exc:
+        _raise_verification_failure(exc, claim)
+    except VerificationError as exc:
+        raise ExecutePhaseError(f"verification could not run safely: {exc}") from exc
+    except RepairCancelled as exc:
+        raise ExecutePhaseCancelled(str(exc)) from exc
+    except RepairError as exc:
+        raise ExecutePhaseError(str(exc)) from exc
+    evidence = report.as_dict()
+    claim.checkpoint(verification_report=evidence)
+    return evidence
+
+
+def _run_verification_report(
+    path: Path,
+    *,
+    config: MachinistConfig,
+    workspace,
+    claim,
+    test_runner,
+    cancel_check,
+    round: int = 0,
+) -> VerificationReport:
+    """Run deterministic gates with distinct logs and unmodified typed failures."""
+    gates = config.resolved_verification_gates()
+    if not gates:
+        return VerificationReport(gates=(), duration_seconds=0.0)
+    return run_verification_gates(
+        path,
+        gates,
+        log_dir=claim.log_directory(
+            "verification-logs" if round == 0 else "repair-verification-logs"
+        ),
+        snapshotter=workspace.change_snapshot,
+        runner=test_runner,
+        cancel_check=cancel_check,
+        on_progress=lambda index, total, name, status: report_progress(
+            claim,
+            f"verification {index}/{total}: {name}",
+            status,
+        ),
+    )
+
+
 def _run_verification(
     path: Path,
     *,
@@ -759,59 +956,29 @@ def _run_verification(
     test_runner,
     cancel_check,
 ) -> dict[str, Any]:
-    gates = config.resolved_verification_gates()
-    if not gates:
-        report = VerificationReport(gates=(), duration_seconds=0.0).as_dict()
-        claim.checkpoint(verification_report=report)
-        return report
-
-    return _invoke_verification_engine(
-        path,
-        gates,
-        log_dir=claim.log_directory("verification-logs"),
-        workspace=workspace,
-        claim=claim,
-        test_runner=test_runner,
-        cancel_check=cancel_check,
-    )
-
-
-def _invoke_verification_engine(
-    path: Path,
-    gates,
-    *,
-    log_dir: Path,
-    workspace,
-    claim,
-    test_runner,
-    cancel_check,
-) -> dict[str, Any]:
     try:
-        report = run_verification_gates(
+        report = _run_verification_report(
             path,
-            gates,
-            log_dir=log_dir,
-            snapshotter=workspace.change_snapshot,
-            runner=test_runner,
+            config=config,
+            workspace=workspace,
+            claim=claim,
+            test_runner=test_runner,
             cancel_check=cancel_check,
-            on_progress=lambda index, total, name, status: report_progress(
-                claim,
-                f"verification {index}/{total}: {name}",
-                status,
-            ),
         )
     except VerificationFailed as exc:
-        # The engine owns the report shape and the blocked message; Execute
-        # only persists the Evidence and types the failure.
-        claim.checkpoint(verification_report=exc.report.as_dict())
-        if any(gate.status is GateStatus.CANCELLED for gate in exc.report.gates):
-            raise ExecutePhaseCancelled(str(exc)) from exc
-        raise ExecutePhaseError(str(exc)) from exc
+        _raise_verification_failure(exc, claim)
     except VerificationError as exc:
         raise ExecutePhaseError(f"verification could not run safely: {exc}") from exc
     evidence = report.as_dict()
     claim.checkpoint(verification_report=evidence)
     return evidence
+
+
+def _raise_verification_failure(exc: VerificationFailed, claim) -> NoReturn:
+    claim.checkpoint(verification_report=exc.report.as_dict())
+    if any(gate.status is GateStatus.CANCELLED for gate in exc.report.gates):
+        raise ExecutePhaseCancelled(str(exc)) from exc
+    raise ExecutePhaseError(str(exc)) from exc
 
 
 def _verification_resume_blocker(evidence: Mapping[str, Any]) -> str | None:

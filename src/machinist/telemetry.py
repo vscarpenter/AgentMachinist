@@ -20,7 +20,7 @@ _MAX_AUTHORIZATION_CHARS = 4_096
 def build_otlp_payload(
     report: MetricsReport,
     *,
-    repository: str,
+    repository: str | None,
 ) -> dict[str, Any]:
     """Return OTLP/HTTP JSON containing only allowlisted aggregate attributes."""
     timestamp = str(int(datetime.fromisoformat(report.generated_at).timestamp() * 1e9))
@@ -49,6 +49,43 @@ def build_otlp_payload(
             [_point(report.cancellation_count, timestamp, repository=repository)],
         ),
     ]
+    counts = {
+        "machinist.tasks.legacy": report.task_counts["legacy"],
+        "machinist.tasks.local": report.task_counts["local"],
+        "machinist.execute.first_pass.terminal": report.first_pass_execute[
+            "terminal_attempts"
+        ],
+        "machinist.execute.first_pass.succeeded": report.first_pass_execute[
+            "succeeded_without_repair"
+        ],
+        **{
+            f"machinist.repairs.{name}": report.repairs[name]
+            for name in (
+                "attempted_rounds",
+                "verified_rounds",
+                "unsuccessful_rounds",
+                "incomplete_rounds",
+            )
+        },
+        **{
+            f"machinist.local_delivery.{name}": report.local_delivery[name]
+            for name in (
+                "tasks_updated",
+                "reviewed_candidates",
+                "integrated",
+                "published",
+            )
+        },
+        "machinist.usage.known_attempts": report.usage_coverage["attempts_with_usage"],
+        "machinist.usage.unknown_attempts": report.usage_coverage[
+            "attempts_without_usage"
+        ],
+    }
+    for name, count in counts.items():
+        if type(count) is int:
+            metrics.append(
+                _sum_metric(name, [_point(count, timestamp, repository=repository)])
+            )
     _append_gauges(metrics, report, repository=repository, timestamp=timestamp)
     return {
         "resourceMetrics": [
@@ -162,13 +199,18 @@ def _append_gauges(
     metrics: list[dict[str, Any]],
     report: MetricsReport,
     *,
-    repository: str,
+    repository: str | None,
     timestamp: str,
 ) -> None:
     values = {
         "machinist.success_rate": report.success_rate,
         "machinist.duration.median": report.duration_seconds["median"],
         "machinist.duration.p95": report.duration_seconds["p95"],
+        "machinist.execute.first_pass.success_rate": report.first_pass_execute[
+            "success_rate"
+        ],
+        "machinist.repairs.success_rate": report.repairs["success_rate"],
+        "machinist.repairs.duration.total": report.repairs["duration_seconds"]["total"],
     }
     for name, value in values.items():
         if value is not None:
