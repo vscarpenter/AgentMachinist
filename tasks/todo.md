@@ -1001,3 +1001,23 @@ covered desktop/mobile directory layout, historical disclosure, the first-Task
 route, the explainer route, and return links, with no console errors observed.
 The Approval policy remains unchanged because it is a runtime instruction input.
 No controller behavior, package version, push, or publication is included.
+
+## Origin push and documentation publication (2026-09-18)
+
+- [x] Integrate main's documentation corrections, push the complete branch, and
+  open PR #51 for the `main:/docs` GitHub Pages publication path.
+- [x] Reproduce initial CI failures: same-second, same-size fixture edits reused
+  Python bytecode; Click 8.1's test runner mixed stderr into captured JSON.
+- [x] Keep temporary fixture gates free of bytecode caches and explicitly
+  separate captured streams on older Click. Preserve behavioral assertions and
+  assert the export notice remains on stderr.
+- [ ] Complete CI on the corrected PR head, merge, and verify the live site.
+
+Resuming from here: PR #51 contains the implementation and documentation work.
+The package remains 0.17.1; this publication targets the documentation site.
+The fixed-timestamp reproduction and all 35 local-phase tests pass after the
+fixture change. All 48
+reporting/docs tests pass with current dependencies, all 10 report CLI tests
+pass with Click 8.1, and focused Ruff/format checks pass. GitHub's main-branch
+rules still name old test checks and require a review; any admin merge override
+requires explicit authorization and all current CI checks to pass first.

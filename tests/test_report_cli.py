@@ -92,7 +92,11 @@ def test_explicit_local_export_requires_no_forge_and_omits_repository_identity(
         "machinist.cli.export_otlp", lambda *a, **k: exported.append((a, k))
     )
 
-    result = CliRunner().invoke(
+    runner = CliRunner()
+    # Click before 8.2 mixes stderr into stdout unless explicitly disabled.
+    if hasattr(runner, "mix_stderr"):
+        runner.mix_stderr = False
+    result = runner.invoke(
         main,
         [
             "report",
@@ -111,6 +115,9 @@ def test_explicit_local_export_requires_no_forge_and_omits_repository_identity(
     assert str(repo) not in payload
     assert "repository" not in payload
     assert json.loads(result.stdout)["attempts"] == 1
+    assert result.stderr == (
+        "Exported aggregate metrics to https://collector.example/metrics.\n"
+    )
 
 
 def test_legacy_source_retains_configured_telemetry_endpoint(repo, monkeypatch):

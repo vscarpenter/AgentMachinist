@@ -85,7 +85,8 @@ def local(tmp_path):
     config = MachinistConfig.model_validate(
         {
             "workspace": {"root": str(tmp_path / "workshops")},
-            "tests": {"command": f"{sys.executable} -m unittest discover -s tests"},
+            # Same-size repair edits can share a timestamp second; avoid stale bytecode.
+            "tests": {"command": f"{sys.executable} -B -m unittest discover -s tests"},
             "review": {"enabled": True},
         }
     )
