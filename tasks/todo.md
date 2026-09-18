@@ -944,9 +944,15 @@ publication, artifact-checksum, and isolated public-install evidence.
   exhaustion, cancellation, malformed budgets, and recovery without paid replay.
 - [x] Resolve independent review findings about resumed instruction provenance.
 - [x] Update operating guides, policy, reference configuration, and changelog.
-- [ ] Complete the final canonical gate and record its results.
+- [x] Complete the final canonical gate and record its results.
 
-Implementation and focused checks are complete. The first canonical run was
-deliberately interrupted after 839 passing tests to address review findings.
-The replacement run must pass before this work is reported as verified.
-No package version change, remote publication, or release is included.
+Implementation, focused checks, and independent review are complete. The final
+canonical gate passed all 1,663 tests at 88.41% coverage, workflow projection,
+formatting, lint, types, wheel and source builds, and clean installation smoke
+checks for both distributions. Installed local readiness checks also passed.
+This complete run supersedes the earlier run deliberately interrupted after
+839 passing tests to address resumed instruction-provenance findings.
+
+The changes are committed locally on `codex/verification-reporting-repair`.
+No package version change, remote publication, or release is included. No live
+model or forge/CI result is claimed; real Git workflows used fake Harnesses.
