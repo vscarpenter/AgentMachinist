@@ -74,6 +74,9 @@ Use `machinist status T1` and follow its next action. A failed Phase needs an
 explicit retry; inspect its Evidence first. [Recovery instructions](local-workflow.md#amend-or-recover)
 cover retries, fresh Workshops, and amendments requiring a new Approval.
 
+Once integration starts, amendments require a new Task. Rerun
+`machinist integrate T1` to reconcile an interrupted integration.
+
 First start saves settings in `.machinist/runs/local/config.yaml`. Later edits to
 root `machinist.yaml` do not update that saved file. See [local settings](operator-runbook.md#local-settings-and-evidence)
 for changes and baseline failures. Bounded repair and combined reporting are

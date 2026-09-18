@@ -18,11 +18,12 @@ Older releases are not guaranteed to receive backports.
 
 ## System and Scope
 
-AgentMachinist is a local Python controller for Tasks, Git Workshops, coding
-Harnesses, Verification, independent Review, and explicit local integration.
-GitHub/GitLab intake and PR/MR publication are optional. Reports may cover the
-published Python package, controller source, bundled prompts and workflows, and
-release automation maintained in this repository.
+AgentMachinist is a local Python controller for Tasks, coding Harnesses,
+isolated Git Workshops, Verification, and independent Review. It supports
+explicit local integration and optional GitHub/GitLab issue intake and PR/MR
+publication, alongside the legacy GitHub issue workflow. Reports may cover the
+published Python package, controller source, bundled prompts and workflows,
+and release automation maintained in this repository.
 
 Task bodies, imported issues, PR/MR branches, and Verification failure output
 are untrusted input. The repository owner, default branch, local configuration
@@ -35,16 +36,21 @@ baseline is 0.17.1.
 
 Security-sensitive behavior should preserve these properties:
 
-- Implementation requires Approval bound to the exact Spec SHA. Local Approval
-  also binds the repository and Task; legacy GitHub Approval requires the
-  trusted workflow marker and label.
+- Local Execute requires Approval bound to the repository, Task, and exact
+  Spec commit. Revising the Spec invalidates that Approval.
+- Legacy GitHub Execute requires both the configured approval label and a
+  trusted workflow-authored marker matching the current spec PR SHA. A forge
+  review approval does not authorize Execute in either workflow.
 - `pull_request_target` automation must not check out or execute untrusted PR
   head code.
 - Harness subprocesses must not receive controller GitHub or SSH-agent
   credentials that AgentMachinist claims to remove.
 - Concurrent remote changes must not be overwritten; pushes remain lease-bound.
+- Optional publication must bind the origin to the intended forge host and
+  repository and verify the exact PR/MR identity and reviewed candidate SHA.
 - Untrusted issue and repository data must not escape configured workspace,
   command-construction, or size boundaries.
+- Logs and errors must not disclose credentials or other avoidable secrets.
 - Bounded diagnostics and repair prompt excerpts redact recognized credentials
   and terminal controls. Raw logs and arbitrary output are not covered by that
   sanitization contract and must be inspected before sharing.
@@ -54,8 +60,9 @@ Security-sensitive behavior should preserve these properties:
 - Repair stays within one active Execute attempt and its persisted budget and
   deadline. Failed Task Runs still require explicit retry; configured
   Verification and existing independent Review requirements remain unchanged.
-- Local integration is explicit, exact-base/exact-candidate, and fast-forward
-  only. AgentMachinist never merges a remote pull request or merge request.
+- Local integration requires an explicit human command, a clean expected base,
+  and a fast-forward to the exact verified, independently reviewed candidate.
+  AgentMachinist never merges a remote PR or MR.
 
 ## Reportable Findings
 
@@ -68,9 +75,11 @@ the reachable impact and assumptions needed to reproduce the issue.
 
 AgentMachinist is not an operating-system sandbox. Harnesses, repository tests,
 hooks, and provider plugins execute with access available to the launching user.
-Local task claims are not distributed locks, and model output can be incorrect
-even when tests pass. See `docs/trust-model.md` for the complete operational
-boundary and recommended isolation.
+Local Approval records are workflow Evidence, not an authentication boundary
+against hostile processes running as the same OS user. Local Task Claims are
+not distributed locks, and model output can be incorrect even when tests pass.
+See [the trust model](docs/trust-model.md) for the complete operational boundary
+and recommended isolation.
 Repair instructions limiting scope and forbidding weaker tests are advisory;
 the controller cannot prove semantic compliance or that all secrets have been
 removed from arbitrary output.
