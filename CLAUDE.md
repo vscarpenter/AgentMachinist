@@ -18,8 +18,8 @@ Task → Spec commit → human Approval → Execute → verification → Review
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
 hatchling, published to PyPI as `agentmachinist` (current release: 0.17.1).
 This repository dogfoods itself: the root `machinist.yaml` configures the
-pipeline for this repo (`spec_source: github-actions`, test gate
-`uv run pytest`).
+pipeline for this repo (`spec_source: github-actions`, ordered workflow,
+format, lint, type, and coverage/test gates from `scripts/verify.sh`).
 
 ## Commands
 

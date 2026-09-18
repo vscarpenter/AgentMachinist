@@ -32,5 +32,32 @@ workspace:
   cleanup: on_success          # always | on_success | never
   branch_prefix: agent/        # spec branches become <prefix>issue-<number>
 
-tests:
-  command: uv run pytest       # M2 test gate for this repo
+# Run the fast CI checks first; coverage runs the full suite once.
+# Packaging and the OS/Python matrix remain separate release/CI checks.
+verification:
+  gates:
+    - name: workflows
+      command: bash scripts/verify.sh workflows
+      timeout_minutes: 5
+      required: true
+      mutation_policy: forbid
+    - name: format
+      command: bash scripts/verify.sh format
+      timeout_minutes: 5
+      required: true
+      mutation_policy: forbid
+    - name: lint
+      command: bash scripts/verify.sh lint
+      timeout_minutes: 5
+      required: true
+      mutation_policy: forbid
+    - name: types
+      command: bash scripts/verify.sh types
+      timeout_minutes: 10
+      required: true
+      mutation_policy: forbid
+    - name: coverage
+      command: bash scripts/verify.sh coverage
+      timeout_minutes: 15
+      required: true
+      mutation_policy: forbid

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Expand this repository's configured Verification to required, check-only
+  workflow drift, formatting, lint, types, and coverage/test gates. Existing
+  saved local configurations keep their settings until explicitly updated.
+
 ## 0.17.1 — 2026-09-13
 
 - Fix the manual setup receipt for `machinist init` and `machinist onboard`:
