@@ -65,8 +65,12 @@
     .hero { padding-block: clamp(4rem, 8vw, 6.5rem) clamp(2.5rem, 5vw, 4rem); }
     .hero h1 { margin: 0 0 1.5rem; max-width: 17ch; font-size: clamp(2.6rem, 6.5vw, 5.2rem); font-weight: 650; letter-spacing: -0.055em; line-height: 0.98; }
     .hero .lede { margin: 0 0 2rem; max-width: 44rem; color: var(--ink-1); font-size: clamp(1.08rem, 2vw, 1.3rem); }
-    .reading-path { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-bottom: 1.5rem; font-weight: 650; }
-    .reading-path a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+    .reading-path { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2rem; font-weight: 650; }
+    .reading-path a { display: inline-flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3.5rem; padding: 0.9rem 1.25rem; border: 1px solid var(--blueprint); border-radius: 8px; background: var(--blueprint-soft); color: var(--blueprint); font-size: 1.05rem; line-height: 1.35; text-decoration: none; box-shadow: var(--shadow-sm); transition: background-color 150ms ease, border-color 150ms ease; }
+    .reading-path a:hover { background: var(--paper-0); }
+    .reading-path a.primary { border-color: var(--signal-strong); background: var(--signal-strong); color: var(--paper-0); }
+    .reading-path a.primary:hover { border-color: var(--ink-0); background: var(--ink-0); }
+    .reading-path svg { flex: 0 0 auto; width: 1.2rem; height: 1.2rem; }
     .documentation { scroll-margin-top: 5rem; border-top: 1px solid var(--line); }
     .documentation .section-head { margin-bottom: 2rem; }
     .doc-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem 4rem; }
@@ -134,6 +138,7 @@
       .shell { width: min(100% - 1.25rem, 74rem); }
       .brand span { display: none; }
       .nav-links { gap: 0.75rem; }
+      .reading-path { flex-direction: column; }
       .doc-groups { grid-template-columns: minmax(0, 1fr); }
       .strip-grid { grid-template-columns: 1fr; }
       .strip-cell { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -247,8 +252,8 @@
       <h1>One Task. A reviewed local change.</h1>
       <p class="lede">Start with a bounded objective. Approve its exact Spec, then let the controller coordinate implementation, verification, and independent Review. Inspect the result and integrate it locally. Publish a GitHub PR or GitLab MR whenever sharing helps.</p>
       <nav class="reading-path" aria-label="Start here">
-        <a href="how-it-works.html">Understand the workflow</a>
-        <a href="first-run-guide.html">Complete your first Task</a>
+        <a href="how-it-works.html">Understand the workflow <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <a class="primary" href="first-run-guide.html">Complete your first Task <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
       </nav>
       <p><strong>AgentMachinist 0.17.1</strong> includes an <a href="approval-policy.md">Approval policy</a>, advisory source-text guidance in all three Harness prompts, and a <a href="how-it-works.html">workflow diagram</a>. Install 0.17.1 from PyPI. Exact Spec Approval, verification, independent Review, and optional GitHub or GitLab publication remain part of the workflow. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
       <div class="legend">
