@@ -331,17 +331,17 @@ closes the open draft PR. Choose the operation that matches your decision.
 
 ## Documentation
 
-- [TL;DR](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/tldr.md)
-- [Getting started](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md)
-- [Local workflow and optional publication](docs/local-workflow.md)
-- [Visual first-run field guide](https://agentmachinist.vinny.dev/first-run-guide.html)
-- [Architecture and lifecycle](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/architecture.md)
-- [Operator runbook](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/operator-runbook.md)
-- [Trust model](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/trust-model.md)
-- [Harness support](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/harnesses.md)
-- [Architecture decisions](https://github.com/vscarpenter/AgentMachinist/tree/main/docs/adr)
-- [Contributing](https://github.com/vscarpenter/AgentMachinist/blob/main/CONTRIBUTING.md)
-- [Changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md)
+1. [Understand the workflow](docs/how-it-works.html): one diagram of your decisions
+   and the controller's work.
+2. [Complete your first Task](docs/tldr.md): the short installation-to-integration
+   guide. Prefer illustrated instructions? Use the
+   [visual first-run guide](https://agentmachinist.vinny.dev/first-run-guide.html).
+
+The [complete documentation index](docs/README.md) links every guide, reference,
+architecture decision, and historical plan. For detailed settings, use the
+[configuration and GitHub reference](https://github.com/vscarpenter/AgentMachinist/blob/main/docs/getting-started.md).
+Contributor and release information lives in [CONTRIBUTING.md](CONTRIBUTING.md)
+and the [changelog](CHANGELOG.md).
 
 The trust model is deliberately narrower than “the agent cannot use git.”
 Harness flags, credential reduction, repository postconditions, and push leases

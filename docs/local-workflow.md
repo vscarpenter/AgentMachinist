@@ -1,5 +1,9 @@
 # Local workflow and optional publication
 
+For a first Task, follow [Start here](tldr.md). This reference covers local
+settings, context, recovery, and optional publication in detail.
+See the [documentation index](README.md) for other topics.
+
 The local workflow takes a Task through Spec, human Approval, implementation,
 verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever

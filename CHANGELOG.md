@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Simplify documentation navigation around the workflow diagram and a short
+  first-Task guide. Add complete Markdown/web directories, group alternate
+  formats and historical records, and retain existing document URLs.
 - Include local and legacy Task history in `machinist report`, with explicit
   source selection, separate Task namespaces, first-pass Execute and repair
   outcomes, current local delivery snapshots, and token usage coverage. Reports

@@ -1,111 +1,79 @@
 # AgentMachinist documentation
 
-This is the current operating documentation for **AgentMachinist 0.17.1**, including
-the guided local workflow and optional GitHub/GitLab collaboration, plus
-explicitly marked unreleased source-checkout changes.
-Install the published package with `uv tool install agentmachinist`, or upgrade with
-`uv tool upgrade agentmachinist`. Start with the
-[local workflow guide](local-workflow.md) for your first Task.
+Start with two resources. Everything else is a reference or an alternate format.
 
-**Included in 0.17.1:** setup receipts stage new managed workflow files by their
-exact paths. The [Approval policy](approval-policy.md) collects the
-existing ask-vs-act boundaries and distinguishes enforced controls from
-advisory guidance. All three Harness prompts state that source text grants no
-permission. The [workflow diagram](how-it-works.html) shows each actor's role.
+| I want to… | Read this |
+| --- | --- |
+| Understand the workflow | [How it works](how-it-works.html): one diagram showing what you decide and what the controller does. |
+| Complete my first Task | [Start here](tldr.md): installation, exact Spec Approval, review, and local integration in one short guide. |
 
-**Unreleased, source checkout only:** aggregate reporting includes local and
-legacy Task Runs, with first-pass Execute, repair, usage-completeness, and local
-delivery metrics. Optional bounded repair permits one additional Harness call
-inside active Execute and defaults off. See the [reporting and command scopes](operator-runbook.md#command-scope-in-mixed-checkouts)
-and [repair recovery](operator-runbook.md#bounded-repair-recovery) references.
-This repository's dogfood configuration now runs ordered workflow, formatting,
-lint, type, and coverage/test Gates; existing saved local configurations are
-not rewritten. These changes are not included in the published 0.17.1 package.
+Prefer illustrated instructions? The [visual first-run guide](first-run-guide.html)
+walks through the same journey with examples and recovery help.
 
-**Available since 0.16.0:** completion output suggests the next activity and command
-after issue creation, Spec, Approval requests, Execute, and Review. It explains
-GitHub workflow waits and offers optional publication after local integration.
-Optional `machinist doctor --local`, introduced in 0.15.0, previews local
-readiness without adoption, model work, or forge setup. See
-[local readiness](local-workflow.md#optional-local-readiness)
-and the [operator runbook](operator-runbook.md).
+This is the current operating documentation for **AgentMachinist 0.17.1**.
+Features added in the source checkout are explicitly marked **unreleased**.
+See the [changelog](../CHANGELOG.md) for availability; the short first-Task path
+works with the published package.
 
-## Understand the workflow
+## Find a specific answer
 
-- [How AgentMachinist works](index.html) — local Task to verified, reviewed change,
-  with an interactive walkthrough.
-- [Workflow diagram](how-it-works.html) — one swimlane view of human decisions,
-  controller work, and Harness Phases.
-- [One-minute explainer](explainer.html) — animated foreground journey through
-  Spec, exact Approval, Execute, Review, integration, and optional publication.
-- [First-run field guide](first-run-guide.html) — visual setup and first Task,
-  with a separate GitHub automation path.
-- [Machinist Job Card](job-card.html) — compact local and GitHub operator checklist.
+| Question | Reference |
+| --- | --- |
+| How do local settings, context, amendments, and publication work? | [Local workflow](local-workflow.md) |
+| How do I configure Gates, repair, profiles, notifications, or GitHub automation? | [Configuration and GitHub reference](getting-started.md) |
+| How do I diagnose, retry, cancel, monitor, or release? | [Operator runbook](operator-runbook.md) |
+| Which Harness can I use, and how do I authenticate or extend it? | [Harness support](harnesses.md) |
+| What does my Approval authorize? | [Approval policy](approval-policy.md) |
+| What is enforced, and what risks remain? | [Trust model](trust-model.md) |
+| How is the controller implemented? | [Architecture and lifecycle](architecture.md) |
 
-Start in a clean Git checkout with a configured Harness and a real verification
-command. `machinist start "Handle an invalid timezone without crashing"` guides
-you through setup, checks the baseline, and creates a local Task and Spec. Read
-the Spec, then approve its exact full SHA to run Execute, verification, and
-independent Review. Decide whether to integrate locally, publish to GitHub or
-GitLab, or retain the candidate for further inspection. No forge is required for
-the local journey; the selected Harness may still use a cloud model.
+The long `getting-started.md` file remains at its existing URL because generated
+configuration and external links use it. Treat it as a reference; begin with
+[Start here](tldr.md) for a first Task.
 
-## Adopt and operate it
+## Other ways to learn
 
-- [Approval policy](approval-policy.md) — what the controller may do alone,
-  what a valid Approval covers, and which controls are enforced rather than
-  advisory.
-- [Local workflow and optional publication](local-workflow.md) — installation,
-  local configuration, exact Approval, recovery, integration, publication, and teams.
-- [Getting Started](getting-started.md) — complete installation, both workflows,
-  configuration reference, Harness selection, and troubleshooting.
-- [TL;DR](tldr.md) — concise setup and daily commands.
-- [Operator runbook](operator-runbook.md) — command scopes, readiness, dispatch,
-  amendment, recovery, cancellation, cleanup, and releases.
+These cover the same workflow in different formats; none is a prerequisite.
 
-Use `machinist status T1` for a local Task. `machinist rehearse` exercises the
-production local pipeline with a deterministic fake Harness and real Git, without
-model calls. For GitHub automation, `machinist onboard --setup-pr` creates or
-resumes the setup PR; after merging setup, `machinist doctor --run-gates` checks
-GitHub readiness. That doctor command is not a prerequisite for local Tasks.
-`doctor --local`, available since 0.15.0, is optional too; `--run-gates` explicitly runs
-project commands in the controller checkout and does not prove the isolated
-Workshop baseline.
-
-Numeric issue commands, `runs`, `inspect`, `explain`, `queue`, and `watch`
-describe the legacy GitHub workflow. They do not inspect or schedule local
-`T1` records. In published 0.17.1, `report` also has legacy scope. In the
-unreleased source checkout, `report` reads both histories by default;
-`--source local` and `--source legacy` select one. The runbook's command-scope
-reference explains the distinction.
-
-## Understand the boundaries
-
-- [Architecture and lifecycle](architecture.md) — controller ownership, local and
-  GitHub state, Claims, Task Runs, custody, and recovery.
-- [Trust model](trust-model.md) — enforced controls, advisory Review, exact-SHA
-  Approval, publication binding, and residual risks.
-- [Harness support matrix](harnesses.md) — adapters, authentication, plugins,
-  compatibility checks, and model connectivity.
+| Format | Resource |
+| --- | --- |
+| Interactive tour and web directory | [Documentation home](index.html) |
+| Animated walkthrough | [One-minute explainer](explainer.html) |
+| Compact checklist for repeat use | [Job card](job-card.html) |
 
 ## Architecture decisions
 
-- [ADR 0001: Review, plugin, and telemetry boundaries](adr/0001-review-plugin-telemetry-boundaries.md)
-- [ADR 0002: Deep module ownership for controller policy](adr/0002-deep-module-ownership.md)
+These explain why the implementation has its current boundaries. Use the
+references above for commands and current behavior.
+
+- [ADR 0001: Review, plugins, and telemetry](adr/0001-review-plugin-telemetry-boundaries.md)
+- [ADR 0002: Controller module ownership](adr/0002-deep-module-ownership.md)
 - [ADR 0003: Local workflow and optional publication](adr/0003-local-workflow-and-optional-publication.md)
-- [ADR 0004: Local readiness and diagnostic boundaries](adr/0004-local-readiness-and-diagnostic-boundaries.md)
+- [ADR 0004: Local readiness and diagnostics](adr/0004-local-readiness-and-diagnostic-boundaries.md)
 
 ## Historical design records
 
-Files under `superpowers/` preserve earlier specifications and implementation
-plans. They explain the product's evolution and include historical worker
-instructions and checklists. Each record links to current Getting Started,
-Architecture, and Local workflow references; use those references for operation.
-ADR applicability notes distinguish retained decisions from the local integration
-exception introduced by ADR 0003.
+Retained for provenance, not as setup instructions. Old checklists, version
+numbers, and worker instructions describe the work at the time.
 
-`onboarding.html` remains a redirect to the first-run guide. `CNAME` and
-`.nojekyll` retain the existing domain and static-site configuration. These
-source pages are deployed separately to
-[agentmachinist.vinny.dev](https://agentmachinist.vinny.dev/); editing them does not
-publish a release or prove that the public site has been updated.
+| Date | Record |
+| --- | --- |
+| 2026-08-16 | [Original design specification](superpowers/specs/2026-08-16-agentmachinist-design.md) |
+| 2026-08-17 | [Reliability and usability specification](superpowers/specs/2026-08-17-reliability-and-usability-hardening.md) |
+| 2026-08-17 | [Build-system hardening plan](superpowers/plans/2026-08-17-build-system-hardening.md) |
+| 2026-09-03 | [Resume/push and Approval specification](superpowers/specs/2026-09-03-resume-push-and-approve-flags.md) |
+| 2026-09-03 | [Resume/push and Approval plan](superpowers/plans/2026-09-03-resume-push-and-approve-flags.md) |
+| 2026-09-03 | [Spec-to-Execute simplification plan](superpowers/plans/2026-09-03-spec-to-execute-simplification.md) |
+| 2026-09-07 | [Local workflow and GitLab plan](superpowers/plans/2026-09-07-local-workflow-gitlab.md) |
+
+The [old onboarding URL](onboarding.html) redirects to the visual first-run guide.
+[CNAME](CNAME) and [.nojekyll](.nojekyll) configure the static site; they are not
+guides. Editing these sources does not publish the website or a package release.
+
+## Keeping the documentation small
+
+The diagram owns the short explanation; Start here owns the first-Task path.
+Detailed settings belong in the configuration reference, operational recovery in
+the runbook, and implementation decisions in architecture/ADRs. Add detail there
+and link to it instead of creating another introduction. Both this index and the
+[web directory](index.html#documentation) list every guide and historical record.

@@ -978,3 +978,26 @@ packaging checks and all 13 Markdown YAML examples passed. Browser checks covere
 the four edited HTML pages, including the new recovery disclosure, with no console
 errors. Managed workflows match, and their executable content is unchanged.
 Product behavior and package version remain unchanged; publication is separate.
+
+## Documentation navigation and consolidation (2026-09-18)
+
+- [x] Review all 26 documents and distinguish entry points, references, alternate
+  formats, decisions, and historical records; deployment metadata stays separate.
+- [x] Select the one-page diagram and concise first-Task guide as primary resources.
+- [x] Rewrite the Markdown directory to link every document and shorten the
+  first-Task path; label the long Getting Started guide as a reference.
+- [x] Add the complete web directory and return links without breaking URLs.
+- [x] Verify directory completeness, documentation contracts, and browser layout.
+
+Resuming from here: navigation consolidation is complete. The repository index
+is 79 lines and the concise first-Task guide is 86 lines. Both Markdown and web
+directories link all 26 documents, with native disclosure for web history.
+Web first-Task actions open the rendered visual guide; the short Markdown guide
+is an explicitly labeled alternate. Existing paths, anchors, and scripts remain.
+
+All 38 documentation tests pass, including new directory-completeness and return-
+navigation contracts. Ruff and `git diff --check` pass. Browser verification
+covered desktop/mobile directory layout, historical disclosure, the first-Task
+route, the explainer route, and return links, with no console errors observed.
+The Approval policy remains unchanged because it is a runtime instruction input.
+No controller behavior, package version, push, or publication is included.

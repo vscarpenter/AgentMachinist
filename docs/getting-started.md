@@ -1,5 +1,10 @@
 # Getting Started with AgentMachinist
 
+**Looking for the short path?** [Complete your first Task](tldr.md) covers setup
+through integration. This longer guide is the configuration and GitHub automation
+reference; its existing headings and links are retained. Browse the
+[documentation index](README.md) for other topics.
+
 AgentMachinist takes a Task through an exact human-approved Spec, isolated
 implementation, verification, and independent Review. You can integrate the
 reviewed candidate locally and optionally publish it to GitHub or GitLab.

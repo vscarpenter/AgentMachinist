@@ -313,6 +313,11 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   job card, animated explainer, the how-it-works swimlane diagram, and the
   onboarding redirect. Documentation tests validate commands, configuration,
   version identity, links, and control targets.
+- Documentation entry points: `docs/how-it-works.html` is the short explainer,
+  `docs/tldr.md` is the first-Task guide, and `docs/README.md` plus
+  `docs/index.html#documentation` index every guide and historical record.
+  Keep detailed configuration in `getting-started.md` and recovery in the
+  runbook; link to those references rather than adding another introduction.
 - `AgentMachinist-Prompt.md` — the original kickoff prompt, historical.
 
 ## Releasing
