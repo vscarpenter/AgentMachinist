@@ -8,6 +8,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from machinist.authorization import (
+    AuthorizationError,
+    bind_delegation_spec,
+    validate_authorization,
+    validate_delegation,
+)
 from machinist.cancellation import CancellationStore
 from machinist.config import MachinistConfig
 from machinist.dispatch import TaskDispatcher
@@ -34,8 +40,10 @@ class LocalWorkflow:
         workspace: LocalWorkspace | None = None,
         test_runner: Callable[..., object] = run_supervised,
         progress: Callable[[str], None] | None = None,
+        delegated_execution: bool = False,
     ) -> None:
         self.config = config
+        self._delegated_execution = delegated_execution
         self._progress = progress
         self.repo_root = repo_root.resolve()
         self.store = store or LocalTaskStore(self.repo_root)
@@ -59,6 +67,7 @@ class LocalWorkflow:
             workspace_factory=lambda: self.workspace,
             test_runner=test_runner,
             progress=progress,
+            delegated_execution=delegated_execution,
         )
 
     def start(
@@ -101,6 +110,7 @@ class LocalWorkflow:
     ) -> LocalTask:
         """Approve the displayed immutable Spec, then execute and review locally."""
         with self.store.claim(task_id) as task:
+            self._manual_only(task, "approve")
             spec = self.lifecycle.record(task.number, Phase.SPEC)
             if (
                 task.spec_sha is None
@@ -135,6 +145,12 @@ class LocalWorkflow:
             return self._continue(task)
 
     def _continue(self, task: LocalTask, *, resume: bool = False) -> LocalTask:
+        self._require_background_runtime(task)
+        if task.delegation is not None:
+            try:
+                validate_delegation(task, self.config)
+            except AuthorizationError as exc:
+                raise LocalWorkflowError(str(exc)) from exc
         spec = self.lifecycle.record(task.number, Phase.SPEC)
         if (
             task.spec_sha is None
@@ -143,9 +159,17 @@ class LocalWorkflow:
             or spec.evidence.get("spec_sha") != task.spec_sha
         ):
             task = self.dispatcher.run_local_spec(task, store=self.store)
-            if not self._approved(task):
+            if task.delegation is None and not self._approved(task):
                 return task
-        if not self._approved(task):
+        if task.delegation is not None:
+            try:
+                delegation = bind_delegation_spec(task, self.config)
+                if delegation != task.delegation:
+                    task = self.store.update(task, delegation=delegation)
+                validate_authorization(task, self.config)
+            except AuthorizationError as exc:
+                raise LocalWorkflowError(str(exc)) from exc
+        elif not self._approved(task):
             raise LocalWorkflowError(
                 f"Approval required: inspect the Spec, then run machinist approve "
                 f"--task {task.id} --spec-sha {task.spec_sha}"
@@ -168,6 +192,7 @@ class LocalWorkflow:
         if not feedback.strip():
             raise LocalWorkflowError("amendment feedback must not be empty")
         with self.store.claim(task_id) as task:
+            self._manual_only(task, "amend")
             ready_candidate(task, self.workspace, self.lifecycle)
             if task.integration is not None:
                 raise LocalWorkflowError(
@@ -191,17 +216,24 @@ class LocalWorkflow:
         self, task_id: str | int, *, phase: Phase, resume: bool = True
     ) -> LocalTask:
         with self.store.claim(task_id) as task:
+            self._require_background_runtime(task)
+            if task.delegation is not None:
+                try:
+                    validate_delegation(task, self.config)
+                except AuthorizationError as exc:
+                    raise LocalWorkflowError(str(exc)) from exc
             latest = self.lifecycle.latest(task.number)
             if latest is None or latest.phase is not phase:
                 raise LifecycleError("retry must select the current failed Phase")
             self.lifecycle.retry(task.number, phase)
             self.cancellation.clear(task.number)
-            if phase is Phase.SPEC:
+            if phase is Phase.SPEC and task.delegation is None:
                 return self.dispatcher.run_local_spec(task, store=self.store)
-            return self._continue(task, resume=resume)
+            return self._continue(task, resume=resume and phase is Phase.EXECUTE)
 
     def integrate(self, task_id: str | int) -> LocalTask:
         with self.store.claim(task_id) as task:
+            self._manual_only(task, "integrate")
             candidate = ready_candidate(task, self.workspace, self.lifecycle)
             intent = {
                 "base_branch": task.base_branch,
@@ -248,7 +280,15 @@ class LocalWorkflow:
         expected_ref = task.candidate_sha if self._executed(task) else task.spec_sha
         if (
             decision.state
-            in {"awaiting approval", "approved", "ready to integrate", "integrated"}
+            in {
+                "awaiting approval",
+                "approved",
+                "ready to integrate",
+                "integrated",
+                "delegated",
+                "ready to publish",
+                "published",
+            }
             and expected_ref
             and self.workspace.branch_sha(task.branch) != expected_ref
         ):
@@ -272,6 +312,11 @@ class LocalWorkflow:
             "report": str(self.store.report_path(task)) if task.review_report else None,
             "publication": task.publication,
             "integration": task.integration,
+            "authorization": "delegation"
+            if task.delegation is not None
+            else "human_approval"
+            if task.approval is not None
+            else None,
         }
 
     def _executed(self, task: LocalTask) -> bool:
@@ -298,3 +343,16 @@ class LocalWorkflow:
                 }.items()
             )
         )
+
+    @staticmethod
+    def _manual_only(task: LocalTask, operation: str) -> None:
+        if task.delegation is not None:
+            raise LocalWorkflowError(
+                f"cannot {operation} a delegated Task; use its background workflow and review the PR"
+            )
+
+    def _require_background_runtime(self, task: LocalTask) -> None:
+        if task.delegation is not None and not self._delegated_execution:
+            raise LocalWorkflowError(
+                "delegated Tasks require the background runtime; use machinist background run"
+            )

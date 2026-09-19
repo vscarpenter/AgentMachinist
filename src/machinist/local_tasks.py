@@ -65,6 +65,7 @@ class LocalTask:
     spec_sha: str | None = None
     candidate_sha: str | None = None
     approval: dict[str, Any] | None = None
+    delegation: dict[str, Any] | None = None
     review_report: dict[str, Any] | None = None
     integration: dict[str, Any] | None = None
     publication: dict[str, Any] | None = None
@@ -303,6 +304,8 @@ class LocalTaskStore:
             raise LocalTaskNotFound(f"local Task T{number} does not exist")
         payload = self._read_json(path)
         _version(payload)
+        # Version-1 records predating delegated Tasks omit this optional field.
+        payload.setdefault("delegation", None)
         if set(payload) != _TASK_FIELDS | {"version", "repository_id"}:
             raise LocalTaskError(f"invalid local Task T{number} record fields")
         if payload["repository_id"] != index["repository_id"]:
@@ -476,7 +479,14 @@ def _validate_task(task: LocalTask) -> None:
         raise LocalTaskError("local Task updated_at precedes created_at")
     if task.feedback is not None and not isinstance(task.feedback, str):
         raise LocalTaskError("local Task feedback must be text")
-    for name in ("approval", "review_report", "integration", "publication", "source"):
+    for name in (
+        "approval",
+        "delegation",
+        "review_report",
+        "integration",
+        "publication",
+        "source",
+    ):
         value = getattr(task, name)
         if value is not None and not isinstance(value, dict):
             raise LocalTaskError(f"local Task {name} must be a JSON object")

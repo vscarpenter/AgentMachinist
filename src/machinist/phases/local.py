@@ -11,11 +11,17 @@ import hashlib
 import json
 import re
 import subprocess
-from dataclasses import asdict
-from datetime import datetime
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, cast
 
+from machinist.authorization import (
+    AuthorizationError,
+    authorization_evidence,
+    bind_delegation_spec,
+    validate_authorization,
+    validate_delegation,
+)
 from machinist.config import InstructionResolutionError, MachinistConfig
 from machinist.evidence import EvidenceError, TaskEvidence, validate_repair_evidence
 from machinist.harness import harness_evidence
@@ -168,8 +174,8 @@ def run_local_execute(
     test_runner=run_supervised,
     resume: bool = False,
 ) -> LocalTask:
-    """Implement one exact local Approval with custody, limits and Verification."""
-    _require_approval(task)
+    """Implement an exactly authorized local Spec with custody and Verification."""
+    _require_authorization(task, config)
     assert task.spec_sha is not None
     spec_sha = task.spec_sha
     previous = _begin(
@@ -188,7 +194,9 @@ def run_local_execute(
             validate_repair_evidence(previous["repair"])
         except EvidenceError as exc:
             raise LocalPhaseError(f"{exc}; use an explicit fresh retry") from exc
-    claim.checkpoint(approved_sha=spec_sha)
+    # approved_sha is the historical field for exact Spec binding; authorization
+    # separately records whether delegation or human Approval authorized execution.
+    claim.checkpoint(approved_sha=spec_sha, authorization=authorization_evidence(task))
     spec = workspace.read_at_commit(
         spec_sha, spec_path(task), max_bytes=config.limits.max_spec_chars * 4
     )
@@ -221,7 +229,9 @@ def run_local_execute(
             )
             != spec
         ):
-            raise LocalPhaseError("recovered implementation changed its approved Spec")
+            raise LocalPhaseError(
+                "recovered implementation changed its authorized Spec"
+            )
         _cancel(cancel_check, "before candidate Task delivery")
         delivered = _deliver_candidate(store, task, implementation_sha)
         claim.checkpoint(
@@ -230,7 +240,7 @@ def run_local_execute(
         _cleanup(workspace, path, claim)
         return delivered
     if workspace.branch_sha(task.branch) != spec_sha:
-        raise LocalPhaseError("Spec branch changed after Approval")
+        raise LocalPhaseError("Spec branch changed after authorization")
     if resume:
         if not previous:
             raise LocalPhaseError(
@@ -262,7 +272,7 @@ def run_local_execute(
         )
     if _read_spec(path, task, config) != spec:
         raise LocalPhaseError(
-            "retained Workshop does not contain the exact approved Spec"
+            "retained Workshop does not contain the exact authorized Spec"
         )
     instructions = None
     if previous.get("harness_completed") is not True:
@@ -282,6 +292,7 @@ def run_local_execute(
         prompt = render_implement_prompt(
             task.number, spec, task.feedback, instructions, gates=allowed
         ).replace(f"GitHub issue #{task.number}", f"Local Task {task.id}")
+        prompt = _authorized_prompt(task, prompt)
         try:
             output = harness.implement(prompt, cwd=path)
         except BaseException:
@@ -339,7 +350,7 @@ def run_local_execute(
             local_verified_snapshot=workspace.change_snapshot(path),
         )
     _cancel(cancel_check, "before committing implementation")
-    message = f"feat(agent): implement local Task {task.id} per approved Spec"
+    message = f"feat(agent): implement local Task {task.id} per authorized Spec"
     intent = _prepare_commit(workspace, path, claim, spec_sha, message)
     workspace.commit_all(path, message)
     _verify_commit(workspace, path, intent)
@@ -401,7 +412,7 @@ def _verify_local_implementation(
             except InstructionResolutionError as exc:
                 raise LocalPhaseError(
                     "retained implementation instructions cannot be read for repair; "
-                    "use --fresh to start a new approved Execute attempt"
+                    "use --fresh to start a new authorized Execute attempt"
                 ) from exc
             digest = config.instructions.evidence("execute", resolved)[
                 "instructions_sha256"
@@ -409,11 +420,14 @@ def _verify_local_implementation(
             if digest != previous.get("instructions_sha256"):
                 raise LocalPhaseError(
                     "retained implementation instructions changed or lack saved "
-                    "provenance; use --fresh to start a new approved Execute attempt"
+                    "provenance; use --fresh to start a new authorized Execute attempt"
                 )
-        return render_implement_prompt(
-            task.number, spec, task.feedback, resolved, gates=gates
-        ).replace(f"GitHub issue #{task.number}", f"Local Task {task.id}")
+        return _authorized_prompt(
+            task,
+            render_implement_prompt(
+                task.number, spec, task.feedback, resolved, gates=gates
+            ).replace(f"GitHub issue #{task.number}", f"Local Task {task.id}"),
+        )
 
     def guarded_runner(*args, **kwargs):
         before = workspace.capture_harness_state(path)
@@ -504,7 +518,7 @@ def run_local_review(
     execute_evidence: dict[str, Any] | None = None,
 ) -> LocalTask:
     """Review the exact local candidate; findings stay visible and advisory."""
-    _require_approval(task)
+    _require_authorization(task, config)
     candidate = _sha(task.candidate_sha)
     if candidate is None:
         raise LocalPhaseError("local Review requires a delivered candidate")
@@ -519,6 +533,7 @@ def run_local_review(
         candidate,
         cancel_check,
     )
+    claim.checkpoint(authorization=authorization_evidence(task))
     if workspace.branch_sha(task.branch) != candidate:
         raise LocalPhaseError("local candidate changed before Review")
     evidence = _execute_evidence(task, store, execute_evidence)
@@ -536,13 +551,15 @@ def run_local_review(
     if spec != workspace.read_at_commit(
         task.spec_sha, spec_path(task), max_bytes=config.limits.max_spec_chars * 4
     ):
-        raise LocalPhaseError("local candidate changed its approved Spec")
+        raise LocalPhaseError("local candidate changed its authorized Spec")
     diff = workspace.diff_against(path, task.spec_sha, max_bytes=_MAX_DIFF_BYTES)
     instructions = config.resolve_instructions("review", path)
     claim.checkpoint(**config.instructions.evidence("review", instructions))
     prompt = _prompt_sections(
         task.number, task, spec, json.dumps(evidence, sort_keys=True), diff
     ).replace(f"## Task #{task.number}:", f"## Local Task {task.id}:")
+    if task.delegation is not None:
+        prompt = prompt.replace("## Approved Spec", "## Internal Spec", 1)
     if instructions:
         prompt += f"\n\n## Repository Review instructions\n\n{instructions}"
     before = workspace.capture_harness_state(path)
@@ -587,6 +604,11 @@ def _begin(
         )
     if claim.issue != task.number or claim.phase is not phase:
         raise LocalPhaseError("local Phase requires the exact Task and Phase Claim")
+    if task.delegation is not None:
+        try:
+            validate_delegation(task, config, require_spec=phase is not Phase.SPEC)
+        except AuthorizationError as exc:
+            raise LocalPhaseError(str(exc)) from exc
     current = store.get(task.id)
     if current != task:
         raise LocalPhaseError("local Task changed before the Phase began")
@@ -789,35 +811,31 @@ def _baseline(path, config, workspace, claim, runner, cancel_check):
         workspace.assert_harness_state(path, before, read_only=True)
 
 
-def _require_approval(task):
-    approval = task.approval
-    if (
-        not task.spec_sha
-        or not isinstance(approval, dict)
-        or any(
-            approval.get(key) != value
-            for key, value in {
-                "task_id": task.id,
-                "repository": task.repository,
-                "spec_sha": task.spec_sha,
-            }.items()
-        )
-    ):
-        raise LocalPhaseError(
-            "Approval must identify this repository, Task and exact Spec SHA"
-        )
-    actor, timestamp = approval.get("actor"), approval.get("approved_at")
+def _require_authorization(task, config):
     try:
-        if (
-            not isinstance(actor, str)
-            or not actor.strip()
-            or not isinstance(timestamp, str)
-        ):
-            raise ValueError("missing actor or time")
-        if datetime.fromisoformat(timestamp).utcoffset() is None:
-            raise ValueError("missing timezone")
-    except ValueError as exc:
-        raise LocalPhaseError("Approval must record its human actor and time") from exc
+        validate_authorization(task, config)
+    except AuthorizationError as exc:
+        raise LocalPhaseError(str(exc)) from exc
+
+
+def _authorized_prompt(task, prompt):
+    if task.delegation is None:
+        return prompt
+    return (
+        prompt.replace(
+            "You are implementing an approved specification",
+            "You are implementing an internal specification",
+            1,
+        )
+        .replace(
+            "The spec below was reviewed and approved by a human. Implement it faithfully.",
+            "A trusted actor delegated this Task under repository policy. The controller generated "
+            "the internal Spec below; it has not received human Spec approval. Implement only "
+            "the delegated request and report unresolved ambiguity.",
+            1,
+        )
+        .replace("## The approved spec", "## The internal spec", 1)
+    )
 
 
 def _read_spec(path, task, config):
@@ -844,6 +862,11 @@ def _deliver_spec(store, task, sha):
         approval=None,
         review_report=None,
         integration=None,
+        **(
+            {"delegation": bind_delegation_spec(replace(task, spec_sha=sha))}
+            if task.delegation is not None
+            else {}
+        ),
     )
 
 
@@ -866,6 +889,12 @@ def _execute_evidence(task, store, supplied):
         or evidence.implementation_sha != task.candidate_sha
     ):
         raise LocalPhaseError("Execute Evidence does not match this Spec and candidate")
+    if task.delegation is not None and evidence.as_dict().get(
+        "authorization"
+    ) != authorization_evidence(task):
+        raise LocalPhaseError(
+            "Execute Evidence does not match this delegated authorization"
+        )
     report = evidence.verification_report
     if not isinstance(report, dict) or report.get("success") is not True:
         raise LocalPhaseError("Review requires successful Verification Evidence")
@@ -874,6 +903,7 @@ def _execute_evidence(task, store, supplied):
         "implementation_sha": evidence.implementation_sha,
         "change_summary": evidence.change_summary,
         "verification_report": report,
+        "authorization": evidence.as_dict().get("authorization"),
     }
 
 

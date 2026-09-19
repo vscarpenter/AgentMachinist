@@ -79,8 +79,10 @@ class TaskDispatcher:
         execute_runner: ExecuteRunner = run_execute_phase,
         review_runner: ReviewRunner = run_review_phase,
         test_runner: Callable[..., object] = run_supervised,
+        delegated_execution: bool = False,
     ) -> None:
         self.config = config
+        self._delegated_execution = delegated_execution
         self.repo_root = repo_root.resolve()
         self.runs_dir = self.repo_root / ".machinist/runs"
         self.lifecycle = (
@@ -229,6 +231,7 @@ class TaskDispatcher:
         """Enter a claimed local Spec using the same durable lifecycle."""
         from machinist.phases.local import run_local_spec
 
+        self._require_background_runtime(task)
         return self.lifecycle.run(
             task.number,
             Phase.SPEC,
@@ -255,6 +258,7 @@ class TaskDispatcher:
         """Execute the exact local Approval, allowing a newly approved amendment."""
         from machinist.phases.local import run_local_execute
 
+        self._require_background_runtime(task)
         return self.lifecycle.run(
             task.number,
             Phase.EXECUTE,
@@ -278,6 +282,7 @@ class TaskDispatcher:
         """Review one immutable local candidate, repeating only for a new head."""
         from machinist.phases.local import run_local_review
 
+        self._require_background_runtime(task)
         return self.lifecycle.run(
             task.number,
             Phase.REVIEW,
@@ -305,6 +310,12 @@ class TaskDispatcher:
         github = GitHubClient()
         bind_repository(self.config, github, workspace)
         return github
+
+    def _require_background_runtime(self, task) -> None:
+        if task.delegation is not None and not self._delegated_execution:
+            raise LifecycleError(
+                "delegated Tasks require the background runtime; use machinist background run"
+            )
 
     def _local_workspace(self, number: int) -> LocalWorkspace:
         workspace = (

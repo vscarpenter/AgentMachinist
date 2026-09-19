@@ -192,6 +192,27 @@ def test_github_update_does_not_repeat_an_already_satisfied_draft_transition(dra
     assert not any(argv[1:3] == ["pr", "ready"] for argv in calls)
 
 
+def test_github_update_checks_cancellation_again_before_ready_transition():
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, json.dumps(github_payload()), "")
+
+    forge = GitHubForgeClient("team/demo", runner=runner)
+    with pytest.raises(ForgeError, match="cancelled"):
+        forge.update_change(
+            7,
+            title="Refined",
+            body="Report",
+            draft=False,
+            cancel_check=lambda: bool(calls),
+        )
+
+    assert any(argv[1:3] == ["pr", "edit"] for argv in calls)
+    assert not any(argv[1:3] == ["pr", "ready"] for argv in calls)
+
+
 def test_github_publication_creates_verified_draft_then_delivers_ready_change():
     responses = iter(
         [

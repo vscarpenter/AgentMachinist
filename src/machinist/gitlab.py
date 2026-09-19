@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit
 
@@ -14,6 +15,7 @@ from machinist.forge import (
     ExternalTask,
     ForgeError,
     PublishedChange,
+    _check_cancelled,
     normalize_host,
     normalize_repository,
     positive_number,
@@ -101,11 +103,19 @@ class GitLabClient:
         return change
 
     def create_change(
-        self, *, branch: str, base: str, title: str, body: str, draft: bool = True
+        self,
+        *,
+        branch: str,
+        base: str,
+        title: str,
+        body: str,
+        draft: bool = True,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> PublishedChange:
         validate_ref(branch)
         validate_ref(base)
         self._get_project()
+        _check_cancelled(cancel_check)
         item = self._api(
             "/merge_requests",
             method="POST",
@@ -119,10 +129,17 @@ class GitLabClient:
         return self._change(item)
 
     def update_change(
-        self, number: int, *, title: str, body: str, draft: bool
+        self,
+        number: int,
+        *,
+        title: str,
+        body: str,
+        draft: bool,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> PublishedChange:
         positive_number(number)
         self._get_project()
+        _check_cancelled(cancel_check)
         change = self._change(
             self._api(
                 f"/merge_requests/{number}",

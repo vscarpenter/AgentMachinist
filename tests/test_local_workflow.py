@@ -78,7 +78,10 @@ def local(tmp_path):
     )
     harness = Harness()
     workflow = LocalWorkflow(
-        config, repo_root=root, harness_factory=lambda phase, number: harness
+        config,
+        repo_root=root,
+        harness_factory=lambda phase, number: harness,
+        delegated_execution=True,
     )
     return root, workflow, harness
 
@@ -325,3 +328,115 @@ def test_published_task_amendment_preserves_remote_lease_and_change_identity(loc
     assert task.publication["change_number"] == 17
     assert task.publication["published_sha"] == task.candidate_sha
     assert harness.calls == ["spec", "execute", "review", "spec", "execute", "review"]
+
+
+def delegate_task(root, workflow):
+    from machinist.authorization import make_delegation
+
+    task = workflow.store.create(
+        "Improve the answer with its regression test",
+        "Return two and test it",
+        "main",
+        git(root, "rev-parse", "HEAD"),
+        workflow.config.workspace.branch_prefix,
+        source={
+            "provider": "github",
+            "repository": "team/project",
+            "issue_number": 7,
+            "event_id": "42",
+            "actor": "vinny",
+        },
+    )
+    return workflow.store.update(
+        task,
+        delegation=make_delegation(
+            task, workflow.config, actor="vinny", source_event="42"
+        ),
+    )
+
+
+def test_delegated_task_runs_through_review_without_human_approval(local):
+    root, workflow, harness = local
+    task = delegate_task(root, workflow)
+    original_implement, original_review = harness.implement, harness.review
+    prompts = []
+
+    def implement(prompt, cwd):
+        prompts.append(prompt)
+        return original_implement(prompt, cwd)
+
+    def review(prompt, cwd):
+        prompts.append(prompt)
+        return original_review(prompt, cwd)
+
+    harness.implement, harness.review = implement, review
+    task = workflow.continue_task(task.id)
+    assert all("reviewed and approved by a human" not in prompt for prompt in prompts)
+    assert "## The internal spec" in prompts[0]
+    assert "## Internal Spec" in prompts[1]
+    assert harness.calls == ["spec", "execute", "review"]
+    assert task.approval is None
+    assert task.delegation["spec_sha"] == task.spec_sha
+    assert task.review_report["reviewed_sha"] == task.candidate_sha
+    evidence = workflow.lifecycle.record(task.number, Phase.EXECUTE).evidence
+    assert evidence["authorization"]["kind"] == "delegation"
+    assert evidence["authorization"]["spec_sha"] == task.spec_sha
+    assert workflow.status(task.id)["state"] == "ready to publish"
+    workflow.continue_task(task.id)
+    assert harness.calls == ["spec", "execute", "review"]
+    assert git(root, "rev-parse", "HEAD") == task.base_sha
+
+
+def test_delegated_policy_change_stops_before_spec_harness(local):
+    root, workflow, harness = local
+    task = delegate_task(root, workflow)
+    workflow.config.limits.max_changed_files += 1
+    with pytest.raises(LocalWorkflowError, match="configuration"):
+        workflow.continue_task(task.id)
+    with pytest.raises(LocalWorkflowError, match="configuration"):
+        workflow.retry(task.id, phase=Phase.SPEC)
+    assert harness.calls == []
+
+
+def test_delegated_task_rejects_manual_approval_amendment_and_integration(local):
+    root, workflow, harness = local
+    task = delegate_task(root, workflow)
+    for operation in (
+        lambda: workflow.approve(task.id, expected_sha="a" * 40),
+        lambda: workflow.amend(task.id, "Expand the task"),
+        lambda: workflow.integrate(task.id),
+    ):
+        with pytest.raises(LocalWorkflowError, match="delegated"):
+            operation()
+    assert harness.calls == []
+
+
+def test_delegated_failed_spec_retry_continues_through_review(local):
+    root, workflow, harness = local
+    task = delegate_task(root, workflow)
+    original = harness.generate_spec
+    harness.generate_spec = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        RuntimeError("interrupted")
+    )
+    with pytest.raises(RuntimeError, match="interrupted"):
+        workflow.continue_task(task.id)
+    with pytest.raises(LifecycleError, match="retry"):
+        workflow.continue_task(task.id)
+    harness.generate_spec = original
+    task = workflow.retry(task.id, phase=Phase.SPEC)
+    assert task.review_report["completed"]
+    assert task.approval is None
+
+
+def test_generic_continuation_cannot_run_a_delegated_task_on_host(local):
+    root, workflow, harness = local
+    task = delegate_task(root, workflow)
+    foreground = LocalWorkflow(
+        workflow.config, repo_root=root, harness_factory=lambda phase, number: harness
+    )
+    with pytest.raises(LocalWorkflowError, match="background runtime"):
+        foreground.continue_task(task.id)
+    with pytest.raises(LocalWorkflowError, match="background runtime"):
+        foreground.retry(task.id, phase=Phase.SPEC)
+    assert workflow.lifecycle.record(task.number, Phase.SPEC) is None
+    assert harness.calls == []

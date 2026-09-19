@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from machinist.authorization import AuthorizationError, validate_authorization
 from machinist.evidence import TaskEvidence
 from machinist.lifecycle import Phase, RunRecord, RunStatus
 
@@ -31,29 +32,44 @@ def classify_local_task(
     claim_held: bool,
 ) -> LocalTransitionDecision:
     """Project the local delivery cycle without relying on forge state."""
+    delegated = task.delegation is not None
+    continuation = (
+        "machinist background run --once"
+        if delegated
+        else f"machinist continue {task.id}"
+    )
 
     def phase_state(phase: Phase) -> LocalTransitionDecision | None:
         record = records.get(phase)
         if record is None or record.status is RunStatus.SUCCEEDED:
             return None
         if record.status is RunStatus.RETRYABLE:
-            return LocalTransitionDecision(
-                f"{phase.value} retryable", f"machinist continue {task.id}"
-            )
+            return LocalTransitionDecision(f"{phase.value} retryable", continuation)
         state = classify_run(record, claim_held=claim_held).state.value
         action = (
             f"machinist cancel --task {task.id}"
             if claim_held
             else f"machinist retry --task {task.id} --phase {phase.value}"
         )
+        if delegated:
+            action = (
+                f"machinist background {'cancel' if claim_held else 'retry'} {task.id}"
+            )
         return LocalTransitionDecision(state, action)
 
     pending = phase_state(Phase.SPEC)
     if pending:
         return pending
     if task.spec_sha is None:
-        return LocalTransitionDecision("awaiting spec", f"machinist continue {task.id}")
-    if not task.approval or any(
+        return LocalTransitionDecision("awaiting spec", continuation)
+    if task.delegation is not None:
+        try:
+            validate_authorization(task)
+        except AuthorizationError:
+            return LocalTransitionDecision(
+                "delegation needs attention", f"machinist background status {task.id}"
+            )
+    elif not task.approval or any(
         task.approval.get(key) != value
         for key, value in {
             "repository": task.repository,
@@ -75,7 +91,12 @@ def classify_local_task(
         or not task.candidate_sha
         or execute.evidence.get("implementation_sha") != task.candidate_sha
     ):
-        return LocalTransitionDecision("approved", f"machinist continue {task.id}")
+        return LocalTransitionDecision(
+            "delegated" if task.delegation is not None else "approved",
+            f"machinist background status {task.id}"
+            if task.delegation is not None
+            else f"machinist continue {task.id}",
+        )
     pending = phase_state(Phase.REVIEW)
     if pending:
         return pending
@@ -87,8 +108,15 @@ def classify_local_task(
         or task.review_report.get("completed") is not True
         or task.review_report.get("reviewed_sha") != task.candidate_sha
     ):
+        return LocalTransitionDecision("awaiting review", continuation)
+    if task.delegation is not None:
+        published = (
+            task.publication
+            and task.publication.get("published_sha") == task.candidate_sha
+        )
         return LocalTransitionDecision(
-            "awaiting review", f"machinist continue {task.id}"
+            "published" if published else "ready to publish",
+            f"machinist background status {task.id}",
         )
     if task.integration and task.integration.get("observed_sha") == task.candidate_sha:
         return LocalTransitionDecision(

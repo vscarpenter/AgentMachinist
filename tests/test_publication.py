@@ -6,6 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from machinist.authorization import (
+    authorization_evidence,
+    bind_delegation_spec,
+    make_delegation,
+)
+from machinist.config import MachinistConfig
 from machinist.forge import PublishedChange
 from machinist.lifecycle import Phase, TaskLifecycle
 from machinist.local_tasks import LocalTaskStore
@@ -29,6 +35,10 @@ class Task:
     spec_sha: str | None = SPEC
     candidate_sha: str | None = CANDIDATE
     approval: dict | None = None
+    delegation: dict | None = None
+    source: dict | None = None
+    feedback: str | None = None
+    spec_base_sha: str | None = None
     review_report: dict | None = None
     publication: dict | None = None
 
@@ -99,6 +109,7 @@ class Forge:
         self.events = events
         self.change = None
         self.fail_after_create = False
+        self.body = ""
 
     def find_change(self, branch):
         self.events.append("find-change")
@@ -106,8 +117,11 @@ class Forge:
             self.change = replace(self.change, head_sha=self.workshop.remote)
         return self.change
 
-    def create_change(self, *, branch, base, title, body, draft=True):
+    def create_change(
+        self, *, branch, base, title, body, draft=True, cancel_check=None
+    ):
         self.events.append("create-change")
+        self.body = body
         self.change = PublishedChange(
             self.provider,
             self.host,
@@ -125,8 +139,9 @@ class Forge:
             raise OSError("uncertain create result")
         return self.change
 
-    def update_change(self, number, *, title, body, draft):
+    def update_change(self, number, *, title, body, draft, cancel_check=None):
         self.events.append("update-change")
+        self.body = body
         self.change = replace(self.change, is_draft=draft)
         return self.change
 
@@ -175,6 +190,229 @@ def test_publish_records_intent_before_push_and_returns_exact_reviewed_change(re
     assert task.publication["stage"] == "published"
     assert workspace.remote == CANDIDATE
     assert not forge.change.is_draft
+
+
+def test_background_publication_persists_draft_intent_and_remains_draft(ready):
+    store, workspace, forge, events = ready
+    task = publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
+
+    checkpoint = next(event for event in events if isinstance(event, tuple))
+    assert checkpoint[1]["draft"] is True
+    assert task.publication["draft"] is True
+    assert forge.change.is_draft
+
+
+def test_uncertain_draft_publication_cannot_retry_as_ready(ready):
+    store, workspace, forge, events = ready
+    forge.fail_after_create = True
+    with pytest.raises(OSError, match="uncertain create"):
+        publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
+
+    with pytest.raises(PublicationError, match="draft intent"):
+        publish(ready)
+
+    assert events.count("create-change") == 1
+    assert "update-change" not in events
+    assert forge.change.is_draft
+
+
+def test_reconciled_publication_does_not_reverse_subsequent_ready_transition(ready):
+    store, workspace, forge, events = ready
+    task = publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
+    forge.change = replace(forge.change, is_draft=False)
+    events.clear()
+
+    assert (
+        publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
+        == task
+    )
+    assert not forge.change.is_draft
+    assert "update-change" not in events
+
+
+@pytest.mark.parametrize("after", [None, "push", "create-change"])
+def test_cancellation_stops_before_next_external_publication_mutation(ready, after):
+    store, workspace, forge, events = ready
+
+    with pytest.raises(PublicationError, match="cancelled"):
+        publish_task(
+            "T1",
+            store=store,
+            workspace=workspace,
+            forge=forge,
+            draft=True,
+            cancel_check=lambda: after is None or after in events,
+        )
+
+    if after is None:
+        assert "push" not in events
+    if after != "create-change":
+        assert "create-change" not in events
+    assert "update-change" not in events
+
+
+@pytest.fixture
+def delegated(ready):
+    store, workspace, _, _ = ready
+    task = replace(
+        store.task,
+        approval=None,
+        spec_sha=None,
+        candidate_sha=None,
+        source={"provider": "github", "number": 42, "event_id": "queue-17"},
+    )
+    config = MachinistConfig()
+    task = replace(
+        task,
+        delegation=make_delegation(
+            task, config, actor="vinny", source_event="queue-17"
+        ),
+        spec_sha=SPEC,
+        candidate_sha=CANDIDATE,
+    )
+    task = replace(task, delegation=bind_delegation_spec(task, config))
+    store.task = task
+    authorization = authorization_evidence(task)
+    runs = TaskLifecycle(workspace.repo_root / ".machinist/runs/local")
+    runs.run(
+        1,
+        Phase.EXECUTE,
+        lambda claim: claim.checkpoint(
+            implementation_sha=CANDIDATE,
+            approved_sha=SPEC,
+            authorization=authorization,
+            verification_report={
+                "success": True,
+                "gates": [
+                    {
+                        "name": "tests",
+                        "required": True,
+                        "passed": True,
+                        "status": "passed",
+                        "stdout_log": str(
+                            workspace.repo_root / ".machinist/private.log"
+                        ),
+                    }
+                ],
+            },
+        ),
+        repeat_succeeded_if=lambda record: True,
+    )
+    runs.run(
+        1,
+        Phase.REVIEW,
+        lambda claim: claim.checkpoint(
+            reviewed_sha=CANDIDATE,
+            authorization=authorization,
+            review_report=task.review_report,
+        ),
+        repeat_succeeded_if=lambda record: True,
+    )
+    return ready
+
+
+def test_delegated_publication_uses_task_authorization_and_readable_evidence(delegated):
+    store, workspace, forge, _ = delegated
+    store.task = replace(
+        store.task,
+        review_report={
+            **store.task.review_report,
+            "summary": "Timezone parsing now returns a helpful error.",
+            "findings": [
+                {
+                    "severity": "high",
+                    "file": "timezone.py",
+                    "line": 4,
+                    "message": "The fallback needs another test.",
+                    "remediation": "Cover the fallback path.",
+                }
+            ],
+        },
+    )
+    runs = TaskLifecycle(workspace.repo_root / ".machinist/runs/local")
+    runs.run(
+        1,
+        Phase.REVIEW,
+        lambda claim: claim.checkpoint(
+            reviewed_sha=CANDIDATE,
+            authorization=authorization_evidence(store.task),
+            review_report=store.task.review_report,
+        ),
+        repeat_succeeded_if=lambda record: True,
+    )
+    task = publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
+
+    assert task.approval is None
+    assert forge.change.is_draft
+    assert "Timezone parsing now returns a helpful error." in forge.body
+    assert "tests" in forge.body and "passed" in forge.body
+    assert "The fallback needs another test." in forge.body
+    assert "high" in forge.body.lower()
+    assert "vinny" in forge.body
+    assert "approved Spec" not in forge.body
+    assert str(workspace.repo_root) not in forge.body
+
+
+@pytest.mark.parametrize("phase", [Phase.EXECUTE, Phase.REVIEW])
+def test_delegated_publication_requires_matching_authorization_evidence(
+    delegated, phase
+):
+    store, workspace, forge, _ = delegated
+    runs = TaskLifecycle(workspace.repo_root / ".machinist/runs/local")
+    evidence = dict(runs.record(1, phase).evidence)
+    evidence.pop("authorization")
+    runs.run(
+        1,
+        phase,
+        lambda claim: claim.checkpoint(**evidence),
+        repeat_succeeded_if=lambda record: True,
+    )
+
+    with pytest.raises(PublicationError, match="authorization"):
+        publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
+
+
+def test_delegated_publication_cannot_bypass_ci_by_requesting_ready(delegated):
+    with pytest.raises(PublicationError, match="draft"):
+        publish(delegated)
+    assert "push" not in delegated[3]
+
+
+@pytest.mark.parametrize(
+    "verification",
+    [
+        None,
+        {"success": False, "gates": []},
+        {"success": True, "gates": []},
+        {"success": True, "gates": [{"required": True, "passed": False}]},
+    ],
+)
+def test_delegated_publication_requires_successful_required_gates(
+    delegated, verification
+):
+    store, workspace, forge, _ = delegated
+    runs = TaskLifecycle(workspace.repo_root / ".machinist/runs/local")
+    evidence = dict(runs.record(1, Phase.EXECUTE).evidence)
+    evidence["verification_report"] = verification
+    runs.run(
+        1,
+        Phase.EXECUTE,
+        lambda claim: claim.checkpoint(**evidence),
+        repeat_succeeded_if=lambda record: True,
+    )
+
+    with pytest.raises(PublicationError, match="Verification"):
+        publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
+
+
+def test_delegated_publication_cannot_hide_findings_by_replacing_task_report(delegated):
+    store, workspace, forge, _ = delegated
+    store.task = replace(
+        store.task, review_report={**store.task.review_report, "summary": "Changed"}
+    )
+
+    with pytest.raises(PublicationError, match="Review report"):
+        publish_task("T1", store=store, workspace=workspace, forge=forge, draft=True)
 
 
 @pytest.mark.parametrize(

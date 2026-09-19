@@ -70,3 +70,42 @@ def test_removed_keys_in_historical_records_stay_readable():
     }
 
     assert TaskEvidence.load(legacy).spec_sha == "d" * 40
+
+
+def delegation_evidence():
+    return {
+        "kind": "delegation",
+        "repository": "/repo",
+        "task_id": "T1",
+        "spec_sha": SHA_A,
+        "actor": "vinny",
+        "source_event": "42",
+        "config_digest": "a" * 64,
+        "request_digest": "b" * 64,
+    }
+
+
+def test_checkpoint_records_delegation_without_changing_historical_spec_key():
+    evidence = checkpoint_evidence(
+        "execute", {}, {"approved_sha": SHA_A, "authorization": delegation_evidence()}
+    )
+    assert TaskEvidence.load(evidence).authorization["kind"] == "delegation"
+    with pytest.raises(EvidenceError, match="authorization.*Spec"):
+        checkpoint_evidence("execute", evidence, {"approved_sha": SHA_B})
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("kind", "auto_approved"),
+        ("spec_sha", "bad"),
+        ("actor", ""),
+        ("source_event", ""),
+        ("config_digest", "bad"),
+    ],
+)
+def test_checkpoint_rejects_malformed_authorization(key, value):
+    with pytest.raises(EvidenceError, match="authorization"):
+        checkpoint_evidence(
+            "execute", {}, {"authorization": {**delegation_evidence(), key: value}}
+        )

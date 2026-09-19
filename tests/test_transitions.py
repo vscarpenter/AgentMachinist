@@ -238,3 +238,40 @@ def test_describe_run_names_the_state_and_next_action():
 
     executed = describe_run(_record(RunStatus.SUCCEEDED, phase=Phase.EXECUTE))
     assert executed.next_action is None
+
+
+@pytest.mark.parametrize(
+    "status,held,action",
+    [
+        (RunStatus.FAILED, False, "machinist background retry T1"),
+        (RunStatus.RUNNING, True, "machinist background cancel T1"),
+        (RunStatus.RETRYABLE, False, "machinist background run --once"),
+    ],
+)
+def test_delegated_phase_actions_use_the_background_runtime(
+    tmp_path, status, held, action
+):
+    from machinist.authorization import make_delegation
+    from machinist.config import MachinistConfig
+    from machinist.local_tasks import LocalTaskStore
+    from machinist.transitions import classify_local_task
+
+    store = LocalTaskStore(tmp_path)
+    task = store.create(
+        "Intent",
+        "Details",
+        "main",
+        "a" * 40,
+        "agent/",
+        source={"provider": "github", "number": 1},
+    )
+    task = store.update(
+        task,
+        delegation=make_delegation(
+            task, MachinistConfig(), actor="vinny", source_event="42"
+        ),
+    )
+    decision = classify_local_task(
+        task, records={Phase.SPEC: record(Phase.SPEC, status)}, claim_held=held
+    )
+    assert decision.next_action == action

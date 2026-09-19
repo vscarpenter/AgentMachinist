@@ -66,11 +66,24 @@ class ForgeClient(Protocol):
     def get_change(self, number: int) -> PublishedChange: ...
 
     def create_change(
-        self, *, branch: str, base: str, title: str, body: str, draft: bool = True
+        self,
+        *,
+        branch: str,
+        base: str,
+        title: str,
+        body: str,
+        draft: bool = True,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> PublishedChange: ...
 
     def update_change(
-        self, number: int, *, title: str, body: str, draft: bool
+        self,
+        number: int,
+        *,
+        title: str,
+        body: str,
+        draft: bool,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> PublishedChange: ...
 
     def upsert_comment(
@@ -88,6 +101,7 @@ def publish_change(
     body: str,
     draft: bool = False,
     expected_number: int | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> PublishedChange:
     """Recover or create one exact candidate, then verify remote delivery.
 
@@ -126,14 +140,22 @@ def publish_change(
         raise ForgeError("publication custody mismatch: checkpointed change number")
     if change is None:
         # Never expose an unverified creation as ready for human integration.
+        _check_cancelled(cancel_check)
+        cancellation: dict[str, Any] = (
+            {"cancel_check": cancel_check} if cancel_check is not None else {}
+        )
         change = client.create_change(
-            branch=branch, base=base, title=title, body=body, draft=True
+            branch=branch, base=base, title=title, body=body, draft=True, **cancellation
         )
         verify(change, expected_draft=True)
     else:
         verify(change)
     number = change.number
-    updated = client.update_change(number, title=title, body=body, draft=draft)
+    _check_cancelled(cancel_check)
+    cancellation = {"cancel_check": cancel_check} if cancel_check is not None else {}
+    updated = client.update_change(
+        number, title=title, body=body, draft=draft, **cancellation
+    )
     if updated.number != number:
         raise ForgeError("publication custody mismatch: number")
     verify(updated, expected_draft=draft)
@@ -201,10 +223,18 @@ class GitHubForgeClient:
         return change
 
     def create_change(
-        self, *, branch: str, base: str, title: str, body: str, draft: bool = True
+        self,
+        *,
+        branch: str,
+        base: str,
+        title: str,
+        body: str,
+        draft: bool = True,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> PublishedChange:
         validate_ref(branch)
         validate_ref(base)
+        _check_cancelled(cancel_check)
         created = self._call(
             self._client.create_draft_pr,
             branch=branch,
@@ -214,17 +244,26 @@ class GitHubForgeClient:
         )
         result = self.get_change(created.number)
         if not draft:
+            _check_cancelled(cancel_check)
             self._call(self._client.mark_ready, result.number)
             result = self.get_change(result.number)
         return result
 
     def update_change(
-        self, number: int, *, title: str, body: str, draft: bool
+        self,
+        number: int,
+        *,
+        title: str,
+        body: str,
+        draft: bool,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> PublishedChange:
         positive_number(number)
+        _check_cancelled(cancel_check)
         self._call(self._client.update_pr, number, title=title, body=body)
         change = self.get_change(number)
         if change.is_draft is not draft:
+            _check_cancelled(cancel_check)
             self._call(
                 self._client.mark_draft if draft else self._client.mark_ready, number
             )
@@ -271,6 +310,11 @@ class GitHubForgeClient:
             return operation(*args, **kwargs)
         except (GitHubError, KeyError, TypeError, ValueError) as exc:
             raise ForgeError(str(exc)) from exc
+
+
+def _check_cancelled(cancel_check: Callable[[], bool] | None) -> None:
+    if cancel_check is not None and cancel_check():
+        raise ForgeError("publication cancelled")
 
 
 def normalize_host(value: str) -> str:

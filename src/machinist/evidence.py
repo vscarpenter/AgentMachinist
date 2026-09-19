@@ -24,6 +24,7 @@ _PHASES = frozenset({"spec", "execute", "review"})
 _PHASE_FIELDS = {
     "spec_sha": frozenset({"spec"}),
     "approved_sha": frozenset({"execute"}),
+    "authorization": frozenset({"execute", "review"}),
     "implementation_sha": frozenset({"execute"}),
     "harness_completed": frozenset({"execute"}),
     "feedback_supplied": frozenset({"execute"}),
@@ -60,6 +61,7 @@ _MAPPING_FIELDS = frozenset(
         "verification_report",
         "review_report",
         "repair",
+        "authorization",
     }
 )
 
@@ -89,6 +91,11 @@ class TaskEvidence:
     @property
     def approved_sha(self) -> str | None:
         return self._sha("approved_sha")
+
+    @property
+    def authorization(self) -> dict[str, EvidenceValue] | None:
+        value = self._mapping("authorization")
+        return validate_authorization_evidence(value) if value is not None else None
 
     @property
     def implementation_sha(self) -> str | None:
@@ -304,6 +311,8 @@ def _validate_known_value(key: str, value: EvidenceValue) -> None:
         raise EvidenceError(f"Task Run Evidence '{key}' must be an object")
     if key == "repair":
         validate_repair_evidence(value)
+    if key == "authorization":
+        validate_authorization_evidence(value)
     if key == "pr_base" and not (isinstance(value, str) and _safe_ref(value)):
         raise EvidenceError("Task Run Evidence contains an invalid PR base")
 
@@ -312,6 +321,16 @@ def _validate_relationships(
     phase: str, evidence: Evidence, updated: frozenset[str]
 ) -> None:
     view = TaskEvidence(cast(Evidence, evidence))
+    if phase == "execute" and updated.intersection({"authorization", "approved_sha"}):
+        authorization = view.authorization
+        if (
+            authorization is not None
+            and view.approved_sha is not None
+            and authorization["spec_sha"] != view.approved_sha
+        ):
+            raise EvidenceError(
+                "Task Run authorization does not match its exact Spec binding"
+            )
     relationships = [("push_intended_sha", "push_observed_sha")]
     if phase == "spec":
         relationships.append(("spec_sha", "push_intended_sha"))
@@ -416,3 +435,32 @@ def _repair_timestamp(value: object, error: str) -> datetime:
     if timestamp.utcoffset() != timedelta(0):
         raise EvidenceError(error)
     return timestamp
+
+
+def validate_authorization_evidence(value: object) -> Evidence:
+    """Interpret explicit authorization without reclassifying historical records."""
+    error = "Task Run Evidence 'authorization' is invalid"
+    if not isinstance(value, dict):
+        raise EvidenceError(error)
+    result = validate_evidence(value)
+    if result.get("kind") not in ("delegation", "human_approval"):
+        raise EvidenceError(error)
+    for key in ("repository", "task_id", "actor"):
+        item = result.get(key)
+        if not isinstance(item, str) or not item.strip():
+            raise EvidenceError(error)
+    sha = result.get("spec_sha")
+    if not isinstance(sha, str) or _FULL_SHA.fullmatch(sha) is None:
+        raise EvidenceError(error)
+    if result["kind"] == "delegation":
+        event = result.get("source_event")
+        if not isinstance(event, str) or not event.strip():
+            raise EvidenceError(error)
+        for key in ("config_digest", "request_digest"):
+            digest = result.get(key)
+            if (
+                not isinstance(digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            ):
+                raise EvidenceError(error)
+    return result
