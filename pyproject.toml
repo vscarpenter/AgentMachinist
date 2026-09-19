@@ -84,6 +84,12 @@ warn_unused_configs = true
 # TODO(static-types): expand this zero-error gate to all of src/machinist once
 # the CLI read-model and dynamic Harness runner annotations are made precise.
 files = [
+    "src/machinist/authorization.py",
+    "src/machinist/background.py",
+    "src/machinist/background_cli.py",
+    "src/machinist/background_github.py",
+    "src/machinist/background_harness.py",
+    "src/machinist/background_runtime.py",
     "src/machinist/config.py",
     "src/machinist/diagnostics.py",
     "src/machinist/gitconfig.py",

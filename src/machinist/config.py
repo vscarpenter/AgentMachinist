@@ -1058,6 +1058,61 @@ class LimitsConfig(StrictModel):
         )
 
 
+class BackgroundConfig(StrictModel):
+    """Opt-in single-worker GitHub pilot; no implicit host execution."""
+
+    enabled: bool = False
+    queue_label: str = "machinist:queue"
+    image: str | None = None
+    network: Literal["bridge", "none"] = "bridge"
+    required_checks: list[str] = Field(default_factory=list)
+    timeout_minutes: int = Field(default=30, ge=1, le=120)
+    max_open_prs: int = Field(default=2, ge=1, le=10)
+    poll_interval_seconds: int = Field(default=60, ge=5, le=3600)
+
+    @field_validator("image")
+    @classmethod
+    def _image_reference(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._/@:-]{0,511}", value
+        ):
+            raise ValueError("image must be a Docker image reference")
+        return value
+
+    @field_validator("queue_label")
+    @classmethod
+    def _queue_label(cls, value: str) -> str:
+        if (
+            not value.strip()
+            or value != value.strip()
+            or any(ord(c) < 32 for c in value)
+        ):
+            raise ValueError(
+                "queue_label must be a non-empty label without control characters"
+            )
+        return value
+
+    @field_validator("required_checks")
+    @classmethod
+    def _required_checks(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)) or any(
+            not name.strip() or name != name.strip() or any(ord(c) < 32 for c in name)
+            for name in value
+        ):
+            raise ValueError(
+                "required_checks must contain unique non-empty check names"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _enabled_contract(self) -> "BackgroundConfig":
+        if self.enabled and (self.image is None or not self.required_checks):
+            raise ValueError(
+                "background enabled requires an image and explicit required_checks"
+            )
+        return self
+
+
 class MachinistConfig(StrictModel):
     version: Literal[1] = 1
     harness: HarnessConfig = Field(default_factory=HarnessConfig)
@@ -1071,6 +1126,7 @@ class MachinistConfig(StrictModel):
     queue: QueueConfig = Field(default_factory=QueueConfig)
     notifications: NotificationConfig = Field(default_factory=NotificationConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
+    background: BackgroundConfig = Field(default_factory=BackgroundConfig)
 
     @field_validator("version", mode="before")
     @classmethod

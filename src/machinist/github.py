@@ -172,6 +172,16 @@ class GitHubClient:
         ]
         return [pr for pr in prs if self._same_repository_pr(pr)]
 
+    def get_pr(self, number: int) -> PullRequest:
+        """Observe current exact PR metadata for publication custody checks."""
+        try:
+            data = self._gh_json("pr", "view", str(number), "--json", _PR_JSON_FIELDS)
+            if not isinstance(data, dict):
+                raise GitHubError("gh pr view returned invalid PR metadata")
+            return _pull_request(data)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise GitHubError("gh pr view returned invalid PR metadata") from exc
+
     def pr_for_branch(self, branch: str) -> PullRequest | None:
         """Return the exact branch's open or most-recent historical PR."""
 

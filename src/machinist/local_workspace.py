@@ -409,6 +409,34 @@ class LocalWorkspace:
         self._require_origin(origin_url)
         self._publication_auth = (provider, origin_url)
 
+    def fetch_background_base(self, branch: str) -> str:
+        """Fetch one exact remote base without moving the controller checkout."""
+        from machinist.forge import validate_ref
+
+        validate_ref(branch)
+        self._controller_custody()
+        origin = self.origin_url()
+        expected = self.remote_sha(branch, origin_url=origin)
+        if expected is None:
+            raise WorkspaceError("background base branch is missing on origin")
+        self._network_git(
+            "fetch",
+            "--no-tags",
+            "--no-recurse-submodules",
+            "--no-write-fetch-head",
+            "--",
+            origin,
+            f"refs/heads/{branch}",
+        )
+        # Resolve the observed exact object, not a moving symbolic remote ref.
+        observed = self.resolve_commit(expected)
+        if (
+            observed != expected
+            or self.remote_sha(branch, origin_url=origin) != expected
+        ):
+            raise WorkspaceError("background base changed during fetch; try again")
+        return observed
+
     def remote_sha(self, branch: str, *, origin_url: str) -> str | None:
         self._require_origin(origin_url)
         self._workspace._validate_branch(branch)

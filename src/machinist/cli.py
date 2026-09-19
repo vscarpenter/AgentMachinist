@@ -17,6 +17,7 @@ import yaml
 from pydantic import ValidationError
 
 from machinist.admission import queue_admission
+from machinist.background_cli import register_background_commands
 from machinist.cancellation import CancellationError, CancellationStore
 from machinist.config import (
     MAX_CONFIG_BYTES,
@@ -525,7 +526,7 @@ _COMMAND_GROUPS: list[tuple[str, list[str]]] = [
     ),
     (
         "Operate — daily",
-        ["watch", "status"],
+        ["background", "watch", "status"],
     ),
     (
         "Operate — advanced",
@@ -3348,3 +3349,4 @@ def service_uninstall(force: bool) -> None:
 
 
 register_local_commands(main)
+register_background_commands(main)

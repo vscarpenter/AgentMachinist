@@ -124,6 +124,12 @@ def test_static_type_gate_is_zero_error_core_with_explicit_expansion_debt():
     config = tomllib.loads((_ROOT / "pyproject.toml").read_text())
     mypy = config["tool"]["mypy"]
     expected_core = {
+        "src/machinist/authorization.py",
+        "src/machinist/background.py",
+        "src/machinist/background_cli.py",
+        "src/machinist/background_github.py",
+        "src/machinist/background_harness.py",
+        "src/machinist/background_runtime.py",
         "src/machinist/config.py",
         "src/machinist/diagnostics.py",
         "src/machinist/gitconfig.py",
