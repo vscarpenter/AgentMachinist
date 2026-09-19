@@ -16,3 +16,15 @@
    runtime, authentication, or target prerequisites separately from code completion.
 
 No extra spec or plan approval gate is required; the user approved this design.
+
+## Completion record (2026-09-19)
+
+Steps 1–6 are complete. The canonical `bash scripts/verify.sh` run passed
+1,896 tests at 88.70% coverage, workflow projection, formatting, lint, the
+expanded 28-module type gate, distribution builds, and clean wheel/source
+installation smoke checks. Independent reviews found no remaining concrete
+findings after the cancellation, status-selector, and repair-deadline fixes.
+
+Step 7 is pending the user's target repository and runtime choice. Docker CLI
+is installed on this Mac, but no working engine was available. No live provider
+execution, GitHub Task/PR, deployment, or measured time saving is claimed.

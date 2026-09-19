@@ -15,6 +15,23 @@ Task → Spec commit → human Approval → Execute → verification → Review
                                                   → optional PR/MR publication
 ```
 
+The unreleased, opt-in background pilot reuses local Tasks and Phases through
+trusted GitHub Delegation:
+
+```text
+queue action → internal Spec → Execute → verification → Review → draft PR
+                                             required CI → human review/merge
+```
+
+Delegation authorizes the saved Task and publication without an intermediate
+human Spec Approval. It is a separate authorization record, never a synthetic
+human Approval. One persistent controller uses disposable Docker containers for
+Harnesses and Gates. Background operation reads root `machinist.yaml`, not the
+saved foreground configuration; the existing manual workflow remains available.
+The pilot supports Codex for all three Phases. Its container-only profile relies
+on Docker isolation, with read-only Workshop mounts for Spec/Review; ordinary
+host Codex sandbox profiles remain unchanged.
+
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
 hatchling, published to PyPI as `agentmachinist` (current release: 0.17.1).
 This repository dogfoods itself: the root `machinist.yaml` configures the
@@ -64,9 +81,25 @@ never-merges rule only for that human-directed local operation.
   requiring a forge (worktrees share repository remotes; clones remove origin),
   durable candidate refs, Git custody, explicit clean fast-forward integration,
   and leased publication Git.
-- `publication.py` — verifies local Approval and exact successful Phase
+- `publication.py` — verifies local authorization and exact successful Phase
   Evidence, binds origin/forge identity, persists push intent, and reconciles
   optional publication independently from Harness and Verification work.
+- `authorization.py` — separate human Approval and Delegation validation,
+  effective-policy/request digests, and internal Spec binding. Historical human
+  Approval records keep their meaning.
+- `background.py` — persistent worker journal, trusted intake deduplication,
+  admission limits, shared deadlines, explicit retry, sparse result reporting,
+  and coordination through the local dispatcher and publication owner.
+- `background_runtime.py` — disposable Docker execution for background Harnesses
+  and Verification: clone-only mounts, provider keys only for Harness work,
+  shared task deadline, and no fallback to host execution. Runtime readiness
+  inspects the daemon and prebuilt image without paid model work.
+- `background_harness.py` — Codex-only profile tied to `ContainerRuntime` and an
+  explicit Phase. It uses `danger-full-access` only inside Docker, avoiding
+  nested Bubblewrap requirements; Spec/Review mounts are read-only. Host
+  Harness adapters and Docker security restrictions stay unchanged.
+- `background_github.py` — trusted queue-label actor validation, immutable issue
+  intake, and required check-run/status observations for the exact published SHA.
 - `forge.py`, `gitlab.py` — explicit GitHub/`gh` and GitLab/`glab` issue intake
   and exact PR/MR publication. GitLab supports nested projects and explicit
   hosts; it does not provide hosted Spec CI or remote Approval.
@@ -88,6 +121,10 @@ never-merges rule only for that human-directed local operation.
   approval SHA, workspace path, and all Task Run records in one pass. Click
   owns validation, rendering, notifications, and the daemon loop; it delegates
   claimed Phase construction to `dispatch.py`.
+  The opt-in `background [--config PATH]` group provides `doctor`,
+  `run [--once]`, `status [--json]`, `cancel T1`, and `retry T1` (or `retry --issue N`
+  when intake failed before Task allocation) for the persistent
+  background worker. The legacy watcher service does not install this worker.
 - `config.py` — strict pydantic schema for `machinist.yaml`
   (`extra="forbid"`: unknown keys fail loudly). Validates label shapes,
   branch prefix safety, and timeout bounds. The validated model also owns the
@@ -213,7 +250,9 @@ never-merges rule only for that human-directed local operation.
 Use these terms exactly in docs and messages: **Task** (controller-owned local
 objective or legacy GitHub issue), **Phase** (Spec, Execute, or Review — Approve is a human Gate, not a
 Phase), **Spec** (identified by its exact commit), **Approval** (authorizes
-one exact Spec commit; stale when the branch head changes), **Task Run**
+one exact Spec commit; stale when the branch head changes), **Delegation**
+(trusted authorization of a saved background Task, policy, and publication;
+not human Approval of its internal Spec), **Task Run**
 (durable record of one Phase attempt), **Claim** (exclusive local ownership),
 **Workshop** (the isolated checkout — code keeps the public name `Workspace`
 for compatibility; docs say Workshop), **Harness**, **Evidence**.
@@ -225,7 +264,7 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    the Phase and Workshop modules enforce it. Both paths check HEAD and
    protected metadata; local Phases additionally check local refs, while legacy
    GitHub Phases check the remote head. Spec rejects any dirty tree.
-2. **SHA-bound Approval**: local Execute requires repository/Task-bound Approval
+2. **Exact authorization**: manual local Execute requires repository/Task-bound Approval
    of the exact saved Spec commit. Local Approval is an explicit human CLI
    action and does not protect against hostile code running as the same OS
    user. Legacy GitHub execution requires the approval label AND a
@@ -237,7 +276,11 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    paths on the actor before minting evidence: a `/machinist-execute` comment
    and a label action both need write or admin access, because GitHub grants
    label permission at triage level. The
-   approver's login is recorded on the approval comment.
+   approver's login is recorded on the approval comment. The opt-in background
+   path instead requires a valid Delegation bound to repository, Task, immutable
+   request/event, actor, base, effective policy, and internal Spec. Never call a
+   bot decision human Approval, reinterpret old Approval records, or let source
+   text widen delegated scope.
 3. **Legacy GitHub draft-ness outranks the label**: a non-draft PR is "in review" and never
    re-executable without `run --force` (which demands fresh approval).
 4. **Leased pushes**: legacy implementation pushes use `--force-with-lease`
@@ -251,20 +294,34 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
    decides who owns Phase 1; managed workflows are projected from config,
    never hand-edited (the next sync intentionally replaces drift).
 7. **Explicit retry only**: a failed Task Run blocks re-runs until
-   `machinist retry`; a crash after push is reconciled from checkpoints
+   explicit retry (`machinist retry` for manual/legacy work or
+   `machinist background retry T1` for the pilot); a crash after push is reconciled from checkpoints
    (neither the harness nor the verification gates rerun; only a crash
    before the implementation commit reruns the gates). Configured bounded repair
    runs inside active Execute before it fails; it never redispatches failed runs.
 8. **Security wording**: never claim a harness "has no Git access" — the
    trust model (docs/trust-model.md, SECURITY.md) is credential *reduction*
-   and detection, not OS-level isolation. `pull_request_target` automation
+   and detection for host-executed manual/legacy Tasks, not OS-level isolation.
+   Background Tasks additionally require the configured Docker boundary, mount
+   only a clone Workshop, and never fall back to host execution. They do not
+   mount controller state, publication credentials, host home, or Docker socket;
+   Gates receive no provider key. Docker networking is not an egress firewall.
+   `pull_request_target` automation
    must never check out or execute PR-head code.
 9. **Local delivery and human integration**: every local candidate requires
    verification and exact completed independent Review. Findings remain
-   advisory. Preserve the candidate before Workshop cleanup. Integration is
+   advisory for manual delivery. Background high-severity findings keep the PR
+   draft; successful required CI for its exact SHA is also required for ready
+   transition. Neither condition authorizes merge. Preserve the candidate before Workshop cleanup. Integration is
    explicit, clean, exact-base/exact-candidate, and fast-forward only; persist
    intent before updating the base. Publication is optional, recoverable work
    that never re-executes successful local Phases.
+10. **Bounded background work**: one persistent worker per repository; intake
+   and recovery are durable and duplicate events do not create paid repeat work.
+   The shared deadline, repair budget, open-PR cap, protected paths, and
+   cancellation checks apply before publication and ready transitions. Remote
+   CI failure never launches an automatic repair loop. No automatic task
+   discovery, integration, remote merge, or deployment.
 
 ## Conventions
 

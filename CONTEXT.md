@@ -3,6 +3,9 @@
 AgentMachinist coordinates a human-approved path from a Task to a reviewed local
 implementation while keeping Harness execution isolated from the developer's
 checkout. GitHub and GitLab intake and publication are optional.
+The unreleased opt-in background pilot accepts trusted GitHub Delegation and
+publishes a PR after machine work without intermediate human Spec Approval.
+Human review and merge remain required.
 
 ## Language
 
@@ -15,9 +18,10 @@ _Avoid_: Job, ticket, work item
 
 **Phase**:
 One of the ordered kinds of machine work: Spec, Execute, or Review. Approval is a
-human Gate between Spec and Execute; human review and integration remain the
+human Gate between Spec and Execute in the manual workflow; human review and integration remain the
 final Gate after the machine Review Phase. Publication is a separate controller
-operation, not a Phase.
+operation, not a Phase. Background Delegation authorizes the machine Phases and
+PR publication before the internal Spec is generated.
 _Avoid_: Stage, step
 
 **Spec**:
@@ -30,9 +34,16 @@ binds repository, Task, Spec SHA, actor, and time. The legacy GitHub flow requir
 its trusted workflow marker and label. Revising the Spec invalidates Approval.
 _Avoid_: Review approval, permission
 
+**Delegation**:
+A trusted task-level authorization for the opt-in background pilot. It binds
+repository, Task, issue/event identity, request snapshot, actor, base commit,
+policy identity, and the internal Spec once generated. It authorizes Execute,
+Review, and PR publication within that saved scope. It is not human Approval of
+the generated Spec and does not authorize integration, merge, or deployment.
+
 **Gate**:
 A control transfer that requires durable Evidence before work can proceed.
-Gate 1 is Approval; the final human Gate is review and explicit local integration
+Gate 1 is Approval in the manual workflow; the final human Gate is review and explicit local integration
 or a human merge on the forge. Verification Gates run the configured checks.
 _Avoid_: Checkpoint
 
@@ -58,7 +69,7 @@ A coding-agent CLI selected by configuration. Claude Code, OpenCode, PI, and Cod
 _Avoid_: Agent provider, model
 
 **Evidence**:
-Durable facts produced by a Task Run: approved Spec commit, verification result,
+Durable facts produced by a Task Run: authorized Spec commit, verification result,
 implementation commit, independent Review report, and error details. Local
 integration and optional PR/MR publication also retain recoverable intent and
 observed results.
@@ -68,7 +79,8 @@ _Avoid_: Log, output
 
 - "Approve" in a forge review UI does not authorize local Execute. AgentMachinist
   Approval names an exact Spec through the local CLI or the legacy GitHub
-  workflow. GitLab remote reviews are not local Approval.
+  workflow. GitLab remote reviews are not local Approval. Background Delegation
+  is a separate record and must never be reported as bot-generated human Approval.
 - The existing code uses `Workspace` for the Workshop module. Keep the public code name for compatibility; documentation uses Workshop for the domain concept.
 
 ## Example dialogue

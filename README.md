@@ -16,6 +16,14 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
+**Source-only background pilot:** a trusted GitHub queue action can delegate a
+Task through internal Spec, implementation, Verification, independent Review,
+and one PR without intermediate Spec Approval. A persistent controller runs
+task code in disposable Docker containers; exact required CI checks and Review
+findings govern readiness, and you review and merge. This is opt-in and does not
+change existing installations. See the [background pilot guide](docs/background-pilot.md)
+and [trial worksheet](docs/background-trial.md).
+
 AgentMachinist 0.17.1 fixes setup instructions to stage new managed workflow
 files before committing. It also includes an
 [Approval policy](docs/approval-policy.md) and
@@ -53,9 +61,10 @@ You also need `git` and one supported Harness executable (`claude`, `opencode`,
 `pi`, or `codex`). GitHub operations require authenticated [`gh`](https://cli.github.com);
 GitLab operations require authenticated [`glab`](https://docs.gitlab.com/cli/).
 The core
-CLI is tested on macOS and Linux with Python 3.12–3.14. Managed background
+CLI is tested on macOS and Linux with Python 3.12–3.14. Managed legacy watcher
 service commands are macOS-only; on Linux, schedule `machinist watch --once`
-with your existing service manager.
+with your existing service manager. These service commands do not start the
+source-only `machinist background` worker.
 
 `machinist update-check` compares the installed release against PyPI and
 prints the upgrade command for how this copy was installed (`uv tool`, `pipx`,

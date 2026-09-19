@@ -20,6 +20,8 @@ works with the published package.
 | Question | Reference |
 | --- | --- |
 | How do local settings, context, amendments, and publication work? | [Local workflow](local-workflow.md) |
+| How do I queue an unattended GitHub Task? | [Background pilot](background-pilot.md), unreleased and opt-in |
+| How do I measure whether background work saves time? | [Pilot trial worksheet](background-trial.md) |
 | How do I configure Gates, repair, profiles, notifications, or GitHub automation? | [Configuration and GitHub reference](getting-started.md) |
 | How do I diagnose, retry, cancel, monitor, or release? | [Operator runbook](operator-runbook.md) |
 | Which Harness can I use, and how do I authenticate or extend it? | [Harness support](harnesses.md) |

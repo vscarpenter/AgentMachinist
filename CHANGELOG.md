@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add an opt-in background GitHub pilot using existing local Tasks and Phases.
+  Trusted queue delegation records the request, actor, source event, base,
+  policy, and internal Spec separately from human Approval. A persistent worker
+  runs Harnesses and Gates in disposable Docker containers, enforces a shared
+  deadline and PR cap, and requires explicit retry after stopped work.
+- Use a container-only Codex profile for all background Phases, with read-only
+  Workshop mounts for Spec and Review. Docker supplies execution isolation
+  without nested Codex sandbox requirements; ordinary host adapters are unchanged.
+- Publish delegated candidates as draft PRs with Verification and Review
+  Evidence. Observe configured required CI checks on the exact candidate;
+  high-severity findings or failing checks keep the PR draft. No automatic merge,
+  remote CI repair, or task discovery is included. Add readiness, run, status,
+  cancellation, and retry commands plus a setup guide and time-savings worksheet.
 - Simplify documentation navigation around the workflow diagram and a short
   first-Task guide. Add complete Markdown/web directories, group alternate
   formats and historical records, and retain existing document URLs.

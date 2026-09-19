@@ -1,6 +1,7 @@
 # Background Task pilot
 
-Status: approved by the user in this conversation; implement continuously.
+Status: implemented and locally verified on `codex/background-pilot`.
+The live trial still requires a selected repository and working Docker runtime.
 
 ## Outcome
 

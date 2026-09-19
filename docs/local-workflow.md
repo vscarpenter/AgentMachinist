@@ -22,6 +22,14 @@ Bounded Execute repair and combined local/legacy reporting, described below,
 are unreleased source-checkout additions and are not in the published 0.17.1
 package.
 
+The source checkout also offers a separate opt-in
+[background pilot](background-pilot.md): trusted GitHub delegation replaces the
+intermediate Spec Approval and authorizes PR publication. It reuses local Task
+records and Phases but reads root `machinist.yaml`, runs Task code in Docker,
+and retains human review and merge. This guide continues to describe the manual
+workflow; background operation does not change its saved settings or Approval
+requirements.
+
 ## Complete one Task
 
 Start on a named branch in a clean Git repository with an initial commit, a

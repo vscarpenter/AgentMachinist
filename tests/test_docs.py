@@ -738,7 +738,7 @@ def test_release_docs_describe_current_package_version():
             assert "publication pending" not in html, path
         # Source-only additions must be visibly isolated from released commands.
         html = re.sub(
-            r'<(?P<tag>details|p)\b[^>]*data-release="unreleased"[^>]*>.*?</(?P=tag)>',
+            r'<(?P<tag>details|p|li)\b[^>]*data-release="unreleased"[^>]*>.*?</(?P=tag)>',
             "",
             html,
             flags=re.DOTALL,

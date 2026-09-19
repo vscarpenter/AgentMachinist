@@ -1,11 +1,14 @@
 # Trust model
 
 AgentMachinist is designed for repositories and harness installations you
-already trust. It improves custody and failure visibility; it is not an OS
-sandbox, container boundary, malware scanner, or policy engine.
+already trust. Manual and legacy workflows improve custody and failure
+visibility; they are not an OS sandbox or container boundary. The opt-in
+background pilot additionally runs task processes in disposable Docker
+containers. None of these paths is a malware scanner or general policy engine.
 
 The published baseline is AgentMachinist 0.17.1. Bounded Execute repair and
-combined local/legacy reporting below are unreleased source-checkout additions.
+combined local/legacy reporting and the background pilot below are unreleased
+source-checkout additions.
 Local readiness and bounded diagnostic rendering were introduced in 0.15.0.
 
 ## Trusted inputs and principals
@@ -16,6 +19,8 @@ Local readiness and bounded diagnostic rendering were introduced in 0.15.0.
 - Repository actors with write or admin access who can authorize legacy GitHub
   execution or review/merge published changes.
 - The local user account that launches AgentMachinist.
+- For background operation, the Docker daemon and configured image, the
+  persistent controller host, and write/admin actors who queue Tasks.
 
 Task bodies, imported issues, and PR/MR branches are untrusted input. `pull_request_target`
 approval automation never checks out or executes PR-head code.
@@ -63,6 +68,59 @@ Harness authority over these files. Backups of this runtime state contain
 Task bodies, Approval, and detailed Evidence and deserve the same treatment as
 the repository's source.
 
+## Background execution boundary
+
+The [background pilot](background-pilot.md) admits a Task only after verifying
+the actual queue-label actor has write or admin permission. Its separate
+Delegation record binds the request snapshot, actor/event, repository, Task,
+base, policy, and generated Spec. It is not human Spec Approval. The worker
+rechecks authorization and does not widen scope after issue edits. Ordinary
+foreground continuation cannot execute delegated Tasks outside this worker.
+
+The persistent controller retains GitHub/publication credentials and state.
+Harness and Verification invocations run in disposable Docker containers
+mounting only a clone Workshop. They receive no host home, controller runtime
+directory, publication credentials, or Docker socket. The root filesystem is
+read-only, capabilities are dropped, privilege escalation is disabled, and
+memory, CPU, process count, and runtime are bounded. Spec and Review mount the
+entire Workshop read-only. Execute and Gate mounts are writable for implementation
+and dependency preparation; Gate mutation policies and Git custody/output checks
+still apply. Container execution does not remove Git access.
+
+The pilot supports Codex for all three Phases. Its container-only profile uses
+`--sandbox danger-full-access` and `approval_policy="never"` inside the required
+Docker boundary. It does not attempt to nest the Codex/Bubblewrap sandbox or
+relax Docker's security restrictions. Ordinary host Codex still uses its existing
+read-only/workspace-write sandbox profiles. Background readiness requires
+`OPENAI_API_KEY`; Harness containers receive the `CODEX_API_KEY` alias as well.
+
+Only Harness processes receive the selected provider key; separately supervised
+Gates receive none. Commands a Harness runs during its own invocation can still
+access that provider key. The worker image and repository contents are trusted
+inputs, and a cloud provider can receive source code. `bridge` networking does
+not prevent exfiltration or provide an egress firewall. `none` disables container
+networking and cannot reach a cloud model. Set external network policy for your
+deployment; keep host credentials and unrelated files outside the mounted clone.
+
+Runtime readiness requires a working daemon and an already available image;
+there is no fallback to host execution. Successful readiness is not a live
+provider, dependency, or task-completion test. Docker and the persistent
+controller remain trusted infrastructure, not protection against a hostile
+administrator or a compromised daemon.
+
+Background output limits also protect `.machinist/`, `.github/workflows/`,
+`machinist.yaml`, `AGENTS.md`, and `CLAUDE.md`. These are checked after task work;
+they do not prove a change remained semantically within scope or that tests
+were not weakened. Human review remains necessary.
+
+Publication starts in draft. High-severity Review findings prevent the ready
+transition; exact-candidate required CI must succeed. Unknown, missing, skipped,
+or neutral results cannot become success. A failed or timed-out result stops
+for intervention, with no remote CI repair. Cancellation is checked before
+publication and ready transitions. Worker restarts do not reset budgets;
+explicit retry allocates another bounded attempt. Local claims do not
+coordinate different machines.
+
 ## Enforced controls
 
 The following GitHub label/comment controls apply to the legacy issue pipeline;
@@ -82,8 +140,9 @@ verification, Task Run persistence, and read-only Review apply to both paths.
 - Repository custody binds GitHub operations to the controller origin's host,
   owner, and repository, then checks the expected same-repository PR number,
   base, head, state, and draft status before a Phase changes it.
-- Codex read-only sandbox, Pi read-tool allowlist, and Claude plan/read-tool
-  arguments during Spec and Review.
+- Ordinary host adapters use Codex's read-only sandbox, Pi's read-tool allowlist,
+  and Claude's plan/read-tool arguments during Spec and Review. Background Codex
+  uses a read-only Docker Workshop mount instead of the inner Codex sandbox.
 - Rejection of working-tree changes after Spec or Review.
 - Post-implementation checks for Harness-created commits and edits under
   `.machinist/`. Local Phases also compare controller/Workshop HEAD, branch,
@@ -121,15 +180,17 @@ mean a hostile process with the same OS identity cannot work around it.
   allowlisted provider keys remain available; other common secret names and
   cloud credential variables are filtered. Other credentials—keychain helpers,
   SSH keys on disk, cloud credentials, or tokens loaded by plugins—may still
-  be reachable.
+  be reachable by host-executed manual/legacy Harnesses. Background task
+  containers have the narrower mounts described above.
 
 Therefore, documentation must not claim that a harness “has no Git access.”
 
 Independent Review reduces producer self-evaluation risk, but it is not a
-security scanner or merge authorization. Findings are advisory, the reviewer
-is still local software running as the same OS user, and a configured Review
-profile may use the same provider as Execute. Human code review remains the
-final gate.
+security scanner or merge authorization. Findings are advisory for manual
+delivery. Background high-severity findings keep a PR draft, but findings can
+still be wrong. A configured Review profile may use the same provider as
+Execute. Host-executed manual Review runs as the same OS user; background Review
+uses the container boundary above. Human code review remains the final gate.
 
 Harness plugins are trusted installed Python code. Entry-point validation
 prevents name collisions and isolates broken imports; it cannot constrain what
@@ -190,7 +251,8 @@ of the isolated Workshop baseline; `start` still checks that baseline before
 Spec generation. Plain `doctor` retains its GitHub setup scope.
 
 The legacy test command and every named verification gate are
-repository-controlled shell text and run as the local user. A null
+repository-controlled shell text. Manual and legacy Gates run as the local
+user; background Gates run inside the configured container boundary. A null
 `tests.command` skips only the single legacy command. In the GitHub issue
 workflow, verification is skipped when no named Gates are configured either.
 Foreground local setup instead requires at least one required Gate and runs
@@ -213,7 +275,7 @@ afterwards, and that controller run remains the authoritative gate. Set
 ### Bounded repair within Execute
 
 Repair is off by default. `verification.repair.max_attempts: 1` authorizes one
-additional Harness invocation inside an active approved Execute Task Run,
+additional Harness invocation inside an active authorized Execute Task Run,
 followed by all configured Gates. `verification.repair.timeout_minutes` defaults
 to 10 (range 1–240); its deadline covers both extra model work and final
 Verification. Consumed budget and deadline are persisted before paid work.
@@ -231,7 +293,7 @@ missing commands or exit 126/127, output limits, stragglers, custody violations,
 forbidden mutations, and snapshot failures stop the run without repair. A
 nonzero exit alone cannot establish that a defect is in the code. The repair
 prompt carries bounded, sanitized failure Evidence as untrusted input alongside
-the approved implementation prompt and a bounded change summary. Failure text
+the authorized implementation prompt and a bounded change summary. Failure text
 never authorizes broader scope, new permissions, Git operations, or weakening
 tests or Gates. Sanitization reduces recognized secret and terminal-control
 exposure; it does not make arbitrary logs trustworthy or secret-free.
@@ -282,7 +344,9 @@ merge protection and required CI reviews on the repository.
 
 ## Residual risks
 
-- A compromised harness can read files available to the launching user.
+- A compromised host-executed Harness can read files available to the launching
+  user. Background isolation narrows this to the container's inputs but still
+  exposes repository contents and the selected Harness provider key.
 - A repository test or hook can execute arbitrary code.
 - Cross-host duplicate execution is not prevented by the local claim.
 - A harness-side remote effect can be detected without being reversible.

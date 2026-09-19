@@ -5,8 +5,10 @@ verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
 deployment remain outside the controller. The published baseline is
-AgentMachinist 0.17.1. Bounded Execute repair and combined local/legacy reporting
-below are unreleased source-checkout additions. The 0.14.0 release added the local
+AgentMachinist 0.17.1. Bounded Execute repair, combined local/legacy reporting,
+and the opt-in background pilot below are unreleased source-checkout additions.
+The background path turns trusted GitHub Delegation into a PR while retaining
+human review and merge. The 0.14.0 release added the local
 workflow and GitLab collaboration; 0.15.0 added local readiness, exact
 remote-base validation, and bounded diagnostics.
 
@@ -15,9 +17,9 @@ remote-base validation, and bounded diagnostics.
 | Owner | Responsibilities |
 | --- | --- |
 | GitHub/GitLab | Optional source issues and published PRs/MRs; GitHub additionally supports its legacy trusted Approval workflows. |
-| AgentMachinist | Local Task identity, Approval, Claims, Task Runs, Workshops, commits, verified candidates, explicit local integration, leased publication. |
+| AgentMachinist | Local Task identity, Approval or Delegation, Claims, Task Runs, Workshops, commits, verified candidates, explicit local integration, leased publication. |
 | Harness | Read repository context, return a spec or working-tree edits, and independently review the delivered diff; may pre-run configured verification gates to iterate. |
-| Human | Task intent, exact Spec Approval, code review, explicit local integration or remote merge. |
+| Human | Task intent, exact Spec Approval for manual work or trusted queue Delegation for background work, code review, explicit local integration or remote merge. |
 
 The controller keeps Git authority. Prompts tell the Harness not to use Git.
 Both workflows check Workshop/controller Git custody, commits, and protected
@@ -74,6 +76,69 @@ provenance. They do not select publication origin or supply local Approval.
 Native GitLab Spec CI, GitLab remote Approval, and remote merge are out of scope.
 See [ADR 0003](adr/0003-local-workflow-and-optional-publication.md).
 
+## Background coordination
+
+The opt-in [background pilot](background-pilot.md) reuses the local Task model,
+`TaskDispatcher`, Phase implementations, Verification, bounded repair, and
+publication. It has a different intake and authorization contract, not another
+independent implementation of Spec, Execute, and Review.
+
+`background_github.py` reads open issues with the configured queue label and
+verifies the actual labeling actor's write/admin permission. It rereads issue
+content and the event to avoid binding a changed request to an earlier actor.
+The worker atomically retains the accepted request and source event against its
+controller-owned Task ID. Repeated polling and re-labeling an accepted issue
+find the existing Task; changed scope requires a new issue in the pilot.
+
+A separate Delegation binds repository, Task, immutable request, source event,
+actor, base commit, effective policy digest, and the internal Spec once generated.
+`authorization.py` owns those validations; `background.py` owns the worker
+journal and coordination.
+Execute, Review, and publication validate that authorization without creating a
+human Approval. Manual records retain their original meaning. Ordinary
+foreground continuation refuses delegated work so it cannot bypass background
+execution policy.
+
+Background configuration comes from root `machinist.yaml` or the explicit
+`background --config` path, not the foreground saved copy. Effective background
+settings force clone Workshops, required local Verification, independent Review,
+and protected controller/workflow paths. The controller uses one persistent
+worker claim per repository plus existing local Task/Phase Claims. Durable
+intake, deadlines, state, and result reporting survive worker restarts. These
+local files and claims are not cross-host coordination.
+
+`background_runtime.py` supplies injected Harness and Gate runners that invoke
+disposable Docker containers. The only host mount is an individual clone
+Workshop. `background_harness.py` supplies a Codex-only profile for all three
+Phases, bound to that runtime. It uses Codex `--sandbox danger-full-access` and
+`approval_policy="never"` inside Docker so it does not require nested
+Bubblewrap namespaces or relaxed Docker controls. Spec/Review mount the Workshop
+read-only; Execute and Gates mount it writable, with Gate mutation policies
+still enforced. The ordinary host Codex adapter is unchanged.
+`OPENAI_API_KEY` and its `CODEX_API_KEY` alias enter Harness invocations only; controller state,
+publication credentials, host home, and Docker socket are not mounted. A shared
+persisted deadline bounds all task processes and eligible repair. Docker daemon
+or image unavailability fails readiness; it never selects host execution instead.
+Network mode is explicit and provides no egress allowlist. See the
+[execution trust boundary](trust-model.md#background-execution-boundary).
+
+The worker advances internal Spec, Execute, exact-candidate Review, and recovered
+publication through their existing shared owners. Publication starts draft.
+High-severity findings keep it draft. Required CI names are checked against
+check runs and commit-status contexts for the exact candidate SHA; only success
+passes. Missing, skipped, neutral, or unknown states remain unresolved until the
+deadline. Failing CI or an expired deadline produces a needs-attention result,
+without remote CI or Review repair. Cancellation is checked before publication
+and ready transitions. The controller never merges.
+
+Failed, cancelled, and needs-attention Tasks require explicit
+`machinist background retry T1`. It schedules a new bounded attempt with the
+same saved policy. Completed Phases and publication intent reconcile without
+repeating paid work. Admission also enforces concurrency one and the configured
+outstanding-PR cap. Notifications describe results or intervention, with durable
+deduplication; progress remains in status and logs. No service is installed by
+the background commands, and the legacy watcher service remains separate.
+
 ## Deep policy seams
 
 `local_doctor.py` supplies optional
@@ -100,10 +165,13 @@ change custody, spend Harness time, or interpret durable state:
 | Verification Gates | `verification.py` | The sole required/advisory, timeout, cancellation, mutation, logging, and result implementation. |
 | Bounded Execute repair | `repair.py` | Shared local/legacy eligibility, persisted budget and deadline, repair prompt, and final Verification coordination; Phases retain custody and change-limit ownership. |
 | Configuration behavior | `config.py` | Validated starter and effective projections; terminal rendering and atomic persistence live in `config_cli.py`. |
+| Local authorization | `authorization.py` | Distinguish human Approval from task-bound Delegation and validate saved request, policy, and Spec identity. |
+| Background admission | `background.py` | Durable issue intake, worker Claim, limits, deadlines, explicit recovery, and result deduplication. |
 
 These are internal module seams, not persistence migrations. Version-1 Task Run
 records and `machinist.yaml` remain compatible, and CLI text, JSON, and GitHub
-effects keep their existing contracts.
+effects for existing manual and legacy operations keep their contracts.
+Background Delegation and worker state are additive records.
 
 ## Legacy GitHub lifecycle
 
@@ -278,7 +346,8 @@ retry loop or repairs independent Review findings.
 Harnesses and gates run under a process supervisor with bounded output,
 timeouts, credential reduction, process-group termination, and cooperative
 cancellation. This makes ordinary child-process failures containable; it does
-not turn a local harness into a sandbox.
+not turn a host-executed harness into a sandbox. Background invocations also use
+the mandatory Docker boundary described above.
 
 Phase-specific harness profiles and repository-local instruction overlays are
 resolved before invocation. Instruction files must remain within the canonical

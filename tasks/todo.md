@@ -1021,3 +1021,37 @@ reporting/docs tests pass with current dependencies, all 10 report CLI tests
 pass with Click 8.1, and focused Ruff/format checks pass. GitHub's main-branch
 rules still name old test checks and require a review; any admin merge override
 requires explicit authorization and all current CI checks to pass first.
+
+## Autonomous background pilot (2026-09-19)
+
+- [x] Record the approved small pivot and implement it through existing local
+  Tasks, Phases, verification, repair, Review, and publication.
+- [x] Add trusted GitHub queue intake, separate immutable Delegation, a durable
+  single worker, bounded admission, cancellation, explicit retry, and exact-CI
+  draft-to-ready publication.
+- [x] Add disposable Docker execution for Codex and Gates, provider credentials
+  only for Harnesses, read-only Spec/Review mounts, and no host fallback.
+- [x] Add CLI readiness/run/status/cancel/retry, setup documentation, both index
+  links, and a 10–15 Task worksheet for measuring active time and maintenance.
+- [x] Complete independent review, fix valid findings, and pass canonical gates.
+- [ ] Select the real pilot repository and runtime, build its worker image, and
+  validate a live provider/GitHub Task before measuring time saved.
+
+The final canonical run passed 1,896 tests at 88.70% coverage on Python 3.12,
+managed workflow consistency, format, lint, 28-module type checking, wheel/source
+builds, and clean installation smoke checks on Python 3.13. The full run required
+normal process-table and package-download access; earlier restricted runs could
+not execute the existing `ps` cleanup assertions or fetch build dependencies.
+The expanded type-gate contract was updated alongside its configured file list.
+
+Independent review verified the complete real-Git delivery and interrupted
+publication recovery. Fixed findings included container cancellation/signal
+forwarding, the Task-specific status selector, null repair Evidence, and expired
+repair budgets incorrectly affecting explicit fresh retries. No remaining
+concrete findings were reported. These controlled tests used injected Harness
+and forge transports; they are not evidence of live Docker/provider success.
+
+Implementation remains an unreleased source-checkout pilot on
+`codex/background-pilot`; the package version is still 0.17.1. See
+`docs/background-pilot.md` and `docs/background-trial.md`. Live execution awaits
+the user's repository/runtime choice; no remote publication or release is included.

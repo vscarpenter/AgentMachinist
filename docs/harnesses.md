@@ -11,6 +11,9 @@ This matrix describes the adapters in AgentMachinist 0.17.1. It covers the local
 workflow and GitLab publication, plus local readiness introduced in 0.15.0.
 The CI column below describes the existing GitHub Actions Spec workflow, not
 GitLab CI.
+The unreleased [background pilot](background-pilot.md) supports Codex only and
+uses the separate container profile described below; this matrix continues to
+describe the ordinary host adapters and managed Spec workflow.
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
 | --- | --- | --- | --- | --- |
@@ -27,6 +30,31 @@ candidate prevents integration/publication eligibility. In the GitHub issue
 pipeline, `review.enabled` controls Review; when enabled, failure leaves the
 PR draft. A changed successful Execute SHA permits another Review, while a
 completed Review for the same candidate is not repeated.
+
+## Background Codex profile
+
+The opt-in source-only pilot requires `harness.name: codex` for all three
+Phases, including any Phase overrides. The supplied worker image includes Codex;
+custom images may add project build tools but do not enable other Harnesses.
+Startup requires `OPENAI_API_KEY` in the controller environment. The runtime
+also supplies it as `CODEX_API_KEY` inside Harness containers. Host Codex login
+files are not mounted, and separately supervised Gates receive neither key.
+
+`background_harness.py` constructs Codex only with a `ContainerRuntime` and an
+explicit Phase. Its argv uses `--sandbox danger-full-access` and
+`-c approval_policy="never"` inside Docker. This profile relies on the outer
+container rather than starting a nested Codex/Bubblewrap sandbox, whose mount
+and namespace operations conflict with Docker's default restrictions. No Docker
+security settings are relaxed to make it work, and the profile is not registered
+as an ordinary host Harness.
+
+Docker mounts the entire Workshop read-only for Spec and Review and writable
+for Execute. Gates receive a writable Workshop mount; existing Gate mutation
+policies and custody checks still apply. Root filesystem restrictions,
+capability limits, credential separation, and process/runtime limits belong to
+the container boundary. The ordinary host Codex adapter continues to use its
+read-only and workspace-write sandbox modes. See the
+[trust model](trust-model.md#background-execution-boundary) for remaining risks.
 
 ## Verification feedback loop
 
