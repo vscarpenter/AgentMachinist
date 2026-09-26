@@ -187,7 +187,8 @@ or quota.
 commands through the shared Verification engine in the controller checkout.
 Commands may write files or download dependencies. Passing there is not proof
 of the isolated Workshop baseline; `start` still checks that baseline before
-Spec generation. Plain `doctor` retains its GitHub setup scope.
+Spec generation. Plain `doctor` keeps its GitHub setup scope when
+`machinist.yaml` exists and runs the local checks otherwise.
 
 The legacy test command and every named verification gate are
 repository-controlled shell text and run as the local user. A null

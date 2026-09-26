@@ -174,7 +174,8 @@ machinist doctor
 The compatibility rows execute `--help` against the configured Spec and Execute
 argv, plus Review when enabled, without starting a Harness Task. If an argument
 changes, update the adapter, its exact argv test, this matrix, and the changelog together.
-Plain `doctor` reads root `machinist.yaml` and checks GitHub setup. The
+Plain `doctor` reads root `machinist.yaml` and checks GitHub setup when that
+file exists; without it, plain `doctor` runs the local checks below. The
 0.15.0 `machinist doctor --local` option reads saved local settings or previews
 first-start discovery without saving it. It runs no model, forge, release-update probe, or Verification
 Gate by default. `--run-gates` explicitly runs project commands in the
