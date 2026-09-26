@@ -27,6 +27,7 @@ from machinist.config import (
     load_config,
 )
 from machinist.harness import HarnessRegistry, discover_harnesses
+from machinist.local_tasks import LocalTaskStore
 from machinist.local_workspace import LocalWorkspace
 from machinist.runtime_paths import (
     RuntimeDirectory,
@@ -93,7 +94,9 @@ def ensure_local_config(
         descriptor = open_regular_file(runtime.path / "setup.lock", truncate=False)
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
-            if regular_file_exists(path):
+            if regular_file_exists(path) and not _flags_replace_saved_settings(
+                runtime, harness_name, test_command
+            ):
                 return resolve_local_config(
                     runtime.repository_root,
                     harness_name=harness_name,
@@ -127,7 +130,9 @@ def resolve_local_config(
         path = runtime.path / "config.yaml"
         registry = discover_harnesses()
         locate = shutil.which if which is None else which
-        if regular_file_exists(path):
+        if regular_file_exists(path) and not _flags_replace_saved_settings(
+            runtime, harness_name, test_command
+        ):
             config = _existing_config(
                 runtime, registry, harness_name, test_command, locate
             )
@@ -159,24 +164,54 @@ def _existing_config(
     which: Callable[[str], str | None],
 ) -> MachinistConfig:
     config = load_local_config(runtime.repository_root)
-    path = runtime.path / "config.yaml"
+    conflicts = _flag_conflicts(
+        config, runtime.path / "config.yaml", harness_name, test_command
+    )
+    if conflicts:
+        raise ConfigError(conflicts[0])
+    _validate_harnesses(config, registry, runtime.repository_root, which)
+    return config
+
+
+def _flag_conflicts(
+    config: MachinistConfig,
+    path: Path,
+    harness_name: str | None,
+    test_command: str | None,
+) -> list[str]:
+    conflicts = []
     if harness_name is not None and any(
         harness_identifier(config.harness_for(phase).name) != harness_name
         for phase in HarnessPhase
     ):
-        raise ConfigError(
+        conflicts.append(
             f"--harness conflicts with {path}; edit that local configuration "
             "to change Harnesses, or omit --harness to reuse it"
         )
     if test_command is not None:
         gates = config.resolved_verification_gates()
         if not any(gate.required and gate.command == test_command for gate in gates):
-            raise ConfigError(
+            conflicts.append(
                 f"--test-cmd conflicts with {path}; edit that local configuration "
                 "to change verification, or omit --test-cmd to reuse it"
             )
-    _validate_harnesses(config, registry, runtime.repository_root, which)
-    return config
+    return conflicts
+
+
+def _flags_replace_saved_settings(
+    runtime: RuntimeDirectory, harness_name: str | None, test_command: str | None
+) -> bool:
+    """Explicit start flags replace saved settings until the first Task exists."""
+    if harness_name is None and test_command is None:
+        return False
+    if LocalTaskStore(runtime.repository_root).list():
+        return False
+    config = load_local_config(runtime.repository_root)
+    return bool(
+        _flag_conflicts(
+            config, runtime.path / "config.yaml", harness_name, test_command
+        )
+    )
 
 
 def _new_config(
@@ -213,7 +248,7 @@ def _new_config(
     if test_command is not None:
         _set_test_command(values, config, test_command)
     elif not any(gate.required for gate in config.resolved_verification_gates()):
-        detected = detect_test_command(root)
+        detected = detect_test_command(root, which=which)
         if detected is not None:
             _set_test_command(values, config, detected)
         else:
@@ -342,8 +377,11 @@ def _validate_local_config(config: MachinistConfig, root: Path, path: Path) -> N
         raise ConfigError(f"edit {path}: Workshop root must be outside the repository")
 
 
-def detect_test_command(root: Path) -> str | None:
+def detect_test_command(
+    root: Path, which: Callable[[str], str | None] | None = None
+) -> str | None:
     """Suggest only a manifest-backed test runner; never execute the command."""
+    locate = shutil.which if which is None else which
     pyproject = _manifest(root / "pyproject.toml", toml=True)
     if pyproject is not None:
         tool = pyproject.get("tool", {})
@@ -357,9 +395,7 @@ def detect_test_command(root: Path) -> str | None:
             default=str,
         ).casefold()
         if tool.get("pytest") or re.search(r"\bpytest(?:\W|$)", dependency_text):
-            return (
-                "uv run pytest" if (root / "uv.lock").is_file() else "python -m pytest"
-            )
+            return _pytest_runner(locate)
     package = _manifest(root / "package.json", toml=False)
     scripts = package.get("scripts", {}) if package is not None else {}
     script = scripts.get("test") if isinstance(scripts, dict) else None
@@ -382,6 +418,16 @@ def detect_test_command(root: Path) -> str | None:
     if (root / "go.mod").is_file():
         return "go test ./..."
     return None
+
+
+def _pytest_runner(which: Callable[[str], str | None]) -> str:
+    # Prefer a runner that exists on this machine. A bare `python` is missing
+    # on stock macOS, and `uv run` prepares the Workshop environment itself.
+    if which("uv"):
+        return "uv run pytest"
+    if which("python3"):
+        return "python3 -m pytest"
+    return "python -m pytest"
 
 
 def _manifest(path: Path, *, toml: bool) -> dict[str, Any] | None:

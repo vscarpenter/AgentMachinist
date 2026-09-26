@@ -1370,13 +1370,15 @@ def test_amend_rejects_feedback_file_symlink_without_disclosure(tmp_path):
         assert not Path(".machinist/runs").exists()
 
 
-def test_status_without_config_points_at_init():
+def test_status_without_any_configuration_points_at_start():
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(main, ["status"])
 
-        assert result.exit_code != 0
-        assert "machinist init" in result.output
+        assert result.exit_code == 0, result.output
+        assert "No local Tasks" in result.output
+        assert "machinist start" in result.output
+        assert "machinist onboard" in result.output
 
 
 def test_status_renders_rows(monkeypatch):
@@ -3150,7 +3152,12 @@ def test_rendered_init_config_omits_manage_workflows_only_when_default():
     )
 
 
-def test_init_yes_enables_the_detected_test_command():
+def test_init_yes_enables_the_detected_test_command(monkeypatch):
+    # Detection prefers an installed runner; stub PATH so the result is stable.
+    monkeypatch.setattr(
+        "machinist.local_setup.shutil.which",
+        lambda command: "/usr/bin/python3" if command == "python3" else None,
+    )
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("pyproject.toml").write_text(
@@ -3161,7 +3168,7 @@ def test_init_yes_enables_the_detected_test_command():
         result = runner.invoke(main, ["init", "--no-workflows", "--yes"])
 
         assert result.exit_code == 0, result.output
-        assert load_config(Path("machinist.yaml")).tests.command == "python -m pytest"
+        assert load_config(Path("machinist.yaml")).tests.command == "python3 -m pytest"
 
 
 def test_init_no_input_still_refuses_to_enable_a_merely_detected_command():
@@ -3452,3 +3459,110 @@ def test_shared_spec_receipt_guides_human_approval(monkeypatch, capsys, notify_o
         assert "Read the Spec" in output
         assert "machinist approve --issue 42" in output
         assert "machinist run" not in output
+
+
+def test_config_commands_default_to_the_local_file_without_root_config():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        local = Path(".machinist/runs/local")
+        local.mkdir(parents=True)
+        (local / "config.yaml").write_text("version: 1\ntests:\n  command: pytest\n")
+
+        shown = runner.invoke(main, ["config", "show"])
+        assert shown.exit_code == 0, shown.output
+        assert "command: pytest" in shown.output
+
+        updated = runner.invoke(
+            main, ["config", "set", "tests.command", "uv run pytest"]
+        )
+        assert updated.exit_code == 0, updated.output
+        assert ".machinist/runs/local/config.yaml" in updated.output
+        assert "uv run pytest" in (local / "config.yaml").read_text()
+
+        valid = runner.invoke(main, ["config", "validate"])
+        assert valid.exit_code == 0, valid.output
+        assert ".machinist/runs/local/config.yaml" in valid.output
+
+        Path("machinist.yaml").write_text(
+            "version: 1\ntests:\n  command: root-pytest\n"
+        )
+        root_shown = runner.invoke(main, ["config", "show"])
+        assert "command: root-pytest" in root_shown.output
+
+
+def test_runs_points_local_tasks_at_status(monkeypatch):
+    monkeypatch.setattr("machinist.cli.has_local_configuration", lambda: True)
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["runs"])
+
+        assert result.exit_code == 0, result.output
+        assert "machinist status" in result.output
+
+
+def _local_repository_with_workshops(tmp_path):
+    from machinist.local_workspace import LocalWorkspace
+
+    subprocess.run(["git", "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], check=True)
+    Path("README.md").write_text("test repository\n")
+    subprocess.run(["git", "add", "README.md"], check=True)
+    subprocess.run(["git", "commit", "-qm", "initial"], check=True, capture_output=True)
+    local = Path(".machinist/runs/local")
+    local.mkdir(parents=True)
+    (local / "config.yaml").write_text(
+        "version: 1\n"
+        f"workspace:\n  root: {tmp_path / 'workshops'}\n"
+        "tests:\n  command: pytest\n"
+        "review:\n  enabled: true\n"
+        "github:\n  spec_source: local\n  manage_workflows: false\n"
+    )
+    config = load_config(local / "config.yaml")
+    workspace = LocalWorkspace(Path.cwd(), config.workspace)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    return (
+        workspace.provision("task-1-spec", "agent/task-1", head, attempt=1),
+        workspace.provision("task-2-execute", "agent/task-2", head, attempt=1),
+    )
+
+
+def test_clean_manages_local_task_workshops_without_root_config(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        first, second = _local_repository_with_workshops(tmp_path)
+
+        listed = runner.invoke(main, ["clean"])
+        assert listed.exit_code == 0, listed.output
+        assert "Found 2 workspace(s)" in listed.output
+        assert "clean --task T1" in listed.output
+
+        one = runner.invoke(main, ["clean", "--task", "T1", "--force"])
+        assert one.exit_code == 0, one.output
+        assert "T1" in one.output
+        assert not first.exists()
+        assert second.exists()
+
+        everything = runner.invoke(main, ["clean", "--all", "--force"])
+        assert everything.exit_code == 0, everything.output
+        assert not second.exists()
+
+
+def test_clean_refuses_an_actively_claimed_local_task(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "machinist.cli.TaskLifecycle.claim_held", lambda self, issue: issue == 2
+    )
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        first, second = _local_repository_with_workshops(tmp_path)
+
+        refused = runner.invoke(main, ["clean", "--task", "T2", "--force"])
+        assert refused.exit_code != 0
+        assert "T2" in refused.output and "claimed" in refused.output
+        assert second.exists()
+
+        everything = runner.invoke(main, ["clean", "--all", "--force"])
+        assert everything.exit_code != 0
+        assert "T2" in everything.output
+        assert second.exists()

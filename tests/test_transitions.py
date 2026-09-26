@@ -238,3 +238,48 @@ def test_describe_run_names_the_state_and_next_action():
 
     executed = describe_run(_record(RunStatus.SUCCEEDED, phase=Phase.EXECUTE))
     assert executed.next_action is None
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        {"baseline_report": {"success": False}},
+        {
+            "baseline_report": {"success": True},
+            "baseline_workshop_changes": ["uv.lock"],
+        },
+    ],
+)
+def test_local_baseline_failure_is_named_and_keeps_the_retry_action(tmp_path, evidence):
+    from machinist.local_tasks import LocalTaskStore
+    from machinist.transitions import classify_local_task
+
+    store = LocalTaskStore(tmp_path)
+    task = store.create("Intent", "Detailed intent", "main", "a" * 40, "agent/")
+    decision = classify_local_task(
+        task,
+        records={Phase.SPEC: record(Phase.SPEC, RunStatus.FAILED, evidence=evidence)},
+        claim_held=False,
+    )
+    assert decision.state == "baseline failed"
+    assert decision.next_action == "machinist retry --task T1 --phase spec"
+
+
+def test_local_spec_failure_after_a_passing_baseline_stays_spec_failed(tmp_path):
+    from machinist.local_tasks import LocalTaskStore
+    from machinist.transitions import classify_local_task
+
+    store = LocalTaskStore(tmp_path)
+    task = store.create("Intent", "Detailed intent", "main", "a" * 40, "agent/")
+    decision = classify_local_task(
+        task,
+        records={
+            Phase.SPEC: record(
+                Phase.SPEC,
+                RunStatus.FAILED,
+                evidence={"baseline_report": {"success": True}},
+            )
+        },
+        claim_held=False,
+    )
+    assert decision.state == "spec failed"

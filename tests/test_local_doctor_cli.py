@@ -88,3 +88,44 @@ def test_local_doctor_failure_json_has_no_human_remediation_suffix(monkeypatch):
     assert result.exit_code == 1, result.output
     assert json.loads(result.output)["ok"] is False
     assert "→ fix" not in result.output
+
+
+def test_plain_doctor_runs_local_readiness_when_no_root_config_exists(
+    monkeypatch, tmp_path
+):
+    calls = []
+
+    def local_readiness(root, *, run_gates):
+        calls.append(run_gates)
+        return DoctorReport((DoctorCheck(CheckLevel.PASS, "working tree", "clean"),))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("a repository without machinist.yaml has no GitHub setup")
+
+    monkeypatch.setattr(
+        "machinist.cli.run_local_doctor", local_readiness, raising=False
+    )
+    monkeypatch.setattr("machinist.cli.load_config", forbidden)
+    monkeypatch.setattr("machinist.cli.run_doctor", forbidden)
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(main, ["doctor"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [False]
+    assert "No machinist.yaml" in result.output
+    assert "machinist onboard" in result.output
+
+
+def test_plain_doctor_json_stays_clean_without_root_config(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "machinist.cli.run_local_doctor",
+        lambda root, *, run_gates: DoctorReport(()),
+        raising=False,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(main, ["doctor", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"ok": True, "checks": []}

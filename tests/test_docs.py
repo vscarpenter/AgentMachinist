@@ -603,7 +603,7 @@ def test_earlier_adrs_explain_the_local_integration_exception():
 def test_readme_lists_recovery_inspection_and_cleanup_commands():
     readme = _README_PATH.read_text()
     assert "`machinist inspect <issue> [--offline] [--json]`" in readme
-    assert r"`machinist clean [--issue <issue>\|--all]`" in readme
+    assert r"`machinist clean [--issue <issue>\|--task <Tn>\|--all]`" in readme
 
 
 def test_solo_operator_surfaces_and_advanced_config_are_documented():

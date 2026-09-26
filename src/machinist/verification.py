@@ -180,9 +180,16 @@ class VerificationFailed(VerificationError):
         )
         details = []
         for gate in self.failures:
-            evidence = gate.stderr_excerpt or gate.stdout_excerpt or gate.error
+            # Show both streams: a self-preparing runner writes setup lines to
+            # stderr while the test framework reports failures on stdout.
+            streams = [
+                _tail(text.strip(), 1_000)
+                for text in (gate.stderr_excerpt, gate.stdout_excerpt)
+                if text and text.strip()
+            ]
+            evidence = "\n".join(streams) or gate.error
             if evidence:
-                details.append(f"{gate.name}: {_tail(evidence.strip(), 1_000)}")
+                details.append(f"{gate.name}: {evidence}")
         message = f"verification gates blocked: {summary}"
         if details:
             message += "\n" + "\n".join(details)

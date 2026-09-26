@@ -678,3 +678,24 @@ def test_recovery_preserves_ignored_data_created_after_ref_advancement(
 
     assert saved.read_text() == "valuable new local data\n"
     assert (local_repo / "private").read_text() == "candidate\n"
+
+
+def test_lists_and_removes_only_owned_local_workshops(local_repo, tmp_path):
+    ws = workshop(local_repo, tmp_path)
+    head = git(local_repo, "rev-parse", "HEAD")
+    first = ws.provision("task-1-spec", "agent/task-1", head, attempt=1)
+    second = ws.provision("task-2-execute", "agent/task-2", head, attempt=1)
+    stranger = tmp_path / "workshops" / f"{local_repo.name}-task-9-spec-attempt-1"
+    stranger.mkdir()
+    (stranger / "keep.txt").write_text("not ours\n")
+
+    assert ws.list_workspaces() == [first, second]
+    assert ws.list_task_workspaces(2) == [second]
+
+    ws.remove_workspace(first, force=True)
+
+    assert not first.exists()
+    assert ws.list_workspaces() == [second]
+    assert (stranger / "keep.txt").read_text() == "not ours\n"
+    with pytest.raises(WorkspaceError, match="ownership"):
+        ws.remove_workspace(stranger, force=True)

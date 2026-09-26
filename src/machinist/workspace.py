@@ -620,6 +620,10 @@ class Workspace:
             raise WorkspaceError(
                 f"workspace {target} has no valid controller ownership marker"
             )
+        self._remove_owned_workspace(target, force=force)
+
+    def _remove_owned_workspace(self, target: Path, *, force: bool) -> None:
+        """Remove a Workshop whose ownership the caller has already verified."""
         self._assert_bound_custody(target)
 
         if self.config.strategy is WorkspaceStrategy.WORKTREE:

@@ -181,6 +181,33 @@ def test_baseline_gate_failure_stops_before_spec_harness(local):
     assert evidence["baseline_report"]["success"] is False
 
 
+def test_baseline_gate_failure_keeps_its_own_error_when_the_gate_writes_files(local):
+    # A runner such as `uv run` can create a lockfile and then fail its tests.
+    local.config.tests.command = (
+        f"{sys.executable} -c "
+        '\'open("generated.lock", "w").write("x"); raise SystemExit(7)\''
+    )
+    with pytest.raises(Exception, match="verification gates blocked"):
+        local.run(Phase.SPEC)
+    record = local.lifecycle.record(local.task.number, Phase.SPEC)
+    assert "verification gates blocked" in record.error
+    assert "read-only Workshop" not in record.error
+    assert local.harness.calls == []
+
+
+def test_baseline_gate_that_passes_but_creates_files_names_them(local):
+    local.config.tests.command = (
+        f'{sys.executable} -c \'open("generated.lock", "w").write("x")\''
+    )
+    with pytest.raises(LocalPhaseError, match="generated.lock"):
+        local.run(Phase.SPEC)
+    record = local.lifecycle.record(local.task.number, Phase.SPEC)
+    assert "Harness" not in record.error
+    assert "commit" in record.error
+    assert record.evidence["baseline_workshop_changes"] == ["generated.lock"]
+    assert local.harness.calls == []
+
+
 def _enable_repair(local):
     payload = local.config.model_dump(mode="json")
     payload["verification"]["repair"] = {"max_attempts": 1, "timeout_minutes": 10}

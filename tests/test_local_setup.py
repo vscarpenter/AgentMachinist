@@ -129,7 +129,11 @@ def test_existing_runtime_is_preserved_verbatim_and_ignores_later_root_defaults(
     "options", [{"harness_name": "codex"}, {"test_command": "other"}]
 )
 def test_conflicting_runtime_flags_point_to_preserved_local_config(repo, options):
+    from machinist.local_tasks import LocalTaskStore
+
     ensure_local_config(repo, test_command="pytest")
+    # Saved settings become fixed once a Task depends on them.
+    LocalTaskStore(repo).create("Intent", "Detailed intent", "main", "a" * 40, "agent/")
     before = local_path(repo).read_bytes()
     with pytest.raises(ConfigError) as error:
         ensure_local_config(repo, **options)
@@ -315,45 +319,67 @@ def test_find_repository_root_rejects_non_repository(tmp_path):
         find_repository_root(tmp_path)
 
 
+_PYTEST_PROJECT = '[project]\ndependencies=["pytest>=8"]\n'
+
+
 @pytest.mark.parametrize(
-    "files, expected",
+    "files, available, expected",
     [
-        (
-            {"pyproject.toml": '[project]\ndependencies=["pytest>=8"]\n'},
-            "python -m pytest",
-        ),
+        ({"pyproject.toml": _PYTEST_PROJECT}, {"uv", "python3"}, "uv run pytest"),
+        ({"pyproject.toml": _PYTEST_PROJECT}, {"python3"}, "python3 -m pytest"),
+        ({"pyproject.toml": _PYTEST_PROJECT}, set(), "python -m pytest"),
+        # A lockfile no longer chooses the runner; an installed uv does.
         (
             {"pyproject.toml": '[dependency-groups]\ndev=["pytest"]\n', "uv.lock": ""},
-            "uv run pytest",
+            {"python3"},
+            "python3 -m pytest",
         ),
         (
             {"pyproject.toml": "[tool.pytest.ini_options]\naddopts='-q'\n"},
-            "python -m pytest",
+            {"uv"},
+            "uv run pytest",
         ),
-        ({"package.json": json.dumps({"scripts": {"test": "vitest"}})}, "npm test"),
+        (
+            {"package.json": json.dumps({"scripts": {"test": "vitest"}})},
+            set(),
+            "npm test",
+        ),
         (
             {"package.json": '{"scripts":{"test":"vitest"}}', "bun.lock": ""},
+            set(),
             "bun run test",
         ),
         (
             {"package.json": '{"scripts":{"test":"vitest"}}', "pnpm-lock.yaml": ""},
+            set(),
             "pnpm test",
         ),
         (
             {"package.json": '{"scripts":{"test":"vitest"}}', "yarn.lock": ""},
+            set(),
             "yarn test",
         ),
-        ({"Cargo.toml": ""}, "cargo test"),
-        ({"go.mod": ""}, "go test ./..."),
-        ({"package.json": '{"scripts":{"test":"echo no test specified"}}'}, None),
-        ({"pyproject.toml": "tool = 'bad shape'\n"}, None),
-        ({"pyproject.toml": "bad[syntax", "package.json": "[]"}, None),
+        ({"Cargo.toml": ""}, set(), "cargo test"),
+        ({"go.mod": ""}, set(), "go test ./..."),
+        (
+            {"package.json": '{"scripts":{"test":"echo no test specified"}}'},
+            set(),
+            None,
+        ),
+        ({"pyproject.toml": "tool = 'bad shape'\n"}, set(), None),
+        ({"pyproject.toml": "bad[syntax", "package.json": "[]"}, set(), None),
     ],
 )
-def test_test_command_detection_uses_real_test_configuration(tmp_path, files, expected):
+def test_test_command_detection_uses_real_test_configuration(
+    tmp_path, files, available, expected
+):
     for name, content in files.items():
         (tmp_path / name).write_text(content)
-    assert detect_test_command(tmp_path) == expected
+
+    def which(command):
+        return f"/bin/{command}" if command in available else None
+
+    assert detect_test_command(tmp_path, which=which) == expected
 
 
 def test_setup_uses_detected_test_command(repo):
@@ -536,3 +562,24 @@ def test_selected_harness_replaces_different_phase_provider_preserving_phase_tim
     assert phase.extra_args == []
     assert phase.timeout_minutes == 45
     assert ensure_local_config(repo, harness_name="local-plugin") == config
+
+
+def test_flags_replace_saved_settings_until_a_task_exists(repo):
+    ensure_local_config(repo, test_command="pytest")
+
+    config = ensure_local_config(repo, test_command="uv run pytest")
+
+    assert config.tests.command == "uv run pytest"
+    assert "uv run pytest" in local_path(repo).read_text()
+    assert resolve_local_config(repo).tests.command == "uv run pytest"
+
+
+def test_flags_conflict_with_saved_settings_once_a_task_exists(repo):
+    from machinist.local_tasks import LocalTaskStore
+
+    ensure_local_config(repo, test_command="pytest")
+    LocalTaskStore(repo).create("Intent", "Detailed intent", "main", "a" * 40, "agent/")
+
+    with pytest.raises(ConfigError, match="conflicts with"):
+        ensure_local_config(repo, test_command="uv run pytest")
+    assert "command: pytest" in local_path(repo).read_text()

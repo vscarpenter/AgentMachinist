@@ -7,6 +7,7 @@ operator action without interpreting status strings themselves.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -41,6 +42,12 @@ def classify_local_task(
                 f"{phase.value} retryable", f"machinist continue {task.id}"
             )
         state = classify_run(record, claim_held=claim_held).state.value
+        if (
+            phase is Phase.SPEC
+            and record.status is RunStatus.FAILED
+            and _baseline_failed(record.evidence)
+        ):
+            state = "baseline failed"
         action = (
             f"machinist cancel --task {task.id}"
             if claim_held
@@ -97,6 +104,14 @@ def classify_local_task(
     return LocalTransitionDecision(
         "ready to integrate", f"machinist integrate {task.id}"
     )
+
+
+def _baseline_failed(evidence: Mapping[str, object]) -> bool:
+    """True when the Spec attempt stopped at baseline Verification, before any Harness."""
+    report = evidence.get("baseline_report")
+    if isinstance(report, dict) and report.get("success") is False:
+        return True
+    return bool(evidence.get("baseline_workshop_changes"))
 
 
 class PipelineState(StrEnum):
