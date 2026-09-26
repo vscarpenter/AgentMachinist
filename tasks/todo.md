@@ -1011,7 +1011,16 @@ No controller behavior, package version, push, or publication is included.
 - [x] Keep temporary fixture gates free of bytecode caches and explicitly
   separate captured streams on older Click. Preserve behavioral assertions and
   assert the export notice remains on stderr.
-- [ ] Complete CI on the corrected PR head, merge, and verify the live site.
+- [x] Complete CI on the corrected PR head, merge (PR #51, `c9f99fb`,
+  2026-09-18), and verify the live site. Verified 2026-09-26 against the
+  0.18.0 Pages build of `6a59af4`: all 28 tracked `docs/` files are served
+  byte-identical, the six HTML pages show 0.18.0 with no "unreleased" text
+  and no console errors, and all 22 in-page anchors resolve. Finding: three
+  Markdown links climb above `docs/` (the docs directory to `CHANGELOG.md`,
+  the short guide to `examples/first-task`, and two historical plans to the
+  changelog and this ledger). They resolve on GitHub and 404 on the site,
+  because Pages publishes only `docs/` and the repository link test resolves
+  against the tree rather than the published root.
 
 Resuming from here: PR #51 contains the implementation and documentation work.
 The package remains 0.17.1; this publication targets the documentation site.
