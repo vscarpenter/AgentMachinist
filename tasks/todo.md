@@ -1062,15 +1062,17 @@ list both showed 0.17.1 when this started.
   notes, and the documentation site pages.
 - [x] `bash scripts/verify.sh` green from the release candidate: 1688 passed,
   88% coverage, wheel and sdist built as 0.18.0 and smoke-tested.
-- [ ] Push `release/0.18.0`, open the release PR, wait for green required
-  checks, and merge.
-- [ ] `gh release create v0.18.0` with the changelog bullets as the body, then
-  confirm `https://pypi.org/pypi/agentmachinist/json` reports 0.18.0.
+- [x] Push `release/0.18.0`, open PR #55, wait for green required checks, and
+  merge (`6a59af4`, 2026-09-26 19:33 UTC). The merge commit's own CI run on
+  `main` passed all eleven jobs before the release was created.
+- [x] `gh release create v0.18.0` at `6a59af4` with the changelog bullets and
+  the upgrade block as the body. Release run 36268072049 passed build,
+  publish, verify-published, and release-assets. The PyPI version endpoint
+  reports 0.18.0 with the wheel and sdist, neither yanked. The project JSON
+  and simple index lag that endpoint by a few minutes.
 
-Resuming from here: the release prep commit is on `release/0.18.0` and nothing
-is pushed. The gate ran before this todo entry and two markdown reflows; the
-docs tests were rerun after them. Assumptions: 0.18.0 is a minor bump because
-`report --source` and `verification.repair` are new user-facing surface, and
-the documentation links the published 0.18.0 package before PyPI has it, which
-matches how 0.17.1 shipped. Blockers: pushing, opening the PR, merging, and
-creating the GitHub Release each need an explicit go-ahead.
+Resuming from here: 0.18.0 is published. This note lives on
+`docs/todo-ledger-0.18.0` until the next change's PR carries it, because
+`main` is PR-protected. Assumptions from the prep entry stand: 0.18.0 is a
+minor bump because `report --source` and `verification.repair` are new
+user-facing surface. No open work remains from this release.
