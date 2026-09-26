@@ -174,8 +174,10 @@ Once integration begins, start a new Task from the updated base instead.
 Local setup and the existing GitHub setup use separate configuration and run
 namespaces. `watch`, `queue`, `runs`, `inspect`, `explain`, and portfolio
 `status --all` retain their legacy scope and do not manage or aggregate `T1`
-records. Plain `doctor`, `config`, and `clean` follow the root `machinist.yaml`
-when it exists and the local workflow otherwise. Aggregate `report` reads both namespaces by
+records. Plain `doctor` and `config` follow the root `machinist.yaml` when it
+exists and the local workflow otherwise. `clean` covers issue Workshops and local
+Task Workshops whenever their configuration exists, so `clean --all` removes both
+kinds in a mixed checkout. Aggregate `report` reads both namespaces by
 default in the source checkout; `--source local` selects foreground Tasks without
 root configuration. See the [command and storage
 boundaries](local-workflow.md#command-and-storage-boundaries) before operating
