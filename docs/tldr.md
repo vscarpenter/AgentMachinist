@@ -31,8 +31,10 @@ origin, watcher, or root configuration file is required.
 ## Start one small Task
 
 Use a real test command for your project. Verification runs in an isolated
-checkout, so the command must prepare missing dependencies: for example,
-`uv run pytest` for a uv project or `npm ci && npm test` with a committed lockfile.
+checkout of committed files, so the command must prepare its own dependencies
+and must not leave new files behind: `uv run pytest` with a committed `uv.lock`,
+or `npm ci && npm test` with a committed lockfile. To try this on something
+disposable first, copy the [example project](../examples/first-task/README.md).
 
 ```sh
 machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
@@ -70,8 +72,9 @@ is optional. Local orchestration can still use a cloud model; see the
 
 ## If something stops
 
-Use `machinist status T1` and follow its next action. A failed Phase needs an
-explicit retry; inspect its Evidence first. [Recovery instructions](local-workflow.md#amend-or-recover)
+Use `machinist status T1`; it prints the error, the log directory, and the next
+action. A failed baseline needs a fixed verification command and a retry, or a
+committed baseline change and a new Task. [Recovery instructions](local-workflow.md#amend-or-recover)
 cover retries, fresh Workshops, and amendments requiring a new Approval.
 
 Once integration starts, amendments require a new Task. Rerun

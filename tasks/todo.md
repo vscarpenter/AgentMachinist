@@ -1032,7 +1032,19 @@ from `origin/main`.
   named; status shows error and logs; `baseline failed` state and guidance.
 - [x] Item 3: start checks preconditions before saving; flags replace unused
   saved settings; dirty-tree error lists paths.
-- [ ] Item 4: doctor, status, config, clean, and runs route locally without
+- [x] Item 4: doctor, status, config, clean, and runs route locally without
   `machinist.yaml`.
-- [ ] Item 5: `examples/first-task/` and guide links.
-- [ ] Docs, changelog, full verification, commits.
+- [x] Item 5: `examples/first-task/` and guide links.
+- [x] Docs, changelog, and lessons.
+- [x] Full suite green, item 4 and documentation commits, review page published.
+
+Resuming from here: items 1 through 4 and the example project are implemented
+with red/green tests. Items 1 to 3 are committed (`a01926f`); item 4, the
+example, and the documentation edits await the full-suite result before their
+two commits. Nothing is pushed and no PR is open. Assumptions: the branch is
+based on `origin/main`, not the unmerged pilot branch; `--harness` and
+`--test-cmd` replace saved local settings only while no Task exists; a Gate
+that leaves untracked files fails the baseline with a named-file error rather
+than being tolerated. The cheap wins from the review (progress lines, rehearse
+in the short guide, help regrouping, README restructure, abbreviated Approval
+SHAs, wording) remain open and are listed on the published review page.

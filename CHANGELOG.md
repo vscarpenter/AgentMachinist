@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Report baseline Verification failures truthfully in the local workflow. The
+  Gate's own error replaces the misleading read-only Workshop message, files a
+  Gate created are named, failure messages show both output streams, and
+  `status` prints the error, the log directory, and a `baseline failed` state
+  with both recoveries.
+- Detect `uv run pytest` when `uv` is installed and `python3 -m pytest`
+  otherwise; a lockfile no longer selects the runner.
+- Check the checkout before `start` saves local configuration, name pending
+  paths in the refusal, and let `--harness` and `--test-cmd` replace saved
+  settings until the first Task exists.
+- Route `doctor`, `status`, `config`, `clean`, and `runs` to the local workflow
+  when `machinist.yaml` is absent. `clean --task T1` removes one local Task's
+  retained Workshops.
+- Add `examples/first-task`, a disposable project for a first Task, linked from
+  the short guide and the README.
 - Simplify documentation navigation around the workflow diagram and a short
   first-Task guide. Add complete Markdown/web directories, group alternate
   formats and historical records, and retain existing document URLs.

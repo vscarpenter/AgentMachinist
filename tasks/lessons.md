@@ -51,3 +51,17 @@
 - When a review merges several findings into one card, keep a checklist of
   the individual findings: the card can be "done" while a small member of it
   is not.
+
+## First-run friction (2026-09-26)
+
+- A `finally` clause that asserts state replaces the exception already in
+  flight. The baseline Gate's real failure vanished behind a read-only Workshop
+  message for months because nothing tested a Gate that both fails and writes
+  a file. Assert custody on the success path, and on the failure path keep the
+  cause the user needs.
+- Walk the product as a stranger before trusting the docs. A fresh repository,
+  a stock macOS PATH, and a fake Harness found four first-ten-minute defects
+  that 1,900 unit tests and three documentation reviews had not.
+- A retry reuses the Task's original base commit by design, so a printed
+  "retry" next action is wrong advice after a baseline fix. When a state has
+  two recoveries, the receipt must name both.

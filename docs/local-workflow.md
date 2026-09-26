@@ -51,7 +51,8 @@ changes to the root file do not automatically propagate. Runtime files are
 excluded through Git's local exclude file. Setup preserves the root config and
 does not generate GitHub workflows, labels, or issue forms.
 
-To inspect or change these settings, target the local file explicitly:
+To inspect or change these settings, target the local file. Without a root
+`machinist.yaml`, the `config` commands default to it and `--path` is optional:
 
 ```sh
 machinist config show --path .machinist/runs/local/config.yaml
@@ -66,8 +67,9 @@ be combined. Local commands require at least one required Gate,
 `github.manage_workflows: false`, `telemetry.otlp_endpoint: null`, and an
 absolute Workshop root outside the repository. Generic config validation
 checks the shared schema; local commands also check these local constraints.
-Later `start --harness` or `--test-cmd` flags must agree with the saved settings;
-change the local file to change them. Changes to root `machinist.yaml`, including
+Until the first Task is recorded, `start --harness` and `--test-cmd` replace the
+saved settings. Afterwards they must agree with the saved values; change the
+local file to change them. Changes to root `machinist.yaml`, including
 this repository's workflow, format, lint, type, and coverage Gates, do not update
 an already saved local configuration.
 
@@ -75,11 +77,15 @@ The verification command must work in an isolated checkout of committed files.
 An existing `node_modules/`, `.venv/`, or other ignored dependency directory in
 your working repository is not copied into the Workshop. Use a command that
 prepares its environment, such as `npm ci && npm test` with a committed lockfile
-or `uv run pytest`. A prepared absolute interpreter is another option, provided
+or `uv run pytest` with a committed `uv.lock`. A command that leaves new files in
+the Workshop stops the Spec Phase before any Harness work, and the error names
+those files. A prepared absolute interpreter is another option, provided
 its dependencies are installed and tests import the Workshop's code.
 
 Before invoking the Spec Harness, the controller runs baseline verification in
-that isolated Workshop. A failing baseline stops before model work. If the
+that isolated Workshop. A failing baseline stops before model work, and
+`machinist status T1` reports `baseline failed` with the Gate's error and log
+directory. If the
 failure is a missing dependency or unsuitable command, edit the required Gate
 in `.machinist/runs/local/config.yaml` (`tests.command` or the corresponding
 `verification.gates` entry), prepare any external dependencies, then retry the
@@ -387,8 +393,9 @@ identity. See the
 for repair metrics, window semantics, and export behavior.
 
 Watcher queue windows, daily Task Run budgets, notifications, and the managed
-service do not govern foreground local Tasks. `clean` manages legacy Workshops;
-there is no local `clean --task` command. Local success cleanup follows
+service do not govern foreground local Tasks. `clean` lists both kinds of Workshop
+and works without a root `machinist.yaml`; `clean --task T1` removes one local
+Task's retained Workshops. Local success cleanup follows
 `workspace.cleanup`; retained failures should remain available for retry.
 
 ## Use it alone or with a small team

@@ -1,0 +1,13 @@
+[project]
+name = "first-task"
+version = "0.1.0"
+description = "A disposable project for a first AgentMachinist Task."
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+# Let tests import timezones.py when pytest runs from the Workshop root.
+pythonpath = ["."]

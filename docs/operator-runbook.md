@@ -99,9 +99,12 @@ The `tests.command` example applies to the single-Gate form; edit
 `verification.gates` when using named Gates. Shared schema validation does not
 replace the local constraints checked on load: required verification, Review
 enabled, local Spec source, managed workflows off, telemetry endpoint unset,
-and an absolute Workshop root outside the repository. Repair a baseline Gate
-failure here and run `machinist retry --task T1 --phase spec`. If the committed
-baseline itself needs a fix, commit it and start a new Task from the new base.
+and an absolute Workshop root outside the repository. `machinist status T1`
+reports a baseline Gate failure as `baseline failed` with the Gate's error and
+log directory. Repair the Gate here and run
+`machinist retry --task T1 --phase spec`. If the committed baseline itself
+needs a fix, commit it and start a new Task from the new base; a retry reuses
+the Task's original base commit.
 This repository's root configuration now uses ordered workflow, format, lint,
 type, and full-suite coverage Gates. Existing saved local settings retain their
 previous Gates until explicitly updated; packaging and the OS/Python CI matrix

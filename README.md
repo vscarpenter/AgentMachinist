@@ -114,9 +114,13 @@ requires a separately configured local provider.
 
 Verification runs in an isolated committed checkout; dependency folders from
 your working repository are not copied. Use a self-preparing command such as
-`npm ci && npm test` or `uv run pytest`. A failing baseline stops before the
-Spec Harness. Correct the Gate in `.machinist/runs/local/config.yaml` or its
-dependency setup, then run `machinist retry --task T1 --phase spec`.
+`npm ci && npm test` or `uv run pytest`, with its lockfile committed. A failing
+baseline stops before the Spec Harness, and `machinist status T1` shows the
+Gate's error and log directory. Correct the Gate in
+`.machinist/runs/local/config.yaml` or its dependency setup, then run
+`machinist retry --task T1 --phase spec`. If the committed baseline itself
+needs a fix, commit it and start a new Task. To try the loop on something
+disposable first, copy [examples/first-task](examples/first-task/README.md).
 
 **Available since 0.15.0:** `machinist doctor --local` is an optional
 readiness check using the same configuration resolution as first start or your
@@ -298,12 +302,12 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist init [--yes]` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--yes` hands-free, `--no-input` skips without auto-enabling test command). |
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
 | `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |
-| `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). |
+| `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). Without `machinist.yaml`, plain `doctor` runs the local readiness checks. |
 | `machinist doctor --local [--run-gates] [--json]` | Available since 0.15.0: optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |
-| `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration. |
+| `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration; without `machinist.yaml`, `--path` defaults to the saved local settings. |
 | `machinist task template --write\|--check` | Project or verify the sealed GitHub issue form. |
 | `machinist task new --title <title> [--body-file <path>] [--dispatch]` | Create a structured GitHub issue; preserve drafts on failure and dispatch only after lint passes. |
 | `machinist task lint <issue> [--json]` | Check objective, acceptance criteria, constraints, and verification readiness. |
@@ -327,7 +331,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist retry <issue> --phase execute --run [--resume\|--fresh]` | Reuse a retained workspace or start a fresh Execute attempt; fresh is the default. |
 | `machinist inspect <issue> [--offline] [--json]` | Show GitHub, workspace, and complete Task Run diagnostics. |
 | `machinist repo add\|remove\|list` | Maintain the optional local repository registry. |
-| `machinist clean [--issue <issue>\|--all]` | List or remove retained workspaces. |
+| `machinist clean [--issue <issue>\|--task <Tn>\|--all]` | List or remove retained Workshops for GitHub issues and local Tasks. |
 
 ## Documentation
 
