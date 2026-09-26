@@ -719,13 +719,54 @@ class LocalWorkspace:
             "controller_repository": str(self.repo_root),
         }
 
-    def _assert_owned(self, path: Path) -> None:
+    def _is_owned(self, path: Path) -> bool:
         raw = self._workspace._read_git_marker(path, "agentmachinist-owner.json")
         try:
-            valid = raw is not None and json.loads(raw) == self._owner()
+            return raw is not None and json.loads(raw) == self._owner()
         except (ValueError, TypeError):
-            valid = False
-        if not valid:
+            return False
+
+    def _assert_owned(self, path: Path) -> None:
+        if not self._is_owned(path):
             raise WorkspaceError(
                 "local Workshop has no valid controller ownership marker"
             )
+
+    def list_workspaces(self) -> list[Path]:
+        """Retained local Workshops that this controller checkout owns."""
+        root = self.config.resolved_root()
+        if not root.exists():
+            return []
+        prefix = f"{self.repo_root.name}-task-"
+        owned: list[Path] = []
+        for path in root.iterdir():
+            if path.is_symlink() or not path.is_dir():
+                continue
+            if not path.name.startswith(prefix):
+                continue
+            try:
+                if self._is_owned(path):
+                    owned.append(path.resolve())
+            except (OSError, WorkspaceError):
+                continue
+        return sorted(owned)
+
+    def list_task_workspaces(self, number: int) -> list[Path]:
+        """Every retained Workshop of one local Task, across its Phases."""
+        prefix = f"{self.repo_root.name}-task-{number}-"
+        return [path for path in self.list_workspaces() if path.name.startswith(prefix)]
+
+    def remove_workspace(self, path: Path, *, force: bool = False) -> None:
+        target = self._workspace.managed_path(path)
+        if not target.exists() and not target.is_symlink():
+            return
+        try:
+            owned = self._is_owned(target)
+        except WorkspaceError:
+            # A directory without readable Git metadata cannot prove ownership.
+            owned = False
+        if not owned:
+            raise WorkspaceError(
+                f"local Workshop {target} has no valid controller ownership marker"
+            )
+        self._workspace._remove_owned_workspace(target, force=force)

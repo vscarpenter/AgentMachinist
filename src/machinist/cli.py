@@ -85,10 +85,12 @@ from machinist.local_cli import (
     read_body_file,
     register_local_commands,
     retry_local,
+    validate_task_id,
 )
 from machinist.local_doctor import local_fix_hint_for_check_name, run_local_doctor
 from machinist.local_setup import detect_test_command, find_repository_root
 from machinist.local_tasks import LocalTask, LocalTaskError, LocalTaskStore
+from machinist.local_workspace import LocalWorkspace
 from machinist.managed_paths import (
     ManagedPathError,
     managed_file_exists,
@@ -348,6 +350,30 @@ def _setup_receipt_workflow_paths(
             ) from exc
         paths.update(removed_paths.intersection(result.stdout.split("\0")))
     return tuple(sorted(paths))
+
+
+def _root_config_present() -> bool:
+    """True when this checkout carries the GitHub-oriented root configuration."""
+    return Path("machinist.yaml").is_file()
+
+
+def _default_config_path() -> Path:
+    """Root machinist.yaml when present, otherwise the saved local settings."""
+    root = Path("machinist.yaml")
+    if root.is_file():
+        return root
+    try:
+        local = find_repository_root(Path.cwd()) / ".machinist/runs/local/config.yaml"
+    except ConfigError:
+        return root
+    return local if local.is_file() else root
+
+
+def _display_path(path: Path) -> Path:
+    try:
+        return path.relative_to(Path.cwd())
+    except ValueError:
+        return path
 
 
 def _repository_root(cwd: Path) -> Path:
@@ -1527,8 +1553,15 @@ def doctor(
     ctx: click.Context, as_json: bool, run_gates: bool, local_only: bool
 ) -> None:
     """Diagnose installation readiness; gate execution is opt-in."""
+    local_readiness = local_only or not _root_config_present()
     try:
-        if local_only:
+        if local_readiness:
+            if not local_only and not as_json:
+                click.echo(
+                    "No machinist.yaml in this checkout; checking local Task "
+                    "readiness. Run 'machinist onboard' for GitHub automation.",
+                    err=True,
+                )
             report = run_local_doctor(Path.cwd(), run_gates=run_gates)
         else:
             config = load_config()
@@ -1546,7 +1579,7 @@ def doctor(
         for check in report.checks:
             click.echo(f"{check.level.value:<4} {check.name:<28} {check.detail}")
         if not report.ok:
-            for hint in _doctor_fix_hints(report, local_only=local_only):
+            for hint in _doctor_fix_hints(report, local_only=local_readiness):
                 click.echo(hint)
     if not report.ok:
         ctx.exit(1)
@@ -1583,16 +1616,22 @@ def config_command() -> None:
     """Validate, inspect, and update machinist.yaml."""
 
 
+_CONFIG_PATH_HELP = (
+    "Config file; defaults to machinist.yaml, else the saved local settings."
+)
+
+
 @config_command.command("validate")
-@click.option("--path", type=click.Path(path_type=Path), default=Path("machinist.yaml"))
+@click.option("--path", type=click.Path(path_type=Path), help=_CONFIG_PATH_HELP)
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable result.")
-def config_validate(path: Path, as_json: bool) -> None:
+def config_validate(path: Path | None, as_json: bool) -> None:
     """Validate a config file without running a pipeline command."""
+    path = path or _default_config_path()
     result = validate_config(path)
     if as_json:
         click.echo(json.dumps(result.as_dict(), sort_keys=True))
     elif result.ok:
-        click.echo(f"{path} is valid.")
+        click.echo(f"{_display_path(path)} is valid.")
     else:
         assert result.error is not None
         click.echo(result.error.message, err=True)
@@ -1601,12 +1640,12 @@ def config_validate(path: Path, as_json: bool) -> None:
 
 
 @config_command.command("show")
-@click.option("--path", type=click.Path(path_type=Path), default=Path("machinist.yaml"))
+@click.option("--path", type=click.Path(path_type=Path), help=_CONFIG_PATH_HELP)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of YAML.")
-def config_show(path: Path, as_json: bool) -> None:
+def config_show(path: Path | None, as_json: bool) -> None:
     """Show the effective phase-resolved configuration."""
     try:
-        effective = show_effective(path)
+        effective = show_effective(path or _default_config_path())
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -1635,14 +1674,15 @@ def config_schema_command(output: Path | None) -> None:
 @config_command.command("set")
 @click.argument("key")
 @click.argument("value")
-@click.option("--path", type=click.Path(path_type=Path), default=Path("machinist.yaml"))
-def config_set(key: str, value: str, path: Path) -> None:
+@click.option("--path", type=click.Path(path_type=Path), help=_CONFIG_PATH_HELP)
+def config_set(key: str, value: str, path: Path | None) -> None:
     """Set a dotted value after full validation; rewrites canonical YAML."""
+    path = path or _default_config_path()
     try:
         set_config_value(key, value, path)
     except (ConfigError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"set {key} in {path} (comments were normalized)")
+    click.echo(f"set {key} in {_display_path(path)} (comments were normalized)")
 
 
 @main.command()
@@ -2517,60 +2557,119 @@ def queue_show(as_json: bool) -> None:
     help="Remove all workspaces for this repository.",
 )
 @click.option(
+    "--task", "task_id", help="Remove the Workshops for one local Task such as T1."
+)
+@click.option(
     "--force", is_flag=True, help="Force removal of uncommitted or dirty workspaces."
 )
-def clean(issue_number: int | None, all_workspaces: bool, force: bool) -> None:
+def clean(
+    issue_number: int | None, task_id: str | None, all_workspaces: bool, force: bool
+) -> None:
     """Remove retained or stale workspaces under workspace.root."""
+    if issue_number is not None and task_id is not None:
+        raise click.UsageError("--issue and --task cannot be combined")
     try:
-        config = load_config()
-        repo_root = Path.cwd()
-        ws = Workspace(repo_root=repo_root, config=config.workspace)
+        legacy_ws = None
+        if _root_config_present():
+            repo_root = Path.cwd()
+            legacy_ws = Workspace(repo_root=repo_root, config=load_config().workspace)
+        else:
+            repo_root = find_repository_root(Path.cwd())
+        local_ws = None
+        if (repo_root / ".machinist/runs/local/config.yaml").is_file():
+            local_ws = LocalWorkspace(repo_root, load_local_config(repo_root).workspace)
+        if legacy_ws is None and local_ws is None:
+            raise ConfigError(
+                "no machinist.yaml or saved local configuration here; run "
+                "'machinist start' or 'machinist onboard' first"
+            )
         lifecycle = TaskLifecycle(repo_root / ".machinist/runs")
+        local_lifecycle = TaskLifecycle(
+            repo_root / ".machinist/runs/local", repo_root=repo_root
+        )
+
+        if task_id is not None:
+            validate_task_id(task_id)
+            number = int(task_id[1:])
+            if local_ws is None:
+                raise ConfigError(
+                    "local Task Workshops need saved local configuration; "
+                    "run 'machinist start' first"
+                )
+            if local_lifecycle.claim_held(number):
+                raise LifecycleError(
+                    f"local Task {task_id} is actively claimed; refusing to remove "
+                    "its Workshops"
+                )
+            targets = local_ws.list_task_workspaces(number)
+            if not targets:
+                click.echo(f"No workspace found for local Task {task_id}.")
+                return
+            for target in targets:
+                local_ws.remove_workspace(target, force=force)
+                click.echo(f"Removed workspace for {task_id} ({target}).")
+            return
 
         if issue_number is not None:
+            if legacy_ws is None:
+                raise ConfigError(
+                    "issue Workshops need machinist.yaml; run 'machinist onboard' first"
+                )
             if lifecycle.claim_held(issue_number):
                 raise LifecycleError(
                     f"issue #{issue_number} is actively claimed; refusing to remove its Workshop"
                 )
-            targets = ws.list_task_workspaces(f"issue-{issue_number}")
+            targets = legacy_ws.list_task_workspaces(f"issue-{issue_number}")
             if not targets:
-                target = ws.workspace_for_task(f"issue-{issue_number}")
+                target = legacy_ws.workspace_for_task(f"issue-{issue_number}")
                 click.echo(f"No workspace found for issue #{issue_number} ({target}).")
                 return
             for target in targets:
-                ws.remove_workspace(target, force=force)
+                legacy_ws.remove_workspace(target, force=force)
                 click.echo(f"Removed workspace for issue #{issue_number} ({target}).")
             return
 
-        workspaces = ws.list_workspaces()
-        if not workspaces:
+        # Each Workshop is removed by the Workspace kind that owns its marker.
+        owned: list[tuple[str, Path]] = []
+        if legacy_ws is not None:
+            owned.extend(("issue", path) for path in legacy_ws.list_workspaces())
+        if local_ws is not None:
+            owned.extend(("task", path) for path in local_ws.list_workspaces())
+        if not owned:
             click.echo("No workspaces found for this repository.")
             return
 
         if all_workspaces:
-            claimed = [
-                number
-                for path in workspaces
-                if (number := _issue_from_workspace_path(repo_root, path)) is not None
-                and lifecycle.claim_held(number)
-            ]
+            claimed: set[str] = set()
+            for kind, path in owned:
+                if kind == "issue":
+                    number = _issue_from_workspace_path(repo_root, path)
+                    if number is not None and lifecycle.claim_held(number):
+                        claimed.add(f"#{number}")
+                else:
+                    number = _task_from_workspace_path(repo_root, path)
+                    if number is not None and local_lifecycle.claim_held(number):
+                        claimed.add(f"T{number}")
             if claimed:
-                joined = ", ".join(f"#{number}" for number in sorted(set(claimed)))
                 raise LifecycleError(
-                    f"active Task Claims prevent cleanup for issue(s) {joined}"
+                    "active Task Claims prevent cleanup for "
+                    + ", ".join(sorted(claimed))
                 )
-            for path in workspaces:
-                ws.remove_workspace(path, force=force)
+            for kind, path in owned:
+                owner = legacy_ws if kind == "issue" else local_ws
+                assert owner is not None
+                owner.remove_workspace(path, force=force)
                 click.echo(f"Removed {path}")
-            click.echo(f"Cleaned {len(workspaces)} workspace(s).")
+            click.echo(f"Cleaned {len(owned)} workspace(s).")
             return
 
-        click.echo(f"Found {len(workspaces)} workspace(s) for this repository:")
-        for path in workspaces:
+        click.echo(f"Found {len(owned)} workspace(s) for this repository:")
+        for _kind, path in owned:
             click.echo(f"  {path}")
         click.echo(
-            "\nUse 'machinist clean --all' to remove all or "
-            "'machinist clean --issue <n>' for one."
+            "\nUse 'machinist clean --all' to remove all, "
+            "'machinist clean --issue <n>' for one issue, or "
+            "'machinist clean --task T1' for one local Task."
         )
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
@@ -2581,6 +2680,14 @@ def _issue_from_workspace_path(repo_root: Path, path: Path) -> int | None:
     if not path.name.startswith(prefix):
         return None
     tail = path.name.removeprefix(prefix).split("-attempt-", 1)[0]
+    return int(tail) if tail.isdigit() else None
+
+
+def _task_from_workspace_path(repo_root: Path, path: Path) -> int | None:
+    prefix = f"{repo_root.name}-task-"
+    if not path.name.startswith(prefix):
+        return None
+    tail = path.name.removeprefix(prefix).split("-", 1)[0]
     return int(tail) if tail.isdigit() else None
 
 
@@ -2754,6 +2861,14 @@ def status(
     if task_id is not None or (not all_repositories and has_local_configuration()):
         local_status(
             task_id, as_json=as_json, watch=watch_status, interval=status_interval
+        )
+        return
+    if not (local_only or all_repositories or watch_status) and not (
+        _root_config_present()
+    ):
+        click.echo(
+            "No local Tasks. Start one with 'machinist start OBJECTIVE' in a Git "
+            "repository. For GitHub automation, run 'machinist onboard'."
         )
         return
     if watch_status:
@@ -2977,6 +3092,10 @@ def runs_command(issue_number: int | None, as_json: bool) -> None:
         return
     for line in summarize_run_report(report, lifecycle=lifecycle):
         click.echo(line)
+    if has_local_configuration():
+        click.echo(
+            "This lists GitHub issue Task Runs. For local Tasks, use 'machinist status'."
+        )
 
 
 def _github_issue_source(github, issue_number: int) -> dict:
