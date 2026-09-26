@@ -12,8 +12,8 @@ This is an operating reference, not a policy engine. AgentMachinist checks the
 items under [Enforced controls](#enforced-controls). Everything under
 [Advisory controls](#advisory-controls) depends on you.
 
-The published baseline is 0.17.1. Bounded Execute repair described below is an
-unreleased source-checkout addition.
+The published baseline is 0.18.0, which includes the bounded Execute repair
+described below.
 
 ## What a valid Approval covers
 

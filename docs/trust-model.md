@@ -4,8 +4,8 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-The published baseline is AgentMachinist 0.17.1. Bounded Execute repair and
-combined local/legacy reporting below are unreleased source-checkout additions.
+The published baseline is AgentMachinist 0.18.0, which added bounded Execute
+repair and combined local/legacy reporting.
 Local readiness and bounded diagnostic rendering were introduced in 0.15.0.
 
 ## Trusted inputs and principals

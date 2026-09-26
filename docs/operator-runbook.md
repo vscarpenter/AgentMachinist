@@ -1,14 +1,14 @@
 # Operator runbook
 
-This runbook describes AgentMachinist 0.17.1, including the foreground
+This runbook describes AgentMachinist 0.18.0, including the foreground
 local workflow, optional GitLab intake/publication, and the readiness,
 remote-base, and diagnostic behavior introduced in 0.15.0.
 Install with `uv tool install agentmachinist`, or upgrade with
 `uv tool upgrade agentmachinist`. See the
 [installation instructions](getting-started.md#install) for other setups.
 
-The bounded repair and combined reporting options described below are
-unreleased additions available from the source checkout.
+Release 0.18.0 adds the bounded repair and combined reporting options
+described below.
 
 ## Local foreground operation
 

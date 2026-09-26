@@ -9,7 +9,7 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This guide describes AgentMachinist 0.17.1. Install the published package with
+This guide describes AgentMachinist 0.18.0. Install the published package with
 `uv tool install agentmachinist`, or upgrade an existing tool installation with
 `uv tool upgrade agentmachinist`; then run the commands below in the repository
 you want to change. Optional local readiness was introduced in 0.15.0. The
@@ -18,9 +18,8 @@ existing
 remains available. See [installation](getting-started.md#install) for an optional
 editable source setup.
 
-Bounded Execute repair and combined local/legacy reporting, described below,
-are unreleased source-checkout additions and are not in the published 0.17.1
-package.
+Release 0.18.0 adds bounded Execute repair and combined local/legacy
+reporting, described below.
 
 ## Complete one Task
 
@@ -118,7 +117,7 @@ machinist status T1
 machinist status T1 --json
 ```
 
-Optional bounded repair is available in the source checkout and is unreleased.
+Release 0.18.0 adds optional bounded repair.
 Set `verification.repair.max_attempts: 1` in the saved local configuration to
 permit one additional Harness invocation after an ordinary required Gate failure
 inside the active Execute run. It defaults to `0`. The extra invocation and all
@@ -361,7 +360,7 @@ Local Tasks and legacy issue numbers have separate records and recovery paths:
 | Approve | `approve --task T1 --spec-sha <sha>` continues in foreground | `approve --issue 42` or `--pr 8` requests trusted workflow Evidence; wait for `explain 42` to report `approved` before the first Execute |
 | Resume | `continue T1`; failure requires `retry --task T1 --phase execute` | `retry 42 --phase execute --run --resume` explicitly reuses edits |
 | Inspect | `status T1`, `status T1 --json`, printed report | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42` for Evidence |
-| Aggregate (unreleased) | `report --source local` | `report --source legacy`; the default `report` combines both namespaces |
+| Aggregate | `report --source local` | `report --source legacy`; the default `report` combines both namespaces |
 | Configure | `config show`, which defaults to `.machinist/runs/local/config.yaml` when no root `machinist.yaml` exists; `--path` selects it explicitly | `config show` reads `machinist.yaml` when present |
 | Schedule | Foreground commands | `watch`, `queue`, and macOS `service` |
 | Deliver | Explicit `integrate T1` and/or `publish T1 --provider gitlab` (or `github`) | Ready GitHub PR; human remote merge |
@@ -374,8 +373,8 @@ runtime records for recovery; do not commit them or edit Task JSON manually.
 Plain `doctor` is the root GitHub setup preflight when `machinist.yaml` exists
 and runs local readiness otherwise; `doctor --local`, available since 0.15.0,
 checks local readiness explicitly as described above. `runs`, `inspect`, `explain`, and portfolio `status --all` read the legacy
-issue-run namespace under `.machinist/runs/`. In the source checkout, aggregate
-`report` reads both namespaces by default; use
+issue-run namespace under `.machinist/runs/`. Aggregate `report` reads both
+namespaces by default; use
 `machinist report --source local --since 30d --json`
 for foreground Tasks only, without root configuration or forge access.
 `status --local` is an offline view of legacy issue runs only when no local

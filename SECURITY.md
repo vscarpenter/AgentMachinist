@@ -28,9 +28,8 @@ and release automation maintained in this repository.
 Task bodies, imported issues, PR/MR branches, and Verification failure output
 are untrusted input. The repository owner, default branch, local configuration
 and Verification commands, installed Harness, and the local user account
-launching AgentMachinist are trusted inputs. Bounded Execute repair and combined
-local/legacy reporting are unreleased source-checkout additions; the published
-baseline is 0.17.1.
+launching AgentMachinist are trusted inputs. The published baseline is 0.18.0,
+which includes bounded Execute repair and combined local/legacy reporting.
 
 ## Security Invariants
 
