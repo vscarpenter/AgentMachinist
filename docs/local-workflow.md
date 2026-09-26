@@ -208,8 +208,9 @@ machinist doctor --local --run-gates
 This uses the existing Verification engine in your **controller checkout**;
 project commands can write files or download dependencies. It does not prove
 the isolated Workshop baseline, which `start` still checks before Spec work.
-Resolve reported readiness failures before running Gates. Plain `doctor`
-continues to check the existing GitHub setup.
+Resolve reported readiness failures before running Gates. Plain `doctor` runs
+these same checks when no root `machinist.yaml` exists and checks the existing
+GitHub setup otherwise.
 
 ## Provide existing context
 
@@ -361,7 +362,7 @@ Local Tasks and legacy issue numbers have separate records and recovery paths:
 | Resume | `continue T1`; failure requires `retry --task T1 --phase execute` | `retry 42 --phase execute --run --resume` explicitly reuses edits |
 | Inspect | `status T1`, `status T1 --json`, printed report | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42` for Evidence |
 | Aggregate (unreleased) | `report --source local` | `report --source legacy`; the default `report` combines both namespaces |
-| Configure | `config show --path .machinist/runs/local/config.yaml` | `config show` reads `machinist.yaml` by default |
+| Configure | `config show`, which defaults to `.machinist/runs/local/config.yaml` when no root `machinist.yaml` exists; `--path` selects it explicitly | `config show` reads `machinist.yaml` when present |
 | Schedule | Foreground commands | `watch`, `queue`, and macOS `service` |
 | Deliver | Explicit `integrate T1` and/or `publish T1 --provider gitlab` (or `github`) | Ready GitHub PR; human remote merge |
 
@@ -370,9 +371,9 @@ Local records, Phase history, configuration, and reports live under
 The Spec itself is committed at `.machinist/specs/task-1-spec.md`. Preserve
 runtime records for recovery; do not commit them or edit Task JSON manually.
 
-Plain `doctor` remains the root GitHub setup preflight;
-`doctor --local`, available since 0.15.0, checks local readiness as described
-above. `runs`, `inspect`, `explain`, and portfolio `status --all` read the legacy
+Plain `doctor` is the root GitHub setup preflight when `machinist.yaml` exists
+and runs local readiness otherwise; `doctor --local`, available since 0.15.0,
+checks local readiness explicitly as described above. `runs`, `inspect`, `explain`, and portfolio `status --all` read the legacy
 issue-run namespace under `.machinist/runs/`. In the source checkout, aggregate
 `report` reads both namespaces by default; use
 `machinist report --source local --since 30d --json`

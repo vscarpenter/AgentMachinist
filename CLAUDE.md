@@ -55,7 +55,8 @@ never-merges rule only for that human-directed local operation.
   verification discovery, and local Git exclusion only during setup.
 - `local_doctor.py` — optional `doctor --local` checks Git, resolved local
   configuration, Harness probes, and verification availability without forge
-  setup, update checks, or runtime writes. `--run-gates` explicitly executes
+  setup, update checks, or runtime writes; plain `doctor` runs the same checks
+  when no root `machinist.yaml` exists. `--run-gates` explicitly executes
   Verification in the controller checkout, not an isolated Workshop.
 - `local_workflow.py` — guided local Spec, exact-SHA Approval, Execute, Review,
   amendment/recovery, and explicit integration. Task Run construction still
@@ -63,7 +64,8 @@ never-merges rule only for that human-directed local operation.
 - `local_workspace.py` — Workshops provisioned from local commits without
   requiring a forge (worktrees share repository remotes; clones remove origin),
   durable candidate refs, Git custody, explicit clean fast-forward integration,
-  and leased publication Git.
+  leased publication Git, and the listing and removal of local Task Workshops
+  behind `clean`.
 - `publication.py` — verifies local Approval and exact successful Phase
   Evidence, binds origin/forge identity, persists push intent, and reconciles
   optional publication independently from Harness and Verification work.
@@ -74,9 +76,10 @@ never-merges rule only for that human-directed local operation.
   `sync-workflows [--check]`, `spec`, `approve`, `run [--force]`,
   `review`, `amend`, `watch [--once -v --interval]`,
   `retry [--phase --run]`, `status [-v]`, `update-check [--json --timeout]`,
-  `clean [--issue --all --force]`, `inspect`. Ergonomics worth knowing:
+  `clean [--issue --task --all --force]`, `inspect`. Ergonomics worth knowing:
   `init` auto-detects the test gate from the project manifest
-  (`_detect_test_command`: pyproject/uv.lock → `uv run pytest`, package.json
+  (`_detect_test_command`: pyproject with pytest → `uv run pytest` when `uv`
+  is on PATH, else `python3 -m pytest`; package.json
   → `npm test`, Cargo.toml → `cargo test`, go.mod → `go test ./...`);
   `approve` takes exactly one of `--issue <n>` (resolved through the
   `<branch_prefix>issue-<n>` branch) or `--pr <n>` for legacy GitHub. Local

@@ -85,7 +85,8 @@ existing doctor report contract. It creates no Task, Claim, Workshop, runtime
 file, configuration, exclusion, or ref and makes no model, forge, or update
 request by default. Explicit `--run-gates` reuses `verification.py` in the
 controller checkout, where commands may write or download; this does not prove
-the isolated baseline. Plain `doctor` keeps its GitHub setup behavior.
+the isolated baseline. Plain `doctor` runs the same local readiness checks when
+no root `machinist.yaml` exists, and keeps its GitHub setup behavior otherwise.
 
 The controller keeps one authoritative implementation for each policy that can
 change custody, spend Harness time, or interpret durable state:
@@ -362,11 +363,14 @@ The optional repository registry contains canonical local roots only.
 independently; one missing or corrupt repository does not erase healthy
 repository results. It does not include foreground `T1` records. A checkout with
 local configuration routes default `status` to local Tasks; `runs`, `inspect`,
-`explain`, plain `doctor`, and `clean` retain legacy scope. Aggregate `report`
-selects both history namespaces by default or one through `--source`.
-`doctor --local` selects readiness for the local workflow.
-`config` defaults to root `machinist.yaml`, with `--path` required to inspect or
-change the foreground local configuration.
+and `explain` retain legacy scope, and `runs` points at `status` for local
+Tasks. `clean` lists issue and local Task Workshops together and removes one
+local Task's Workshops through `--task`. Aggregate `report` selects both
+history namespaces by default or one through `--source`. `doctor --local`
+selects readiness for the local workflow, and plain `doctor` does the same
+without a root `machinist.yaml`. `config` defaults to root `machinist.yaml` when
+it exists, otherwise to the saved local configuration; `--path` selects either
+explicitly.
 
 On macOS, the managed service is one per-repository LaunchAgent. It schedules
 `machinist watch --once`, sets the repository working directory, uses an

@@ -128,7 +128,8 @@ saved local settings. It checks Git, Harness probes, and verification command
 availability without creating a Task or requiring a forge. Add `--json` for
 structured output. Add `--run-gates` only to execute project commands in your
 current checkout; this does not prove dependencies are ready in a fresh Workshop.
-Plain `machinist doctor` retains its GitHub setup checks.
+Plain `machinist doctor` runs these local checks when no `machinist.yaml`
+exists and its GitHub setup checks otherwise.
 
 You can publish the same reviewed candidate when collaboration is useful:
 

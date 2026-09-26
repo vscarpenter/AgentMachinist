@@ -138,11 +138,14 @@ this local journey, even when legacy GitHub settings disabled Review.
 The command must work from the Workshop's isolated committed checkout. Ignored
 dependency folders such as `node_modules/` and `.venv/` are not copied from your
 working repository. Commands such as `npm ci && npm test` or `uv run pytest`
-can prepare that environment. Baseline verification runs before the Spec
-Harness; on dependency or command failure, correct the required Gate in
-`.machinist/runs/local/config.yaml` and retry with
-`machinist retry --task T1 --phase spec`. See the local workflow guide for
-prepared-interpreter and changed-baseline cases.
+can prepare that environment; commit their lockfiles, because a Gate that
+leaves new files in the Workshop stops the Spec Phase and names them. Baseline
+verification runs before the Spec Harness. On failure, `machinist status T1`
+reports `baseline failed` with the Gate's error and log directory. Correct the
+required Gate in `.machinist/runs/local/config.yaml` and retry with
+`machinist retry --task T1 --phase spec`, or commit a baseline change and
+start a new Task. See the local workflow guide for prepared-interpreter and
+changed-baseline cases.
 
 Integration is explicitly requested and requires the clean expected base and
 exact reviewed candidate to permit a fast-forward. It does not push or merge
@@ -169,9 +172,12 @@ Task with corrected intent; local amendment cannot revise that initial Spec.
 Once integration begins, start a new Task from the updated base instead.
 
 Local setup and the existing GitHub setup use separate configuration and run
-namespaces. Plain `doctor`, `watch`, `queue`, `runs`, `inspect`, `explain`,
-`clean`, and portfolio `status --all` retain their legacy scope. They do not
-manage or aggregate `T1` records. Aggregate `report` reads both namespaces by
+namespaces. `watch`, `queue`, `runs`, `inspect`, `explain`, and portfolio
+`status --all` retain their legacy scope and do not manage or aggregate `T1`
+records. Plain `doctor` and `config` follow the root `machinist.yaml` when it
+exists and the local workflow otherwise. `clean` covers issue Workshops and local
+Task Workshops whenever their configuration exists, so `clean --all` removes both
+kinds in a mixed checkout. Aggregate `report` reads both namespaces by
 default in the source checkout; `--source local` selects foreground Tasks without
 root configuration. See the [command and storage
 boundaries](local-workflow.md#command-and-storage-boundaries) before operating
@@ -1159,7 +1165,7 @@ For a foreground Task, start with `machinist status T1`; follow its printed
 `Next:` command. Use `machinist config show --path .machinist/runs/local/config.yaml` to
 inspect the local settings and the [local recovery guide](local-workflow.md#amend-or-recover)
 for retry, amendment, integration, or publication problems. Plain `doctor`
-checks GitHub setup.
+checks GitHub setup when `machinist.yaml` exists and local readiness otherwise.
 
 **New in 0.15.0:** optional local readiness is available with
 `machinist doctor --local` or `machinist doctor --local --json`. It adds no
@@ -1200,6 +1206,7 @@ Common states and responses:
 | `spec running` / `execute running` / `review running` | AgentMachinist holds the Claim; `status`/`runs` show its current named stage and elapsed time. |
 | `spec interrupted` / `execute interrupted` / `review interrupted` | No process holds the recorded Claim; run the exact `Next:` retry command. |
 | `spec failed` / `execute failed` / `review failed` | Inspect the retained Evidence, fix the cause, then use the displayed retry command. |
+| `baseline failed` | A local Spec stopped before any Harness work. Fix the verification command and retry, or commit a baseline change and start a new Task. |
 | `spec cancelled` / `execute cancelled` / `review cancelled` | Clear or replace the cancellation request before retrying. |
 | `spec abandoned` / `execute abandoned` / `review abandoned` | The operator ended this lifecycle; retry only after deciding it should resume. |
 | `spec closed` | The Spec PR is closed; revise the Task intent before starting another Spec. |
@@ -1207,7 +1214,7 @@ Common states and responses:
 | Failed Execute run should start clean | Run `machinist retry <issue> --phase execute --run --fresh`. Omitting both recovery flags also selects a fresh attempt. |
 | Task should not start again | Run `machinist cancel <issue> --reason "..."`; clear it directly or explicitly retry only when dispatch is safe. |
 | Queue or issue is intentionally waiting | Run `machinist queue show`; use `queue resume` or `queue allow <issue>` as appropriate. |
-| Workspace already exists | Inspect it first, or prune it with `machinist clean --issue <issue>` or `machinist clean --all`. |
+| Workspace already exists | Inspect it first, or prune it with `machinist clean --issue <issue>`, `machinist clean --task <Tn>`, or `machinist clean --all`. |
 | Remote base fetch fails | Confirm origin and the repository's current default branch; a new remote Task will not use a stale tracking ref for a deleted branch. |
 | Managed workflow drift | `watch` and `update-check` report it. Run `machinist sync-workflows`, inspect, commit, and push. |
 | Configuration is unclear | Run `machinist config validate` and `machinist config show`; neither starts a Task. |

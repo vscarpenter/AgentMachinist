@@ -171,11 +171,13 @@ reading `.machinist/runs/` issue records. Aggregate `report` reads both local an
 legacy history by default; `--source local` or `--source legacy` selects one. `status --local` reads legacy records only when local configuration is
 absent. Use `runs` and `inspect` for legacy Evidence in a mixed checkout.
 
-Plain `doctor` remains a GitHub setup preflight; `doctor --local`
-checks local readiness. `watch`, `queue`, service
-scheduling, admission budgets, and notifications belong to the legacy workflow;
-they do not govern foreground Tasks. `clean` manages legacy Workshops and has
-no `--task` selector. Local success cleanup follows `workspace.cleanup`; keep
+Plain `doctor` is a GitHub setup preflight when `machinist.yaml` exists and
+runs local readiness otherwise; `doctor --local` always checks local readiness.
+`watch`, `queue`, service scheduling, admission budgets, and notifications
+belong to the legacy workflow; they do not govern foreground Tasks. `clean`
+lists issue and local Task Workshops together, and `clean --task T1` removes
+one local Task's retained Workshops. Local success cleanup follows
+`workspace.cleanup`; keep
 failed local Workshops until you have selected a recovery action.
 
 The remaining sections describe the legacy GitHub workflow unless explicitly
@@ -553,12 +555,14 @@ telemetry, the test-deletion guard, notifications, admission budgets, and change
 
 ## Legacy Workshop cleanup
 
-These commands select legacy issue Workshops, not foreground local Workshops.
-Inspect before deleting. You can list and prune managed workspaces directly:
+`clean` lists issue Workshops and local Task Workshops together and works
+without a root `machinist.yaml`. Inspect before deleting. You can list and
+prune managed workspaces directly:
 
 ```sh
 machinist clean
 machinist clean --issue 42
+machinist clean --task T1
 machinist clean --all
 ```
 
