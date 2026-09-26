@@ -458,3 +458,22 @@ def _gate(
         required=required,
         mutation_policy=mutation,
     )
+
+
+def test_failure_message_keeps_stdout_when_stderr_is_only_setup_noise(tmp_path):
+    # pytest reports on stdout; a self-preparing runner such as uv writes
+    # its own setup lines to stderr, which used to hide the real failure.
+    script = (
+        "import sys; print('E   ModuleNotFoundError: No module named demo'); "
+        "print('Installed 5 packages', file=sys.stderr); sys.exit(2)"
+    )
+    gate = _gate(
+        "tests", f"{sys.executable} -c {shlex.quote(script)}", mutation="allow"
+    )
+
+    with pytest.raises(VerificationFailed) as excinfo:
+        run_verification_gates(tmp_path, [gate], log_dir=tmp_path / "logs")
+
+    message = str(excinfo.value)
+    assert "Installed 5 packages" in message
+    assert "ModuleNotFoundError: No module named demo" in message

@@ -13,7 +13,7 @@ from machinist.cli import main
 from machinist.config import MachinistConfig
 from machinist.forge import ExternalTask
 from machinist.local_tasks import LocalTaskError
-from machinist.local_workflow import LocalWorkflow
+from machinist.local_workflow import LocalWorkflow, LocalWorkflowError
 from machinist.managed_paths import ManagedPathError
 from machinist.phases.execute import ExecutePhaseError
 from machinist.phases.local import LocalPhaseError
@@ -39,6 +39,9 @@ def local_cli(monkeypatch, tmp_path):
         def origin(self):
             events.append(("origin",))
             return "git@gitlab.example:team/subgroup/project.git"
+
+        def require_clean_base(self):
+            return "main"
 
         def start(self, title, body="", **kwargs):
             events.append(("start", title, body, kwargs))
@@ -88,6 +91,9 @@ def local_cli(monkeypatch, tmp_path):
     workflow = Workflow()
     monkeypatch.setattr(
         "machinist.local_cli.find_repository_root", lambda cwd: tmp_path
+    )
+    monkeypatch.setattr(
+        "machinist.local_cli.resolve_local_config", lambda *a, **k: MachinistConfig()
     )
     monkeypatch.setattr(
         "machinist.local_cli.ensure_local_config", lambda *a, **k: MachinistConfig()
@@ -543,6 +549,9 @@ def test_real_foreground_workflow_preserves_checkout_until_explicit_integration(
     harness.config = config.harness
     monkeypatch.chdir(root)
     monkeypatch.setattr(
+        "machinist.local_cli.resolve_local_config", lambda *a, **k: config
+    )
+    monkeypatch.setattr(
         "machinist.local_cli.ensure_local_config", lambda *a, **k: config
     )
     monkeypatch.setattr("machinist.local_cli.load_local_config", lambda *a, **k: config)
@@ -581,3 +590,76 @@ def test_real_foreground_workflow_preserves_checkout_until_explicit_integration(
     assert git("status", "--porcelain") == ""
     assert git("remote") == ""
     assert "return 2" in (root / "feature.py").read_text()
+
+
+def test_status_renders_baseline_failure_error_logs_and_both_recoveries(local_cli):
+    local_cli.workflow.status = lambda task_id: {
+        "id": task_id,
+        "title": local_cli.task.title,
+        "state": "baseline failed",
+        "spec_sha": None,
+        "spec": None,
+        "candidate_sha": None,
+        "report": None,
+        "next_action": "machinist retry --task T1 --phase spec",
+        "error": "verification gates blocked: tests (failed)\ntests: E ImportError",
+        "log_dir": "/repo/.machinist/runs/local/logs/issue-1/spec/attempt-1",
+    }
+
+    result = CliRunner().invoke(main, ["status", "T1"])
+
+    assert result.exit_code == 0, result.output
+    assert "Error: verification gates blocked: tests (failed)" in result.output
+    assert "tests: E ImportError" in result.output
+    assert (
+        "Logs: /repo/.machinist/runs/local/logs/issue-1/spec/attempt-1" in result.output
+    )
+    assert "before any Harness work" in result.output
+    assert "start a new Task" in result.output
+    assert "Next: machinist retry --task T1 --phase spec" in result.output
+
+
+def test_start_checks_the_checkout_before_saving_local_configuration(
+    local_cli, monkeypatch
+):
+    saved = []
+    monkeypatch.setattr(
+        "machinist.local_cli.resolve_local_config", lambda *a, **k: MachinistConfig()
+    )
+    monkeypatch.setattr(
+        "machinist.local_cli.ensure_local_config",
+        lambda *a, **k: saved.append(1) or MachinistConfig(),
+    )
+
+    def dirty():
+        raise LocalWorkflowError(
+            "start needs a clean committed checkout; commit or stash: demo.py"
+        )
+
+    local_cli.workflow.require_clean_base = dirty
+
+    result = CliRunner().invoke(main, ["start", "Fix recovery"])
+
+    assert result.exit_code != 0
+    assert "commit or stash: demo.py" in result.output
+    assert saved == []
+    assert ("start", "Fix recovery", "", {}) not in local_cli.events
+
+
+def test_start_saves_local_configuration_only_after_the_checkout_passes(
+    local_cli, monkeypatch
+):
+    order = []
+    monkeypatch.setattr(
+        "machinist.local_cli.resolve_local_config", lambda *a, **k: MachinistConfig()
+    )
+    monkeypatch.setattr(
+        "machinist.local_cli.ensure_local_config",
+        lambda *a, **k: order.append("saved") or MachinistConfig(),
+    )
+    local_cli.workflow.require_clean_base = lambda: order.append("checked")
+
+    result = CliRunner().invoke(main, ["start", "Fix recovery"])
+
+    assert result.exit_code == 0, result.output
+    assert order == ["checked", "saved"]

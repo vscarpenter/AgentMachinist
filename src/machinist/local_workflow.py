@@ -11,7 +11,13 @@ from typing import Any
 from machinist.cancellation import CancellationStore
 from machinist.config import MachinistConfig
 from machinist.dispatch import TaskDispatcher
-from machinist.lifecycle import LifecycleError, Phase, RunStatus, TaskLifecycle
+from machinist.lifecycle import (
+    LifecycleError,
+    Phase,
+    RunRecord,
+    RunStatus,
+    TaskLifecycle,
+)
 from machinist.local_tasks import LocalTask, LocalTaskStore
 from machinist.local_workspace import LocalWorkspace
 from machinist.process import run_supervised
@@ -71,12 +77,7 @@ class LocalWorkflow:
             raise LocalWorkflowError(
                 "configure a verification command before starting a local Task"
             )
-        self.workspace.ensure_runtime_ignored()
-        if self.workspace.has_changes(self.repo_root):
-            raise LocalWorkflowError("start needs a clean committed checkout")
-        base_branch = self.workspace.current_branch()
-        if not base_branch:
-            raise LocalWorkflowError("start needs a checked-out base branch")
+        base_branch = self.require_clean_base()
         task = self.store.create(
             title.strip(),
             body.strip() or title.strip(),
@@ -91,6 +92,21 @@ class LocalWorkflow:
             )
         with self.store.claim(task.id) as task:
             return self.dispatcher.run_local_spec(task, store=self.store)
+
+    def require_clean_base(self) -> str:
+        """Refuse a dirty or detached checkout before any local state is saved."""
+        self.workspace.ensure_runtime_ignored()
+        changed = self.workspace.changed_files(self.repo_root)
+        if changed:
+            listed = ", ".join(changed[:5])
+            more = f" and {len(changed) - 5} more" if len(changed) > 5 else ""
+            raise LocalWorkflowError(
+                f"start needs a clean committed checkout; commit or stash: {listed}{more}"
+            )
+        base_branch = self.workspace.current_branch()
+        if not base_branch:
+            raise LocalWorkflowError("start needs a checked-out base branch")
+        return base_branch
 
     def approve(
         self,
@@ -245,6 +261,7 @@ class LocalWorkflow:
         decision = classify_local_task(
             task, records=records, claim_held=self.lifecycle.claim_held(task.number)
         )
+        failure = self._failed_record(records)
         expected_ref = task.candidate_sha if self._executed(task) else task.spec_sha
         if (
             decision.state
@@ -272,7 +289,24 @@ class LocalWorkflow:
             "report": str(self.store.report_path(task)) if task.review_report else None,
             "publication": task.publication,
             "integration": task.integration,
+            "error": failure.error if failure else None,
+            "log_dir": str(
+                self.lifecycle.attempt_log_directory(
+                    task.number, failure.phase, failure.attempt
+                )
+            )
+            if failure
+            else None,
         }
+
+    @staticmethod
+    def _failed_record(records: dict[Phase, RunRecord | None]) -> RunRecord | None:
+        """The earliest Phase attempt that stopped with a recorded error, if any."""
+        for phase in Phase:
+            record = records.get(phase)
+            if record and record.status is not RunStatus.SUCCEEDED and record.error:
+                return record
+        return None
 
     def _executed(self, task: LocalTask) -> bool:
         record = self.lifecycle.record(task.number, Phase.EXECUTE)

@@ -30,6 +30,7 @@ from machinist.local_setup import (
     ensure_local_config,
     find_repository_root,
     load_local_config,
+    resolve_local_config,
 )
 from machinist.local_tasks import LocalTaskError, LocalTaskStore
 from machinist.local_workflow import LocalWorkflow, LocalWorkflowError
@@ -122,10 +123,20 @@ def _render_status(
     ):
         if payload.get(key):
             click.echo(f"{label}: {payload[key]}")
+    if payload.get("error"):
+        click.echo(f"Error: {payload['error']}")
+    if payload.get("log_dir"):
+        click.echo(f"Logs: {payload['log_dir']}")
     if payload["state"] == "awaiting approval":
         click.echo("Read the Spec before approving it.")
     elif payload["state"] == "ready to integrate":
         click.echo("Inspect the Review report and candidate diff before integrating.")
+    elif payload["state"] == "baseline failed":
+        click.echo(
+            "Baseline Verification failed before any Harness work. Fix the "
+            "verification command or its dependencies and retry, or commit a "
+            "baseline change and start a new Task from that commit."
+        )
     if payload.get("next_action"):
         click.echo(f"Next: {payload['next_action']}")
     if payload["state"] == "integrated":
@@ -322,6 +333,12 @@ def start_command(
         )
         root = find_repository_root(Path.cwd())
         first_setup = not (root / ".machinist/runs/local/config.yaml").is_file()
+        # Check the checkout with unsaved settings first, so a refused start
+        # leaves no local configuration behind.
+        config = resolve_local_config(
+            root, harness_name=harness_name, test_command=test_cmd
+        )
+        _workflow(config, root).require_clean_base()
         config = ensure_local_config(
             root, harness_name=harness_name, test_command=test_cmd
         )

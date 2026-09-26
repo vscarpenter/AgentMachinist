@@ -1021,3 +1021,18 @@ reporting/docs tests pass with current dependencies, all 10 report CLI tests
 pass with Click 8.1, and focused Ruff/format checks pass. GitHub's main-branch
 rules still name old test checks and require a review; any admin merge override
 requires explicit authorization and all current CI checks to pass first.
+
+## First-run friction (2026-09-26)
+
+Specification: `tasks/first-run-friction-spec.md`. Branch `fix/first-run-friction`
+from `origin/main`.
+
+- [x] Item 2: detection prefers an installed runner (`uv`, then `python3`).
+- [x] Item 1: baseline failures keep their real error; gate-created files are
+  named; status shows error and logs; `baseline failed` state and guidance.
+- [x] Item 3: start checks preconditions before saving; flags replace unused
+  saved settings; dirty-tree error lists paths.
+- [ ] Item 4: doctor, status, config, clean, and runs route locally without
+  `machinist.yaml`.
+- [ ] Item 5: `examples/first-task/` and guide links.
+- [ ] Docs, changelog, full verification, commits.

@@ -676,6 +676,14 @@ class TaskLifecycle:
         except RuntimePathError as exc:
             raise LifecycleError(f"unsafe Task Run log file: {exc}") from exc
 
+    def attempt_log_directory(self, issue: int, phase: Phase, attempt: int) -> Path:
+        """Return one attempt's log directory for display, without creating it."""
+        if issue < 1 or attempt < 1:
+            raise LifecycleError("log paths require positive issue and attempt numbers")
+        return self._runtime.path.joinpath(
+            "logs", f"issue-{issue}", phase.value, f"attempt-{attempt}"
+        )
+
     def log_directory(self, issue: int, phase: Phase, attempt: int, name: str) -> Path:
         """Create and return a contained per-attempt log directory."""
         if issue < 1 or attempt < 1:

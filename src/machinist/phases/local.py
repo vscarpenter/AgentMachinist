@@ -782,11 +782,21 @@ def _baseline(path, config, workspace, claim, runner, cancel_check):
         )
     except VerificationFailed as exc:
         claim.checkpoint(baseline_report=exc.report.as_dict())
+        # The Gate's own failure is the cause the user needs. Custody fields
+        # are still checked; a read-only check here would hide that failure.
+        workspace.assert_harness_state(path, before)
         raise
-    else:
-        claim.checkpoint(baseline_report=report.as_dict())
-    finally:
-        workspace.assert_harness_state(path, before, read_only=True)
+    claim.checkpoint(baseline_report=report.as_dict())
+    workspace.assert_harness_state(path, before)
+    changed = workspace.changed_files(path)
+    if changed:
+        claim.checkpoint(baseline_workshop_changes=changed)
+        listed = ", ".join(changed[:5])
+        raise LocalPhaseError(
+            f"baseline Verification changed the Workshop ({listed}); commit "
+            "generated files such as lockfiles or ignore them, then start a new "
+            "Task from that commit"
+        )
 
 
 def _require_approval(task):

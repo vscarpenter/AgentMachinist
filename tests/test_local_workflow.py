@@ -325,3 +325,41 @@ def test_published_task_amendment_preserves_remote_lease_and_change_identity(loc
     assert task.publication["change_number"] == 17
     assert task.publication["published_sha"] == task.candidate_sha
     assert harness.calls == ["spec", "execute", "review", "spec", "execute", "review"]
+
+
+def test_status_reports_a_baseline_failure_with_its_error_and_logs(local):
+    root, workflow, harness = local
+    workflow.config.tests.command = f"{sys.executable} -c 'raise SystemExit(3)'"
+    with pytest.raises(Exception, match="verification gates blocked"):
+        workflow.start("Improve the answer with its regression test")
+
+    status = workflow.status("T1")
+
+    assert status["state"] == "baseline failed"
+    assert "verification gates blocked" in status["error"]
+    assert status["log_dir"] == str(
+        root / ".machinist/runs/local/logs/issue-1/spec/attempt-1"
+    )
+    assert status["next_action"] == "machinist retry --task T1 --phase spec"
+    assert harness.calls == []
+
+
+def test_status_omits_error_and_logs_for_a_healthy_task(local):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer with its regression test")
+
+    status = workflow.status(task.id)
+
+    assert status["error"] is None
+    assert status["log_dir"] is None
+
+
+def test_start_refuses_a_dirty_checkout_and_names_the_pending_paths(local):
+    root, workflow, harness = local
+    (root / "scratch.txt").write_text("not committed\n")
+    (root / "feature.py").write_text("def answer():\n    return 3\n")
+
+    with pytest.raises(LocalWorkflowError, match="feature.py, scratch.txt"):
+        workflow.start("Improve the answer with its regression test")
+
+    assert harness.calls == []
