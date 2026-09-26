@@ -14,7 +14,7 @@ use the [visual first-run guide](first-run-guide.html).
 
 ## One-time setup
 
-This path works with published **AgentMachinist 0.17.1**. You need Python 3.12+,
+This path works with published **AgentMachinist 0.18.0**. You need Python 3.12+,
 `uv`, Git, and an installed, authenticated Harness such as Claude Code or Codex.
 See [Harness setup](harnesses.md#authentication) if yours is not ready.
 
@@ -82,8 +82,8 @@ Once integration starts, amendments require a new Task. Rerun
 
 First start saves settings in `.machinist/runs/local/config.yaml`. Later edits to
 root `machinist.yaml` do not update that saved file. See [local settings](operator-runbook.md#local-settings-and-evidence)
-for changes and baseline failures. Bounded repair and combined reporting are
-unreleased source-checkout additions documented in the [runbook](operator-runbook.md).
+for changes and baseline failures. Release 0.18.0 adds bounded repair and
+combined reporting, documented in the [runbook](operator-runbook.md).
 
 ## Go further when needed
 

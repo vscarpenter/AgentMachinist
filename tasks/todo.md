@@ -1048,3 +1048,29 @@ that leaves untracked files fails the baseline with a named-file error rather
 than being tolerated. The cheap wins from the review (progress lines, rehearse
 in the short guide, help regrouping, README restructure, abbreviated Approval
 SHAs, wording) remain open and are listed on the published review page.
+
+## Release 0.18.0 (2026-09-26)
+
+Branch `release/0.18.0` from `main` at `2fd143e`. PyPI and the GitHub Release
+list both showed 0.17.1 when this started.
+
+- [x] Bump `pyproject.toml` and `uv.lock` to 0.18.0.
+- [x] Promote the changelog `Unreleased` section to the dated 0.18.0 heading.
+- [x] Replace every unreleased or source-checkout marker for bounded repair,
+  combined reporting, and the first-run fixes with 0.18.0 wording across the
+  README, SECURITY.md, CLAUDE.md, the operating guides, the ADR applicability
+  notes, and the documentation site pages.
+- [x] `bash scripts/verify.sh` green from the release candidate: 1688 passed,
+  88% coverage, wheel and sdist built as 0.18.0 and smoke-tested.
+- [ ] Push `release/0.18.0`, open the release PR, wait for green required
+  checks, and merge.
+- [ ] `gh release create v0.18.0` with the changelog bullets as the body, then
+  confirm `https://pypi.org/pypi/agentmachinist/json` reports 0.18.0.
+
+Resuming from here: the release prep commit is on `release/0.18.0` and nothing
+is pushed. The gate ran before this todo entry and two markdown reflows; the
+docs tests were rerun after them. Assumptions: 0.18.0 is a minor bump because
+`report --source` and `verification.repair` are new user-facing surface, and
+the documentation links the published 0.18.0 package before PyPI has it, which
+matches how 0.17.1 shipped. Blockers: pushing, opening the PR, merging, and
+creating the GitHub Release each need an explicit go-ahead.

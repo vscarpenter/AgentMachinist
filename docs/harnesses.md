@@ -7,7 +7,7 @@ may subsequently select different supported adapters. “Spec and Review control
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-This matrix describes the adapters in AgentMachinist 0.17.1. It covers the local
+This matrix describes the adapters in AgentMachinist 0.18.0. It covers the local
 workflow and GitLab publication, plus local readiness introduced in 0.15.0.
 The CI column below describes the existing GitHub Actions Spec workflow, not
 GitLab CI.
@@ -42,7 +42,7 @@ gate run afterwards stays authoritative.
 
 ### Bounded controller repair
 
-This is an unreleased source-checkout addition. Opt-in
+Release 0.18.0 adds bounded controller repair. Opt-in
 `verification.repair.max_attempts: 1` reuses the resolved Execute Harness for at
 most one additional invocation after an eligible required Gate failure. It
 defaults to `0`. The repair prompt includes the approved implementation
@@ -155,7 +155,7 @@ that declares structured usage must record nonnegative integer aggregate
 `machinist report` includes them. A recorded zero is known usage; an omitted or
 invalid value remains unknown.
 
-Combined reporting is an unreleased source-checkout addition: aggregate reports
+Release 0.18.0 adds combined reporting: aggregate reports
 read both local and legacy history by default; `--source local` and
 `--source legacy` select one. `usage_coverage` reports which attempts and token
 fields were observed. Token totals cover only those known fields and do not

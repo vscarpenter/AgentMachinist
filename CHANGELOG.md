@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 — 2026-09-26
 
 - Report baseline Verification failures truthfully in the local workflow. The
   Gate's own error replaces the misleading read-only Workshop message, files a
@@ -34,7 +34,7 @@
   workflow drift, formatting, lint, types, and coverage/test gates. Existing
   saved local configurations keep their settings until explicitly updated.
 - Align operating, visual, contributor, and architecture documentation with
-  the unreleased repair/reporting contracts. Clarify metrics, recovery,
+  the repair and reporting contracts in this release. Clarify metrics, recovery,
   telemetry consent, and release availability; correct the managed Spec
   workflow's instructions for switching back to local dispatch.
 

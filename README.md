@@ -16,20 +16,19 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-AgentMachinist 0.17.1 fixes setup instructions to stage new managed workflow
-files before committing. It also includes an
-[Approval policy](docs/approval-policy.md) and
-advisory source-text guidance in all three Harness prompts. The
-[workflow diagram](docs/how-it-works.html) shows who owns each step from Task
+AgentMachinist 0.18.0 adds combined local/legacy reliability reports and
+opt-in bounded repair after an ordinary required Verification failure. See the
+[Verification](docs/getting-started.md#verification-gates-and-change-limits)
+and [reporting](docs/getting-started.md#local-evidence-and-repository-portfolio)
+guidance. It also fixes first-run friction. Baseline Verification failures keep
+their real error, and `doctor`, `status`, `config`, and `clean` work without
+`machinist.yaml`. The new `examples/first-task` directory is a disposable
+project for a first Task. The [Approval policy](docs/approval-policy.md) and
+[workflow diagram](docs/how-it-works.html) show who owns each step from Task
 through optional publication.
 
-The source checkout also includes combined local/legacy reliability reports and
-opt-in bounded repair after an ordinary required Verification failure. These
-additions are unreleased; see the [Verification](docs/getting-started.md#verification-gates-and-change-limits)
-and [reporting](docs/getting-started.md#local-evidence-and-repository-portfolio) guidance.
-
 Current release:
-[AgentMachinist 0.17.1 on PyPI](https://pypi.org/project/agentmachinist/0.17.1/).
+[AgentMachinist 0.18.0 on PyPI](https://pypi.org/project/agentmachinist/0.18.0/).
 
 This repository's source checkout uses ordered required check-only Gates for workflow
 drift, formatting, lint, types, and coverage. Existing saved local configuration
@@ -74,7 +73,7 @@ never appears in `update-check --json`.
 ## Start
 
 The guided local workflow and optional GitLab support introduced in 0.14.0
-continue in 0.17.1. The existing GitHub workflow remains available.
+continue in 0.18.0. The existing GitHub workflow remains available.
 Start on a clean named branch with an initial commit, configured Git author,
 and an installed, authenticated Harness. Replace the example's Python test
 command with verification appropriate to your project.
@@ -327,7 +326,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist status [--local\|--all] [--json]` | With local configuration, default status and `--local` show local Tasks. Otherwise, default status shows the GitHub board and `--local` reads legacy Run Evidence. `--all` shows the registered GitHub portfolio. |
 | `machinist status --watch [--interval <seconds>] [--json]` | Emit changed-only live pipeline snapshots until Ctrl-C. |
 | `machinist runs [--issue <issue>] [--json]` | Read current, historical, orphaned, and corrupt local run records. |
-| `machinist report [--source all\|legacy\|local] [--since 30d] [--json] [--otlp-endpoint <url>]` | Source checkout (unreleased): aggregate both history namespaces by default; local/all export requires an explicit endpoint. |
+| `machinist report [--source all\|legacy\|local] [--since 30d] [--json] [--otlp-endpoint <url>]` | Aggregate both history namespaces by default; local/all export requires an explicit endpoint. |
 | `machinist retry <issue> [--phase spec\|execute\|review]` | Re-enable one failed Task Run. |
 | `machinist retry <issue> --phase execute --run [--resume\|--fresh]` | Reuse a retained workspace or start a fresh Execute attempt; fresh is the default. |
 | `machinist inspect <issue> [--offline] [--json]` | Show GitHub, workspace, and complete Task Run diagnostics. |

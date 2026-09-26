@@ -41,12 +41,12 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.17.1 includes the guided local workflow, optional GitHub/GitLab
+AgentMachinist 0.18.0 includes the guided local workflow, optional GitHub/GitLab
 intake and publication, existing GitHub issue automation, and next-step CLI
 guidance. Local readiness, exact remote-base validation, and bounded diagnostics
-introduced in 0.15.0 remain available. Setup receipts stage new managed workflow
-files explicitly. Install the published package, then change into the repository
-you want to work on:
+introduced in 0.15.0 remain available. This release adds bounded Execute repair
+and combined reporting. Install the published package, then change into the
+repository you want to work on:
 
 ```sh
 uv tool install agentmachinist
@@ -60,11 +60,9 @@ uv tool upgrade agentmachinist
 machinist --version
 ```
 
-Confirm that `machinist --version` reports 0.17.1 or newer for the setup
-guidance described here. `machinist doctor --local` is available since 0.15.0.
-The bounded repair and combined reporting sections below describe unreleased
-source-checkout additions; installing the published 0.17.1 package does not
-enable them.
+Confirm that `machinist --version` reports 0.18.0 or newer for the repair and
+reporting guidance described here. `machinist doctor --local` is available
+since 0.15.0.
 For contributing to AgentMachinist, an editable installation is optional:
 run `uv tool install --editable .` from its source
 checkout, then enter the repository you want to change. An editable install
@@ -178,7 +176,7 @@ records. Plain `doctor` and `config` follow the root `machinist.yaml` when it
 exists and the local workflow otherwise. `clean` covers issue Workshops and local
 Task Workshops whenever their configuration exists, so `clean --all` removes both
 kinds in a mixed checkout. Aggregate `report` reads both namespaces by
-default in the source checkout; `--source local` selects foreground Tasks without
+default; `--source local` selects foreground Tasks without
 root configuration. See the [command and storage
 boundaries](local-workflow.md#command-and-storage-boundaries) before operating
 both workflows in one checkout.
@@ -653,7 +651,7 @@ tests:
 verification:
   gates: []
   harness_may_run_gates: true
-  repair:                     # unreleased source-checkout option
+  repair:                     # added in 0.18.0
     max_attempts: 0            # 0 (off) or 1
     timeout_minutes: 10        # repair + final Gates deadline, 1-240
 
@@ -844,8 +842,7 @@ work — so weakened assertions still need human review in the local diff or PR/
 
 ### Bounded Verification repair
 
-This option is available in the source checkout and is unreleased. Repair is
-optional and defaults off:
+Release 0.18.0 adds this option. Repair is optional and defaults off:
 
 ```yaml
 verification:
@@ -1096,7 +1093,7 @@ command, phase profiles, gates, workspace policy, limits, queue state, attempts,
 and allowed credential names—never credential values. `status --watch` emits
 only changed snapshots; `--json` produces one compact JSON object per line.
 
-The source checkout adds unreleased combined reporting:
+Release 0.18.0 adds combined reporting:
 
 ```sh
 machinist report --since 30d --json

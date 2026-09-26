@@ -16,7 +16,7 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.17.1).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.18.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, ordered workflow,
 format, lint, type, and coverage/test gates from `scripts/verify.sh`).
@@ -331,18 +331,23 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current checkout (2026-09-18)
+## Current checkout (2026-09-26)
 
-- **Unreleased:** combined local/legacy `report --source all|legacy|local`,
-  bounded opt-in Execute repair, and this repository's expanded check-only
-  Verification Gates. Repair defaults off and is limited to one additional
-  Harness invocation plus final Verification under a persisted deadline.
-  Saved local configuration is unchanged until explicitly edited. See
-  `tasks/verification-reporting-repair-spec.md` and the operating guides.
+- **0.18.0 adds combined local/legacy `report --source all|legacy|local`,
+  bounded opt-in Execute repair, and first-run fixes.** Repair defaults off
+  and is limited to one additional Harness invocation plus final Verification
+  under a persisted deadline. Saved local configuration is unchanged until
+  explicitly edited. Baseline Verification failures keep their real error,
+  `doctor`, `status`, `config`, and `clean` route to the local workflow without
+  `machinist.yaml`, test detection prefers an installed runner, and
+  `examples/first-task` is a disposable first-Task project. This repository's
+  own Verification runs check-only workflow drift, format, lint, type, and
+  coverage Gates. See `tasks/verification-reporting-repair-spec.md`,
+  `tasks/first-run-friction-spec.md`, and the operating guides.
 
 - **0.17.1 fixes manual setup staging for new managed workflows.** The setup
   receipt lists exact generated and removed workflow paths, preserving staged
-  diff review before the commit. This release also includes an Approval policy
+  diff review before the commit. That release also includes an Approval policy
   that distinguishes enforced controls from advisory guidance, source-text
   guidance in all three Harness prompts, and a workflow diagram showing who
   owns each step. The documentation has been reviewed against the
