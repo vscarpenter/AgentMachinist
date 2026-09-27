@@ -1100,7 +1100,13 @@ the two 0.18.0 ledger notes.
 - [x] Commit, push, and open the PR. The local full suite was still running
   at 46% when the commit was made; the PR's required checks rerun it.
 
-Resuming from here: the fix, its test, and this note are committed on
-`fix/docs-site-links` and pushed for review. Next: green required checks,
-then merge. Assumption: `blob/main` URLs are the right target because the
+- [x] All fourteen checks passed and PR #56 merged as `a8c1879` on 2026-09-27
+  at 02:32 UTC. The local full suite finished green afterward (1,689 passed).
+  The Pages rebuild for that commit serves all 28 `docs/` files byte-identical
+  and the live link check reports no 404s.
+
+Resuming from here: the fix is on `main` and the site is verified. This note
+lives on `docs/todo-ledger-post-56` until the next PR carries it. Local
+branches `docs/todo-ledger-0.18.0` and `fix/docs-site-links` are merged and
+can be deleted. Assumption: `blob/main` URLs are the right target because the
 site publishes only `docs/` and the linked files live at the repository root.
