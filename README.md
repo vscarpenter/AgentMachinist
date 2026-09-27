@@ -222,7 +222,9 @@ The default `github.spec_source: local` makes `watch` own spec generation.
 Choose `github-actions` and run `machinist sync-workflows` if CI should own that
 phase instead. Exactly one source is active, preventing duplicate spec runs.
 Managed CI installs the selected Spec adapter and reads its declared secret
-name; built-ins support Claude Code, Codex, OpenCode, and Pi.
+name; built-ins support Claude Code, Codex, OpenCode, and Pi. The unreleased
+source checkout adds a built-in Goose adapter for local dispatch only; see the
+[harness matrix](docs/harnesses.md#goose-unreleased-source-checkout).
 
 Create a focused issue with `machinist task new --title "Handle an invalid
 timezone without crashing"`. The completion guidance points to

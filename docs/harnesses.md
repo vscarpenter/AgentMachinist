@@ -1,7 +1,7 @@
 # Harness support matrix
 
-AgentMachinist includes four built-in adapters and discovers installed v1
-plugins. The guided local workflow requires executable adapters for all three
+AgentMachinist 0.18.0 includes four built-in adapters, and the unreleased
+source checkout adds Goose as a fifth. It also discovers installed v1 plugins. The guided local workflow requires executable adapters for all three
 Phases; the first-run selector accepts a full-pipeline adapter. Phase profiles
 may subsequently select different supported adapters. “Spec and Review control”
 describes adapter arguments; the controller also checks repository custody and
@@ -10,7 +10,8 @@ rejects changes from these read-only Phases.
 This matrix describes the adapters in AgentMachinist 0.18.0. It covers the local
 workflow and GitLab publication, plus local readiness introduced in 0.15.0.
 The CI column below describes the existing GitHub Actions Spec workflow, not
-GitLab CI.
+GitLab CI. The `goose` row is an unreleased source-checkout addition; see
+[Goose](#goose-unreleased-source-checkout).
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
 | --- | --- | --- | --- | --- |
@@ -18,6 +19,36 @@ GitLab CI.
 | `codex` | `codex` | Read-only sandbox and ephemeral session | Workspace-write sandbox, approval prompts disabled, ephemeral session; prompt plus Git postconditions | `OPENAI_API_KEY` |
 | `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools with session persistence disabled; prompt plus Git postconditions | `GEMINI_API_KEY` |
 | `opencode` | `opencode` | Pure plan agent; treated as advisory | Normal run agent; prompt plus Git postconditions | `ANTHROPIC_API_KEY` by default |
+| `goose` (unreleased) | `goose` | Quiet run with only the developer builtin loaded and no session; treated as advisory | Normal profile with no session; prompt plus Git postconditions | None; managed Spec CI is unsupported |
+
+### Goose (unreleased source checkout)
+
+Goose's `developer` builtin reads files for Spec and Review, but it also writes
+files and runs shell commands. `goose run` has no flag that limits it to
+reading, so its read-only control is advisory. The controller rejects any
+change a Spec or Review run makes, as it does for OpenCode. Spec and Review add
+`--no-profile`, so your other Goose extensions stay unloaded there.
+
+Every Goose run sets `GOOSE_MODE=auto`. The `approve` and `smart_approve`
+modes wait for a confirmation that a headless Task Run cannot give. This
+overrides a `GOOSE_MODE` in your shell or Goose configuration for AgentMachinist
+runs only.
+
+First-run discovery never picks Goose from PATH, because pressly/goose, a Go
+database migration tool, installs the same `goose` executable. Choose it with
+`machinist start --harness goose` or `harness.name: goose`. Goose model names
+depend on the provider, so pass the provider through `extra_args` when your
+Goose configuration does not already set one:
+
+```yaml
+harness:
+  name: goose
+  extra_args: ["--provider", "anthropic"]
+```
+
+Goose ships through an install script or Homebrew rather than a pinnable
+package, so it has no managed GitHub Spec CI profile. Use
+`github.spec_source: local` with Goose.
 
 Review is a separate durable Task Run even when it inherits the same adapter.
 It receives the approved Spec, diff, verification Evidence, and Task context,
@@ -33,8 +64,8 @@ completed Review for the same candidate is not repeated.
 When gates are configured and `verification.harness_may_run_gates` is true
 (the default), the implementation prompt lists each gate command and asks the
 harness to run required gates and iterate until they pass before finishing.
-`codex`, `pi`, and `opencode` execute modes already permit command execution,
-so only the prompt changes for them. `claude-code`'s headless edit mode
+`codex`, `pi`, `opencode`, and `goose` execute modes already permit command
+execution, so only the prompt changes for them. `claude-code`'s headless edit mode
 denies commands, so the adapter additionally allowlists the configured gate
 commands and variants with additional arguments
 (`--allowedTools "Bash(<command>)" "Bash(<command>:*)"`). The controller's own
@@ -79,6 +110,7 @@ Current authentication entry points are:
 | Codex | `codex login status` | `codex login` |
 | OpenCode | `opencode auth list --pure` | `opencode auth login` |
 | Pi | `pi auth check --model <model> --json --no-refresh` (or the default Google provider when no model is set) | Configure credentials for the selected provider or model, then rerun the check. |
+| Goose (unreleased) | None; `doctor` warns that Goose has no non-interactive auth probe | `goose configure`, then verify one Goose run yourself |
 
 These CLIs evolve independently. Confirm the command with the installed
 harness's `--help` output when upgrading.
@@ -118,7 +150,7 @@ Each Phase can set `timeout_minutes` in its own profile, subject to the same
 Phase limit. Review inherits the base read-only timeout, not a timeout override
 under `harness.spec`.
 
-For the four built-in
+For the built-in
 adapters, AgentMachinist rejects reserved sandbox, permission, model, session,
 and tool flags, including duplicate forms that could override its controls.
 Third-party adapters do not inherit that reserved-argument map and must validate
@@ -147,7 +179,13 @@ entry points.
 
 Adapters splice `self._passthrough_argv()` (the operator's `harness.model` and
 `harness.extra_args`) into both the read-only and the edit profile at their own
-prompt-relative position instead of restating that block. Adapter tests should
+prompt-relative position instead of restating that block.
+
+The unreleased source checkout adds two optional class members. Set
+`auto_select = False` when another common tool installs the same executable
+name, so first-run discovery never guesses the adapter. Return non-secret
+variables from `environment_overrides()` when the CLI reads a control only from
+the environment. They replace inherited values after credential reduction. Adapter tests should
 pin exact Spec, Execute, and Review argv; prove read-only controls for
 Spec/Review; and install a fixture entry point from an isolated path. A plugin
 that declares structured usage must record nonnegative integer aggregate

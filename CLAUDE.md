@@ -5,8 +5,8 @@ Guidance for Claude Code when working in this repository.
 ## What this is
 
 AgentMachinist is a local development workflow for solo developers and small
-teams. It coordinates a coding Harness (Claude Code, OpenCode, Pi, or Codex)
-around an exact human-approved Spec and a reviewed local candidate. GitHub and
+teams. It coordinates a coding Harness (Claude Code, OpenCode, Pi, Codex, or
+Goose) around an exact human-approved Spec and a reviewed local candidate. GitHub and
 GitLab issue intake and PR/MR publication are optional:
 
 ```text
@@ -151,13 +151,17 @@ never-merges rule only for that human-directed local operation.
 - `harness/` — `base.py` owns subprocess mechanics, timeouts, 30s heartbeat
   callbacks, and credential scrubbing (removes `GH_TOKEN`, `GITHUB_TOKEN`,
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
-  (`claude_code`, `codex`, `pi`, `opencode`) build a read-only argv profile
-  (shared by Spec and Review) and an Execute edit profile, and stay one screen
-  long. Registry in `__init__.py`. Every adapter splices
+  (`claude_code`, `codex`, `pi`, `opencode`, `goose`) build a read-only argv
+  profile (shared by Spec and Review) and an Execute edit profile, and stay one
+  screen long. Registry in `__init__.py`. Every adapter splices
   `Harness._passthrough_argv()` (`--model <value>` plus `harness.extra_args`)
   into both `spec_argv` and `implement_argv` at its own prompt-relative
   position: `claude-code` after `-p <prompt>`, `codex`, `opencode`, and `pi`
-  before the final positional prompt.
+  before the final positional prompt, `goose` before `--text <prompt>`.
+  `environment_overrides()` pins non-secret variables after credential
+  scrubbing (Goose sets `GOOSE_MODE=auto`), and `auto_select = False` keeps an
+  adapter out of first-run PATH discovery (Goose, whose executable name
+  pressly/goose shares).
 - `phases/spec.py` — Phase 1: issue → harness in read-only mode → spec file →
   branch → push → draft PR ("Closes #n"). Rejects empty specs and any
   working-tree change made by the harness.
@@ -331,7 +335,13 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current checkout (2026-09-26)
+## Current checkout (2026-09-27)
+
+- **Unreleased: a built-in Goose adapter.** Spec and Review read through
+  Goose's `developer` builtin, so read-only custody is advisory, as for
+  OpenCode. Goose has no managed Spec CI profile or auth probe, and first-run
+  discovery never selects it. See `tasks/goose-harness-spec.md` and
+  `docs/harnesses.md`.
 
 - **0.18.0 adds combined local/legacy `report --source all|legacy|local`,
   bounded opt-in Execute repair, and first-run fixes.** Repair defaults off

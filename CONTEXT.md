@@ -54,7 +54,7 @@ The isolated worktree or clone where a harness reads or changes repository files
 _Avoid_: Workspace, checkout
 
 **Harness**:
-A coding-agent CLI selected by configuration. Claude Code, OpenCode, PI, and Codex are Harness adapters.
+A coding-agent CLI selected by configuration. Claude Code, OpenCode, PI, Codex, and Goose are Harness adapters.
 _Avoid_: Agent provider, model
 
 **Evidence**:

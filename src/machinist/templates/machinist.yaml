@@ -5,7 +5,7 @@
 version: 1
 
 harness:
-  name: claude-code            # claude-code | opencode | pi | codex
+  name: claude-code            # claude-code | opencode | pi | codex | goose
   command: null                # optional: override the harness executable path
   model: null                  # optional: override model (e.g. "claude-3-7-sonnet")
   extra_args: []               # optional: additional CLI arguments to pass to harness

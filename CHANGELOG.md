@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Add a built-in Goose adapter (`harness.name: goose`). Spec and Review run
+  `goose run -q --no-session --no-profile --with-builtin developer`, and
+  Execute runs `goose run --no-session`. The developer builtin can also write
+  files, so read-only custody is advisory and the controller's postconditions
+  enforce it, as for OpenCode.
+- Set `GOOSE_MODE=auto` for every Goose run. The approval modes wait for a
+  confirmation that a headless Task Run cannot give.
+- Keep Goose out of first-run discovery. pressly/goose, a Go database
+  migration tool, installs the same `goose` executable, so choose Goose with
+  `--harness goose`.
+- Goose has no managed GitHub Spec CI profile and no non-interactive auth
+  probe. Workflow projection refuses it with the local-dispatch recovery, and
+  `doctor` asks you to verify its login yourself.
+- Adapters can pin non-secret environment variables with
+  `environment_overrides()` and opt out of first-run discovery with
+  `auto_select = False`.
+
 ## 0.18.0 — 2026-09-26
 
 - Report baseline Verification failures truthfully in the local workflow. The

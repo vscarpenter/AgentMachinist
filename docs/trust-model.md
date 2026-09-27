@@ -113,6 +113,9 @@ mean a hostile process with the same OS identity cannot work around it.
 
 - The implementation prompt says not to run Git or edit `.machinist/`.
 - OpenCode plan-agent write behavior is treated as advisory.
+- Goose Spec and Review write behavior is advisory (unreleased source
+  checkout). Its developer builtin can write files and run shell commands, and
+  every Goose run sets `GOOSE_MODE=auto` so no approval prompt waits.
 - Git postconditions detect ordinary violations after the harness exits; they
   cannot undo an external side effect.
 - Removing common forge tokens, including `GH_TOKEN`, `GITHUB_TOKEN`, and
