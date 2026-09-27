@@ -362,6 +362,42 @@ def test_harness_subprocess_strips_controller_credentials_but_keeps_provider_key
     assert env["GIT_TERMINAL_PROMPT"] == "0"
 
 
+class ModePinningHarness(Harness):
+    name = "mode-pinning"
+    default_command = "mode-cli"
+
+    def environment_overrides(self):
+        return {"PROBE_MODE": "auto"}
+
+    def spec_argv(self, prompt):
+        return [self.command, prompt]
+
+    def implement_argv(self, prompt):
+        return [self.command, prompt]
+
+
+def test_environment_overrides_replace_inherited_values_in_every_phase(
+    tmp_path, monkeypatch
+):
+    # An adapter whose CLI reads its permission mode from the environment
+    # must win over the operator's shell for Spec, Execute, and Review alike.
+    monkeypatch.setenv("PROBE_MODE", "approve")
+    runner = FakeRunner(("spec", 0, ""), ("done", 0, ""), ("{}", 0, ""))
+    harness = ModePinningHarness(HarnessConfig(), runner=runner)
+
+    harness.generate_spec("p", cwd=tmp_path)
+    harness.implement("p", cwd=tmp_path)
+    harness.review("p", cwd=tmp_path)
+
+    assert [call[1]["env"]["PROBE_MODE"] for call in runner.calls] == ["auto"] * 3
+
+
+def test_harness_base_defaults_add_no_environment_and_allow_auto_selection():
+    harness = PythonProbeHarness(HarnessConfig())
+    assert harness.environment_overrides() == {}
+    assert PythonProbeHarness.auto_select is True
+
+
 def test_adapters_publish_honest_policy_capabilities():
     for name in HarnessName:
         capability = get_harness(HarnessConfig(name=name)).capabilities

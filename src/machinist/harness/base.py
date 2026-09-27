@@ -75,6 +75,9 @@ class Harness(ABC):
     default_command: ClassVar[str]
     capabilities: ClassVar[HarnessCapabilities] = HarnessCapabilities("advisory")
     descriptor: ClassVar[HarnessDescriptor]
+    # False when another common tool installs the same executable name, so
+    # first-run discovery never guesses the adapter from PATH alone.
+    auto_select: ClassVar[bool] = True
 
     # Harness runs are silent and can last many minutes; a periodic progress
     # callback keeps callers (and humans) sure the process is alive.
@@ -110,6 +113,14 @@ class Harness(ABC):
         if self.config.extra_args:
             argv.extend(self.config.extra_args)
         return argv
+
+    def environment_overrides(self) -> dict[str, str]:
+        """Non-secret variables pinned for every Phase run of this adapter.
+
+        For CLIs that read a control such as a permission mode only from the
+        environment. Values replace inherited ones after credential reduction.
+        """
+        return {}
 
     @abstractmethod
     def spec_argv(self, prompt: str) -> list[str]:
@@ -200,6 +211,7 @@ class Harness(ABC):
         self, argv: list[str], cwd: Path, timeout_minutes: int
     ) -> subprocess.CompletedProcess:
         environment = credential_reduced_environment(allow=HARNESS_CREDENTIAL_ALLOWLIST)
+        environment.update(self.environment_overrides())
         kwargs = {
             "cwd": cwd,
             "timeout": timeout_minutes * 60,
