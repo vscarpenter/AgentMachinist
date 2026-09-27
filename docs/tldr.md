@@ -34,7 +34,7 @@ Use a real test command for your project. Verification runs in an isolated
 checkout of committed files, so the command must prepare its own dependencies
 and must not leave new files behind: `uv run pytest` with a committed `uv.lock`,
 or `npm ci && npm test` with a committed lockfile. To try this on something
-disposable first, copy the [example project](../examples/first-task/README.md).
+disposable first, copy the [example project](https://github.com/vscarpenter/AgentMachinist/blob/main/examples/first-task/README.md).
 
 ```sh
 machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"

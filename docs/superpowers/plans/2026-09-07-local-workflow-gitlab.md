@@ -11,7 +11,7 @@
 ## Current status (2026-09-12)
 
 The local Task workflow and GitLab issue intake/MR publication are implemented
-and recorded under 0.14.0 in the [changelog](../../../CHANGELOG.md). `start`
+and recorded under 0.14.0 in the [changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md). `start`
 stops at the saved Spec; local Approval continues Execute and mandatory
 independent Review. Integration and publication remain separate explicit
 commands. Version 0.15.0 adds optional local readiness through `doctor --local`;
@@ -25,7 +25,7 @@ September 7, 2026. The working `tasks/spec.md` now describes later readiness wor
 Completed September 7, 2026. All seven steps below are implemented and verified.
 The canonical gate passed 1,411 tests with 87.52% coverage, twenty typed modules,
 and isolated distribution smoke tests including the production local rehearsal.
-See the [implementation ledger](../../../tasks/todo.md) for the final evidence
+See the [implementation ledger](https://github.com/vscarpenter/AgentMachinist/blob/main/tasks/todo.md) for the final evidence
 and external-validation boundary.
 
 1. Record contracts and ADR on a feature branch. Repair adoption, intake, budgets,

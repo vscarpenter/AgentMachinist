@@ -1085,3 +1085,22 @@ Resuming from here: 0.18.0 is published. This note lives on
 `main` is PR-protected. Assumptions from the prep entry stand: 0.18.0 is a
 minor bump because `report --source` and `verification.repair` are new
 user-facing surface. No open work remains from this release.
+
+## Documentation site links (2026-09-26)
+
+Branch `fix/docs-site-links` from `docs/todo-ledger-0.18.0`, so its PR carries
+the two 0.18.0 ledger notes.
+
+- [x] Contract test: no relative link in `docs/` may resolve above the
+  published root. Red named the five escaping links across four files.
+- [x] Point those five links (the docs directory and two historical plans to
+  `CHANGELOG.md`, one plan to `tasks/todo.md`, the short guide to
+  `examples/first-task/README.md`) at `blob/main` GitHub URLs.
+- [x] Docs module, ruff format, and ruff lint green on the change.
+- [x] Commit, push, and open the PR. The local full suite was still running
+  at 46% when the commit was made; the PR's required checks rerun it.
+
+Resuming from here: the fix, its test, and this note are committed on
+`fix/docs-site-links` and pushed for review. Next: green required checks,
+then merge. Assumption: `blob/main` URLs are the right target because the
+site publishes only `docs/` and the linked files live at the repository root.
