@@ -1104,3 +1104,24 @@ Resuming from here: the fix, its test, and this note are committed on
 `fix/docs-site-links` and pushed for review. Next: green required checks,
 then merge. Assumption: `blob/main` URLs are the right target because the
 site publishes only `docs/` and the linked files live at the repository root.
+
+## Goose Harness adapter (2026-09-27)
+
+Branch `feat/goose-harness` from `main`. Spec: `tasks/goose-harness-spec.md`
+(design approved 2026-09-27). Pi and OpenCode already ship, so only Goose is
+new.
+
+- [ ] Contract tests red: `environment_overrides()` reaches the Harness
+  subprocess, and `auto_select` defaults to true.
+- [ ] Base hook and flag green in `harness/base.py`.
+- [ ] Contract tests red: `HarnessName.GOOSE`, Goose reserved `extra_args`,
+  exact Spec/Review/Execute argv, `GOOSE_MODE=auto`, no `ci_spec`, no auth probe.
+- [ ] Goose adapter, registry entry, and config map green.
+- [ ] Contract tests red: local setup and the `init` wizard skip adapters with
+  `auto_select` false; explicit `--harness goose` still saves.
+- [ ] Discovery changes green in `local_setup.py` and `init_wizard.py`.
+- [ ] Documentation: harness matrix, auth table, README, `CONTEXT.md`,
+  getting-started, trust model, starter YAML comments, HTML pages with
+  unreleased labels, `CLAUDE.md`, and `## Unreleased` changelog.
+- [ ] Verification: full suite in the background, ruff format and lint, mypy,
+  and `--help` parse checks against the installed Goose 1.52.0.
