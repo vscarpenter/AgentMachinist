@@ -1111,17 +1111,31 @@ Branch `feat/goose-harness` from `main`. Spec: `tasks/goose-harness-spec.md`
 (design approved 2026-09-27). Pi and OpenCode already ship, so only Goose is
 new.
 
-- [ ] Contract tests red: `environment_overrides()` reaches the Harness
+- [x] Contract tests red: `environment_overrides()` reaches the Harness
   subprocess, and `auto_select` defaults to true.
-- [ ] Base hook and flag green in `harness/base.py`.
-- [ ] Contract tests red: `HarnessName.GOOSE`, Goose reserved `extra_args`,
+- [x] Base hook and flag green in `harness/base.py`.
+- [x] Contract tests red: `HarnessName.GOOSE`, Goose reserved `extra_args`,
   exact Spec/Review/Execute argv, `GOOSE_MODE=auto`, no `ci_spec`, no auth probe.
-- [ ] Goose adapter, registry entry, and config map green.
-- [ ] Contract tests red: local setup and the `init` wizard skip adapters with
+- [x] Goose adapter, registry entry, and config map green.
+- [x] Contract tests red: local setup and the `init` wizard skip adapters with
   `auto_select` false; explicit `--harness goose` still saves.
-- [ ] Discovery changes green in `local_setup.py` and `init_wizard.py`.
-- [ ] Documentation: harness matrix, auth table, README, `CONTEXT.md`,
+- [x] Discovery changes green in `local_setup.py` and `init_wizard.py`.
+- [x] Documentation: harness matrix, auth table, README, `CONTEXT.md`,
   getting-started, trust model, starter YAML comments, HTML pages with
   unreleased labels, `CLAUDE.md`, and `## Unreleased` changelog.
-- [ ] Verification: full suite in the background, ruff format and lint, mypy,
+- [x] Verification: full suite in the background, ruff format and lint, mypy,
   and `--help` parse checks against the installed Goose 1.52.0.
+  All six profile argvs (Spec, Execute, and Review, each with and without
+  passthrough) parse; the Goose 1.52.0 source registers `developer` as a
+  platform extension, so `--with-builtin developer` resolves.
+- [x] `bash scripts/verify.sh` green: workflow drift, format, lint, and mypy
+  clean, 1709 passed, 88.50% coverage, and the wheel and sdist smoke-tested.
+
+Resuming from here: the Goose adapter, its docs, and this note are committed
+on `feat/goose-harness` (`e1ec91e` through the ledger commit). Next: Vinny's
+go-ahead to push the branch and open the PR, which stay parked as confirm-first.
+At the next release, add Goose to the adapter lists in `docs/index.html` and
+`docs/explainer.html` and replace the unreleased labels with release wording.
+Assumptions: no paid Goose run was made, so a live Task with Goose remains
+unexercised; `GOOSE_MODE=auto` in Spec and Review is acceptable because the
+controller's postconditions reject any change those runs make.
