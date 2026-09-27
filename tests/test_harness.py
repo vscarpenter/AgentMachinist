@@ -127,9 +127,14 @@ def test_allowed_commands_never_reach_spec_argv():
 
 
 def test_allowed_commands_leave_other_implement_argvs_unchanged():
-    # codex workspace-write, opencode run, and pi -p already permit command
-    # execution in their execute modes; the allowlist is claude-code-only.
-    for name in (HarnessName.CODEX, HarnessName.OPENCODE, HarnessName.PI):
+    # codex workspace-write, opencode run, pi -p, and goose run already permit
+    # command execution in their execute modes; the allowlist is claude-code-only.
+    for name in (
+        HarnessName.CODEX,
+        HarnessName.OPENCODE,
+        HarnessName.PI,
+        HarnessName.GOOSE,
+    ):
         harness = get_harness(HarnessConfig(name=name))
         baseline = harness.implement_argv("p")
         harness.allowed_commands = ("uv run pytest",)
@@ -150,6 +155,79 @@ def test_codex_implement_argv_uses_current_headless_workspace_write_contract():
         "build",
     ]
     assert "--full-auto" not in argv
+
+
+def test_goose_argv_pins_headless_profiles_and_splices_passthrough_before_prompt():
+    # Flags verified against `goose run --help` on Goose 1.52.0, 2026-09-27.
+    harness = get_harness(
+        HarnessConfig(
+            name=HarnessName.GOOSE,
+            model="claude-sonnet-4",
+            extra_args=["--provider", "anthropic"],
+        )
+    )
+    read_only = [
+        "goose",
+        "run",
+        "-q",
+        "--no-session",
+        "--no-profile",
+        "--with-builtin",
+        "developer",
+        "--model",
+        "claude-sonnet-4",
+        "--provider",
+        "anthropic",
+        "--text",
+        "write a spec",
+    ]
+
+    assert harness.spec_argv("write a spec") == read_only
+    assert harness.review_argv("write a spec") == read_only
+    assert harness.implement_argv("build it") == [
+        "goose",
+        "run",
+        "--no-session",
+        "--model",
+        "claude-sonnet-4",
+        "--provider",
+        "anthropic",
+        "--text",
+        "build it",
+    ]
+
+
+def test_goose_runs_pin_autonomous_mode_over_operator_setting(tmp_path, monkeypatch):
+    # approve and smart_approve wait for a confirmation no headless run can give.
+    monkeypatch.setenv("GOOSE_MODE", "approve")
+    runner = FakeRunner(("spec", 0, ""), ("done", 0, ""))
+    harness = get_harness(HarnessConfig(name=HarnessName.GOOSE), runner=runner)
+
+    harness.generate_spec("p", cwd=tmp_path)
+    harness.implement("p", cwd=tmp_path)
+
+    assert [call[1]["env"]["GOOSE_MODE"] for call in runner.calls] == ["auto"] * 2
+
+
+def test_goose_is_advisory_explicit_only_and_has_no_hosted_ci_or_auth_probe():
+    harness = get_harness(HarnessConfig(name=HarnessName.GOOSE))
+
+    assert harness.capabilities.spec_repository_writes == "advisory"
+    assert harness.descriptor.phases == frozenset({"spec", "execute", "review"})
+    assert harness.descriptor.documentation_url == "https://goose-docs.ai/docs/"
+    assert harness.descriptor.ci_spec is None
+    assert harness.authentication_argv() is None
+    # pressly/goose, a Go migration tool, installs the same executable name.
+    assert type(harness).auto_select is False
+
+
+def test_other_builtin_adapters_pin_no_environment_and_stay_auto_selectable():
+    for name in HarnessName:
+        if name is HarnessName.GOOSE:
+            continue
+        harness = get_harness(HarnessConfig(name=name))
+        assert harness.environment_overrides() == {}, name.value
+        assert type(harness).auto_select is True, name.value
 
 
 def test_authentication_probes_fail_closed_on_empty_or_unstructured_output():

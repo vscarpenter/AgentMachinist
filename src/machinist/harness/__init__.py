@@ -12,12 +12,13 @@ from machinist.config import HarnessConfig, HarnessIdentifier, harness_identifie
 from machinist.harness.base import Harness, HarnessDescriptor, HarnessError, Runner
 from machinist.harness.claude_code import ClaudeCode
 from machinist.harness.codex import Codex
+from machinist.harness.goose import Goose
 from machinist.harness.opencode import OpenCode
 from machinist.harness.pi import Pi
 
 HARNESS_ENTRY_POINT_GROUP = "agentmachinist.harnesses.v1"
 _BUILTINS: dict[str, type[Harness]] = {
-    cls.name: cls for cls in (ClaudeCode, OpenCode, Pi, Codex)
+    cls.name: cls for cls in (ClaudeCode, OpenCode, Pi, Codex, Goose)
 }
 _PHASES = frozenset({"spec", "execute", "review"})
 

@@ -157,6 +157,16 @@ def test_plugin_ci_descriptor_drives_managed_workflow(monkeypatch):
     assert "ACME_API_KEY: ${{ secrets.ACME_API_KEY }}" in spec
 
 
+def test_goose_refuses_managed_spec_ci_with_a_recovery_choice():
+    # Goose has no pinnable package, so its descriptor declares no ci_spec.
+    cfg = MachinistConfig.model_validate(
+        {"harness": {"name": "goose"}, "github": {"spec_source": "github-actions"}}
+    )
+
+    with pytest.raises(WorkflowDriftError, match="use github.spec_source local"):
+        expected_workflows(cfg, installed_version="0.9.0")
+
+
 def test_local_spec_source_omits_ci_dispatcher():
     assert set(expected_workflows(config("local"), installed_version="0.2.0")) == {
         "machinist-approve.yml"
