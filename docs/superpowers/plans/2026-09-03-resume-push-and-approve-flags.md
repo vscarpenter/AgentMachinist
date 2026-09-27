@@ -11,7 +11,7 @@
 ## Current status (2026-09-12)
 
 Both implementation cards are complete and recorded under 0.14.0 in the
-[changelog](../../../CHANGELOG.md). The unchecked steps and old file line
+[changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md). The unchecked steps and old file line
 numbers below preserve the original plan, rather than an outstanding worklist.
 See the [specification's current status](../specs/2026-09-03-resume-push-and-approve-flags.md#current-status-2026-09-12)
 for the implemented recovery and Approval contracts.

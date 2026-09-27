@@ -188,6 +188,29 @@ def test_local_document_links_resolve():
             assert (path.parent / relative).exists(), f"broken link in {path}: {target}"
 
 
+def test_document_links_stay_inside_the_published_docs_root():
+    """GitHub Pages publishes only docs/, so a link that climbs above it 404s on the site."""
+    docs_root = (_REPO_ROOT / "docs").resolve()
+    escaped: list[str] = []
+
+    def collect(path: Path, targets: list[str]) -> None:
+        for target in targets:
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            relative = target.split("#", 1)[0].strip("<>")
+            if relative and not (path.parent / relative).resolve().is_relative_to(
+                docs_root
+            ):
+                escaped.append(f"{path.relative_to(_REPO_ROOT)}: {target}")
+
+    for path in sorted(docs_root.rglob("*.md")):
+        collect(path, re.findall(r"\[[^\]]+\]\(([^)]+)\)", path.read_text()))
+    for path in sorted(docs_root.glob("*.html")):
+        collect(path, re.findall(r'href="([^"]+)"', path.read_text()))
+
+    assert escaped == [], "links leave the published docs root:\n" + "\n".join(escaped)
+
+
 def test_documentation_indexes_cover_all_guides_and_history():
     docs_root = _REPO_ROOT / "docs"
     documents = {

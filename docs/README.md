@@ -12,7 +12,7 @@ walks through the same journey with examples and recovery help.
 
 This is the current operating documentation for **AgentMachinist 0.18.0**,
 which adds bounded Execute repair, combined local/legacy reporting, and
-first-run fixes. See the [changelog](../CHANGELOG.md) for details; the short
+first-run fixes. See the [changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md) for details; the short
 first-Task path works with the published package.
 
 ## Find a specific answer
