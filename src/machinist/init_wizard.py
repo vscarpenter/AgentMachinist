@@ -170,7 +170,8 @@ def _ask_harness(*, spec_source: str, manage_workflows: bool) -> str:
     installed = [
         name
         for name in choices
-        if shutil.which(registry.adapters[name].default_command)
+        if registry.adapters[name].auto_select
+        and shutil.which(registry.adapters[name].default_command)
     ]
     default = (
         installed[0]

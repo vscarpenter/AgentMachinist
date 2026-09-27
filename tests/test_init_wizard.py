@@ -12,6 +12,7 @@ from machinist.cli import main
 from machinist.config import load_config
 from machinist.harness import HarnessRegistry
 from machinist.harness.codex import Codex
+from machinist.harness.goose import Goose
 from machinist.init_wizard import _ask_harness
 
 
@@ -62,6 +63,43 @@ def test_wizard_excludes_plugin_without_hosted_spec_support_for_actions(monkeypa
     assert "selected=codex" in result.output
     assert "local-plugin" not in result.output
     assert "spec-only" not in result.output
+
+
+def invoke_goose_selection(monkeypatch, *, input):
+    monkeypatch.setattr(
+        "machinist.init_wizard.discover_harnesses",
+        lambda: HarnessRegistry({"goose": Goose, "local-plugin": LocalPlugin}),
+    )
+    monkeypatch.setattr(
+        "machinist.init_wizard.shutil.which",
+        lambda command: (
+            f"/bin/{command}" if command in {"goose", "local-agent"} else None
+        ),
+    )
+
+    @click.command()
+    def choose():
+        click.echo(
+            "selected=" + _ask_harness(spec_source="local", manage_workflows=True)
+        )
+
+    return CliRunner().invoke(choose, input=input)
+
+
+def test_wizard_never_offers_goose_as_detected_or_default(monkeypatch):
+    # pressly/goose, a Go migration tool, installs the same executable name.
+    result = invoke_goose_selection(monkeypatch, input="\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Available on PATH: local-plugin\n" in result.output
+    assert "selected=local-plugin" in result.output
+
+
+def test_wizard_still_accepts_goose_when_typed(monkeypatch):
+    result = invoke_goose_selection(monkeypatch, input="goose\n")
+
+    assert result.exit_code == 0, result.output
+    assert "selected=goose" in result.output
 
 
 def install_plugin_fixture(monkeypatch, tmp_path):
