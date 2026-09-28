@@ -343,7 +343,7 @@
   <div class="pipeline-scroll" tabindex="0" role="region" aria-label="Local Task sequence"><div class="pipeline">
     <span class="step">Task T1</span><span class="arrow">→</span><span class="step">baseline + Spec commit</span><span class="arrow">→</span><span class="gate">approve exact SHA</span><span class="arrow">→</span><span class="step">Execute + gates</span><span class="arrow">→</span><span class="step">advisory Review</span><span class="arrow">→</span><span class="gate">you integrate</span>
   </div></div>
-  <section class="prep"><span class="op-index">PREP</span><h2>A committed repository, a Harness, and real tests</h2><p>Start with a clean Git checkout, an initial commit, configured author, and an installed, authenticated Harness. No origin, forge account, or watcher is required for local Tasks.</p><pre><code># Install the released controller:
+  <section class="prep"><span class="op-index">PREP</span><h2>A committed repository, a Harness, and real tests</h2><p>Start with a clean Git checkout, an initial commit, repository-local author, and an installed, authenticated Harness. No origin, forge account, or watcher is required for local Tasks.</p><pre><code># Install the released controller:
 uv tool install agentmachinist
 machinist start --help
 # Then change to the repository you want to work on:

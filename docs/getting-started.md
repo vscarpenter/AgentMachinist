@@ -103,7 +103,7 @@ registries; this setting does not make the workflow offline.
 ## Set up your repository
 
 For a local foreground Task, start on a named branch in a clean repository
-with an initial commit and configured Git author. This branch and commit become
+with an initial commit and repository-local Git author. This branch and commit become
 the Task's integration base:
 
 ```sh

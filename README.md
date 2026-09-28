@@ -74,13 +74,15 @@ never appears in `update-check --json`.
 
 The guided local workflow and optional GitLab support introduced in 0.14.0
 continue in 0.18.0. The existing GitHub workflow remains available.
-Start on a clean named branch with an initial commit, configured Git author,
-and an installed, authenticated Harness. Replace the example's Python test
+Start on a clean named branch with an initial commit and an installed,
+authenticated Harness. Set your author inside the repository with
+`git config user.name` and `git config user.email`, because the controller
+ignores your global Git identity. Replace the example's Python test
 command with verification appropriate to your project.
 
 ```sh
 cd your-repository
-machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
+machinist start "Reject unknown timezone names in parse_timezone with a ValueError" --test-cmd "uv run pytest"
 ```
 
 Read the saved Spec and copy the exact Approval command printed by start:
@@ -300,7 +302,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist integrate <Tn>` | Explicitly fast-forward a clean local base to the exact reviewed candidate. |
 | `machinist publish <Tn> --provider github\|gitlab [--host <host>]` | Publish the reviewed local candidate as a PR or MR with recoverable intent. |
 | `machinist retry --task <Tn> --phase spec\|execute\|review [--fresh]` | Explicitly retry a failed local Phase in the foreground. |
-| `machinist amend --task <Tn> --feedback <text>` | Regenerate the local Spec from feedback and require fresh Approval. |
+| `machinist amend --task <Tn> --feedback <text>` | Turn feedback on a reviewed candidate into a new Spec that needs fresh Approval. |
 | `machinist init [--yes]` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--yes` hands-free, `--no-input` skips without auto-enabling test command). |
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
 | `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |

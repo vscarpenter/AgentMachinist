@@ -25,19 +25,22 @@ cd your-repository
 ```
 
 Use `uv tool upgrade agentmachinist` for an existing installation. Start on a
-clean named branch with an initial commit and configured Git author. No forge,
-origin, watcher, or root configuration file is required.
+clean named branch with an initial commit. Set your commit author inside the
+repository with `git config user.name` and `git config user.email`. The
+controller ignores your global Git identity, so without a repository author its
+commits use the AgentMachinist identity. No forge, origin, watcher, or root
+configuration file is required.
 
 ## Start one small Task
 
 Use a real test command for your project. Verification runs in an isolated
 checkout of committed files, so the command must prepare its own dependencies
-and must not leave new files behind: `uv run pytest` with a committed `uv.lock`,
-or `npm ci && npm test` with a committed lockfile. To try this on something
+and must not leave new files that Git does not ignore: `uv run pytest` with a
+committed `uv.lock`, or `npm ci && npm test` with a committed lockfile. To try this on something
 disposable first, copy the [example project](https://github.com/vscarpenter/AgentMachinist/blob/main/examples/first-task/README.md).
 
 ```sh
-machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
+machinist start "Reject unknown timezone names in parse_timezone with a ValueError" --test-cmd "uv run pytest"
 ```
 
 The controller saves a Task ID such as `T1`, checks the baseline, writes a Spec,

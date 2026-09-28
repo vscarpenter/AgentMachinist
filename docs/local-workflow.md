@@ -24,12 +24,12 @@ reporting, described below.
 ## Complete one Task
 
 Start on a named branch in a clean Git repository with an initial commit, a
-configured Git author, an installed and authenticated Harness, and a
+repository-local Git author, an installed and authenticated Harness, and a
 verification command appropriate to the project. This checked-out branch and
 commit become the Task's integration base:
 
 ```sh
-machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run pytest"
+machinist start "Reject unknown timezone names in parse_timezone with a ValueError" --test-cmd "uv run pytest"
 ```
 
 First start reuses configured Harness profiles and required Verification Gates
@@ -38,7 +38,7 @@ three Phases and detects a verification command from the project manifest. Use
 `--harness codex` or another installed adapter to select it explicitly. Missing
 Harness executables or a required Gate produce configuration guidance before
 model work. Setup does not probe provider login or model access; authenticate
-the Harness and configure Git author identity yourself before starting. Supply
+the Harness and set a repository-local Git author yourself before starting. Supply
 `--test-cmd` when detection cannot find a required verification command. Local Review always runs, even if an existing GitHub configuration
 disabled its optional Review Phase.
 
@@ -188,7 +188,8 @@ version, compatibility, and authentication probes run without a model call;
 plugins without authentication probes need manual verification. Authentication
 readiness does not establish quotas or access to a particular model.
 
-Identity checks respect the controller's existing commit-author fallback. An
+The identity check reads only repository-local `user.name` and `user.email`;
+without them it warns that commits use the AgentMachinist identity. An
 unsafe runtime-exclusion path fails readiness. If exclusion is not established,
 the check warns that `start` must still apply and verify it against your ignore
 rules; it does not modify those rules to test them.

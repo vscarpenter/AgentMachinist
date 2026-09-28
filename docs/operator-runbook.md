@@ -18,7 +18,7 @@ journey. `machinist start` saves a local Task and stops at exact-SHA Approval;
 independent Review. `machinist status T1` reports the next valid action without
 fetching forge state. Inspect the local report/diff before `machinist integrate T1`.
 
-Start requires a clean named branch, initial commit, configured Git author,
+Start requires a clean named branch, initial commit, repository-local Git author,
 installed/authenticated Harnesses, and at least one required Verification Gate.
 Setup checks executables and Phase support; it does not probe authentication.
 Use optional `doctor --local` for the available authentication checks.
@@ -71,8 +71,10 @@ existing doctor report shape; failed checks return a nonzero exit status.
 An available command or successful authentication probe does not prove passing
 tests, model access, or quota.
 
-The Git identity check follows the controller's existing fallback; it does not
-require an extra author setup step. Runtime exclusion is checked without writing
+The Git identity check reads only repository-local `user.name` and
+`user.email`, because the controller ignores global Git configuration. Without
+them it warns, and commits use the AgentMachinist identity. Clone Workshops do
+not copy repository settings, so their commits always use that identity. Runtime exclusion is checked without writing
 it. Unsafe exclusion paths fail; an exclusion that still needs setup is a warning
 because `start` must apply and verify it against the repository's ignore rules.
 
