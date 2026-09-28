@@ -9,7 +9,7 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This guide describes AgentMachinist 0.18.0. Install the published package with
+This guide describes AgentMachinist 0.19.0. Install the published package with
 `uv tool install agentmachinist`, or upgrade an existing tool installation with
 `uv tool upgrade agentmachinist`; then run the commands below in the repository
 you want to change. The existing

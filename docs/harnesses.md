@@ -1,17 +1,16 @@
 # Harness support matrix
 
-AgentMachinist 0.18.0 includes four built-in adapters, and the unreleased
-source checkout adds Goose as a fifth. It also discovers installed v1 plugins. The guided local workflow requires executable adapters for all three
+AgentMachinist 0.19.0 includes five built-in adapters, including Goose, and
+discovers installed v1 plugins. The guided local workflow requires executable adapters for all three
 Phases; the first-run selector accepts a full-pipeline adapter. Phase profiles
 may subsequently select different supported adapters. “Spec and Review control”
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-This matrix describes the adapters in AgentMachinist 0.18.0. It covers the local
+This matrix describes the adapters in AgentMachinist 0.19.0. It covers the local
 workflow, GitLab publication, and local readiness.
 The CI column below describes the existing GitHub Actions Spec workflow, not
-GitLab CI. The `goose` row is an unreleased source-checkout addition; see
-[Goose](#goose-unreleased-source-checkout).
+GitLab CI. See [Goose](#goose) for its advisory read-only profile.
 
 | Config value | Executable | Spec and Review control | Implementation control | Managed Spec CI secret |
 | --- | --- | --- | --- | --- |
@@ -19,9 +18,9 @@ GitLab CI. The `goose` row is an unreleased source-checkout addition; see
 | `codex` | `codex` | Read-only sandbox and ephemeral session | Workspace-write sandbox, approval prompts disabled, ephemeral session; prompt plus Git postconditions | `OPENAI_API_KEY` |
 | `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools with session persistence disabled; prompt plus Git postconditions | `GEMINI_API_KEY` |
 | `opencode` | `opencode` | Pure plan agent; treated as advisory | Normal run agent; prompt plus Git postconditions | `ANTHROPIC_API_KEY` by default |
-| `goose` (unreleased) | `goose` | Quiet run with only the developer builtin loaded and no session; treated as advisory | Normal profile with no session; prompt plus Git postconditions | None; managed Spec CI is unsupported |
+| `goose` | `goose` | Quiet run with only the developer builtin loaded and no session; treated as advisory | Normal profile with no session; prompt plus Git postconditions | None; managed Spec CI is unsupported |
 
-### Goose (unreleased source checkout)
+### Goose
 
 Goose's `developer` builtin reads files for Spec and Review, but it also writes
 files and runs shell commands. `goose run` has no flag that limits it to
@@ -109,7 +108,7 @@ Current authentication entry points are:
 | Codex | `codex login status` | `codex login` |
 | OpenCode | `opencode auth list --pure` | `opencode auth login` |
 | Pi | `pi auth check --model <model> --json --no-refresh` (or the default Google provider when no model is set) | Configure credentials for the selected provider or model, then rerun the check. |
-| Goose (unreleased) | None; `doctor` warns that Goose has no non-interactive auth probe | `goose configure`, then verify one Goose run yourself |
+| Goose | None; `doctor` warns that Goose has no non-interactive auth probe | `goose configure`, then verify one Goose run yourself |
 
 These CLIs evolve independently. Confirm the command with the installed
 harness's `--help` output when upgrading.
@@ -180,7 +179,7 @@ Adapters splice `self._passthrough_argv()` (the operator's `harness.model` and
 `harness.extra_args`) into both the read-only and the edit profile at their own
 prompt-relative position instead of restating that block.
 
-The unreleased source checkout adds two optional class members. Set
+Adapters also have two optional class members. Set
 `auto_select = False` when another common tool installs the same executable
 name, so first-run discovery never guesses the adapter. Return non-secret
 variables from `environment_overrides()` when the CLI reads a control only from

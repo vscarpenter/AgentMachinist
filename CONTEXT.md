@@ -39,8 +39,7 @@ _Avoid_: Checkpoint
 **Task Run**:
 The durable local record of one Phase attempt for a Task, including claim, result, evidence, and failure state.
 An optional bounded repair happens inside the active Execute Task Run; it is
-neither a new Phase nor an automatic retry of a failed Task Run. This repair
-capability is an unreleased source-checkout addition.
+neither a new Phase nor an automatic retry of a failed Task Run.
 _Avoid_: Session, execution
 
 **Claim**:

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 — 2026-09-27
 
 - Add a built-in Goose adapter (`harness.name: goose`). Spec and Review run
   `goose run -q --no-session --no-profile --with-builtin developer`, and

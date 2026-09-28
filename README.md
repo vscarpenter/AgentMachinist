@@ -1,7 +1,7 @@
 # AgentMachinist
 
 AgentMachinist takes a small development Task from intent to a reviewed local
-change. It coordinates Claude Code, OpenCode, Pi, or Codex, with human Approval
+change. It coordinates Claude Code, OpenCode, Pi, Codex, or Goose, with human Approval
 of the exact Spec before implementation and human review before integration.
 GitHub and GitLab are optional sources of Tasks and destinations for publication.
 
@@ -20,7 +20,7 @@ integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
 Current release:
-[AgentMachinist 0.18.0 on PyPI](https://pypi.org/project/agentmachinist/0.18.0/).
+[AgentMachinist 0.19.0 on PyPI](https://pypi.org/project/agentmachinist/0.19.0/).
 
 ## Install
 
@@ -32,7 +32,7 @@ machinist --version
 ```
 
 You also need `git` and one supported Harness executable (`claude`, `opencode`,
-`pi`, or `codex`). GitHub operations require authenticated [`gh`](https://cli.github.com);
+`pi`, `codex`, or `goose`). GitHub operations require authenticated [`gh`](https://cli.github.com);
 GitLab operations require authenticated [`glab`](https://docs.gitlab.com/cli/).
 The core CLI is tested on macOS and Linux with Python 3.12 to 3.14. Managed
 background service commands are macOS-only; on Linux, schedule
@@ -191,9 +191,9 @@ The default `github.spec_source: local` makes `watch` own spec generation.
 Choose `github-actions` and run `machinist sync-workflows` if CI should own that
 phase instead. Exactly one source is active, preventing duplicate spec runs.
 Managed CI installs the selected Spec adapter and reads its declared secret
-name; built-ins support Claude Code, Codex, OpenCode, and Pi. The unreleased
-source checkout adds a built-in Goose adapter for local dispatch only; see the
-[harness matrix](docs/harnesses.md#goose-unreleased-source-checkout).
+name; built-ins support Claude Code, Codex, OpenCode, and Pi. The built-in
+Goose adapter supports local dispatch only; see the
+[harness matrix](docs/harnesses.md#goose).
 
 Create a focused issue with `machinist task new --title "Handle an invalid
 timezone without crashing"`. The completion guidance points to

@@ -16,7 +16,7 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.18.0).
+hatchling, published to PyPI as `agentmachinist` (current release: 0.19.0).
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, ordered workflow,
 format, lint, type, and coverage/test gates from `scripts/verify.sh`).
@@ -337,11 +337,14 @@ tag/version equality, reruns the suite, smoke-tests the installed wheel
 
 ## Current checkout (2026-09-27)
 
-- **Unreleased: a built-in Goose adapter.** Spec and Review read through
-  Goose's `developer` builtin, so read-only custody is advisory, as for
-  OpenCode. Goose has no managed Spec CI profile or auth probe, and first-run
-  discovery never selects it. See `tasks/goose-harness-spec.md` and
-  `docs/harnesses.md`.
+- **0.19.0 adds a built-in Goose adapter and first-run guidance fixes.** Spec
+  and Review read through Goose's `developer` builtin, so read-only custody is
+  advisory, as for OpenCode. Goose has no managed Spec CI profile or auth
+  probe, and first-run discovery never selects it. Before any configuration,
+  `config show` and `config set` point newcomers at `machinist start`. The
+  guides ask for a repository-local Git author, because the controller ignores
+  global Git identity. See `tasks/goose-harness-spec.md`,
+  `tasks/onboarding-review-2026-09-27.md`, and `docs/harnesses.md`.
 
 - **0.18.0 adds combined local/legacy `report --source all|legacy|local`,
   bounded opt-in Execute repair, and first-run fixes.** Repair defaults off
