@@ -1167,3 +1167,29 @@ global Git identity in code, and format consolidation. Open question: the live
 site serves `tldr.md` as raw `text/markdown`, so the site's "Complete your
 first Task" links still target `first-run-guide.html` until Vinny chooses how
 to point them at the short guide.
+
+## Onboarding simplifications (2026-09-27)
+
+Same branch. Vinny picked four "Simplify the path" items from
+`tasks/onboarding-review-2026-09-27.md`.
+
+- [x] Trim the README to lead with the path: release and dogfood notes out of
+  the opening, maintenance into an Upgrade section, and a "New here?" pointer.
+- [x] Cut version-history phrases from the README, local workflow guide,
+  harness matrix, short guide, and docs index. Keep version identity lines.
+- [x] Add a free preflight (`rehearse`, then `doctor --local`) and a paid-run
+  note to the short guide.
+- [x] Add a six-term glossary to the short guide that links `CONTEXT.md`.
+- [x] Docs tests, the full verification script, and commits.
+  `cd27140` trims the README and cuts the history phrases; `d033730` adds the
+  glossary and preflight to the short guide, which stays at its 100-line cap.
+  `bash scripts/verify.sh` passed: 1711 tests, 88.54% coverage.
+
+Assumption: the README's GitHub automation section stays, because moving it
+needs a deliberate change to `test_setup_docs_require_review_commit_and_push`.
+
+Resuming from here: this branch carries the Goose site notes, the onboarding
+review, the contradiction fixes, and these simplifications. Next: merge its PR
+after the required checks pass. Open questions keep their defaults: the site's
+first-Task links stay on `first-run-guide.html` because the site serves
+`tldr.md` as raw Markdown, and the README keeps its GitHub automation section.
