@@ -4,7 +4,7 @@
 > [September 18 documentation review](#documentation-follow-up-2026-09-18) and
 > [CHANGELOG.md](../CHANGELOG.md) for the current checkout.
 
-# Version 0.15.0 publication (IN PROGRESS)
+# Version 0.15.0 publication (COMPLETE)
 
 User asked to release 0.15.0 to PyPI. Findings before any change: PyPI latest is
 0.14.0, no `v0.15.0` GitHub Release exists, and PR #43 merged with the Ubuntu
@@ -19,9 +19,36 @@ pending.
 - [x] Make the Git-author doctor tests deterministic across platforms.
 - [x] Convert release-candidate wording to published-release wording in the
       changelog, README, CLAUDE.md, and every current guide; adapt the docs test.
-- [ ] Run `bash scripts/verify.sh`; commit on `release/0.15.0-publication`.
-- [ ] Push, open the PR, wait for Linux and macOS CI to pass.
-- [ ] Human go-ahead, merge, `gh release create v0.15.0`, verify PyPI.
+- [x] Run `bash scripts/verify.sh`; commit on `release/0.15.0-publication`.
+- [x] Push, open the PR, wait for Linux and macOS CI to pass.
+- [x] Human go-ahead, merge, `gh release create v0.15.0`, verify PyPI.
+
+A second macOS-only failure appeared on the PR: Git 2.55 detaches
+`git maintenance run --auto` after every commit, and its
+`.git/objects/maintenance.lock` was still present when the doctor tests took
+their pre-run repository snapshot on slow runners. The `repo` fixture now sets
+`maintenance.auto=false`; a rotating set of snapshot failures across macOS jobs
+is the signature of this race.
+
+### Resuming From Here
+
+Done: PR #44 merged to `main` as `2b701f9` with every check green on Linux and
+macOS (Python 3.12 to 3.14, coverage, minimum dependencies, package, CodeQL).
+`bash scripts/verify.sh` passed on `fb35c6a` and `270efbf`: 1,508 tests at
+88% coverage, wheel and sdist smoke tests reporting 0.15.0. GitHub Release
+`v0.15.0` targets `2b701f9`; release run 34179377505 passed build, publish,
+release-assets, and verify-published. PyPI lists 0.15.0 as latest with the
+wheel and sdist un-yanked, and an uncached `uv tool run --from
+agentmachinist==0.15.0 machinist --version` prints 0.15.0.
+
+Next: carry this ledger note into the next change's PR. Consider whether the
+controller's `_SAFE_GIT_CONFIG` should also disable auto maintenance so
+Workshop commits never leave a detached Git process behind, and whether the
+doctor's `Git author` FAIL detail should include Git's stderr (it printed only
+the generic "configured repository identity is incomplete or invalid" on the
+Ubuntu runner).
+
+Blockers: none.
 
 # Version 0.15.0 bump and origin push (COMPLETE)
 
@@ -296,7 +323,7 @@ Completed 2026-09-03.
 - [x] Push `release/0.12.1`, open PR #37, merge, publish GitHub Release
       `v0.12.1`, and verify PyPI.
 
-### Resuming From H### Resuming From Here
+### Resuming From Here
 
 Done: 0.12.1 is released. Candidate `438863f` passed the release-grade gate
 (1004 tests at 86.00% coverage, ruff format and lint, mypy, managed workflow
@@ -316,7 +343,7 @@ was a patch bump rather than a minor one.
 
 Completed 2026-09-03.
 
-12.0 release preparation (COMPLETE)
+# AgentMachinist 0.12.0 release preparation (COMPLETE)
 
 - [x] Confirm the release version and inspect origin, branch protection, required
       checks, release automation, and secret metadata.
@@ -1100,9 +1127,15 @@ the two 0.18.0 ledger notes.
 - [x] Commit, push, and open the PR. The local full suite was still running
   at 46% when the commit was made; the PR's required checks rerun it.
 
-Resuming from here: the fix, its test, and this note are committed on
-`fix/docs-site-links` and pushed for review. Next: green required checks,
-then merge. Assumption: `blob/main` URLs are the right target because the
+- [x] All fourteen checks passed and PR #56 merged as `a8c1879` on 2026-09-27
+  at 02:32 UTC. The local full suite finished green afterward (1,689 passed).
+  The Pages rebuild for that commit serves all 28 `docs/` files byte-identical
+  and the live link check reports no 404s.
+
+Resuming from here: the fix is on `main` and the site is verified. This note
+lives on `docs/todo-ledger-post-56` until the next PR carries it. Local
+branches `docs/todo-ledger-0.18.0` and `fix/docs-site-links` are merged and
+can be deleted. Assumption: `blob/main` URLs are the right target because the
 site publishes only `docs/` and the linked files live at the repository root.
 
 ## Goose Harness adapter (2026-09-27)
@@ -1205,10 +1238,20 @@ this started.
   README, CLAUDE.md, SECURITY.md, the guides, and the HTML pages, and add Goose
   to the adapter lists. Drop a stale unreleased note in `CONTEXT.md` that the
   0.18.0 release missed.
-- [ ] `bash scripts/verify.sh` from the release candidate.
-- [ ] Push `release/0.19.0` and open its PR.
-- [ ] Merge after green required checks. This waits on Vinny.
-- [ ] `gh release create v0.19.0` at the merge commit. This waits on Vinny.
+- [x] `bash scripts/verify.sh` from the release candidate `5a673db`: 1711
+  passed, 88.52% coverage, and the 0.19.0 wheel and sdist smoke-tested.
+- [x] Push `release/0.19.0` and open PR #59. All 14 required checks passed on
+  its head.
+- [x] Vinny merged PR #59 as `141c5ef` (2026-09-28 02:23 UTC). CI, CodeQL, and
+  Pages passed on the merge commit before the release was created.
+- [x] `gh release create v0.19.0 --target 141c5ef` at Vinny's request. Release
+  run 36372596297 passed build, publish, verify-published, and release-assets.
+  The PyPI version endpoint lists the wheel and sdist, neither yanked, and an
+  isolated `uv tool run --from agentmachinist==0.19.0` reports 0.19.0.
 
-Assumption: 0.19.0 is a minor bump because `harness.name: goose` and the
-adapter hooks are new user-facing surface.
+Resuming from here: 0.19.0 is published and marked Latest. This note lives on
+`docs/todo-ledger-0.19.0` until the next change's PR carries it, because
+`main` is PR-protected. Assumption from the prep entry stands: 0.19.0 is a
+minor bump because `harness.name: goose` and the adapter hooks are new
+user-facing surface. The auto-mode classifier refused an admin merge, so Vinny
+merged the release PR himself.
