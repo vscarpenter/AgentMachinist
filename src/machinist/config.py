@@ -93,6 +93,7 @@ class HarnessName(str, Enum):
     OPENCODE = "opencode"
     PI = "pi"
     CODEX = "codex"
+    GOOSE = "goose"
 
 
 HarnessIdentifier: TypeAlias = HarnessName | str
@@ -128,6 +129,36 @@ class HarnessPhase(str, Enum):
 # last occurrence win. Keep this map beside configuration validation so unsafe
 # combinations fail before a harness process starts. Adapter tests should keep
 # it synchronized with the argv each adapter owns.
+_GOOSE_RESERVED_ARGS = frozenset(
+    {
+        "run",
+        "--",
+        "-t",
+        "--text",
+        "-i",
+        "--instructions",
+        "--recipe",
+        "--sub-recipe",
+        "--params",
+        "--explain",
+        "--render-recipe",
+        "-n",
+        "--name",
+        "--session-id",
+        "--path",
+        "-s",
+        "--interactive",
+        "-r",
+        "--resume",
+        "--no-session",
+        "--no-profile",
+        "--with-builtin",
+        "--with-extension",
+        "--with-streamable-http-extension",
+        "--container",
+        "--model",
+    }
+)
 RESERVED_HARNESS_EXTRA_ARGS: dict[HarnessName, dict[HarnessPhase, frozenset[str]]] = {
     HarnessName.CLAUDE_CODE: {
         HarnessPhase.SPEC: frozenset(
@@ -259,6 +290,10 @@ RESERVED_HARNESS_EXTRA_ARGS: dict[HarnessName, dict[HarnessPhase, frozenset[str]
                 "--session",
             }
         ),
+    },
+    HarnessName.GOOSE: {
+        HarnessPhase.SPEC: _GOOSE_RESERVED_ARGS | {"-q", "--quiet", "--output-format"},
+        HarnessPhase.EXECUTE: _GOOSE_RESERVED_ARGS,
     },
 }
 

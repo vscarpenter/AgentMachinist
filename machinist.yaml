@@ -12,7 +12,7 @@ instructions:
     paths: [docs/approval-policy.md]
 
 harness:
-  name: claude-code            # claude-code | opencode | pi | codex
+  name: claude-code            # claude-code | opencode | pi | codex | goose
   command: null                # optional: override the harness executable path
   timeout_minutes: 30          # Execute Harness invocation timeout (1-240)
   spec_timeout_minutes: 10     # Phase 1 spec-writing budget (1-60)

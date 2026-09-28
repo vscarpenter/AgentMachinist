@@ -323,7 +323,11 @@ def _select_harness(
             )
         return requested
     for name, adapter in registry.adapters.items():
-        if phases <= adapter.descriptor.phases and which(adapter.default_command):
+        if (
+            adapter.auto_select
+            and phases <= adapter.descriptor.phases
+            and which(adapter.default_command)
+        ):
             return name
     raise ConfigError(
         "No installed Harness supports Spec, Execute, and Review. Install and "

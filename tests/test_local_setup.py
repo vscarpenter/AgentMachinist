@@ -10,6 +10,7 @@ import pytest
 from machinist.config import MAX_CONFIG_BYTES, ConfigError, SpecSource
 from machinist.harness import HarnessRegistry
 from machinist.harness.codex import Codex
+from machinist.harness.goose import Goose
 from machinist.local_setup import (
     detect_test_command,
     ensure_local_config,
@@ -394,6 +395,41 @@ def test_advisory_only_config_requires_a_required_gate(repo):
     with pytest.raises(ConfigError, match="required"):
         ensure_local_config(repo)
     assert not local_path(repo).exists()
+
+
+def goose_on_path(monkeypatch, *commands: str) -> None:
+    # Goose comes first so discovery order cannot explain a skip.
+    monkeypatch.setattr(
+        "machinist.local_setup.discover_harnesses",
+        lambda: HarnessRegistry({"goose": Goose, "local-plugin": LocalPlugin}),
+    )
+    monkeypatch.setattr(
+        "machinist.local_setup.shutil.which",
+        lambda command: f"/bin/{command}" if command in commands else None,
+    )
+
+
+def test_first_setup_skips_goose_for_another_installed_harness(repo, monkeypatch):
+    goose_on_path(monkeypatch, "goose", "local-agent")
+
+    config = ensure_local_config(repo, test_command="pytest")
+
+    assert config.harness.name == "local-plugin"
+
+
+def test_first_setup_never_guesses_goose_but_accepts_it_by_name(repo, monkeypatch):
+    # pressly/goose, a Go migration tool, installs the same executable name.
+    goose_on_path(monkeypatch, "goose")
+
+    with pytest.raises(ConfigError, match="No installed Harness"):
+        ensure_local_config(repo, test_command="pytest")
+    assert not local_path(repo).exists()
+
+    config = ensure_local_config(repo, harness_name="goose", test_command="pytest")
+    assert all(
+        config.harness_for(phase).name == "goose"
+        for phase in ("spec", "execute", "review")
+    )
 
 
 def test_explicit_installed_plugin_sets_all_phases(repo):

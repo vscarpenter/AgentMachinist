@@ -65,3 +65,7 @@
 - A retry reuses the Task's original base commit by design, so a printed
   "retry" next action is wrong advice after a baseline fix. When a state has
   two recoveries, the receipt must name both.
+- Check a Harness CLI's names against its source at the installed tag, not
+  a neighboring subcommand. On Goose 1.52.0, `goose mcp developer` rejects the
+  name because `developer` became an in-process platform extension, while
+  `goose run --with-builtin developer` still resolves it.

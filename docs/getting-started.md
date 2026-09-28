@@ -236,7 +236,8 @@ setup step without the guided receipt:
   `.github/workflows/machinist-*.yml` files.
 - **Harness** — `claude-code`, `codex`, `opencode`, `pi`, or an installed v1
   adapter plugin. Managed GitHub Actions dispatch renders the selected
-  adapter's pinned install and secret metadata.
+  adapter's pinned install and secret metadata. The unreleased source checkout
+  also lists `goose` for local dispatch, but never as the detected default.
 - **Test gate** — confirm the auto-detected command, or pick your language
   for a suggested one (`pytest`, `npm test`, `cargo test`, `go test ./...`,
   `mvn test`), type your own, or explicitly skip the Gate for the legacy
@@ -544,7 +545,8 @@ itself). The generated workflow reads the selected Spec adapter's CI metadata.
 Built-ins install pinned Claude Code, Codex, OpenCode, or Pi packages and bind
 only their declared repository secret (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 or `GEMINI_API_KEY`). `github.spec_secret_env` overrides the secret name, not
-its value. A plugin without a CI Spec profile must use local dispatch.
+its value. A plugin without a CI Spec profile must use local dispatch, and so
+must the unreleased built-in Goose adapter.
 
 ## Configuration reference
 
@@ -897,7 +899,8 @@ See [repair recovery](operator-runbook.md#bounded-repair-recovery).
 ## Choosing a harness
 
 Set `harness.name` to `claude-code`, `opencode`, `pi`, or `codex` in the
-configuration used by your chosen workflow. Runs
+configuration used by your chosen workflow. The unreleased source checkout also
+accepts `goose`; first-run discovery never picks it on its own. Runs
 reuse the provider authentication already available to that executable.
 
 ```yaml
@@ -907,7 +910,8 @@ harness:
 ```
 
 Support is not identical. Some spec modes have a CLI-enforced read-only tool or
-sandbox boundary; OpenCode's plan agent is advisory. All implementations are
+sandbox boundary; OpenCode's plan agent and Goose's read-only profile are
+advisory. All implementations are
 checked afterward for Harness-created commits and `.machinist/` changes.
 Local Phases check controller/Workshop HEAD, branch, refs, and custody without
 contacting a forge; legacy GitHub Phases also check live remote branch changes. See the [harness matrix](harnesses.md) and

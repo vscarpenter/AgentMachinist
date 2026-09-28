@@ -616,11 +616,34 @@ def test_changing_phase_provider_does_not_inherit_provider_specific_options():
         ("codex", "--config=sandbox_mode=danger-full-access"),
         ("pi", "--tools"),
         ("opencode", "--agent"),
+        ("goose", "--no-profile"),
+        ("goose", "--with-extension=npx some-server"),
+        ("goose", "--text=another prompt"),
+        ("goose", "-ianother-prompt.md"),
+        ("goose", "--resume"),
     ],
 )
 def test_legacy_extra_args_cannot_override_adapter_safety(name, argument):
     with pytest.raises(ValueError, match="adapter-owned"):
         HarnessConfig(name=name, extra_args=[argument])
+
+
+def test_goose_reserves_output_shape_only_where_stdout_is_parsed():
+    # Spec and Review parse stdout; Execute output is only logged.
+    execute = HarnessConfig.model_validate(
+        {"execute": {"name": "goose", "extra_args": ["--quiet"]}}
+    )
+    assert execute.execute is not None
+    assert execute.execute.extra_args == ["--quiet"]
+    with pytest.raises(ValueError, match="goose spec"):
+        HarnessConfig.model_validate(
+            {"spec": {"name": "goose", "extra_args": ["--output-format=json"]}}
+        )
+
+
+def test_goose_accepts_provider_selection_in_every_phase():
+    config = HarnessConfig(name="goose", extra_args=["--provider", "anthropic"])
+    assert config.extra_args == ["--provider", "anthropic"]
 
 
 def test_phase_extra_args_are_validated_against_resolved_provider():
