@@ -1,0 +1,115 @@
+{
+  "messages": [
+    {
+      "id": null,
+      "role": "user",
+      "created": 1790632151,
+      "content": [
+        {
+          "type": "text",
+          "text": "Use the shell tool to run exactly: cat sample.txt . Then reply with exactly the word ok and nothing else."
+        }
+      ],
+      "metadata": {
+        "userVisible": true,
+        "agentVisible": true
+      }
+    },
+    {
+      "id": "msg_011CfWaHmPkKuxrsn4nou9AE",
+      "role": "assistant",
+      "created": 1790632153,
+      "content": [
+        {
+          "type": "toolRequest",
+          "id": "toolu_01U8Cyw49ZCsL571cLmsCuXJ",
+          "toolCall": {
+            "status": "success",
+            "value": {
+              "name": "shell",
+              "arguments": {
+                "command": "cat sample.txt"
+              }
+            }
+          },
+          "_meta": {
+            "goose.toolCall.providerIndex": 0,
+            "goose_extension": "developer"
+          }
+        }
+      ],
+      "metadata": {
+        "userVisible": true,
+        "agentVisible": true,
+        "inference": {
+          "provider": "anthropic",
+          "requestedModel": "claude-opus-5-5"
+        }
+      }
+    },
+    {
+      "id": "msg_7ca08c7e-9033-4af5-82fb-ab7ba06bf04a",
+      "role": "user",
+      "created": 1790632153,
+      "content": [
+        {
+          "type": "toolResponse",
+          "id": "toolu_01U8Cyw49ZCsL571cLmsCuXJ",
+          "toolResult": {
+            "status": "success",
+            "value": {
+              "resultType": "complete",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello {name!r}",
+                  "annotations": {
+                    "priority": 0.0
+                  }
+                }
+              ],
+              "structuredContent": {
+                "stdout": "hello {name!r}",
+                "stderr": "",
+                "exit_code": 0
+              },
+              "isError": false
+            }
+          }
+        }
+      ],
+      "metadata": {
+        "userVisible": true,
+        "agentVisible": true
+      }
+    },
+    {
+      "id": "msg_011CfWaHtzeALUFaQA4g27vv",
+      "role": "assistant",
+      "created": 1790632154,
+      "content": [
+        {
+          "type": "text",
+          "text": "ok"
+        }
+      ],
+      "metadata": {
+        "userVisible": true,
+        "agentVisible": true,
+        "inference": {
+          "provider": "anthropic",
+          "requestedModel": "claude-opus-5-5"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "total_tokens": 4860,
+    "input_tokens": 4804,
+    "output_tokens": 56,
+    "cache_read_input_tokens": 2366,
+    "cache_write_input_tokens": 2432,
+    "cost_usd": 0.0137772,
+    "status": "completed"
+  }
+}

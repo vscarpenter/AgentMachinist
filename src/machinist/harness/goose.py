@@ -1,7 +1,11 @@
+import json
+from pathlib import Path
+
 from machinist.harness.base import (
     Harness,
     HarnessCapabilities,
     HarnessDescriptor,
+    HarnessError,
 )
 
 
@@ -27,7 +31,8 @@ class Goose(Harness):
         return {"GOOSE_MODE": "auto"}
 
     def spec_argv(self, prompt: str) -> list[str]:
-        # -q keeps stdout to the response the Spec and Review parsers read;
+        # Even with -q, text output mixes the tool transcript into the answer, so
+        # Spec and Review read JSON and keep only the final assistant message.
         # --no-profile drops personal extensions and keeps only developer.
         argv = [
             self.command,
@@ -37,6 +42,8 @@ class Goose(Harness):
             "--no-profile",
             "--with-builtin",
             "developer",
+            "--output-format",
+            "json",
         ]
         argv.extend(self._passthrough_argv())
         argv.extend(["--text", prompt])
@@ -47,3 +54,27 @@ class Goose(Harness):
         argv.extend(self._passthrough_argv())
         argv.extend(["--text", prompt])
         return argv
+
+    def generate_spec(self, prompt: str, cwd: Path) -> str:
+        return _final_answer(super().generate_spec(prompt, cwd))
+
+    def review(self, prompt: str, cwd: Path) -> str:
+        return _final_answer(super().review(prompt, cwd))
+
+
+def _final_answer(stdout: str) -> str:
+    """Return the text of the last assistant message in a JSON transcript."""
+    try:
+        messages = json.loads(stdout)["messages"]
+        replies = [message for message in messages if message["role"] == "assistant"]
+        # Only the last reply counts; earlier text is mid-task narration.
+        texts = (
+            [item["text"] for item in replies[-1]["content"] if item["type"] == "text"]
+            if replies
+            else []
+        )
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HarnessError(f"goose output is not a JSON transcript: {exc}") from exc
+    if not texts:
+        raise HarnessError("goose transcript has no final assistant answer")
+    return "\n".join(texts)
