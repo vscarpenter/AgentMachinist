@@ -17,6 +17,7 @@ from machinist.local_workflow import LocalWorkflow, LocalWorkflowError
 from machinist.managed_paths import ManagedPathError
 from machinist.phases.execute import ExecutePhaseError
 from machinist.phases.local import LocalPhaseError
+from machinist.phases.review import ReviewPhaseError
 from machinist.verification import VerificationError
 
 SHA = "a" * 40
@@ -474,7 +475,13 @@ def test_legacy_task_new_checks_configuration_before_prompting(monkeypatch, tmp_
 
 @pytest.mark.parametrize(
     "error_type",
-    [LocalPhaseError, ExecutePhaseError, ManagedPathError, VerificationError],
+    [
+        LocalPhaseError,
+        ExecutePhaseError,
+        ReviewPhaseError,
+        ManagedPathError,
+        VerificationError,
+    ],
 )
 def test_local_phase_failures_render_actionable_errors(
     local_cli, monkeypatch, error_type

@@ -20,6 +20,9 @@
 - Retire the job card and the animated explainer. Their URLs now redirect to
   the first-run guide and `how-it-works.html`, which gains the terminal command
   sequence, a skip link, and page metadata.
+- Show a failed local Review as an `Error:` line instead of a Python
+  traceback. `ReviewPhaseError` was missing from the errors the local
+  commands translate, so an unparsable Review report escaped uncaught.
 
 ## 0.19.0 — 2026-09-27
 

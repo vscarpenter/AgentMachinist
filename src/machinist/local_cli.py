@@ -38,6 +38,7 @@ from machinist.local_workflow import LocalWorkflow, LocalWorkflowError
 from machinist.managed_paths import ManagedPathError
 from machinist.phases.execute import ExecutePhaseError
 from machinist.phases.local import LocalPhaseError
+from machinist.phases.review import ReviewPhaseError
 from machinist.process import ProcessSupervisionError
 from machinist.publication import PublicationError, origin_target, publish_task
 from machinist.runtime_paths import RuntimePathError, read_text_file
@@ -76,6 +77,7 @@ def local_errors() -> Iterator[None]:
         ValueError,
         LocalPhaseError,
         ExecutePhaseError,
+        ReviewPhaseError,
         ManagedPathError,
         VerificationError,
         ProcessSupervisionError,
