@@ -1289,3 +1289,18 @@ by request. Next candidates are the cross-Harness regression corpus (review
 item 3) and onboarding decision 1. Assumption: local Approval binds only the
 Spec SHA, repository, and Task, which `local_workflow.py` confirms, so a
 Harness change on retry needs no new Approval.
+
+## Cross-Harness regression corpus (2026-09-28)
+
+Branch `feat/harness-regression-corpus` from `main`. Item 3 of
+`tasks/next-steps-review.md`: answer "did this prompt, adapter, or model make
+first-pass Execute worse?" from Evidence `report` already records.
+
+- [x] Cases in `examples/harness-corpus/cases.json`, all on `examples/first-task`.
+- [x] `scripts/harness_corpus.py`: one disposable repository per case, then
+  `start`, exact-SHA `approve`, and `report --json --source local`.
+- [x] Tested pure functions: load cases, summarize a report, find regressions
+  against `examples/harness-corpus/baseline.json`.
+- [x] README with cost warning. No controller code changes.
+- [x] 11 offline tests, including an end-to-end run against a fake `machinist`
+  on `PATH`. No paid run yet, so `baseline.json` does not exist.

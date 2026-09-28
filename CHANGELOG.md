@@ -23,6 +23,11 @@
 - Show a failed local Review as an `Error:` line instead of a Python
   traceback. `ReviewPhaseError` was missing from the errors the local
   commands translate, so an unparsable Review report escaped uncaught.
+- Add a Harness regression corpus for contributors:
+  `scripts/harness_corpus.py` runs the fixed Tasks in
+  `examples/harness-corpus/` through the public CLI and fails when a case that
+  passed first-pass Execute in `baseline.json` no longer does. It makes paid
+  model calls and is not part of the Verification Gates.
 
 ## 0.19.0 — 2026-09-27
 
