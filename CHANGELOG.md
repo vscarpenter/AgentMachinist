@@ -36,6 +36,10 @@
   when a case never reaches Execute. It makes paid model calls and is not
   part of the Verification Gates. The first baseline covers Claude Code and
   Goose.
+- Save the raw local Review output as `harness-report.txt` in the Review
+  attempt's log directory, record its path as `harness_report_path` Evidence,
+  and name the file when the report fails to parse. Review used to discard
+  output it could not parse, which left a Goose Review failure undiagnosable.
 
 ## 0.19.0 — 2026-09-27
 
