@@ -1140,3 +1140,18 @@ At the next release, add Goose to the adapter lists in `docs/index.html` and
 Assumptions: no paid Goose run was made, so a live Task with Goose remains
 unexercised; `GOOSE_MODE=auto` in Spec and Review is acceptable because the
 controller's postconditions reject any change those runs make.
+
+## Goose site notes and onboarding review (2026-09-27)
+
+Branch `docs/goose-site-onboarding` from `docs/todo-ledger-goose`, so its PR
+also carries the Goose merge note.
+
+- [x] Label the unreleased Goose adapter on `docs/index.html` and
+  `docs/explainer.html` (`f7ec0c5`).
+- [x] Map every onboarding entry point, and walk `docs/tldr.md` literally in a
+  scratch copy of `examples/first-task` using only free commands.
+- [x] Rank verified findings in `tasks/onboarding-review-2026-09-27.md`.
+- [ ] Implement the recommendations Vinny approves.
+
+Resuming from here: the review awaits Vinny's pick. Nothing from it has been
+implemented. Pushing this branch and opening its PR stay confirm-first.
