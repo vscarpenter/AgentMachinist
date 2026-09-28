@@ -456,7 +456,10 @@ def test_setup_docs_require_review_commit_and_push():
     readme = _README_PATH.read_text().lower()
     guide = _guide_text().lower()
     html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
-    for text in (readme, guide, html):
+    # The README points to the guide instead of repeating the setup steps.
+    assert "docs/getting-started.md#github-setup-and-automation" in readme
+    assert "### github setup and automation" in guide
+    for text in (guide, html):
         assert ".machinist/runs/" in text
         assert "git add -- .github/workflows/machinist-approve.yml" in text
         assert "git add -- .github/workflows/machinist-spec.yml" in text
