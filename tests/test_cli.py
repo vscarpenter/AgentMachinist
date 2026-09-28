@@ -3490,6 +3490,48 @@ def test_config_commands_default_to_the_local_file_without_root_config():
         assert "command: root-pytest" in root_shown.output
 
 
+def test_config_commands_route_newcomers_to_start_before_any_configuration():
+    # Before the first start there is no root or local file; the local path,
+    # not GitHub onboarding, is the next step.
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        subprocess.run(["git", "init", "-q", "-b", "main"], check=True)
+        for args in (
+            ["config", "show"],
+            ["config", "set", "tests.command", "pytest"],
+        ):
+            result = runner.invoke(main, args)
+
+            assert result.exit_code != 0, args
+            assert "machinist start" in result.output, args
+            assert "(recommended)" not in result.output, args
+        assert not Path("machinist.yaml").exists()
+        assert not Path(".machinist").exists()
+
+
+def _help_text(*command: str) -> str:
+    result = CliRunner().invoke(main, [*command, "--help"])
+    assert result.exit_code == 0, result.output
+    return " ".join(result.output.split())
+
+
+def test_help_text_matches_the_local_first_workflow():
+    onboard = _help_text("onboard")
+    assert "recommended first command" not in onboard
+    assert "optional GitHub automation" in onboard
+
+    # Amendment starts from a reviewed candidate, never the initial Spec.
+    amend = _help_text("amend")
+    assert "Revise a local Task Spec" not in amend
+    assert "reviewed local candidate" in amend
+
+    # Local retries resume retained edits; only GitHub issues default to fresh.
+    retry = _help_text("retry")
+    assert "(the safe default)" not in retry
+    assert "local Tasks resume" in retry
+    assert "Failed Phase to retry" in retry
+
+
 def test_runs_points_local_tasks_at_status(monkeypatch):
     monkeypatch.setattr("machinist.cli.has_local_configuration", lambda: True)
     runner = CliRunner()
