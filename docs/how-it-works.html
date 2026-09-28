@@ -6,6 +6,8 @@
   <meta name="color-scheme" content="light">
   <title>How AgentMachinist works</title>
   <meta name="description" content="Swimlane diagram of the local AgentMachinist workflow, showing who acts at each step from Task to integrated candidate.">
+  <meta name="theme-color" content="#fbfaf6">
+  <link rel="canonical" href="https://agentmachinist.vinny.dev/how-it-works.html">
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -150,6 +152,24 @@
     .footer a { color: var(--color-link); text-underline-offset: 0.2em; }
     .footer a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
 
+    /* min-width: 0 lets long commands scroll inside pre instead of widening the grid. */
+    .card.wide { grid-column: 1 / -1; min-width: 0; }
+    .card pre {
+      margin-top: 0.6rem;
+      padding: 0.875rem 1rem;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: var(--color-ink);
+    }
+    .card pre .comment { color: var(--color-soft); }
+
+    .skip-link { position: absolute; left: -10000px; }
+    .skip-link:focus { left: 1rem; top: 1rem; padding: 0.5rem 0.75rem; background: #ffffff; color: var(--color-link); outline: 3px solid var(--color-accent); }
+
     @media (max-width: 860px) {
       body { padding: 2rem 1rem; }
       .cards { grid-template-columns: 1fr; }
@@ -157,6 +177,7 @@
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <div class="container">
 
     <header class="header">
@@ -166,7 +187,7 @@
       <nav class="doc-nav" aria-label="Related documentation"><a href="first-run-guide.html">Complete your first Task</a><a href="index.html#documentation">All documentation</a></nav>
     </header>
 
-    <main>
+    <main id="main">
       <figure class="diagram-container">
         <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="how-it-works-title how-it-works-desc">
           <title id="how-it-works-title">How AgentMachinist works</title>
@@ -337,6 +358,18 @@
       </figure>
 
       <div class="cards">
+        <section class="card wide">
+          <p class="eyebrow">In the terminal</p>
+          <div class="card-header"><span class="card-dot coral"></span><h2>One Task from start to a reviewed local candidate</h2></div>
+<pre><code>machinist start "Reject unknown timezone names in parse_timezone with a ValueError"
+<span class="comment"># Read the saved Spec, then approve its exact commit:</span>
+machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;
+<span class="comment"># Execute, Verification Gates, and independent Review run in the foreground.</span>
+<span class="comment"># Findings are advisory. Inspect the report and candidate diff, then:</span>
+machinist integrate T1
+<span class="comment"># Optional: publish a PR or MR instead of, or after, integrating.</span>
+machinist publish T1 --provider github</code></pre>
+        </section>
         <section class="card">
           <p class="eyebrow">Your two decisions</p>
           <div class="card-header"><span class="card-dot coral"></span><h2>Approval and integration stay with you</h2></div>
@@ -360,7 +393,7 @@
           <div class="card-header"><span class="card-dot muted"></span><h2>Amend, retry, or publish</h2></div>
           <ul>
             <li><code>machinist amend</code> turns feedback on a reviewed candidate into a new Spec, which needs a fresh Approval.</li>
-            <li>Local <code>machinist retry</code> defaults to resuming validated retained Execute edits. Add <code>--fresh</code> to start in a new Workshop.</li>
+            <li>Failed runs retain Evidence and need an explicit retry. Local <code>machinist retry</code> defaults to resuming validated retained Execute edits. Add <code>--fresh</code> to start in a new Workshop.</li>
             <li><code>machinist publish</code> pushes the candidate and opens a GitHub PR or GitLab MR without rerunning any Phase.</li>
           </ul>
           <p>Optional <a href="operator-runbook.md#bounded-repair-recovery">bounded repair</a>, added in 0.18.0, defaults off and can repeat implementation once after an eligible required Gate failure, before rerunning all Gates. It stays inside Execute and the approved Spec. Failed or interrupted repair needs explicit <code>retry --fresh</code>.</p>

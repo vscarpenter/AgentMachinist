@@ -15,6 +15,11 @@
   says the run can take a minute. It used to stay silent until the end.
 - List the built-in Harness names in `start --harness` and `retry --harness`
   help, and validate `retry --harness` when the command line is parsed.
+- Shorten the README GitHub automation section to its setup commands and a link
+  to the GitHub setup guide, which already covers the details.
+- Retire the job card and the animated explainer. Their URLs now redirect to
+  the first-run guide and `how-it-works.html`, which gains the terminal command
+  sequence, a skip link, and page metadata.
 
 ## 0.19.0 — 2026-09-27
 

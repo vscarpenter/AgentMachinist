@@ -28,8 +28,7 @@ _GUIDE_PATH = _REPO_ROOT / "docs" / "getting-started.md"
 _FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
 _ONBOARDING_PATH = _REPO_ROOT / "docs" / "onboarding.html"
 _HARNESS_PATH = _REPO_ROOT / "docs" / "harnesses.md"
-_EXPLAINER_PATH = _REPO_ROOT / "docs" / "explainer.html"
-_JOB_CARD_PATH = _REPO_ROOT / "docs" / "job-card.html"
+_HOW_IT_WORKS_PATH = _REPO_ROOT / "docs" / "how-it-works.html"
 _TRUST_MODEL_PATH = _REPO_ROOT / "docs" / "trust-model.md"
 _APPROVAL_POLICY_PATH = _REPO_ROOT / "docs" / "approval-policy.md"
 _DOCS_INDEX_PATH = _REPO_ROOT / "docs" / "README.md"
@@ -242,8 +241,6 @@ def test_visual_guides_link_back_to_complete_directory():
     for name in (
         "first-run-guide.html",
         "how-it-works.html",
-        "explainer.html",
-        "job-card.html",
     ):
         text = (_REPO_ROOT / "docs" / name).read_text()
         assert 'href="index.html#documentation"' in text, name
@@ -551,8 +548,7 @@ def test_all_public_docs_share_current_approval_and_readiness_contract():
         (_REPO_ROOT / "docs/operator-runbook.md").read_text().lower().split()
     )
     first_run = _FIRST_RUN_GUIDE_PATH.read_text().lower()
-    job_card = " ".join(_JOB_CARD_PATH.read_text().lower().split())
-    explainer = " ".join(_EXPLAINER_PATH.read_text().lower().split())
+    how_it_works = " ".join(_HOW_IT_WORKS_PATH.read_text().lower().split())
 
     assert (
         "both comment and label approval paths independently require write or admin access"
@@ -564,16 +560,15 @@ def test_all_public_docs_share_current_approval_and_readiness_contract():
     )
     assert (
         "the managed workflow checks write or admin access and the current head"
-        in job_card
+        in first_run
     )
     assert "pi auth check --model &lt;model&gt; --json --no-refresh" in first_run
     assert "machinist sync-labels [--check|--apply]" in first_run
-    assert "machinist doctor --run-gates" in job_card
-    assert "for existing github adoption" in job_card
-    assert "machinist approve --task t1 --spec-sha" in explainer
-    assert "machinist integrate t1" in explainer
+    assert "machinist doctor --run-gates" in first_run
+    assert "machinist approve --task t1 --spec-sha" in how_it_works
+    assert "machinist integrate t1" in how_it_works
 
-    combined = "\n".join((trust, operator, first_run, job_card, explainer))
+    combined = "\n".join((trust, operator, first_run, how_it_works))
     for stale_claim in (
         "guaranteed human-approved",
         "immutable spec pr",
@@ -586,20 +581,32 @@ def test_all_public_docs_share_current_approval_and_readiness_contract():
         assert stale_claim not in combined
 
 
-def test_explainer_is_current_discoverable_and_has_page_metadata():
+def test_workflow_explainer_is_current_discoverable_and_has_page_metadata():
     index = (_REPO_ROOT / "docs/index.html").read_text().lower()
-    explainer = _EXPLAINER_PATH.read_text().lower()
+    explainer = _HOW_IT_WORKS_PATH.read_text().lower()
 
-    assert 'href="explainer.html"' in index
+    assert 'href="how-it-works.html"' in index
     assert '<meta name="description"' in explainer
     assert '<meta name="theme-color"' in explainer
     assert '<link rel="canonical"' in explainer
     assert "reviewed local" in explainer
     assert "failed runs retain" in explainer
-    assert 'href="#main"' in explainer
-    assert 'role="slider"' in explainer
-    assert 'aria-pressed="true"' in explainer
-    assert "prefers-reduced-motion" in explainer
+    assert 'href="#main"' in explainer and 'id="main"' in explainer
+
+
+@pytest.mark.parametrize(
+    "retired, target",
+    [
+        ("explainer.html", "how-it-works.html"),
+        ("job-card.html", "first-run-guide.html"),
+    ],
+)
+def test_retired_visual_formats_redirect_to_their_replacements(retired, target):
+    text = (_REPO_ROOT / "docs" / retired).read_text().lower()
+
+    assert f'content="0; url={target}"' in text
+    assert 'name="robots" content="noindex"' in text
+    assert f'href="{target}"' in text
 
 
 def test_historical_design_records_are_clearly_labeled():
@@ -613,7 +620,7 @@ def test_historical_design_records_are_clearly_labeled():
     docs_index = _DOCS_INDEX_PATH.read_text().lower()
     assert "current operating documentation" in docs_index
     assert "historical design records" in docs_index
-    assert "(explainer.html)" in docs_index
+    assert "(how-it-works.html)" in docs_index
 
 
 def test_earlier_adrs_explain_the_local_integration_exception():
@@ -697,8 +704,7 @@ def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> No
     architecture = (_REPO_ROOT / "docs/architecture.md").read_text().lower()
     landing = (_REPO_ROOT / "docs/index.html").read_text().lower()
     first_run = _FIRST_RUN_GUIDE_PATH.read_text().lower()
-    job_card = _JOB_CARD_PATH.read_text().lower()
-    explainer = _EXPLAINER_PATH.read_text().lower()
+    how_it_works = _HOW_IT_WORKS_PATH.read_text().lower()
 
     assert "chore/agentmachinist-setup" in readme + guide
     assert "no model or api" in readme + guide
@@ -708,10 +714,10 @@ def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> No
     assert "agentmachinist.harnesses.v1" in harnesses + architecture
     assert "findings are advisory" in guide
     assert "selected spec adapter" in first_run
-    assert "machinist task new" in job_card
-    assert "machinist review 7" in job_card
-    assert "independent review" in explainer
-    assert "machinist approve --task t1" in explainer
+    assert "machinist task new" in first_run
+    assert "machinist review 42" in first_run
+    assert "independent review" in how_it_works
+    assert "machinist approve --task t1" in how_it_works
     assert "machinist start" in landing
     assert "machinist publish t1" in landing
     assert "independent review" in landing
@@ -750,8 +756,6 @@ def test_release_docs_describe_current_package_version():
     pending = version != published_version
     for path in (
         _FIRST_RUN_GUIDE_PATH,
-        _EXPLAINER_PATH,
-        _JOB_CARD_PATH,
         _REPO_ROOT / "docs/index.html",
     ):
         html = path.read_text().lower()
@@ -827,7 +831,7 @@ def test_source_only_examples_are_isolated_until_published():
             html,
             flags=re.DOTALL,
         )
-        if pending and path in (_FIRST_RUN_GUIDE_PATH, _JOB_CARD_PATH):
+        if pending and path == _FIRST_RUN_GUIDE_PATH:
             assert blocks, path
         if blocks:
             # Source changes can precede a version bump. They must still be

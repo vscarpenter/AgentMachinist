@@ -37,8 +37,6 @@ These cover the same workflow in different formats; none is a prerequisite.
 | Format | Resource |
 | --- | --- |
 | Interactive tour and web directory | [Documentation home](index.html) |
-| Animated walkthrough | [One-minute explainer](explainer.html) |
-| Compact checklist for repeat use | [Job card](job-card.html) |
 
 ## Architecture decisions
 
@@ -66,6 +64,8 @@ numbers, and worker instructions describe the work at the time.
 | 2026-09-07 | [Local workflow and GitLab plan](superpowers/plans/2026-09-07-local-workflow-gitlab.md) |
 
 The [old onboarding URL](onboarding.html) redirects to the visual first-run guide.
+The retired [job card](job-card.html) and [animated explainer](explainer.html)
+URLs redirect to the first-run guide and [How it works](how-it-works.html).
 [CNAME](CNAME) and [.nojekyll](.nojekyll) configure the static site; they are not
 guides. Editing these sources does not publish the website or a package release.
 
