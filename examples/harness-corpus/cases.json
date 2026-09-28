@@ -1,0 +1,20 @@
+[
+  {
+    "id": "reject-unknown-timezone",
+    "project": "examples/first-task",
+    "objective": "Reject unknown timezone names in parse_timezone with a ValueError",
+    "test_command": "uv run pytest"
+  },
+  {
+    "id": "case-insensitive-timezone",
+    "project": "examples/first-task",
+    "objective": "Make parse_timezone accept known names in any letter case and return the canonical spelling",
+    "test_command": "uv run pytest"
+  },
+  {
+    "id": "list-supported-timezones",
+    "project": "examples/first-task",
+    "objective": "Add a supported_timezones function that returns the known timezone names in sorted order",
+    "test_command": "uv run pytest"
+  }
+]

@@ -1289,3 +1289,31 @@ by request. Next candidates are the cross-Harness regression corpus (review
 item 3) and onboarding decision 1. Assumption: local Approval binds only the
 Spec SHA, repository, and Task, which `local_workflow.py` confirms, so a
 Harness change on retry needs no new Approval.
+
+## Cross-Harness regression corpus (2026-09-28)
+
+Branch `feat/harness-regression-corpus` from `main`. Item 3 of
+`tasks/next-steps-review.md`: answer "did this prompt, adapter, or model make
+first-pass Execute worse?" from Evidence `report` already records.
+
+- [x] Cases in `examples/harness-corpus/cases.json`, all on `examples/first-task`.
+- [x] `scripts/harness_corpus.py`: one disposable repository per case, then
+  `start`, exact-SHA `approve`, and `report --json --source local`.
+- [x] Tested pure functions: load cases, summarize a report, find regressions
+  against `examples/harness-corpus/baseline.json`.
+- [x] README with cost warning. No controller code changes.
+- [x] 12 offline tests, including end-to-end runs against a fake `machinist`
+  on `PATH`.
+- [x] First paid run (Vinny approved all four installed Harnesses). Claude
+  Code and Goose passed first-pass Execute on all three cases; both are in
+  `baseline.json`. Pi and OpenCode never reached Execute, so the script now
+  reports that as unmeasured (exit 2) instead of a failed first pass.
+- Findings from that run, not fixed here:
+  - `ReviewPhaseError` is missing from `local_cli.local_errors()`, so a failed
+    local Review prints a raw traceback instead of a CLI error.
+  - Goose Review output fails JSON parsing on all three cases
+    (`Expecting ':' delimiter`, line 7). Review saves no raw output, unlike
+    Execute's `harness-report.txt`, so the cause needs a rerun to see.
+  - OpenCode Spec fails: "left background processes running after exit".
+  - Pi Spec fails: "Connection error"; likely Pi provider login or model
+    configuration on this machine.
