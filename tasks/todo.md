@@ -33,7 +33,7 @@ is the signature of this race.
 ### Resuming From Here
 
 Done: PR #44 merged to `main` as `2b701f9` with every check green on Linux and
-macOS (Python 3.12–3.14, coverage, minimum dependencies, package, CodeQL).
+macOS (Python 3.12 to 3.14, coverage, minimum dependencies, package, CodeQL).
 `bash scripts/verify.sh` passed on `fb35c6a` and `270efbf`: 1,508 tests at
 88% coverage, wheel and sdist smoke tests reporting 0.15.0. GitHub Release
 `v0.15.0` targets `2b701f9`; release run 34179377505 passed build, publish,
@@ -323,7 +323,7 @@ Completed 2026-09-03.
 - [x] Push `release/0.12.1`, open PR #37, merge, publish GitHub Release
       `v0.12.1`, and verify PyPI.
 
-### Resuming From H### Resuming From Here
+### Resuming From Here
 
 Done: 0.12.1 is released. Candidate `438863f` passed the release-grade gate
 (1004 tests at 86.00% coverage, ruff format and lint, mypy, managed workflow
@@ -343,7 +343,7 @@ was a patch bump rather than a minor one.
 
 Completed 2026-09-03.
 
-12.0 release preparation (COMPLETE)
+# AgentMachinist 0.12.0 release preparation (COMPLETE)
 
 - [x] Confirm the release version and inspect origin, branch protection, required
       checks, release automation, and secret metadata.
