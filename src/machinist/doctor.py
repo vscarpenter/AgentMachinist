@@ -741,7 +741,9 @@ def _add_harness_checks(checks, root, config, which, runner) -> None:
                 location = None
             else:
                 checks.append(
-                    DoctorCheck(CheckLevel.PASS, "harness", str(location))
+                    DoctorCheck(
+                        CheckLevel.PASS, "harness", f"{harness.name} at {location}"
+                    )
                     if location
                     else DoctorCheck(
                         CheckLevel.FAIL,

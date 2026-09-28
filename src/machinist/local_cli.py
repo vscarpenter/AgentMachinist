@@ -24,13 +24,14 @@ from machinist.forge import (
 )
 from machinist.gitlab import GitLabClient
 from machinist.harness import HarnessError
-from machinist.init_wizard import HarnessChoice
+from machinist.init_wizard import BUILT_IN_HARNESSES, HarnessChoice
 from machinist.lifecycle import LifecycleError, Phase
 from machinist.local_setup import (
     ensure_local_config,
     find_repository_root,
     load_local_config,
     resolve_local_config,
+    retry_local_config,
 )
 from machinist.local_tasks import LocalTaskError, LocalTaskStore
 from machinist.local_workflow import LocalWorkflow, LocalWorkflowError
@@ -167,12 +168,21 @@ def approve_local(task_id: str, spec_sha: str) -> None:
         _render_status(workflow.status(task.id))
 
 
-def retry_local(task_id: str, phase: str | None, *, resume: bool) -> None:
+def retry_local(
+    task_id: str,
+    phase: str | None,
+    *,
+    resume: bool,
+    harness_name: str | None = None,
+    model: str | None = None,
+) -> None:
     validate_task_id(task_id)
     if phase is None:
         raise click.UsageError("local retries require --phase spec, execute, or review")
     with local_errors():
-        workflow = _existing_workflow()
+        root = find_repository_root(Path.cwd())
+        config = retry_local_config(root, harness_name=harness_name, model=model)
+        workflow = _workflow(config, root)
         task = workflow.retry(task_id, phase=Phase(phase), resume=resume)
         _render_status(workflow.status(task.id), show_spec=phase == "spec")
 
@@ -295,7 +305,10 @@ def parse_issue_url(
     "--harness",
     "harness_name",
     type=HarnessChoice(),
-    help="Use an installed full-pipeline Harness.",
+    help=(
+        f"Use an installed full-pipeline Harness: {BUILT_IN_HARNESSES}, "
+        "or an installed plugin."
+    ),
 )
 @click.option(
     "--test-cmd", help="Required verification command for this local repository."

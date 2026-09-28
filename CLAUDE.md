@@ -320,10 +320,11 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 - `docs/` — getting-started, architecture, operator-runbook, trust-model,
   approval-policy (the ask-vs-act boundary, wired into the Harness prompts
   through `instructions:`),
-  harnesses matrix, local workflow, and six HTML pages: index, first-run guide,
-  job card, animated explainer, the how-it-works swimlane diagram, and the
-  onboarding redirect. Documentation tests validate commands, configuration,
-  version identity, links, and control targets.
+  harnesses matrix, local workflow, and three HTML pages: index, first-run
+  guide, and the how-it-works swimlane diagram. `onboarding.html`,
+  `job-card.html`, and `explainer.html` are redirect stubs kept so old links
+  resolve; do not add content to them. Documentation tests validate commands,
+  configuration, version identity, links, and control targets.
 - Documentation entry points: `docs/how-it-works.html` is the short explainer,
   `docs/tldr.md` is the first-Task guide, and `docs/README.md` plus
   `docs/index.html#documentation` index every guide and historical record.

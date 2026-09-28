@@ -152,6 +152,15 @@ machinist retry --task T1 --phase execute --fresh
 machinist retry 42 --phase execute --run --fresh
 ```
 
+When the Harness itself is the problem (a rate limit, an outage, or a missing
+login), retry once with another installed Harness. Execute needs `--fresh`:
+
+```sh
+machinist retry --task T1 --phase execute --fresh --harness codex
+```
+
+The choice is not saved, and Evidence records which Harness ran each Phase.
+
 Resume never replays an interrupted or failed paid repair or replenishes its
 consumed budget. Completed repair with valid retained state may finish Verification
 within the saved deadline without another Harness invocation. Fresh Execute

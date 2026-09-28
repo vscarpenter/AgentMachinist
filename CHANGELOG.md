@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Add `--harness` and `--model` to `machinist retry --task` for one explicit
+  retry with another installed Harness or model. The choice is validated like
+  `start --harness`, applies to every Phase that retry runs, and is never
+  saved. Execute requires `--fresh`, and legacy issue retries reject both
+  flags. Approval is unchanged because it binds the Spec commit, not the
+  Harness.
+- Name the resolved Harness in the `doctor` Harness row (`codex at
+  /usr/local/bin/codex`) and list the required Gate commands in the
+  `doctor --local` test Gate row, instead of a count.
+- Print each `rehearse` checkpoint as it completes, after a first line that
+  says the run can take a minute. It used to stay silent until the end.
+- List the built-in Harness names in `start --harness` and `retry --harness`
+  help, and validate `retry --harness` when the command line is parsed.
+- Shorten the README GitHub automation section to its setup commands and a link
+  to the GitHub setup guide, which already covers the details.
+- Retire the job card and the animated explainer. Their URLs now redirect to
+  the first-run guide and `how-it-works.html`, which gains the terminal command
+  sequence, a skip link, and page metadata.
+
 ## 0.19.0 — 2026-09-27
 
 - Add a built-in Goose adapter (`harness.name: goose`). Spec and Review run

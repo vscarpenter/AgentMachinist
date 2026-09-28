@@ -101,6 +101,9 @@ def local_cli(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "machinist.local_cli.load_local_config", lambda *a, **k: MachinistConfig()
     )
+    monkeypatch.setattr(
+        "machinist.local_cli.retry_local_config", lambda *a, **k: MachinistConfig()
+    )
     monkeypatch.setattr("machinist.local_cli._workflow", lambda *a, **k: workflow)
     return SimpleNamespace(events=events, task=task, workflow=workflow, root=tmp_path)
 
@@ -663,3 +666,89 @@ def test_start_saves_local_configuration_only_after_the_checkout_passes(
 
     assert result.exit_code == 0, result.output
     assert order == ["checked", "saved"]
+
+
+def test_retry_harness_choice_builds_the_workflow_from_a_one_shot_config(
+    local_cli, monkeypatch
+):
+    selected = MachinistConfig()
+    requests = []
+
+    def retry_config(root, *, harness_name=None, model=None):
+        requests.append((root, harness_name, model))
+        return selected
+
+    built = []
+    monkeypatch.setattr("machinist.local_cli.retry_local_config", retry_config)
+    monkeypatch.setattr(
+        "machinist.local_cli._workflow",
+        lambda config, root, **kwargs: built.append(config) or local_cli.workflow,
+    )
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "retry",
+            "--task",
+            "T1",
+            "--phase",
+            "execute",
+            "--fresh",
+            "--harness",
+            "codex",
+            "--model",
+            "gpt-5",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert requests == [(local_cli.root, "codex", "gpt-5")]
+    assert built == [selected]
+    assert local_cli.events == [("retry", "T1", "execute", False)]
+
+
+def test_review_retry_accepts_a_harness_choice_without_fresh(local_cli, monkeypatch):
+    monkeypatch.setattr(
+        "machinist.local_cli.retry_local_config", lambda *a, **k: MachinistConfig()
+    )
+
+    result = CliRunner().invoke(
+        main, ["retry", "--task", "T1", "--phase", "review", "--harness", "codex"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert local_cli.events == [("retry", "T1", "review", True)]
+
+
+@pytest.mark.parametrize(
+    "arguments, message",
+    [
+        (
+            ["retry", "--task", "T1", "--phase", "execute", "--harness", "codex"],
+            "require --fresh",
+        ),
+        (
+            ["retry", "--task", "T1", "--phase", "execute", "--model", "gpt-5"],
+            "require --fresh",
+        ),
+        (
+            ["retry", "12", "--phase", "execute", "--run", "--harness", "codex"],
+            "local Tasks",
+        ),
+    ],
+)
+def test_retry_harness_choice_refuses_mixed_or_legacy_attempts(
+    local_cli, arguments, message
+):
+    result = CliRunner().invoke(main, arguments)
+
+    assert result.exit_code == 2
+    assert message in result.output
+    assert local_cli.events == []
+
+
+@pytest.mark.parametrize("command", ["start", "retry"])
+def test_harness_help_names_the_built_in_harnesses(command):
+    result = CliRunner().invoke(main, [command, "--help"], terminal_width=200)
+
+    assert "claude-code, opencode, pi, codex, goose" in result.output

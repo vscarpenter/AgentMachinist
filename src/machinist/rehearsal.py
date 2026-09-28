@@ -52,7 +52,10 @@ class RehearsalResult:
 
 
 def simulate_rehearsal(
-    *, review_enabled: bool, temp_parent: Path | None = None
+    *,
+    review_enabled: bool,
+    temp_parent: Path | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> RehearsalResult:
     """Run the real controller with a deterministic fake Harness, without a model.
 
@@ -68,6 +71,7 @@ def simulate_rehearsal(
         harness_factory=lambda phase: _FakeHarness(),
         harness_used=False,
         temp_parent=temp_parent,
+        progress=progress,
     )
 
 
@@ -76,6 +80,7 @@ def run_harness_rehearsal(
     *,
     harness_factory: Callable[[str], Any],
     temp_parent: Path | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> RehearsalResult:
     """Explicit opt-in: exercise configured Harnesses through the same local path.
 
@@ -88,6 +93,7 @@ def run_harness_rehearsal(
         harness_factory=harness_factory,
         harness_used=True,
         temp_parent=temp_parent,
+        progress=progress,
     )
 
 
@@ -97,6 +103,7 @@ def _run_rehearsal(
     harness_factory: Callable[[str], Any],
     harness_used: bool,
     temp_parent: Path | None,
+    progress: Callable[[str], None] | None = None,
 ) -> RehearsalResult:
     from machinist.local_workflow import LocalWorkflow
 
@@ -108,7 +115,15 @@ def _run_rehearsal(
     ).resolve()
     repository = path / "repository"
     repository.mkdir()
-    transitions = ["local Task intake"]
+    transitions: list[str] = []
+
+    def reached(*names: str) -> None:
+        for name in names:
+            transitions.append(name)
+            if progress is not None:
+                progress(name)
+
+    reached("local Task intake")
     try:
         _initialize_repo(repository)
         command = shlex.join(
@@ -136,7 +151,7 @@ def _run_rehearsal(
         if not task.spec_sha:
             raise ValueError("production Spec did not record its exact commit")
         spec_sha = task.spec_sha
-        transitions.append("spec ready")
+        reached("spec ready")
         task = workflow.approve(
             task.id, expected_sha=spec_sha, actor="rehearsal operator"
         )
@@ -148,13 +163,13 @@ def _run_rehearsal(
             raise ValueError("production Execute did not deliver an implementation")
         if not task.approval:
             raise ValueError("production workflow did not record human Approval")
-        transitions.extend(["approval recorded", "execute verified"])
+        reached("approval recorded", "execute verified")
         if (
             not task.review_report
             or task.review_report.get("reviewed_sha") != task.candidate_sha
         ):
             raise ValueError("production Review did not cover the candidate")
-        transitions.append("review complete")
+        reached("review complete")
         if not workflow.store.read_report(task.id):
             raise ValueError("production workflow did not save a local report")
         # This invocation authorizes integration of the disposable fixture.
@@ -172,7 +187,7 @@ def _run_rehearsal(
             )
         if _git(repository, "remote").strip():
             raise ValueError("rehearsal unexpectedly acquired a remote")
-        transitions.append("local integration complete")
+        reached("local integration complete")
         result = RehearsalResult(
             tuple(transitions),
             harness_used=harness_used,

@@ -2258,6 +2258,7 @@ def test_rehearse_defaults_to_no_cost_controller_simulation():
         assert "no model or API usage" in result.output
         assert "review complete" in result.output
         assert "local integration complete" in result.output
+        assert result.output.index("Rehearsing") < result.output.index("✓")
 
 
 def test_approve_resolves_issue_number(monkeypatch):

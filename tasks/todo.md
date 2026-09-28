@@ -1255,3 +1255,37 @@ Resuming from here: 0.19.0 is published and marked Latest. This note lives on
 minor bump because `harness.name: goose` and the adapter hooks are new
 user-facing surface. The auto-mode classifier refused an admin merge, so Vinny
 merged the release PR himself.
+
+## Next steps review follow-ups (2026-09-28)
+
+Branch `feat/retry-harness-onboarding` from `main` at `276bb3e`. The plan is
+`tasks/next-steps-review.md`, which rejects the enterprise pivot in the
+untracked `next-steps-spec.md` and keeps three smaller ideas. Vinny approved
+the `retry --harness` design and chose three of the four open onboarding
+decisions.
+
+- [x] Commit the review (`e62bec2`).
+- [x] `retry --task T1 --phase ... --harness <name> [--model <id>]` for one
+  local retry (`5b16d1c`). `retry_local_config` in `local_setup.py` reuses the
+  `start --harness` validation and never writes the saved settings. Execute
+  requires `--fresh`, and legacy issue retries reject both flags.
+- [x] Visibility (`0f6f77e`): the `doctor` Harness row names the adapter, the
+  `doctor --local` test Gate row lists required commands, `rehearse` streams
+  checkpoints, and `--harness` help lists the built-in names.
+- [x] README GitHub section trimmed to a link (`09eeac5`).
+- [x] Job card and animated explainer retired to redirect stubs (`4a0ad5b`).
+- [ ] Onboarding decision 1 (read global Git identity) was not chosen.
+- [ ] Item 3 of the review, the cross-Harness regression corpus, is not
+  started.
+- [x] `bash scripts/verify.sh`: workflow drift, format, lint, types, and
+  coverage passed (1728 tests, 88.56%). The package step then refused to
+  build because `tasks/todo.md` changed during the run, so
+  `bash scripts/verify.sh package` ran separately on the committed tree.
+
+Resuming from here: all six commits are local on
+`feat/retry-harness-onboarding` and unpushed; `main` is PR-protected, so
+pushing and opening a PR wait for Vinny. `next-steps-spec.md` stays untracked
+by request. Next candidates are the cross-Harness regression corpus (review
+item 3) and onboarding decision 1. Assumption: local Approval binds only the
+Spec SHA, repository, and Task, which `local_workflow.py` confirms, so a
+Harness change on retry needs no new Approval.

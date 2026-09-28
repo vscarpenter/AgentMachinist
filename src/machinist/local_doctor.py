@@ -263,11 +263,13 @@ def run_local_doctor(
 
     _add_harness_checks(checks, root, config, local_which, runner)
     gates = config.resolved_verification_gates()
+    required = [gate.command for gate in gates if gate.required]
+    noun = "gate" if len(required) == 1 else "gates"
     checks.append(
         DoctorCheck(
             CheckLevel.PASS,
             "test gate",
-            f"{sum(gate.required for gate in gates)} required verification gate(s) configured",
+            f"{len(required)} required {noun}: {'; '.join(required)}",
         )
     )
     checks.append(_verification_command_check(gates, root, which))

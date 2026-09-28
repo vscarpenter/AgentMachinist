@@ -117,146 +117,20 @@ issues, amendments, recovery, and use by a solo developer or small team.
 
 ## GitHub automation
 
-Existing GitHub issue commands, trusted workflow Approval, and watcher operation
-remain available. Configure that integration separately:
-
-Managed workflows pin the installed controller version. Upgrade the controller
-before regenerating them; a package upgrade does not update checked-in workflow
-files. This repository's development workflows use `github.spec_install: checkout`.
+GitHub issue intake, trusted workflow Approval, draft PRs, independent Review,
+and the watcher remain available as an optional mode. Set it up once per
+repository:
 
 ```sh
-cd your-repository
 machinist onboard
-# Answer the setup questions, review the generated files, then:
-git status --short
-git add machinist.yaml .machinist/specs/.gitkeep .gitignore
-git add .github/ISSUE_TEMPLATE/agentmachinist-task.yml
-git add -- .github/workflows/machinist-approve.yml
-# With github.spec_source: github-actions, also stage:
-# git add -- .github/workflows/machinist-spec.yml
-git diff --cached              # verify what will be committed
-git commit -m "chore: configure AgentMachinist"
-git push
-```
-
-When switching Spec modes or disabling workflow management, also stage any
-removed managed workflow path shown by `git status --short` with
-`git add -- <path>`. Omit the workflow commands
-when no managed workflow files were generated or removed. Review the full
-staged diff before committing.
-
-Review and merge setup into the repository's default branch, then check out
-that branch and pull the merged changes. Once it is up to date:
-
-```sh
+# Review, stage, commit, and push the generated setup files, then:
 machinist doctor --run-gates && machinist watch
 ```
 
-`machinist doctor --run-gates` is the single health check — it already verifies
-labels, workflow drift, the sealed issue form, and verification gates, and prints
-the exact fix for any `FAIL`. Only run the individual
-`machinist sync-labels --check`, `machinist sync-workflows --check`, or
-`machinist task template --check` if doctor asks for them.
-
-Use `machinist onboard --setup-pr` when you want AgentMachinist to put only its
-managed setup files on a pushed `chore/agentmachinist-setup` branch and open a
-draft PR. Fresh setup requires a clean default branch; a recognized partial
-setup resumes without replacing your preferences. Setup checks local readiness
-before publication. Merge setup, then run full doctor to verify the deployed
-workflows. `machinist rehearse` exercises the production local Phases, real Git,
-verification, and integration with a fake Harness; `--harness` explicitly opts
-into configured providers in the disposable repository.
-
-In a terminal, `machinist onboard` (the GitHub setup entry point) asks a short
-set of setup questions — dispatch mode, managed workflows, harness, test gate,
-and notifications — each with a one-line explanation and a safe default. Flags
-such as `--harness`, `--test-cmd`, `--spec-source`, and `--notifications`
-pre-answer their questions; `--yes` accepts all safe defaults and auto-enables the
-detected test command for hands-free quickstart; `--no-input` (or a non-interactive
-shell) also skips questions but does not auto-enable the test command unless you
-pass `--test-cmd`. Errors outside a configured repo now point you to `machinist
-onboard` and the first-run guide. `machinist init` is the same setup step without
-the guided receipt — prefer `onboard` for new repositories. `machinist --help`
-groups commands as `Setup`, `Tasks`, `Build`, and `Operate — daily` vs `Operate — advanced`.
-
-Review the staged diff before committing. The managed Task form is installed
-even when Actions workflows are externally managed. Managed workflows must be
-pushed before GitHub comment or label approval can record SHA-bound evidence.
-`machinist init` also adds `/.machinist/runs/` to `.gitignore`. If you manage
-workflows yourself, `machinist init --no-workflows` records
-`github.manage_workflows: false`; `doctor` then reports that its drift check was
-intentionally skipped.
-
-The default `github.spec_source: local` makes `watch` own spec generation.
-Choose `github-actions` and run `machinist sync-workflows` if CI should own that
-phase instead. Exactly one source is active, preventing duplicate spec runs.
-Managed CI installs the selected Spec adapter and reads its declared secret
-name; built-ins support Claude Code, Codex, OpenCode, and Pi. The built-in
-Goose adapter supports local dispatch only; see the
-[harness matrix](docs/harnesses.md#goose).
-
-Create a focused issue with `machinist task new --title "Handle an invalid
-timezone without crashing"`. The completion guidance points to
-`machinist spec 57` for local Spec generation, or a command applying the
-configured trigger label when GitHub Actions owns Spec generation. Add
-`--dispatch` during creation to apply that label immediately; the next command
-processes queued Tasks with `machinist watch --once -v` for local dispatch, or
-checks hosted Spec progress with `machinist explain 57`. The CLI uses your
-actual issue number. Once the Spec is ready, read its draft PR and follow the
-printed Approval command.
-
-Approval is bound to the exact PR head commit. Use either:
-
-```sh
-machinist approve --issue 57
-# or: machinist approve --pr 18
-# or post the SHA-bound comment shown in the Spec PR body:
-# /machinist-execute <full-spec-commit-sha>
-```
-
-GitHub Approval takes exactly one of `--issue` or `--pr`; local Approval instead
-uses `--task T1 --spec-sha <sha>`. These selectors keep local Tasks, issues, and
-pull requests distinct.
-
-Editing the spec after approval makes that approval stale and blocks execution
-until the new head is approved.
-
-With the starter configuration, a successful Execute run leaves the PR draft
-for an independent read-only Review Task Run. Review compares the approved
-Spec, diff, and verification evidence, posts a structured advisory report, and
-alone marks the exact implementation head ready. Findings never trigger an
-automatic repair or merge. Use `machinist review <issue>` manually or
-`machinist retry <issue> --phase review` after a failed Review.
-
-The CLI approval command submits the SHA-bound comment; the managed GitHub
-workflow independently verifies the current head and approver's write access,
-then records trusted Approval Evidence and the configured label. Wait for that
-workflow to finish successfully before Execute. `machinist explain <issue>`
-shows the GitHub pipeline state even when default `status` lists local Tasks.
-An unapproved draft remains `awaiting approval`.
-`approval pending` specifically means the label is visible but trusted SHA
-Evidence has not arrived yet.
-
-To preview a Spec without commits, pushes, or a PR:
-
-```sh
-machinist spec 42 --dry-run
-```
-
-To regenerate a successful Spec on its existing branch and draft PR:
-
-```sh
-machinist spec 42 --revise
-```
-
-Alternatively, reject it explicitly:
-
-```sh
-machinist spec 42 --abandon --reason "requirements changed"
-```
-
-Abandonment records the reason, removes the trigger and approval labels, and
-closes the open draft PR. Choose the operation that matches your decision.
+The [GitHub setup guide](docs/getting-started.md#github-setup-and-automation)
+covers which setup files to stage, local and CI Spec generation, SHA-bound
+Approval, Review, and recovery. Managed workflows pin the installed controller
+version, so run `machinist sync-workflows` after each upgrade.
 
 ## Commands
 
@@ -269,6 +143,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist integrate <Tn>` | Explicitly fast-forward a clean local base to the exact reviewed candidate. |
 | `machinist publish <Tn> --provider github\|gitlab [--host <host>]` | Publish the reviewed local candidate as a PR or MR with recoverable intent. |
 | `machinist retry --task <Tn> --phase spec\|execute\|review [--fresh]` | Explicitly retry a failed local Phase in the foreground. |
+| `machinist retry --task <Tn> --phase execute --fresh --harness <name> [--model <id>]` | Retry once with another installed Harness or model; the choice is not saved. |
 | `machinist amend --task <Tn> --feedback <text>` | Turn feedback on a reviewed candidate into a new Spec that needs fresh Approval. |
 | `machinist init [--yes]` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--yes` hands-free, `--no-input` skips without auto-enabling test command). |
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |

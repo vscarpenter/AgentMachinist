@@ -293,6 +293,22 @@ repair work.
 A completed repair with valid retained state can resume Verification only within
 its saved deadline. Fresh Execute attempts receive a new repair budget; ordinary
 resume does not replenish it.
+
+If a Harness keeps failing for reasons outside the Task, such as a rate limit or
+an outage, choose another installed Harness or model for one retry:
+
+```sh
+machinist retry --task T1 --phase execute --fresh --harness codex
+machinist retry --task T1 --phase review --harness claude-code --model claude-opus-5-5
+```
+
+The choice applies to every Phase that retry runs, including the Review that
+follows Execute, and it is never saved. Task Run Evidence records the Harness
+and model each Phase used. Approval still covers the same Spec commit. Execute
+requires `--fresh` with a new choice, because resuming would mix retained edits
+from two Harnesses. To change the Harness for later Tasks, edit the saved
+settings with `machinist config set`. The controller never switches Harnesses
+on its own.
 Changing configured Gates, limits, instruction overlays, or enabled repair
 settings requires a fresh Execute attempt. If retained implementation work
 already consumed its instructions, passing verification does not reread them.
