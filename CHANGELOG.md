@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Add `--harness` and `--model` to `machinist retry --task` for one explicit
+  retry with another installed Harness or model. The choice is validated like
+  `start --harness`, applies to every Phase that retry runs, and is never
+  saved. Execute requires `--fresh`, and legacy issue retries reject both
+  flags. Approval is unchanged because it binds the Spec commit, not the
+  Harness.
+
 ## 0.19.0 — 2026-09-27
 
 - Add a built-in Goose adapter (`harness.name: goose`). Spec and Review run

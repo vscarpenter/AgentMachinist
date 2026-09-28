@@ -150,6 +150,40 @@ def resolve_local_config(
         raise ConfigError(f"cannot resolve local configuration: {exc}") from exc
 
 
+def retry_local_config(
+    repo_root: Path,
+    *,
+    harness_name: str | None = None,
+    model: str | None = None,
+    which: Callable[[str], str | None] | None = None,
+) -> MachinistConfig:
+    """Apply a one-retry Harness choice to saved settings without persisting it."""
+    config = load_local_config(repo_root)
+    if harness_name is None and model is None:
+        return config
+    registry = discover_harnesses()
+    locate = shutil.which if which is None else which
+    values = config.model_dump(mode="json", exclude_unset=True)
+    if harness_name is not None:
+        values["harness"] = _harness_override(
+            config, _select_harness(registry, harness_name, locate)
+        )
+    if model is not None:
+        harness = values.setdefault("harness", {})
+        harness["model"] = model
+        for phase in HarnessPhase:
+            profile = harness.get(phase.value)
+            # A profile naming another provider would not inherit the base model.
+            if profile is not None:
+                profile["model"] = model
+    try:
+        selected = MachinistConfig.model_validate(values)
+    except ValidationError as exc:
+        raise ConfigError(f"cannot apply retry Harness choice: {exc}") from exc
+    _validate_harnesses(selected, registry, repo_root, locate)
+    return selected
+
+
 def _runtime(repo_root: Path) -> RuntimeDirectory:
     return RuntimeDirectory.bind(
         repo_root / ".machinist/runs/local", repo_root=repo_root

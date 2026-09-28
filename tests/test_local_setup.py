@@ -17,6 +17,7 @@ from machinist.local_setup import (
     find_repository_root,
     load_local_config,
     resolve_local_config,
+    retry_local_config,
 )
 
 
@@ -619,3 +620,71 @@ def test_flags_conflict_with_saved_settings_once_a_task_exists(repo):
     with pytest.raises(ConfigError, match="conflicts with"):
         ensure_local_config(repo, test_command="uv run pytest")
     assert "command: pytest" in local_path(repo).read_text()
+
+
+def both_harnesses_on_path(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "machinist.local_setup.shutil.which",
+        lambda command: (
+            f"/bin/{command}" if command in {"local-agent", "codex"} else None
+        ),
+    )
+
+
+def test_retry_config_without_overrides_returns_saved_settings(repo):
+    saved = ensure_local_config(
+        repo, harness_name="local-plugin", test_command="pytest"
+    )
+
+    assert retry_local_config(repo) == saved
+
+
+def test_retry_config_switches_every_phase_without_saving(repo, monkeypatch):
+    (repo / "machinist.yaml").write_text(
+        "harness:\n  name: local-plugin\n  model: old-model\n  timeout_minutes: 60\n"
+    )
+    ensure_local_config(repo, test_command="pytest")
+    before = local_path(repo).read_bytes()
+    both_harnesses_on_path(monkeypatch)
+
+    config = retry_local_config(repo, harness_name="codex")
+
+    assert all(
+        config.harness_for(phase).name == "codex"
+        for phase in ("spec", "execute", "review")
+    )
+    assert config.harness.model is None
+    assert config.harness.timeout_minutes == 60
+    assert local_path(repo).read_bytes() == before
+
+
+def test_retry_config_model_replaces_phase_models(repo):
+    (repo / "machinist.yaml").write_text(
+        "harness:\n  name: local-plugin\n  model: shared-model\n"
+        "  execute:\n    model: execute-model\n    timeout_minutes: 45\n"
+        "  review:\n    name: codex\n    command: local-agent\n"
+    )
+    ensure_local_config(repo, test_command="pytest")
+
+    config = retry_local_config(repo, model="retry-model")
+
+    assert all(
+        config.harness_for(phase).model == "retry-model"
+        for phase in ("spec", "execute", "review")
+    )
+    assert config.harness_for("execute").timeout_minutes == 45
+
+
+@pytest.mark.parametrize(
+    "name, message",
+    [
+        ("missing", "unknown Harness 'missing'"),
+        ("spec-only", "must support all local phases"),
+        ("codex", "not on PATH"),
+    ],
+)
+def test_retry_config_rejects_unusable_harness(repo, name, message):
+    ensure_local_config(repo, harness_name="local-plugin", test_command="pytest")
+
+    with pytest.raises(ConfigError, match=message):
+        retry_local_config(repo, harness_name=name)

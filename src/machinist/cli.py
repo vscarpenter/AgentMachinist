@@ -1789,6 +1789,12 @@ def approve(
         "default to fresh; local Tasks resume unless this is set."
     ),
 )
+@click.option(
+    "--harness",
+    "harness_name",
+    help="Use this installed Harness for this local retry only; not saved.",
+)
+@click.option("--model", help="Use this model for this local retry only; not saved.")
 def retry(
     issue_number: int | None,
     phase: str | None,
@@ -1796,14 +1802,30 @@ def retry(
     resume: bool,
     fresh: bool,
     task_target: str | None = None,
+    harness_name: str | None = None,
+    model: str | None = None,
 ) -> None:
     """Make a failed Task Run eligible for one explicit retry."""
     if resume and fresh:
         raise click.UsageError("--resume and --fresh are mutually exclusive")
+    choosing_harness = harness_name is not None or model is not None
+    if choosing_harness and task_target is None:
+        raise click.UsageError("--harness and --model apply only to local Tasks")
+    # A resumed Execute would mix one Harness's retained edits with another's.
+    if choosing_harness and phase == Phase.EXECUTE.value and not fresh:
+        raise click.UsageError(
+            "--harness and --model with --phase execute require --fresh"
+        )
     if task_target is not None:
         if issue_number is not None:
             raise click.UsageError("--task cannot be combined with an issue number")
-        retry_local(task_target, phase, resume=not fresh)
+        retry_local(
+            task_target,
+            phase,
+            resume=not fresh,
+            harness_name=harness_name,
+            model=model,
+        )
         return
     if issue_number is None:
         raise click.UsageError("provide an issue number or --task T<number>")

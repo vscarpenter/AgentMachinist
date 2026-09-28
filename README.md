@@ -269,6 +269,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist integrate <Tn>` | Explicitly fast-forward a clean local base to the exact reviewed candidate. |
 | `machinist publish <Tn> --provider github\|gitlab [--host <host>]` | Publish the reviewed local candidate as a PR or MR with recoverable intent. |
 | `machinist retry --task <Tn> --phase spec\|execute\|review [--fresh]` | Explicitly retry a failed local Phase in the foreground. |
+| `machinist retry --task <Tn> --phase execute --fresh --harness <name> [--model <id>]` | Retry once with another installed Harness or model; the choice is not saved. |
 | `machinist amend --task <Tn> --feedback <text>` | Turn feedback on a reviewed candidate into a new Spec that needs fresh Approval. |
 | `machinist init [--yes]` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--yes` hands-free, `--no-input` skips without auto-enabling test command). |
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
