@@ -5,13 +5,19 @@ has one function, one passing test, a committed `uv.lock`, and nothing else.
 
 ## Try it
 
-Copy the directory somewhere outside this repository and give it its own Git
-history:
+The package does not include this directory, so clone AgentMachinist first.
+Copy the directory somewhere outside the clone and give it its own Git history.
+Set the author inside the new repository, because AgentMachinist ignores your
+global Git identity:
 
 ```sh
-cp -r examples/first-task ~/tmp/first-task
+git clone https://github.com/vscarpenter/AgentMachinist.git
+mkdir -p ~/tmp
+cp -r AgentMachinist/examples/first-task ~/tmp/first-task
 cd ~/tmp/first-task
 git init -b main
+git config user.name "Your Name"
+git config user.email "you@example.com"
 git add .
 git commit -m "Baseline for the first AgentMachinist Task"
 ```

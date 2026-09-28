@@ -369,6 +369,20 @@ def _default_config_path() -> Path:
     return local if local.is_file() else root
 
 
+_NO_CONFIGURATION = (
+    "no machinist.yaml or saved local configuration here; run 'machinist start' "
+    "for a local Task or 'machinist onboard' for GitHub automation"
+)
+
+
+def _existing_config_path(path: Path | None) -> Path:
+    """Return an explicit path, or the default only when that file exists."""
+    resolved = path or _default_config_path()
+    if path is None and not resolved.is_file():
+        raise ConfigError(_NO_CONFIGURATION)
+    return resolved
+
+
 def _display_path(path: Path) -> Path:
     try:
         return path.relative_to(Path.cwd())
@@ -1021,7 +1035,7 @@ def onboard(
     no_input: bool,
     yes: bool = False,
 ) -> None:
-    """Set up this repository for AgentMachinist (recommended first command).
+    """Set up optional GitHub automation for this repository.
 
     Creates or resumes machinist.yaml, .machinist/specs/, the sealed task issue form,
     and managed GitHub workflows/labels. In a terminal it asks a few
@@ -1645,7 +1659,7 @@ def config_validate(path: Path | None, as_json: bool) -> None:
 def config_show(path: Path | None, as_json: bool) -> None:
     """Show the effective phase-resolved configuration."""
     try:
-        effective = show_effective(path or _default_config_path())
+        effective = show_effective(_existing_config_path(path))
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -1677,8 +1691,8 @@ def config_schema_command(output: Path | None) -> None:
 @click.option("--path", type=click.Path(path_type=Path), help=_CONFIG_PATH_HELP)
 def config_set(key: str, value: str, path: Path | None) -> None:
     """Set a dotted value after full validation; rewrites canonical YAML."""
-    path = path or _default_config_path()
     try:
+        path = _existing_config_path(path)
         set_config_value(key, value, path)
     except (ConfigError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -1751,7 +1765,11 @@ def approve(
 @click.option(
     "--task", "task_target", help="Retry a local Task such as T1 in the foreground."
 )
-@click.option("--phase", type=click.Choice([phase.value for phase in Phase]))
+@click.option(
+    "--phase",
+    type=click.Choice([phase.value for phase in Phase]),
+    help="Failed Phase to retry.",
+)
 @click.option(
     "--run",
     "run_now",
@@ -1766,7 +1784,10 @@ def approve(
 @click.option(
     "--fresh",
     is_flag=True,
-    help="Start Execute from the approved remote head (the safe default).",
+    help=(
+        "Start Execute fresh instead of reusing retained edits. GitHub issues "
+        "default to fresh; local Tasks resume unless this is set."
+    ),
 )
 def retry(
     issue_number: int | None,
@@ -2251,7 +2272,11 @@ def _read_feedback_file(path: Path) -> str:
 
 @main.command()
 @click.argument("issue_number", type=int, required=False)
-@click.option("--task", "task_target", help="Revise a local Task Spec from feedback.")
+@click.option(
+    "--task",
+    "task_target",
+    help="Turn feedback on a reviewed local candidate into a new Spec.",
+)
 @click.option("--feedback", help="Bounded operator feedback for the amendment.")
 @click.option(
     "--feedback-file",
@@ -2264,7 +2289,7 @@ def amend(
     feedback_file: Path | None,
     task_target: str | None = None,
 ) -> None:
-    """Revise a local Task Spec or rework a GitHub PR from explicit feedback."""
+    """Rework a reviewed local candidate or a GitHub PR from explicit feedback."""
     if (task_target is None) == (issue_number is None):
         raise click.UsageError("provide exactly one issue number or --task T<number>")
     if (feedback is None) == (feedback_file is None):
@@ -2579,10 +2604,7 @@ def clean(
         if (repo_root / ".machinist/runs/local/config.yaml").is_file():
             local_ws = LocalWorkspace(repo_root, load_local_config(repo_root).workspace)
         if legacy_ws is None and local_ws is None:
-            raise ConfigError(
-                "no machinist.yaml or saved local configuration here; run "
-                "'machinist start' or 'machinist onboard' first"
-            )
+            raise ConfigError(_NO_CONFIGURATION)
         lifecycle = TaskLifecycle(repo_root / ".machinist/runs")
         local_lifecycle = TaskLifecycle(
             repo_root / ".machinist/runs/local", repo_root=repo_root

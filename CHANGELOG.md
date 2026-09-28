@@ -18,6 +18,16 @@
 - Adapters can pin non-secret environment variables with
   `environment_overrides()` and opt out of first-run discovery with
   `auto_select = False`.
+- Point `config show` and `config set` at `machinist start` when neither
+  `machinist.yaml` nor saved local settings exist, instead of recommending
+  GitHub onboarding. Neither command creates a file.
+- Align help text with the local workflow: `onboard` is optional GitHub
+  automation, `amend --task` starts from a reviewed candidate, and
+  `retry --fresh` names both defaults.
+- Document that the controller ignores global Git identity. Set
+  `user.name` and `user.email` inside the repository, or Spec and candidate
+  commits use the AgentMachinist identity. The first-Task example now does
+  this and clones the repository before copying.
 
 ## 0.18.0 — 2026-09-26
 

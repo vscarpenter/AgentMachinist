@@ -1131,11 +1131,65 @@ new.
 - [x] `bash scripts/verify.sh` green: workflow drift, format, lint, and mypy
   clean, 1709 passed, 88.50% coverage, and the wheel and sdist smoke-tested.
 
-Resuming from here: the Goose adapter, its docs, and this note are committed
-on `feat/goose-harness` (`e1ec91e` through the ledger commit). Next: Vinny's
-go-ahead to push the branch and open the PR, which stay parked as confirm-first.
+Resuming from here: PR #57 merged the Goose adapter and its docs into `main`
+as `ed5b278` on 2026-09-28 00:08 UTC. This note lives on
+`docs/todo-ledger-goose` until the next change's PR carries it, because `main`
+is PR-protected.
 At the next release, add Goose to the adapter lists in `docs/index.html` and
 `docs/explainer.html` and replace the unreleased labels with release wording.
 Assumptions: no paid Goose run was made, so a live Task with Goose remains
 unexercised; `GOOSE_MODE=auto` in Spec and Review is acceptable because the
 controller's postconditions reject any change those runs make.
+
+## Goose site notes and onboarding review (2026-09-27)
+
+Branch `docs/goose-site-onboarding` from `docs/todo-ledger-goose`, so its PR
+also carries the Goose merge note.
+
+- [x] Label the unreleased Goose adapter on `docs/index.html` and
+  `docs/explainer.html` (`f7ec0c5`).
+- [x] Map every onboarding entry point, and walk `docs/tldr.md` literally in a
+  scratch copy of `examples/first-task` using only free commands.
+- [x] Rank verified findings in `tasks/onboarding-review-2026-09-27.md`.
+- [x] Implement the recommendations Vinny approved: the seven contradiction
+  fixes. `9192a8e` routes `config show` and `config set` to `machinist start`
+  before any configuration and aligns `onboard`, `amend`, and `retry` help.
+  `af52ee8` asks for a repository-local Git author everywhere, fixes the
+  example's copy steps, and matches the short guide's objective to the
+  example. A scratch copy showed `doctor --local` warn without a
+  repository-local author and pass with one.
+- [x] `bash scripts/verify.sh` green: drift, format, lint, and mypy clean,
+  1711 passed, 88.54% coverage, and packaging smoke-tested.
+
+Resuming from here: the branch is committed and awaits Vinny's go-ahead to push
+and open its PR. Not picked from the review: the path simplifications, honoring
+global Git identity in code, and format consolidation. Open question: the live
+site serves `tldr.md` as raw `text/markdown`, so the site's "Complete your
+first Task" links still target `first-run-guide.html` until Vinny chooses how
+to point them at the short guide.
+
+## Onboarding simplifications (2026-09-27)
+
+Same branch. Vinny picked four "Simplify the path" items from
+`tasks/onboarding-review-2026-09-27.md`.
+
+- [x] Trim the README to lead with the path: release and dogfood notes out of
+  the opening, maintenance into an Upgrade section, and a "New here?" pointer.
+- [x] Cut version-history phrases from the README, local workflow guide,
+  harness matrix, short guide, and docs index. Keep version identity lines.
+- [x] Add a free preflight (`rehearse`, then `doctor --local`) and a paid-run
+  note to the short guide.
+- [x] Add a six-term glossary to the short guide that links `CONTEXT.md`.
+- [x] Docs tests, the full verification script, and commits.
+  `cd27140` trims the README and cuts the history phrases; `d033730` adds the
+  glossary and preflight to the short guide, which stays at its 100-line cap.
+  `bash scripts/verify.sh` passed: 1711 tests, 88.54% coverage.
+
+Assumption: the README's GitHub automation section stays, because moving it
+needs a deliberate change to `test_setup_docs_require_review_commit_and_push`.
+
+Resuming from here: this branch carries the Goose site notes, the onboarding
+review, the contradiction fixes, and these simplifications. Next: merge its PR
+after the required checks pass. Open questions keep their defaults: the site's
+first-Task links stay on `first-run-guide.html` because the site serves
+`tldr.md` as raw Markdown, and the README keeps its GitHub automation section.

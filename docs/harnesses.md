@@ -8,7 +8,7 @@ describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
 This matrix describes the adapters in AgentMachinist 0.18.0. It covers the local
-workflow and GitLab publication, plus local readiness introduced in 0.15.0.
+workflow, GitLab publication, and local readiness.
 The CI column below describes the existing GitHub Actions Spec workflow, not
 GitLab CI. The `goose` row is an unreleased source-checkout addition; see
 [Goose](#goose-unreleased-source-checkout).
@@ -73,8 +73,7 @@ gate run afterwards stays authoritative.
 
 ### Bounded controller repair
 
-Release 0.18.0 adds bounded controller repair. Opt-in
-`verification.repair.max_attempts: 1` reuses the resolved Execute Harness for at
+Opt-in `verification.repair.max_attempts: 1` reuses the resolved Execute Harness for at
 most one additional invocation after an eligible required Gate failure. It
 defaults to `0`. The repair prompt includes the approved implementation
 instructions and bounded, sanitized failure diagnostics treated as untrusted
@@ -95,7 +94,7 @@ installed executables and Phase support; it does not run the provider's login
 probe or validate model access. Use the checks below before your first Task.
 Plain `doctor` checks the installed version, parses configured Spec and Execute
 invocations, and checks Review when `review.enabled: true` for the GitHub
-workflow. **New in 0.15.0:** optional `doctor --local` uses the
+workflow. Optional `doctor --local` uses the
 same probes with the local settings that `start` resolves, including mandatory
 Review. These diagnostics use the adapter's read-only authentication probe when one is available;
 plugins without a probe require manual verification. A successful probe
@@ -193,7 +192,7 @@ that declares structured usage must record nonnegative integer aggregate
 `machinist report` includes them. A recorded zero is known usage; an omitted or
 invalid value remains unknown.
 
-Release 0.18.0 adds combined reporting: aggregate reports
+Aggregate reports
 read both local and legacy history by default; `--source local` and
 `--source legacy` select one. `usage_coverage` reports which attempts and token
 fields were observed. Token totals cover only those known fields and do not
@@ -214,7 +213,7 @@ argv, plus Review when enabled, without starting a Harness Task. If an argument
 changes, update the adapter, its exact argv test, this matrix, and the changelog together.
 Plain `doctor` reads root `machinist.yaml` and checks GitHub setup when that
 file exists; without it, plain `doctor` runs the local checks below. The
-0.15.0 `machinist doctor --local` option reads saved local settings or previews
+`machinist doctor --local` option reads saved local settings or previews
 first-start discovery without saving it. It runs no model, forge, release-update probe, or Verification
 Gate by default. `--run-gates` explicitly runs project commands in the
 controller checkout, where they may write or download; passing does not prove
