@@ -4,6 +4,7 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -174,6 +175,8 @@ def test_goose_argv_pins_headless_profiles_and_splices_passthrough_before_prompt
         "--no-profile",
         "--with-builtin",
         "developer",
+        "--output-format",
+        "json",
         "--model",
         "claude-sonnet-4",
         "--provider",
@@ -197,10 +200,49 @@ def test_goose_argv_pins_headless_profiles_and_splices_passthrough_before_prompt
     ]
 
 
+# Real `goose run --output-format json` output from Goose 1.52.0 (2026-09-28).
+# The run used the shell tool, whose output `hello {name!r}` once broke parsing.
+_GOOSE_RUN = Path(__file__).parent / "fixtures" / "goose-1.52-run.json"
+
+
+@pytest.mark.parametrize("method", ["generate_spec", "review"])
+def test_goose_spec_and_review_return_only_the_final_answer(tmp_path, method):
+    runner = FakeRunner((_GOOSE_RUN.read_text(), 0, ""))
+    harness = get_harness(HarnessConfig(name=HarnessName.GOOSE), runner=runner)
+
+    assert getattr(harness, method)("p", cwd=tmp_path) == "ok"
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        "  \u25b8 shell\nhello",
+        '{"messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]}',
+        # A run that ends on a tool call must not fall back to earlier narration.
+        '{"messages": ['
+        '{"role": "assistant", "content": [{"type": "text", "text": "Let me look."}]},'
+        '{"role": "assistant", "content": [{"type": "toolRequest", "id": "t"}]}]}',
+    ],
+)
+def test_goose_output_without_a_final_answer_fails_loudly(tmp_path, stdout):
+    runner = FakeRunner((stdout, 0, ""))
+    harness = get_harness(HarnessConfig(name=HarnessName.GOOSE), runner=runner)
+
+    with pytest.raises(HarnessError, match="goose"):
+        harness.generate_spec("p", cwd=tmp_path)
+
+
+def test_goose_execute_keeps_its_full_text_transcript(tmp_path):
+    runner = FakeRunner(("  \u25b8 shell\nedited files\n", 0, ""))
+    harness = get_harness(HarnessConfig(name=HarnessName.GOOSE), runner=runner)
+
+    assert harness.implement("p", cwd=tmp_path) == "  \u25b8 shell\nedited files\n"
+
+
 def test_goose_runs_pin_autonomous_mode_over_operator_setting(tmp_path, monkeypatch):
     # approve and smart_approve wait for a confirmation no headless run can give.
     monkeypatch.setenv("GOOSE_MODE", "approve")
-    runner = FakeRunner(("spec", 0, ""), ("done", 0, ""))
+    runner = FakeRunner((_GOOSE_RUN.read_text(), 0, ""), ("done", 0, ""))
     harness = get_harness(HarnessConfig(name=HarnessName.GOOSE), runner=runner)
 
     harness.generate_spec("p", cwd=tmp_path)
