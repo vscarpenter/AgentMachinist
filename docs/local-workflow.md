@@ -281,7 +281,10 @@ machinist retry --task T1 --phase execute
 ```
 
 Local retry runs immediately in the foreground and requires the current failed
-Phase. Execute retry resumes retained edits by default; `--fresh` selects a
+Phase. Review saves the Harness's raw output as `harness-report.txt` in its
+attempt's log directory under `.machinist/runs/local/logs/`, and an invalid
+report names that file in its error. Read it before retrying Review, because
+the same Harness and prompt usually fail the same way. Execute retry resumes retained edits by default; `--fresh` selects a
 new Workshop. It clears a cancellation marker and validates retained Workshop
 custody before reuse. Recovery after the implementation
 commit uses the saved result instead of repeating successful implementation or

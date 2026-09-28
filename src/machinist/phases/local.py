@@ -34,6 +34,7 @@ from machinist.phases.execute import (
 from machinist.phases.progress import bind_harness_progress, report_progress
 from machinist.phases.review import (
     _MAX_DIFF_BYTES,
+    ReviewPhaseError,
     _prompt_sections,
     parse_review_report,
 )
@@ -41,6 +42,7 @@ from machinist.phases.spec import render_spec_prompt
 from machinist.phases.workshop_cleanup import finish_workshop_cleanup
 from machinist.process import run_supervised
 from machinist.repair import RepairCancelled, RepairError, verify_with_repair
+from machinist.runtime_paths import RuntimePathError, write_text_file
 from machinist.verification import (
     GateStatus,
     VerificationError,
@@ -554,7 +556,12 @@ def run_local_review(
         output = harness.review(prompt, path)
     finally:
         workspace.assert_harness_state(path, before, read_only=True)
-    report = _report_payload(parse_review_report(output), candidate)
+    saved = _save_review_output(claim, output)
+    try:
+        parsed = parse_review_report(output)
+    except ReviewPhaseError as exc:
+        raise ReviewPhaseError(f"{exc}; raw Review output saved at {saved}") from exc
+    report = _report_payload(parsed, candidate)
     claim.checkpoint(
         reviewed_sha=candidate,
         review_report=report,
@@ -885,6 +892,19 @@ def _execute_evidence(task, store, supplied):
         "change_summary": evidence.change_summary,
         "verification_report": report,
     }
+
+
+def _save_review_output(claim, output: object) -> Path:
+    """Keep the raw Review text so an unparsable report can be diagnosed."""
+    saved = claim.log_path("harness-report.txt")
+    try:
+        write_text_file(saved, "" if output is None else str(output))
+    except (OSError, RuntimePathError) as exc:
+        raise LocalPhaseError(
+            f"could not persist Review output at {saved}: {exc}"
+        ) from exc
+    claim.checkpoint(harness_report_path=str(saved))
+    return saved
 
 
 def _report_payload(report, sha):

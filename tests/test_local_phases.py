@@ -746,3 +746,37 @@ def test_removed_required_gates_after_spec_block_execute_before_harness(
         local.run(Phase.EXECUTE)
     assert local.harness.calls == ["spec"]
     assert local.store.get(local.task.id).candidate_sha is None
+
+
+def test_review_saves_raw_output_and_names_it_when_the_report_is_invalid(local):
+    from pathlib import Path
+
+    local.run(Phase.SPEC)
+    local.approve()
+    local.run(Phase.EXECUTE)
+    raw = 'Reviewing now.\n{"version": 1, "summary" "missing colon"}\n'
+    local.harness.review = lambda prompt, cwd: raw
+
+    with pytest.raises(Exception, match="valid JSON") as failure:
+        local.run(Phase.REVIEW)
+
+    evidence = local.lifecycle.record(local.task.number, Phase.REVIEW).evidence
+    saved = Path(evidence["harness_report_path"])
+    assert saved.name == "harness-report.txt" and saved.parent.name == "attempt-1"
+    assert saved.read_text() == raw
+    assert str(saved) in str(failure.value)
+
+
+def test_successful_review_keeps_its_raw_output_too(local):
+    from pathlib import Path
+
+    local.run(Phase.SPEC)
+    local.approve()
+    local.run(Phase.EXECUTE)
+    local.run(Phase.REVIEW)
+
+    evidence = local.lifecycle.record(local.task.number, Phase.REVIEW).evidence
+    assert (
+        '"summary": "Review complete"'
+        in Path(evidence["harness_report_path"]).read_text()
+    )
