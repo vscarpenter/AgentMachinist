@@ -8,6 +8,13 @@
   saved. Execute requires `--fresh`, and legacy issue retries reject both
   flags. Approval is unchanged because it binds the Spec commit, not the
   Harness.
+- Name the resolved Harness in the `doctor` Harness row (`codex at
+  /usr/local/bin/codex`) and list the required Gate commands in the
+  `doctor --local` test Gate row, instead of a count.
+- Print each `rehearse` checkpoint as it completes, after a first line that
+  says the run can take a minute. It used to stay silent until the end.
+- List the built-in Harness names in `start --harness` and `retry --harness`
+  help, and validate `retry --harness` when the command line is parsed.
 
 ## 0.19.0 — 2026-09-27
 

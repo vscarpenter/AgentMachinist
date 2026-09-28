@@ -196,3 +196,13 @@ def test_fixture_git_ignores_ambient_repository_redirection(monkeypatch, tmp_pat
 
     assert (repository / ".git/HEAD").read_text().strip() == "ref: refs/heads/main"
     assert list(foreign.iterdir()) == []
+
+
+def test_rehearsal_reports_each_checkpoint_as_it_completes(tmp_path):
+    seen = []
+
+    result = simulate_rehearsal(
+        review_enabled=True, temp_parent=tmp_path, progress=seen.append
+    )
+
+    assert seen == list(result.transitions)

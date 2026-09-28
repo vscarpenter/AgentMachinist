@@ -15,7 +15,7 @@ from machinist.local_doctor import (
     local_fix_hint_for_check_name,
     run_local_doctor,
 )
-from machinist.local_setup import ensure_local_config
+from machinist.local_setup import ensure_local_config, resolve_local_config
 from machinist.workspace import Workspace, WorkspaceError
 
 
@@ -581,3 +581,12 @@ def test_not_a_repository_and_git_lookup_errors_are_reports(tmp_path):
     )
     assert not missing.ok
     assert "PATH unavailable" in str(missing.to_dict())
+
+
+def test_readiness_names_the_resolved_harness_and_required_gate_commands(repo):
+    report = run_local_doctor(repo, which=which, runner=probe_runner([]))
+
+    checks = checks_by_name(report)
+    assert checks["harness"].detail == "codex at /bin/codex"
+    gate_command = resolve_local_config(repo, which=which).tests.command
+    assert checks["test gate"].detail == f"1 required gate: {gate_command}"

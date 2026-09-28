@@ -14,6 +14,9 @@ import click
 from machinist.config import HarnessName
 from machinist.harness import discover_harnesses
 
+# Help text must not import plugins, so it names only the built-in adapters.
+BUILT_IN_HARNESSES = ", ".join(name.value for name in HarnessName)
+
 
 class HarnessChoice(click.ParamType):
     """Resolve built-in and installed plugin identifiers when Click parses argv."""

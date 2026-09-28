@@ -62,6 +62,7 @@ from machinist.github import (
 )
 from machinist.harness import HarnessError, get_harness, get_harness_descriptor
 from machinist.init_wizard import (
+    BUILT_IN_HARNESSES,
     HarnessChoice,
     InitAnswers,
     run_init_wizard,
@@ -1145,6 +1146,14 @@ def onboard(
 )
 def rehearse(use_harness: bool) -> None:
     """Exercise the production local workflow with a fake Harness by default."""
+    click.echo(
+        "Rehearsing a disposable Task with real Git and verification; "
+        "this can take a minute."
+    )
+
+    def reached(transition: str) -> None:
+        click.echo(f"  ✓ {transition}")
+
     try:
         if use_harness:
             config = (
@@ -1152,19 +1161,18 @@ def rehearse(use_harness: bool) -> None:
                 if has_local_configuration()
                 else load_config()
             )
-            result = run_harness_rehearsal(
+            run_harness_rehearsal(
                 config,
                 harness_factory=lambda phase: _make_harness(config, Phase(phase)),
+                progress=reached,
             )
             mode = "configured Harnesses; API usage may have occurred"
         else:
-            result = simulate_rehearsal(review_enabled=True)
+            simulate_rehearsal(review_enabled=True, progress=reached)
             mode = "production local Phases with a fake Harness; no model or API usage"
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Rehearsal passed ({mode}).")
-    for transition in result.transitions:
-        click.echo(f"  ✓ {transition}")
     click.echo("Next: machinist start OBJECTIVE")
 
 
@@ -1792,7 +1800,11 @@ def approve(
 @click.option(
     "--harness",
     "harness_name",
-    help="Use this installed Harness for this local retry only; not saved.",
+    type=HarnessChoice(),
+    help=(
+        f"Use this installed Harness for this local retry only; not saved: "
+        f"{BUILT_IN_HARNESSES}, or an installed plugin."
+    ),
 )
 @click.option("--model", help="Use this model for this local retry only; not saved.")
 def retry(

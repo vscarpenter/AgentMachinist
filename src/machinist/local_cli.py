@@ -24,7 +24,7 @@ from machinist.forge import (
 )
 from machinist.gitlab import GitLabClient
 from machinist.harness import HarnessError
-from machinist.init_wizard import HarnessChoice
+from machinist.init_wizard import BUILT_IN_HARNESSES, HarnessChoice
 from machinist.lifecycle import LifecycleError, Phase
 from machinist.local_setup import (
     ensure_local_config,
@@ -305,7 +305,10 @@ def parse_issue_url(
     "--harness",
     "harness_name",
     type=HarnessChoice(),
-    help="Use an installed full-pipeline Harness.",
+    help=(
+        f"Use an installed full-pipeline Harness: {BUILT_IN_HARNESSES}, "
+        "or an installed plugin."
+    ),
 )
 @click.option(
     "--test-cmd", help="Required verification command for this local repository."

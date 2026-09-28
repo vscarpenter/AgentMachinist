@@ -745,3 +745,10 @@ def test_retry_harness_choice_refuses_mixed_or_legacy_attempts(
     assert result.exit_code == 2
     assert message in result.output
     assert local_cli.events == []
+
+
+@pytest.mark.parametrize("command", ["start", "retry"])
+def test_harness_help_names_the_built_in_harnesses(command):
+    result = CliRunner().invoke(main, [command, "--help"], terminal_width=200)
+
+    assert "claude-code, opencode, pi, codex, goose" in result.output
