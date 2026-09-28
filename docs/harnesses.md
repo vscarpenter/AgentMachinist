@@ -18,7 +18,7 @@ GitLab CI. See [Goose](#goose) for its advisory read-only profile.
 | `codex` | `codex` | Read-only sandbox and ephemeral session | Workspace-write sandbox, approval prompts disabled, ephemeral session; prompt plus Git postconditions | `OPENAI_API_KEY` |
 | `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools with session persistence disabled; prompt plus Git postconditions | `GEMINI_API_KEY` |
 | `opencode` | `opencode` | Pure plan agent; treated as advisory | Normal run agent; prompt plus Git postconditions | `ANTHROPIC_API_KEY` by default |
-| `goose` | `goose` | Quiet run with only the developer builtin loaded and no session; treated as advisory | Normal profile with no session; prompt plus Git postconditions | None; managed Spec CI is unsupported |
+| `goose` | `goose` | Quiet JSON run with only the developer builtin loaded and no session; treated as advisory | Normal profile with no session; prompt plus Git postconditions | None; managed Spec CI is unsupported |
 
 ### Goose
 
@@ -27,6 +27,13 @@ files and runs shell commands. `goose run` has no flag that limits it to
 reading, so its read-only control is advisory. The controller rejects any
 change a Spec or Review run makes, as it does for OpenCode. Spec and Review add
 `--no-profile`, so your other Goose extensions stay unloaded there.
+
+Spec and Review also add `--output-format json`. Goose's text output mixes its
+tool transcript into the answer even with `-q`, so a saved Spec used to start
+with shell commands and their output, and a Review report could fail to parse.
+The adapter keeps only the text of the last assistant message and fails the run
+when that message has none. Execute keeps text output, so its
+`harness-report.txt` still shows every tool call.
 
 Every Goose run sets `GOOSE_MODE=auto`. The `approve` and `smart_approve`
 modes wait for a confirmation that a headless Task Run cannot give. This

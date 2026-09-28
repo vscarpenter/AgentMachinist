@@ -1311,9 +1311,10 @@ first-pass Execute worse?" from Evidence `report` already records.
 - Findings from that run, not fixed here:
   - `ReviewPhaseError` is missing from `local_cli.local_errors()`, so a failed
     local Review prints a raw traceback instead of a CLI error.
-  - Goose Review output fails JSON parsing on all three cases
-    (`Expecting ':' delimiter`, line 7). Review saves no raw output, unlike
-    Execute's `harness-report.txt`, so the cause needs a rerun to see.
+  - Goose Review output failed JSON parsing on all three cases. Fixed: raw
+    Review output is now saved (#68), which showed Goose's tool transcript in
+    stdout even with `-q`. It also filled Goose Specs. Spec and Review now read
+    `--output-format json` and keep only the last assistant message.
   - OpenCode Spec fails: "left background processes running after exit".
   - Pi Spec fails: "Connection error"; likely Pi provider login or model
     configuration on this machine.

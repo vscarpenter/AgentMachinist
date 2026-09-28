@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fix Goose Specs and Reviews. Goose's text output mixes its tool transcript
+  into the answer even with `-q`, so a Goose Spec started with shell commands
+  and file listings, and Goose Review failed with "review report must be
+  valid JSON" whenever that transcript contained a brace. Spec and Review now
+  run with `--output-format json` and keep only the last assistant message.
+  Execute is unchanged.
 - Add `--harness` and `--model` to `machinist retry --task` for one explicit
   retry with another installed Harness or model. The choice is validated like
   `start --harness`, applies to every Phase that retry runs, and is never
