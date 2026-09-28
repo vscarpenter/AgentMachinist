@@ -1,0 +1,24 @@
+{
+  "claude-code": {
+    "case-insensitive-timezone": {
+      "first_pass": true
+    },
+    "list-supported-timezones": {
+      "first_pass": true
+    },
+    "reject-unknown-timezone": {
+      "first_pass": true
+    }
+  },
+  "goose": {
+    "case-insensitive-timezone": {
+      "first_pass": true
+    },
+    "list-supported-timezones": {
+      "first_pass": true
+    },
+    "reject-unknown-timezone": {
+      "first_pass": true
+    }
+  }
+}

@@ -26,7 +26,12 @@ A case passes when its first Execute attempt succeeds without repair. The
 script compares that result with `baseline.json`, keyed by Harness and model,
 and exits 1 when a case that passed in the baseline fails now. Duration and
 token counts are printed but never fail the run, because they vary between
-runs.
+runs. Review is not compared: a case whose Review fails can still pass.
+
+A case that stops before Execute, such as a Harness login, baseline, or Spec
+failure, prints an `ERROR` line with its log path, stays out of the baseline,
+and makes the run exit 2. That result says the corpus could not measure the
+Harness, not that the Harness got worse.
 
 With no baseline for a Harness and model, record one:
 

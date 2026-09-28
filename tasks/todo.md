@@ -1302,5 +1302,18 @@ first-pass Execute worse?" from Evidence `report` already records.
 - [x] Tested pure functions: load cases, summarize a report, find regressions
   against `examples/harness-corpus/baseline.json`.
 - [x] README with cost warning. No controller code changes.
-- [x] 11 offline tests, including an end-to-end run against a fake `machinist`
-  on `PATH`. No paid run yet, so `baseline.json` does not exist.
+- [x] 12 offline tests, including end-to-end runs against a fake `machinist`
+  on `PATH`.
+- [x] First paid run (Vinny approved all four installed Harnesses). Claude
+  Code and Goose passed first-pass Execute on all three cases; both are in
+  `baseline.json`. Pi and OpenCode never reached Execute, so the script now
+  reports that as unmeasured (exit 2) instead of a failed first pass.
+- Findings from that run, not fixed here:
+  - `ReviewPhaseError` is missing from `local_cli.local_errors()`, so a failed
+    local Review prints a raw traceback instead of a CLI error.
+  - Goose Review output fails JSON parsing on all three cases
+    (`Expecting ':' delimiter`, line 7). Review saves no raw output, unlike
+    Execute's `harness-report.txt`, so the cause needs a rerun to see.
+  - OpenCode Spec fails: "left background processes running after exit".
+  - Pi Spec fails: "Connection error"; likely Pi provider login or model
+    configuration on this machine.

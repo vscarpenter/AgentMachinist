@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,7 @@ def test_invalid_cases_fail_before_any_paid_run(tmp_path, payload, message):
 
 def test_summary_reads_first_pass_execute_from_the_report():
     assert corpus.summarize(_report(1, 1)) == {
+        "reached_execute": True,
         "first_pass": True,
         "duration_seconds": 42.0,
         "total_tokens": 1200,
@@ -81,9 +83,12 @@ def test_summary_reads_first_pass_execute_from_the_report():
     assert corpus.summarize(_report(1, 0))["first_pass"] is False
 
 
-def test_summary_treats_a_run_without_execute_as_not_passing():
-    # A failed Spec or baseline never reaches Execute; that is not a pass.
-    assert corpus.summarize(_report(0, 0, median=None))["first_pass"] is False
+def test_summary_separates_a_run_that_never_reached_execute():
+    # A Harness login or setup failure is not evidence about Execute quality.
+    summary = corpus.summarize(_report(0, 0, median=None))
+
+    assert summary["reached_execute"] is False
+    assert summary["first_pass"] is None
 
 
 def test_baseline_key_separates_models_of_one_harness():
@@ -114,12 +119,15 @@ _FAKE_MACHINIST = """#!{python}
 import json, os, sys
 from pathlib import Path
 Path(os.environ["FAKE_LOG"]).open("a").write(" ".join(sys.argv[1:]) + "\\n")
+if sys.argv[1] == "start" and os.environ.get("FAKE_START_FAILS"):
+    sys.exit(1)
 if sys.argv[1] == "status":
     print(json.dumps({{"spec_sha": "a" * 40}}))
 if sys.argv[1] == "report":
     passed = int(os.environ["FAKE_FIRST_PASS"])
+    terminal = 0 if os.environ.get("FAKE_START_FAILS") else 1
     print(json.dumps({{
-        "first_pass_execute": {{"terminal_attempts": 1, "succeeded_without_repair": passed}},
+        "first_pass_execute": {{"terminal_attempts": terminal, "succeeded_without_repair": passed}},
         "duration_seconds": {{"median": 3.0}},
         "token_totals": {{}},
     }}))
@@ -137,6 +145,8 @@ def fake_machinist(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_LOG", str(log))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    # Unmeasured runs keep their repositories; keep them inside pytest's tmp_path.
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     return log
 
 
@@ -171,6 +181,34 @@ def test_run_records_a_baseline_then_fails_on_a_lost_first_pass(
     monkeypatch.setenv("FAKE_FIRST_PASS", "0")
     assert corpus.main(arguments) == 1
     assert "REGRESSION reject-unknown-timezone" in capsys.readouterr().out
+
+
+def test_setup_failure_is_not_recorded_and_exits_as_unmeasured(
+    tmp_path, monkeypatch, fake_machinist, capsys
+):
+    baseline = tmp_path / "baseline.json"
+    monkeypatch.setenv("FAKE_START_FAILS", "1")
+    monkeypatch.setenv("FAKE_FIRST_PASS", "0")
+
+    code = corpus.main(
+        [
+            "--harness",
+            "pi",
+            "--case",
+            "reject-unknown-timezone",
+            "--baseline",
+            str(baseline),
+            "--write-baseline",
+        ]
+    )
+
+    assert code == 2
+    output = capsys.readouterr().out
+    assert "ERROR reject-unknown-timezone: did not reach Execute" in output
+    # The ERROR line points at a log that must survive without --keep.
+    log = Path(output.split("see ", 1)[1].split("\n", 1)[0])
+    assert "$ machinist start" in log.read_text()
+    assert json.loads(baseline.read_text()) == {"pi": {}}
 
 
 def test_unknown_case_is_a_usage_error_before_any_run(fake_machinist):

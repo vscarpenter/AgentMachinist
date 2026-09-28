@@ -62,10 +62,12 @@ def load_cases(path: Path) -> list[Case]:
 
 def summarize(report: dict[str, Any]) -> dict[str, Any]:
     first_pass = report["first_pass_execute"]
+    # A Harness login, baseline, or Spec failure stops before Execute. That says
+    # nothing about Execute quality, so it gets no first-pass verdict.
+    reached = first_pass["terminal_attempts"] == 1
     return {
-        # A Spec or baseline failure never reaches Execute, so it cannot pass.
-        "first_pass": first_pass["terminal_attempts"] == 1
-        and first_pass["succeeded_without_repair"] == 1,
+        "reached_execute": reached,
+        "first_pass": first_pass["succeeded_without_repair"] == 1 if reached else None,
         "duration_seconds": report["duration_seconds"]["median"],
         "total_tokens": report["token_totals"].get("total_tokens"),
     }
@@ -84,7 +86,7 @@ def find_regressions(
         for case_id, expected in baseline.items()
         if expected.get("first_pass")
         and case_id in results
-        and not results[case_id]["first_pass"]
+        and results[case_id]["first_pass"] is False
     ]
 
 
@@ -195,8 +197,12 @@ def main(argv: list[str] | None = None) -> int:
             work=work,
         )
         results[case.id] = result
+        if not result["reached_execute"]:
+            print(f"ERROR {case.id}: did not reach Execute; see {work / case.id}.log")
+            continue
         outcome = "first pass" if result["first_pass"] else "FAILED first pass"
         print(f"{case.id}: {outcome} ({result['duration_seconds']}s)")
+    unmeasured = [case_id for case_id, r in results.items() if not r["reached_execute"]]
 
     key = baseline_key(options.harness, options.model)
     baselines = (
@@ -205,23 +211,30 @@ def main(argv: list[str] | None = None) -> int:
     if options.write_baseline:
         recorded = baselines.setdefault(key, {})
         recorded.update(
-            {case_id: {"first_pass": r["first_pass"]} for case_id, r in results.items()}
+            {
+                case_id: {"first_pass": r["first_pass"]}
+                for case_id, r in results.items()
+                if r["reached_execute"]
+            }
         )
         options.baseline.write_text(
             json.dumps(baselines, indent=2, sort_keys=True) + "\n"
         )
         print(f"Recorded the {key} baseline in {options.baseline}.")
-    if options.keep:
+    # Keep the logs that the ERROR lines point to.
+    if options.keep or unmeasured:
         print(f"Disposable repositories and logs kept in {work}.")
     else:
         shutil.rmtree(work)
     if key not in baselines:
         print(f"No {key} baseline yet; rerun with --write-baseline to record one.")
-        return 0
+        return 2 if unmeasured else 0
     regressions = find_regressions(baselines[key], results)
     for line in regressions:
         print(f"REGRESSION {line}")
-    return 1 if regressions else 0
+    if regressions:
+        return 1
+    return 2 if unmeasured else 0
 
 
 if __name__ == "__main__":

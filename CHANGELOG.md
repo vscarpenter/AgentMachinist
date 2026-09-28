@@ -26,8 +26,10 @@
 - Add a Harness regression corpus for contributors:
   `scripts/harness_corpus.py` runs the fixed Tasks in
   `examples/harness-corpus/` through the public CLI and fails when a case that
-  passed first-pass Execute in `baseline.json` no longer does. It makes paid
-  model calls and is not part of the Verification Gates.
+  passed first-pass Execute in `baseline.json` no longer does, and exits 2
+  when a case never reaches Execute. It makes paid model calls and is not
+  part of the Verification Gates. The first baseline covers Claude Code and
+  Goose.
 
 ## 0.19.0 — 2026-09-27
 
