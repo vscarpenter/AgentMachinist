@@ -1238,10 +1238,20 @@ this started.
   README, CLAUDE.md, SECURITY.md, the guides, and the HTML pages, and add Goose
   to the adapter lists. Drop a stale unreleased note in `CONTEXT.md` that the
   0.18.0 release missed.
-- [ ] `bash scripts/verify.sh` from the release candidate.
-- [ ] Push `release/0.19.0` and open its PR.
-- [ ] Merge after green required checks. This waits on Vinny.
-- [ ] `gh release create v0.19.0` at the merge commit. This waits on Vinny.
+- [x] `bash scripts/verify.sh` from the release candidate `5a673db`: 1711
+  passed, 88.52% coverage, and the 0.19.0 wheel and sdist smoke-tested.
+- [x] Push `release/0.19.0` and open PR #59. All 14 required checks passed on
+  its head.
+- [x] Vinny merged PR #59 as `141c5ef` (2026-09-28 02:23 UTC). CI, CodeQL, and
+  Pages passed on the merge commit before the release was created.
+- [x] `gh release create v0.19.0 --target 141c5ef` at Vinny's request. Release
+  run 36372596297 passed build, publish, verify-published, and release-assets.
+  The PyPI version endpoint lists the wheel and sdist, neither yanked, and an
+  isolated `uv tool run --from agentmachinist==0.19.0` reports 0.19.0.
 
-Assumption: 0.19.0 is a minor bump because `harness.name: goose` and the
-adapter hooks are new user-facing surface.
+Resuming from here: 0.19.0 is published and marked Latest. This note lives on
+`docs/todo-ledger-0.19.0` until the next change's PR carries it, because
+`main` is PR-protected. Assumption from the prep entry stands: 0.19.0 is a
+minor bump because `harness.name: goose` and the adapter hooks are new
+user-facing surface. The auto-mode classifier refused an admin merge, so Vinny
+merged the release PR himself.
