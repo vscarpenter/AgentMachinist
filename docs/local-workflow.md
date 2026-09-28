@@ -12,14 +12,10 @@ you choose to publish it.
 This guide describes AgentMachinist 0.18.0. Install the published package with
 `uv tool install agentmachinist`, or upgrade an existing tool installation with
 `uv tool upgrade agentmachinist`; then run the commands below in the repository
-you want to change. Optional local readiness was introduced in 0.15.0. The
-existing
+you want to change. The existing
 [GitHub issue workflow](getting-started.md#github-setup-and-automation)
 remains available. See [installation](getting-started.md#install) for an optional
 editable source setup.
-
-Release 0.18.0 adds bounded Execute repair and combined local/legacy
-reporting, described below.
 
 ## Complete one Task
 
@@ -117,7 +113,7 @@ machinist status T1
 machinist status T1 --json
 ```
 
-Release 0.18.0 adds optional bounded repair.
+Optional bounded repair is off by default.
 Set `verification.repair.max_attempts: 1` in the saved local configuration to
 permit one additional Harness invocation after an ordinary required Gate failure
 inside the active Execute run. It defaults to `0`. The extra invocation and all
@@ -159,7 +155,7 @@ changed candidate, or dirty checkout stops integration. Intent is recorded
 before the update so a retry can reconcile an interrupted integration without
 silently discarding edits. The command does not push or merge a remote PR/MR.
 
-**Available since 0.16.0:** Local status and completion receipts name
+Local status and completion receipts name
 the next human activity and supply commands with the saved Task ID and exact
 Spec SHA where needed. The short path is `start`, read and approve the Spec, inspect the
 candidate and Review report through `status T1`, then `integrate T1`.
@@ -170,7 +166,7 @@ out of JSON output; the existing structured fields remain available.
 
 ## Optional local readiness
 
-**New in 0.15.0:** `machinist doctor --local` adds an optional readiness check.
+`machinist doctor --local` is an optional readiness check.
 You can still begin with `start` directly; this check adds no required
 onboarding step.
 
@@ -372,7 +368,7 @@ The Spec itself is committed at `.machinist/specs/task-1-spec.md`. Preserve
 runtime records for recovery; do not commit them or edit Task JSON manually.
 
 Plain `doctor` is the root GitHub setup preflight when `machinist.yaml` exists
-and runs local readiness otherwise; `doctor --local`, available since 0.15.0,
+and runs local readiness otherwise; `doctor --local`
 checks local readiness explicitly as described above. `runs`, `inspect`, `explain`, and portfolio `status --all` read the legacy
 issue-run namespace under `.machinist/runs/`. Aggregate `report` reads both
 namespaces by default; use

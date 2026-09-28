@@ -5,6 +5,9 @@ change. It coordinates Claude Code, OpenCode, Pi, or Codex, with human Approval
 of the exact Spec before implementation and human review before integration.
 GitHub and GitLab are optional sources of Tasks and destinations for publication.
 
+New here? Follow [Start here](docs/tldr.md) for your first Task, or try it on
+the disposable [example project](examples/first-task/README.md) first.
+
 ```text
 Task → Spec commit → human Approval → implementation → verification → Review
                                                                     │
@@ -16,26 +19,8 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-AgentMachinist 0.18.0 adds combined local/legacy reliability reports and
-opt-in bounded repair after an ordinary required Verification failure. See the
-[Verification](docs/getting-started.md#verification-gates-and-change-limits)
-and [reporting](docs/getting-started.md#local-evidence-and-repository-portfolio)
-guidance. It also fixes first-run friction. Baseline Verification failures keep
-their real error, and `doctor`, `status`, `config`, and `clean` work without
-`machinist.yaml`. The new `examples/first-task` directory is a disposable
-project for a first Task. The [Approval policy](docs/approval-policy.md) and
-[workflow diagram](docs/how-it-works.html) show who owns each step from Task
-through optional publication.
-
 Current release:
 [AgentMachinist 0.18.0 on PyPI](https://pypi.org/project/agentmachinist/0.18.0/).
-
-This repository's source checkout uses ordered required check-only Gates for workflow
-drift, formatting, lint, types, and coverage. Existing saved local configuration
-is not updated automatically. Repair defaults off; configuring
-`verification.repair.max_attempts: 1` permits one additional Harness invocation
-and final Gates within an active Execute run. Failed runs still need explicit
-retry, and final Review and human integration remain unchanged.
 
 ## Install
 
@@ -46,34 +31,15 @@ uv tool install agentmachinist
 machinist --version
 ```
 
-Upgrade an existing tool installation with `uv tool upgrade agentmachinist`.
-
 You also need `git` and one supported Harness executable (`claude`, `opencode`,
 `pi`, or `codex`). GitHub operations require authenticated [`gh`](https://cli.github.com);
 GitLab operations require authenticated [`glab`](https://docs.gitlab.com/cli/).
-The core
-CLI is tested on macOS and Linux with Python 3.12–3.14. Managed background
-service commands are macOS-only; on Linux, schedule `machinist watch --once`
-with your existing service manager.
-
-`machinist update-check` compares the installed release against PyPI and
-prints the upgrade command for how this copy was installed (`uv tool`, `pipx`,
-`pip`, or a source checkout). `machinist doctor` reports the same result as a
-diagnostic row. Set `MACHINIST_NO_UPDATE_CHECK=1` to suppress both probes on
-offline or CI machines.
-
-Upgrading the package is not always the whole upgrade. Managed workflows are
-projected files: run `machinist sync-workflows`, review the generated changes,
-and commit and merge them into the default branch for hosted workflows to use them.
-`machinist watch` reports local drift at startup and
-`machinist update-check` reports it alongside the release comparison, so you do
-not have to run `doctor` to find out. The advisory never blocks a command and
-never appears in `update-check --json`.
+The core CLI is tested on macOS and Linux with Python 3.12 to 3.14. Managed
+background service commands are macOS-only; on Linux, schedule
+`machinist watch --once` with your existing service manager.
 
 ## Start
 
-The guided local workflow and optional GitLab support introduced in 0.14.0
-continue in 0.18.0. The existing GitHub workflow remains available.
 Start on a clean named branch with an initial commit and an installed,
 authenticated Harness. Set your author inside the repository with
 `git config user.name` and `git config user.email`, because the controller
@@ -101,7 +67,7 @@ machinist status T1
 machinist integrate T1
 ```
 
-**Available since 0.16.0:** Completion output explains the next activity and includes a
+Completion output explains the next activity and includes a
 command using your Task or issue ID. Local integration reports completion;
 publication is an optional follow-up with an explicit forge selection.
 
@@ -123,8 +89,9 @@ Gate's error and log directory. Correct the Gate in
 needs a fix, commit it and start a new Task. To try the loop on something
 disposable first, copy [examples/first-task](examples/first-task/README.md).
 
-**Available since 0.15.0:** `machinist doctor --local` is an optional
-readiness check using the same configuration resolution as first start or your
+Before your first paid run, `machinist rehearse` exercises the whole local
+workflow with a fake Harness and no model cost. `machinist doctor --local` is an
+optional readiness check using the same configuration resolution as first start or your
 saved local settings. It checks Git, Harness probes, and verification command
 availability without creating a Task or requiring a forge. Add `--json` for
 structured output. Add `--run-gates` only to execute project commands in your
@@ -307,7 +274,7 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
 | `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |
 | `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). Without `machinist.yaml`, plain `doctor` runs the local readiness checks. |
-| `machinist doctor --local [--run-gates] [--json]` | Available since 0.15.0: optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
+| `machinist doctor --local [--run-gates] [--json]` | Optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |
@@ -337,10 +304,29 @@ closes the open draft PR. Choose the operation that matches your decision.
 | `machinist repo add\|remove\|list` | Maintain the optional local repository registry. |
 | `machinist clean [--issue <issue>\|--task <Tn>\|--all]` | List or remove retained Workshops for GitHub issues and local Tasks. |
 
+## Upgrade
+
+Upgrade an existing tool installation with `uv tool upgrade agentmachinist`.
+
+`machinist update-check` compares the installed release against PyPI and
+prints the upgrade command for how this copy was installed (`uv tool`, `pipx`,
+`pip`, or a source checkout). `machinist doctor` reports the same result as a
+diagnostic row. Set `MACHINIST_NO_UPDATE_CHECK=1` to suppress both probes on
+offline or CI machines.
+
+Upgrading the package is not always the whole upgrade. Managed workflows are
+projected files: run `machinist sync-workflows`, review the generated changes,
+and commit and merge them into the default branch for hosted workflows to use them.
+`machinist watch` reports local drift at startup and
+`machinist update-check` reports it alongside the release comparison, so you do
+not have to run `doctor` to find out. The advisory never blocks a command and
+never appears in `update-check --json`.
+
 ## Documentation
 
 1. [Understand the workflow](docs/how-it-works.html): one diagram of your decisions
-   and the controller's work.
+   and the controller's work. The [Approval policy](docs/approval-policy.md)
+   explains what each Approval authorizes.
 2. [Complete your first Task](docs/tldr.md): the short installation-to-integration
    guide. Prefer illustrated instructions? Use the
    [visual first-run guide](https://agentmachinist.vinny.dev/first-run-guide.html).
