@@ -20,7 +20,7 @@ the candidate is the reviewed commit you integrate. The
 
 ## One-time setup
 
-This path works with published **AgentMachinist 0.18.0**. You need Python 3.12+,
+This path works with published **AgentMachinist 0.19.0**. You need Python 3.12+,
 `uv`, Git, and an installed, authenticated Harness such as Claude Code or Codex.
 See [Harness setup](harnesses.md#authentication) if yours is not ready.
 

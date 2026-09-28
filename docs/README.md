@@ -10,7 +10,7 @@ Start with two resources. Everything else is a reference or an alternate format.
 Prefer illustrated instructions? The [visual first-run guide](first-run-guide.html)
 walks through the same journey with examples and recovery help.
 
-This is the current operating documentation for **AgentMachinist 0.18.0**.
+This is the current operating documentation for **AgentMachinist 0.19.0**.
 See the [changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md) for details; the short
 first-Task path works with the published package.
 

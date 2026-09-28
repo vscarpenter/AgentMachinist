@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="AgentMachinist documentation: understand the local workflow, complete your first Task, and find configuration, recovery, architecture, and trust references. AgentMachinist 0.18.0.">
+  <meta name="description" content="AgentMachinist documentation: understand the local workflow, complete your first Task, and find configuration, recovery, architecture, and trust references. AgentMachinist 0.19.0.">
   <meta name="theme-color" content="#f3f1eb">
   <meta property="og:title" content="AgentMachinist documentation">
-  <meta property="og:description" content="Start with the workflow explainer and first-Task guide, then find every operating reference and architecture decision. AgentMachinist 0.18.0.">
+  <meta property="og:description" content="Start with the workflow explainer and first-Task guide, then find every operating reference and architecture decision. AgentMachinist 0.19.0.">
   <meta name="twitter:card" content="summary">
   <title>AgentMachinist documentation</title>
   <style>
@@ -255,7 +255,7 @@
         <a href="how-it-works.html">Understand the workflow <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <a class="primary" href="first-run-guide.html">Complete your first Task <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
       </nav>
-      <p><strong>AgentMachinist 0.18.0</strong> adds opt-in <a href="operator-runbook.md#bounded-repair-recovery">bounded repair</a> inside Execute, combined local and legacy <code>report --source all</code>, and first-run fixes for baseline failures and setup-free commands. Install 0.18.0 from PyPI. Exact Spec Approval, verification, independent Review, and optional GitHub or GitLab publication remain part of the workflow. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
+      <p><strong>AgentMachinist 0.19.0</strong> adds a built-in Goose Harness and clearer first-run guidance, including a repository-local Git author and free checks before your first paid run. Install 0.19.0 from PyPI. Exact Spec Approval, verification, independent Review, and optional GitHub or GitLab publication remain part of the workflow. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
@@ -501,10 +501,10 @@
           <div class="prereqs">
             <div class="prereq"><strong>Clean Git checkout with an initial commit and repository-local author</strong><code>git status --short</code></div>
             <div class="prereq"><strong>Python 3.12+ and uv</strong><code>uv --version</code></div>
-            <div class="prereq"><strong>One installed Harness</strong><code>Claude Code · OpenCode · Pi · Codex</code></div>
+            <div class="prereq"><strong>One installed Harness</strong><code>Claude Code · OpenCode · Pi · Codex · Goose</code></div>
             <div class="prereq"><strong>Verification works in an isolated checkout</strong><code>uv run pytest</code></div>
           </div>
-          <p data-release="unreleased" style="margin:1rem 0 0;font-size:0.9rem"><strong>Unreleased, source checkout only:</strong> Goose is also a built-in Harness. First-run discovery never picks it, so choose it with <code>machinist start --harness goose</code>.</p>
+          <p style="margin:1rem 0 0;font-size:0.9rem">First-run discovery never picks Goose, so choose it with <code>machinist start --harness goose</code>.</p>
           <p style="margin:1.5rem 0 0;font-size:0.9rem">Dependencies in your original <code>.venv/</code> or <code>node_modules/</code> are not copied. Include dependency setup in the Gate when needed, such as <code>npm ci &amp;&amp; npm test</code>.</p>
           <p style="margin:1rem 0 0;font-size:0.9rem">Solo developers can keep the whole Task local. Small teams can use one persistent runner checkout and publish reviewable changes to their forge. Local Claims do not coordinate separate laptops. Watcher budgets do not constrain foreground local Tasks.</p>
         </div>
@@ -538,7 +538,7 @@
   </main>
   <footer class="site-footer shell">
     <div class="footer-row">
-      <span>AgentMachinist 0.18.0 · local Task → exact Approval → verified candidate → your decision</span>
+      <span>AgentMachinist 0.19.0 · local Task → exact Approval → verified candidate → your decision</span>
       <nav aria-label="Documentation">
         <a href="#documentation">All documentation</a>
         <a href="first-run-guide.html">Complete your first Task</a>

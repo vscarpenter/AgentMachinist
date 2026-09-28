@@ -5,8 +5,8 @@ verification commands. A reviewed local candidate is the primary result.
 GitHub/GitLab intake and publication are optional; integration requires an
 explicit human command and a clean fast-forward. Remote merge and production
 deployment remain outside the controller. The published baseline is
-AgentMachinist 0.18.0, which added bounded Execute repair and combined
-local/legacy reporting. The 0.14.0 release added the local
+AgentMachinist 0.19.0, which added a built-in Goose adapter. The 0.18.0
+release added bounded Execute repair and combined local/legacy reporting. The 0.14.0 release added the local
 workflow and GitLab collaboration; 0.15.0 added local readiness, exact
 remote-base validation, and bounded diagnostics.
 

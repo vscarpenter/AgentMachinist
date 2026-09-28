@@ -4,8 +4,9 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-The published baseline is AgentMachinist 0.18.0, which added bounded Execute
-repair and combined local/legacy reporting.
+The published baseline is AgentMachinist 0.19.0, which added a built-in Goose
+adapter. Bounded Execute repair and combined local/legacy reporting arrived in
+0.18.0.
 Local readiness and bounded diagnostic rendering were introduced in 0.15.0.
 
 ## Trusted inputs and principals
@@ -113,9 +114,9 @@ mean a hostile process with the same OS identity cannot work around it.
 
 - The implementation prompt says not to run Git or edit `.machinist/`.
 - OpenCode plan-agent write behavior is treated as advisory.
-- Goose Spec and Review write behavior is advisory (unreleased source
-  checkout). Its developer builtin can write files and run shell commands, and
-  every Goose run sets `GOOSE_MODE=auto` so no approval prompt waits.
+- Goose Spec and Review write behavior is advisory. Its developer builtin can
+  write files and run shell commands, and every Goose run sets
+  `GOOSE_MODE=auto` so no approval prompt waits.
 - Git postconditions detect ordinary violations after the harness exits; they
   cannot undo an external side effect.
 - Removing common forge tokens, including `GH_TOKEN`, `GITHUB_TOKEN`, and

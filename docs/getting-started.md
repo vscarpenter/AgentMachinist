@@ -41,11 +41,11 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.18.0 includes the guided local workflow, optional GitHub/GitLab
+AgentMachinist 0.19.0 includes the guided local workflow, optional GitHub/GitLab
 intake and publication, existing GitHub issue automation, and next-step CLI
-guidance. Local readiness, exact remote-base validation, and bounded diagnostics
-introduced in 0.15.0 remain available. This release adds bounded Execute repair
-and combined reporting. Install the published package, then change into the
+guidance. Local readiness, exact remote-base validation, bounded diagnostics,
+bounded Execute repair, and combined reporting remain available. This release
+adds a built-in Goose adapter. Install the published package, then change into the
 repository you want to work on:
 
 ```sh
@@ -236,8 +236,8 @@ setup step without the guided receipt:
   `.github/workflows/machinist-*.yml` files.
 - **Harness** — `claude-code`, `codex`, `opencode`, `pi`, or an installed v1
   adapter plugin. Managed GitHub Actions dispatch renders the selected
-  adapter's pinned install and secret metadata. The unreleased source checkout
-  also lists `goose` for local dispatch, but never as the detected default.
+  adapter's pinned install and secret metadata. The wizard also
+  lists `goose` for local dispatch, but never as the detected default.
 - **Test gate** — confirm the auto-detected command, or pick your language
   for a suggested one (`pytest`, `npm test`, `cargo test`, `go test ./...`,
   `mvn test`), type your own, or explicitly skip the Gate for the legacy
@@ -546,7 +546,7 @@ Built-ins install pinned Claude Code, Codex, OpenCode, or Pi packages and bind
 only their declared repository secret (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 or `GEMINI_API_KEY`). `github.spec_secret_env` overrides the secret name, not
 its value. A plugin without a CI Spec profile must use local dispatch, and so
-must the unreleased built-in Goose adapter.
+must the built-in Goose adapter.
 
 ## Configuration reference
 
@@ -898,9 +898,9 @@ See [repair recovery](operator-runbook.md#bounded-repair-recovery).
 
 ## Choosing a harness
 
-Set `harness.name` to `claude-code`, `opencode`, `pi`, or `codex` in the
-configuration used by your chosen workflow. The unreleased source checkout also
-accepts `goose`; first-run discovery never picks it on its own. Runs
+Set `harness.name` to `claude-code`, `opencode`, `pi`, `codex`, or `goose` in
+the configuration used by your chosen workflow. First-run discovery never picks
+`goose` on its own. Runs
 reuse the provider authentication already available to that executable.
 
 ```yaml

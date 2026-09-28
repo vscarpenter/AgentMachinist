@@ -1193,3 +1193,22 @@ review, the contradiction fixes, and these simplifications. Next: merge its PR
 after the required checks pass. Open questions keep their defaults: the site's
 first-Task links stay on `first-run-guide.html` because the site serves
 `tldr.md` as raw Markdown, and the README keeps its GitHub automation section.
+
+## Release 0.19.0 (2026-09-27)
+
+Branch `release/0.19.0` from `main` at `d44e135`. PyPI had no 0.19.0 when
+this started.
+
+- [x] Bump `pyproject.toml` and `uv.lock` to 0.19.0.
+- [x] Promote the changelog `Unreleased` section to the dated 0.19.0 heading.
+- [x] Replace the unreleased Goose labels with 0.19.0 wording across the
+  README, CLAUDE.md, SECURITY.md, the guides, and the HTML pages, and add Goose
+  to the adapter lists. Drop a stale unreleased note in `CONTEXT.md` that the
+  0.18.0 release missed.
+- [ ] `bash scripts/verify.sh` from the release candidate.
+- [ ] Push `release/0.19.0` and open its PR.
+- [ ] Merge after green required checks. This waits on Vinny.
+- [ ] `gh release create v0.19.0` at the merge commit. This waits on Vinny.
+
+Assumption: 0.19.0 is a minor bump because `harness.name: goose` and the
+adapter hooks are new user-facing surface.

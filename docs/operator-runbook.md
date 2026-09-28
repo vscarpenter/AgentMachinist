@@ -1,6 +1,6 @@
 # Operator runbook
 
-This runbook describes AgentMachinist 0.18.0, including the foreground
+This runbook describes AgentMachinist 0.19.0, including the foreground
 local workflow, optional GitLab intake/publication, and the readiness,
 remote-base, and diagnostic behavior introduced in 0.15.0.
 Install with `uv tool install agentmachinist`, or upgrade with
