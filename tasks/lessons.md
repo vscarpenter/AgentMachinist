@@ -69,3 +69,7 @@
   a neighboring subcommand. On Goose 1.52.0, `goose mcp developer` rejects the
   name because `developer` became an in-process platform extension, while
   `goose run --with-builtin developer` still resolves it.
+- Help text and error strings live in `cli.py`, outside the documentation
+  drift tests, so they drifted from the guides unnoticed. A literal newcomer
+  walkthrough with only free commands (`doctor --local`, `rehearse`, and
+  `--help`) found four such mismatches that reading the docs had not.

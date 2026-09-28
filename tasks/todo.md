@@ -1151,7 +1151,19 @@ also carries the Goose merge note.
 - [x] Map every onboarding entry point, and walk `docs/tldr.md` literally in a
   scratch copy of `examples/first-task` using only free commands.
 - [x] Rank verified findings in `tasks/onboarding-review-2026-09-27.md`.
-- [ ] Implement the recommendations Vinny approves.
+- [x] Implement the recommendations Vinny approved: the seven contradiction
+  fixes. `9192a8e` routes `config show` and `config set` to `machinist start`
+  before any configuration and aligns `onboard`, `amend`, and `retry` help.
+  `af52ee8` asks for a repository-local Git author everywhere, fixes the
+  example's copy steps, and matches the short guide's objective to the
+  example. A scratch copy showed `doctor --local` warn without a
+  repository-local author and pass with one.
+- [x] `bash scripts/verify.sh` green: drift, format, lint, and mypy clean,
+  1711 passed, 88.54% coverage, and packaging smoke-tested.
 
-Resuming from here: the review awaits Vinny's pick. Nothing from it has been
-implemented. Pushing this branch and opening its PR stay confirm-first.
+Resuming from here: the branch is committed and awaits Vinny's go-ahead to push
+and open its PR. Not picked from the review: the path simplifications, honoring
+global Git identity in code, and format consolidation. Open question: the live
+site serves `tldr.md` as raw `text/markdown`, so the site's "Complete your
+first Task" links still target `first-run-guide.html` until Vinny chooses how
+to point them at the short guide.
