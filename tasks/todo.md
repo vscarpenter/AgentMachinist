@@ -1131,9 +1131,10 @@ new.
 - [x] `bash scripts/verify.sh` green: workflow drift, format, lint, and mypy
   clean, 1709 passed, 88.50% coverage, and the wheel and sdist smoke-tested.
 
-Resuming from here: the Goose adapter, its docs, and this note are committed
-on `feat/goose-harness` (`e1ec91e` through the ledger commit). Next: Vinny's
-go-ahead to push the branch and open the PR, which stay parked as confirm-first.
+Resuming from here: PR #57 merged the Goose adapter and its docs into `main`
+as `ed5b278` on 2026-09-28 00:08 UTC. This note lives on
+`docs/todo-ledger-goose` until the next change's PR carries it, because `main`
+is PR-protected.
 At the next release, add Goose to the adapter lists in `docs/index.html` and
 `docs/explainer.html` and replace the unreleased labels with release wording.
 Assumptions: no paid Goose run was made, so a live Task with Goose remains
