@@ -80,8 +80,12 @@ def test_verify_script_is_the_canonical_frozen_build_gate():
     assert "python -c" not in text
     assert "uv build --no-sources --no-build-isolation" in text
 
+    # --no-build-isolation builds with the dev group's Hatchling, so it must
+    # be the exact pin the build system declares.
     config = tomllib.loads((_ROOT / "pyproject.toml").read_text())
-    assert "hatchling==1.32.0" in config["dependency-groups"]["dev"]
+    (build_backend,) = config["build-system"]["requires"]
+    assert build_backend.startswith("hatchling==")
+    assert build_backend in config["dependency-groups"]["dev"]
 
 
 def test_verify_script_exposes_distinct_quality_and_coverage_gates():
