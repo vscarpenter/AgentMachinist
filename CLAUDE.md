@@ -321,7 +321,9 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
   approval-policy (the ask-vs-act boundary, wired into the Harness prompts
   through `instructions:`),
   harnesses matrix, local workflow, and three HTML pages: index, first-run
-  guide, and the how-it-works swimlane diagram. `onboarding.html`,
+  guide, and the how-it-works swimlane diagram. The index hero holds the
+  90-second explainer video: a click-to-load YouTube player whose poster
+  lives in `docs/assets/`. `onboarding.html`,
   `job-card.html`, and `explainer.html` are redirect stubs kept so old links
   resolve; do not add content to them. Documentation tests validate commands,
   configuration, version identity, links, and control targets.

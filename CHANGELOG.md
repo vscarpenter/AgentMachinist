@@ -40,6 +40,10 @@
   attempt's log directory, record its path as `harness_report_path` Evidence,
   and name the file when the report fails to parse. Review used to discard
   output it could not parse, which left a Goose Review failure undiagnosable.
+- Add the 90-second explainer video to the documentation home page, the
+  README, and the documentation index. The home page shows a local poster
+  and loads YouTube's privacy-enhanced player only after a visitor presses
+  play; without JavaScript, the poster links to the video on YouTube.
 
 ## 0.19.0 — 2026-09-27
 
