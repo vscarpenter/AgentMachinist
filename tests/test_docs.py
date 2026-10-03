@@ -932,3 +932,112 @@ def test_repository_dogfoods_the_approval_policy_through_instructions():
         assert "docs/approval-policy.md" in paths, (
             f"machinist.yaml does not wire the policy into the {phase} prompt"
         )
+
+
+_EXPLAINER_ID = "NyQFiGe7V7Q"
+_YOUTUBE_HOSTS = (
+    "youtube.com",
+    "youtube-nocookie.com",
+    "youtu.be",
+    "ytimg.com",
+    "googlevideo.com",
+)
+_CSS_URL = re.compile(r"url\(\s*['\"]?([^'\")\s]+)")
+
+
+class _PageLoad(HTMLParser):
+    """Record what a browser loads while parsing a page, plus the explainer facade."""
+
+    def __init__(self):
+        super().__init__()
+        self.loads: list[str] = []
+        self.iframes = 0
+        self.facades: list[dict[str, str | None]] = []
+        self.posters: list[str] = []
+        self.scripts: list[str] = []
+        self._in_facade = False
+        self._raw: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        for name in ("src", "srcset", "poster", "data"):
+            if values.get(name):
+                self.loads.append(values[name])
+        if tag == "link" and values.get("href"):
+            self.loads.append(values["href"])
+        self.loads.extend(_CSS_URL.findall(values.get("style") or ""))
+        if tag == "iframe":
+            self.iframes += 1
+        if tag == "a" and "explainer-play" in (values.get("class") or "").split():
+            self.facades.append(values)
+            self._in_facade = True
+        if tag == "img" and self._in_facade:
+            self.posters.append(values.get("src") or "")
+        if tag in ("script", "style"):
+            self._raw = []
+
+    def handle_data(self, data):
+        if self._raw is not None:
+            self._raw.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a":
+            self._in_facade = False
+        if tag in ("script", "style") and self._raw is not None:
+            text = "".join(self._raw)
+            if tag == "script":
+                self.scripts.append(text)
+            else:
+                self.loads.extend(_CSS_URL.findall(text))
+            self._raw = None
+
+
+def _explainer_page() -> _PageLoad:
+    page = _PageLoad()
+    page.feed((_REPO_ROOT / "docs" / "index.html").read_text())
+    return page
+
+
+def _explainer_player(page: _PageLoad) -> str:
+    [player] = [script for script in page.scripts if ".explainer-play" in script]
+    return player
+
+
+def test_explainer_video_loads_nothing_from_youtube_until_play():
+    """The home page promises that nothing loads from YouTube until play."""
+    page = _explainer_page()
+
+    assert page.iframes == 0
+    assert [url for url in page.loads if any(h in url for h in _YOUTUBE_HOSTS)] == []
+    [poster] = page.posters
+    assert not urlsplit(poster).scheme
+    assert (_REPO_ROOT / "docs" / poster).is_file()
+
+
+def test_explainer_video_falls_back_to_the_watch_link():
+    """Without JavaScript, or on a modified click, the facade is a plain link."""
+    page = _explainer_page()
+
+    [facade] = page.facades
+    assert facade["href"] == f"https://www.youtube.com/watch?v={_EXPLAINER_ID}"
+    assert facade["data-youtube-id"] == _EXPLAINER_ID
+    assert facade.get("data-title")
+    player = _explainer_player(page)
+    prevent = player.index("event.preventDefault()")
+    for guard in (
+        "event.button !== 0",
+        "event.metaKey",
+        "event.ctrlKey",
+        "event.shiftKey",
+        "event.altKey",
+    ):
+        assert -1 < player.find(guard) < prevent, f"{guard} must return first"
+
+
+def test_explainer_video_plays_in_the_privacy_enhanced_player():
+    """A plain click swaps in youtube-nocookie with the referrer YouTube needs."""
+    player = _explainer_player(_explainer_page())
+
+    assert "'https://www.youtube-nocookie.com/embed/'" in player
+    assert re.search(r"'referrerpolicy',\s*'strict-origin-when-cross-origin'", player)
+    assert "link.replaceWith(frame)" in player
