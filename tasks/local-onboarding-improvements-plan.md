@@ -64,4 +64,22 @@ targets require a later human pilot and are not claimed from automated tests.
 
 ## Progress
 
-- Specification and plan recorded; implementation underway.
+- All six improvements implemented, with local revision/recovery and onboarding
+  implementation committed separately. The CLI, existing guides, and changelog
+  describe the additions as unreleased.
+- Independent review found and verified corrections for real Review finding
+  rendering, fresh-mode failure guidance, failed Execute checks, interrupted
+  Spec delivery, full-plan preview guidance, and revision history.
+- Canonical checks passed workflow drift, format, lint, and mypy for 24 source
+  files. The completed full test run recorded **1,856 passed**, **88.86% coverage**,
+  and one stale packaging-test allowlist assertion. That test-only assertion was
+  updated for the two new typed modules; **all 7 packaging tests then passed**.
+  No runtime implementation changed after the full test run. The earlier stale
+  help-copy assertion was corrected before this completed run.
+- The offline package gate passed for wheel and source distribution in clean
+  Python 3.13.15 environments: dependency checks, automatic/guided rehearsal,
+  exact plan/result decisions, local integration, fresh readiness, and saved
+  local settings inspection. Final packages are rebuilt after the test metadata
+  correction. No real model, forge, or release publication was used.
+- Automated implementation verification is complete. First-time-user timing and
+  comprehension remain a later human pilot; no usability timing claim is made.

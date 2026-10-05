@@ -1,12 +1,14 @@
 # AgentMachinist
 
-AgentMachinist takes a small development Task from intent to a reviewed local
-change. It coordinates Claude Code, OpenCode, Pi, Codex, or Goose, with human Approval
-of the exact Spec before implementation and human review before integration.
-GitHub and GitLab are optional sources of Tasks and destinations for publication.
+AgentMachinist helps your coding agent make a change you can check before
+accepting it. You read its plan, authorize the work, then inspect the changes,
+test results, and a separate review before adding them to your project.
 
-New here? Follow [Start here](docs/tldr.md) for your first Task, or try it on
-the disposable [example project](examples/first-task/README.md) first.
+It works with Claude Code, OpenCode, Pi, Codex, or Goose. GitHub and GitLab
+are optional inputs and places to share the result.
+
+New here? Follow [Start here](docs/tldr.md): try the workflow free, check your
+project, then make one small real change.
 
 ```text
 Task → Spec commit → human Approval → implementation → verification → Review
@@ -40,6 +42,24 @@ background service commands are macOS-only; on Linux, schedule
 
 ## Start
 
+### Try the workflow free
+
+These onboarding additions are unreleased; use this checkout until a package
+release includes them. Install it with `uv tool install --editable .` from the
+AgentMachinist source directory, then:
+
+```sh
+machinist rehearse --guided
+```
+
+The rehearsal uses a fake coding agent and a disposable project. It makes no
+model or API calls. Read the sample plan (Spec), approve it when prompted,
+then inspect the change, checks, and independent Review before accepting it.
+You can decline at either decision; the printed project path lets you return
+to inspect it. No coding-agent login or GitHub setup is needed for this trial.
+
+### Make a small real change
+
 Start on a clean named branch with an initial commit and an installed,
 authenticated Harness. Set your author inside the repository with
 `git config user.name` and `git config user.email`, because the controller
@@ -48,22 +68,31 @@ command with verification appropriate to your project.
 
 ```sh
 cd your-repository
+machinist doctor --local --fresh-workshop
 machinist start "Reject unknown timezone names in parse_timezone with a ValueError" --test-cmd "uv run pytest"
 ```
 
-Read the saved Spec and copy the exact Approval command printed by start:
+Read the saved plan (Spec). If it needs a correction, keep the same Task and
+ask for a new plan before approving:
+
+```sh
+machinist revise T1 --feedback "Keep the public API unchanged."
+```
+
+Each revision needs fresh Approval. When satisfied, copy the exact Approval
+command printed by start or revise:
 
 ```sh
 machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 ```
 
 Approval continues implementation, verification, and independent Review. Use
-status to find the report and candidate, inspect the report and diff, then
-integrate the reviewed change:
+`inspect` to read the plan, change, checks, and Review together. Then accept
+the reviewed change with `integrate`:
 
 ```sh
-machinist status T1
-# Read the report and inspect the candidate diff before accepting it.
+machinist inspect T1
+# After reading the change, checks, and Review:
 machinist integrate T1
 ```
 
@@ -89,12 +118,16 @@ Gate's error and log directory. Correct the Gate in
 needs a fix, commit it and start a new Task. To try the loop on something
 disposable first, copy [examples/first-task](examples/first-task/README.md).
 
-Before your first paid run, `machinist rehearse` exercises the whole local
-workflow with a fake Harness and no model cost. `machinist doctor --local` is an
+`start`, `revise`, and `approve` use your Harness's model and provider quota.
+The guided rehearsal remains free. `doctor --local --fresh-workshop` explicitly
+runs your project checks in a disposable checkout of committed files; commands
+may download dependencies. It makes no model call and creates no Task.
+
+`machinist doctor --local` is an
 optional readiness check using the same configuration resolution as first start or your
 saved local settings. It checks Git, Harness probes, and verification command
 availability without creating a Task or requiring a forge. Add `--json` for
-structured output. Add `--run-gates` only to execute project commands in your
+structured output. Add `--run-gates` to execute project commands in your
 current checkout; this does not prove dependencies are ready in a fresh Workshop.
 Plain `machinist doctor` runs these local checks when no `machinist.yaml`
 exists and its GitHub setup checks otherwise.
@@ -137,9 +170,11 @@ version, so run `machinist sync-workflows` after each upgrade.
 | Command | Purpose |
 | --- | --- |
 | `machinist start [<objective>] [--body-file <path>] [--from-issue <url>]` | Save a local Task, generate its Spec, and stop for exact human Approval. |
+| `machinist revise <Tn> --feedback <text>` | Correct an initial local Spec before implementation; read and approve its new exact SHA. |
 | `machinist approve --task <Tn> --spec-sha <sha>` | Approve one local Spec and continue Execute, verification, and Review in the foreground. |
 | `machinist continue <Tn>` | Continue eligible local work or show the next required human action. |
 | `machinist status <Tn> [--json]` | Inspect one local Task and its next action without forge access. |
+| `machinist inspect <Tn> [--json]` | Read the local plan, candidate diff, Verification, Review, and next action together. |
 | `machinist integrate <Tn>` | Explicitly fast-forward a clean local base to the exact reviewed candidate. |
 | `machinist publish <Tn> --provider github\|gitlab [--host <host>]` | Publish the reviewed local candidate as a PR or MR with recoverable intent. |
 | `machinist retry --task <Tn> --phase spec\|execute\|review [--fresh]` | Explicitly retry a failed local Phase in the foreground. |
@@ -147,13 +182,13 @@ version, so run `machinist sync-workflows` after each upgrade.
 | `machinist amend --task <Tn> --feedback <text>` | Turn feedback on a reviewed candidate into a new Spec that needs fresh Approval. |
 | `machinist init [--yes]` | Create config, spec storage, labels, managed issue form, and workflows; asks setup questions in a terminal (`--yes` hands-free, `--no-input` skips without auto-enabling test command). |
 | `machinist onboard [--setup-pr] [--yes]` | Run guided setup in place or deliver only managed setup files on a draft PR; `--yes` accepts defaults + detected test command. |
-| `machinist rehearse [--harness]` | Exercise production local Phases, Git, verification, Review, and integration; paid Harness use is opt-in. |
+| `machinist rehearse [--guided] [--harness]` | Try the local workflow free with a fake Harness; guided mode pauses for your decisions. Paid Harness use is opt-in. |
 | `machinist doctor [--run-gates]` | Run read-only setup and workflow-drift diagnostics; single health check that prints the exact fix for any `FAIL` (only run individual `--check` commands if doctor asks). Without `machinist.yaml`, plain `doctor` runs the local readiness checks. |
-| `machinist doctor --local [--run-gates] [--json]` | Optional local readiness, without forge setup or saved state; Gate execution requires `--run-gates`. |
+| `machinist doctor --local [--run-gates\|--fresh-workshop] [--json]` | Check local readiness; explicitly run Gates in the current checkout or a disposable committed checkout. |
 | `machinist update-check [--json] [--timeout <seconds>]` | Compare the installed release against PyPI, print how to upgrade, and report managed-workflow drift. |
 | `machinist sync-workflows [--check]` | Write or verify config-derived workflows. |
 | `machinist sync-labels --check\|--apply` | Verify or create the two configured lifecycle labels. |
-| `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration; without `machinist.yaml`, `--path` defaults to the saved local settings. |
+| `machinist config validate\|show\|schema\|set` | Validate, inspect, export, or atomically update configuration; `show --local` and `set ... --local` select saved local settings explicitly. |
 | `machinist task template --write\|--check` | Project or verify the sealed GitHub issue form. |
 | `machinist task new --title <title> [--body-file <path>] [--dispatch]` | Create a structured GitHub issue; preserve drafts on failure and dispatch only after lint passes. |
 | `machinist task lint <issue> [--json]` | Check objective, acceptance criteria, constraints, and verification readiness. |

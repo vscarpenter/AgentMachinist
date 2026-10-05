@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Add initial local plan revision with `revise T1 --feedback`: preserve the Task,
+  prior Spec commits and attempt/feedback history, generate a new exact Spec
+  commit even for unchanged text, and require fresh human Approval. Interrupted
+  intent can continue; failed revisions require explicit Spec retry. Completed
+  candidates retain the existing `amend` journey.
+- Add `inspect T1 [--json]` for one read-only local decision view: objective,
+  saved plan, exact candidate diff, checks, advisory Review findings, history,
+  custody warnings, and next action. GitHub issue-number inspection remains.
+- Add explicit `config show/set --local` selection, active-file/workflow
+  receipts, resolved Harness/model/gates, and configuration-effect guidance.
+  Local edits validate foreground requirements; default and `--path` behavior
+  remains compatible.
+- Add free `rehearse --guided` with real saved plan/result checkpoints and
+  explicit disposable acceptance. Declining retains the sample for inspection;
+  installed packages need no source examples. `--harness` explicitly uses the
+  configured coding assistant's model quota.
+- Add `doctor --local --fresh-workshop` to execute configured checks in a
+  disposable committed checkout without a Task or model call. Existing
+  `--run-gates` remains current-checkout verification.
+- Lead help and existing onboarding guides with the local journey, plain
+  decision language, free rehearsal, and effective settings; introduce optional
+  GitHub automation separately. These additions are not yet published.
+
 - Fix Goose Specs and Reviews. Goose's text output mixes its tool transcript
   into the answer even with `-q`, so a Goose Spec started with shell commands
   and file listings, and Goose Review failed with "review report must be

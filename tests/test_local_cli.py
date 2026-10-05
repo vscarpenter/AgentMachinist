@@ -496,11 +496,14 @@ def test_local_phase_failures_render_actionable_errors(
     assert "Error: Verification failed; inspect the retained Workshop" in result.output
 
 
-def test_main_help_leads_with_local_first_task():
+def test_main_help_leads_with_a_free_local_rehearsal():
     result = CliRunner().invoke(main, ["--help"])
 
     assert result.exit_code == 0
-    assert "Start with 'machinist start OBJECTIVE'" in result.output
+    assert "Try 'machinist rehearse --guided' free" in result.output
+    assert result.output.index("machinist rehearse --guided") < result.output.index(
+        "machinist start OBJECTIVE"
+    )
     assert "optional GitHub" in result.output
     assert result.output.index("Local Tasks") < result.output.index("GitHub automation")
 
