@@ -259,8 +259,13 @@ class LocalWorkspace:
             raise WorkspaceError(f"local Spec {relative} is missing or empty")
         return content
 
-    def commit_all(self, path: Path, message: str) -> None:
-        self._workspace.commit_all(path, message)
+    def commit_all(
+        self, path: Path, message: str, *, allow_empty: bool = False
+    ) -> None:
+        if allow_empty:
+            self._workspace.commit_all(path, message, allow_empty=True)
+        else:
+            self._workspace.commit_all(path, message)
 
     def prepare_commit(self, path: Path) -> str:
         """Stage verified output and return the tree to journal before commit."""

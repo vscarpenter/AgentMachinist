@@ -79,7 +79,7 @@ def run_local_spec(
     previous = _begin(
         task, config, store, workspace, harness, claim, Phase.SPEC, start, cancel_check
     )
-    expected_ref = task.candidate_sha
+    expected_ref = task.candidate_sha or task.spec_base_sha
     recovered_sha = _sha(previous.get("spec_sha"))
     if not recovered_sha and previous.get("local_commit_intent"):
         baseline = previous.get("baseline_report")
@@ -89,7 +89,14 @@ def run_local_spec(
             )
         if not isinstance(previous.get("local_spec_digest"), str):
             raise LocalPhaseError("Spec commit recovery lacks its content digest")
-        recovered_sha = _recover_commit(workspace, task, previous, start, cancel_check)
+        recovered_sha = _recover_commit(
+            workspace,
+            task,
+            previous,
+            start,
+            cancel_check,
+            allow_empty=bool(task.spec_base_sha and task.candidate_sha is None),
+        )
         claim.checkpoint(spec_sha=recovered_sha)
     if recovered_sha:
         path = _recover_delivery(workspace, task, previous, recovered_sha, expected_ref)
@@ -130,7 +137,12 @@ def run_local_spec(
         .replace(f"(#{task.number})", f"({task.id})")
     )
     if task.feedback:
-        prompt += f"\n\n## Human amendment feedback\n\n{task.feedback}\n"
+        prompt += (
+            f"\n\n## Human amendment feedback\n\n{task.feedback}\n"
+            f"\nRevise the existing Spec at {spec_path(task)} to address this feedback. "
+            "Return the complete replacement Spec; the controller will commit it "
+            "and require fresh human Approval.\n"
+        )
     try:
         spec = harness.generate_spec(prompt, cwd=path)
     finally:
@@ -142,7 +154,12 @@ def run_local_spec(
     intent = _prepare_commit(
         workspace, path, claim, start, message, local_spec_digest=_digest(spec)
     )
-    workspace.commit_all(path, message)
+    if task.spec_base_sha and task.candidate_sha is None:
+        # A new plan decision needs a new exact approval SHA even if the model
+        # returns identical text. The controller alone creates this commit.
+        workspace.commit_all(path, message, allow_empty=True)
+    else:
+        workspace.commit_all(path, message)
     _verify_commit(workspace, path, intent)
     if workspace.has_changes(path):
         raise LocalPhaseError("Workshop changed while committing the local Spec")
@@ -662,6 +679,7 @@ def _begin(
         local_repository=task.repository,
         local_input_sha=input_sha,
         local_request_hash=request_hash,
+        local_feedback=task.feedback,
     )
     return previous
 
@@ -717,7 +735,9 @@ def _verify_commit(workspace, path, intent):
     return identity["sha"]
 
 
-def _recover_commit(workspace, task, previous, parent, cancel_check):
+def _recover_commit(
+    workspace, task, previous, parent, cancel_check, *, allow_empty=False
+):
     intent = previous.get("local_commit_intent")
     raw_path = previous.get("workspace_path")
     custody = previous.get("git_custody")
@@ -745,7 +765,10 @@ def _recover_commit(workspace, task, previous, parent, cancel_check):
         if workspace.prepare_commit(path) != intent["tree_sha"]:
             raise LocalPhaseError("prepared commit tree changed since Verification")
         _cancel(cancel_check, "before recovering prepared commit")
-        workspace.commit_all(path, intent["message"])
+        if allow_empty:
+            workspace.commit_all(path, intent["message"], allow_empty=True)
+        else:
+            workspace.commit_all(path, intent["message"])
     return _verify_commit(workspace, path, intent)
 
 

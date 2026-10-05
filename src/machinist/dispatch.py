@@ -244,10 +244,7 @@ class TaskDispatcher:
             ),
             repeat_succeeded=revise,
             repeat_succeeded_if=lambda prior: bool(
-                task.spec_sha is None
-                and task.spec_base_sha
-                and task.feedback
-                and prior.evidence.get("spec_sha") != task.spec_base_sha
+                task.spec_sha is None and task.spec_base_sha and task.feedback
             ),
         )
 
