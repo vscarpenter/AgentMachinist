@@ -934,7 +934,7 @@ def test_repository_dogfoods_the_approval_policy_through_instructions():
         )
 
 
-_EXPLAINER_ID = "NyQFiGe7V7Q"
+_EXPLAINER_ID = "XfLDEiakdkw"
 _YOUTUBE_HOSTS = (
     "youtube.com",
     "youtube-nocookie.com",
