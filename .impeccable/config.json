@@ -1,0 +1,37 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/first-run-guide.html",
+          "docs/index.html"
+        ],
+        "createdAt": "2026-10-05T21:39:53.935Z",
+        "reason": "Agent: verified explicit clamp padding in guide mode-map/mode-steps, padded route/strip cells, section/start grids, and intentional edge-to-edge video frame."
+      },
+      {
+        "rule": "all-caps-body",
+        "value": "*",
+        "files": [
+          "docs/first-run-guide.html"
+        ],
+        "createdAt": "2026-10-05T21:39:54.019Z",
+        "reason": "Agent: the sole hit is the 38-character guide kicker, a short label above the heading; body prose is mixed case."
+      },
+      {
+        "rule": "em-dash-overuse",
+        "value": "*",
+        "files": [
+          "docs/first-run-guide.html",
+          "docs/index.html"
+        ],
+        "createdAt": "2026-10-05T21:39:54.098Z",
+        "reason": "Agent: HTML text extraction found no prose dashes in the guide and only one em dash plus five double hyphens in index prose; detector saturation comes from domain-appropriate CLI flags in code examples."
+      }
+    ]
+  }
+}
