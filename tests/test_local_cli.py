@@ -502,7 +502,7 @@ def test_main_help_leads_with_local_first_task():
     assert result.exit_code == 0
     assert "Start with 'machinist start OBJECTIVE'" in result.output
     assert "optional GitHub" in result.output
-    assert result.output.index("Tasks  ") < result.output.index("Setup  ")
+    assert result.output.index("Local Tasks") < result.output.index("GitHub automation")
 
 
 def test_real_foreground_workflow_preserves_checkout_until_explicit_integration(

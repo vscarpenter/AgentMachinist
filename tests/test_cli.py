@@ -2847,7 +2847,7 @@ def test_inspect_rejects_non_positive_issue_without_traceback():
     result = CliRunner().invoke(main, ["inspect", "0", "--offline"])
 
     assert result.exit_code == 2
-    assert "Invalid value for 'ISSUE_NUMBER'" in result.output
+    assert "positive GitHub issue number" in result.output
     assert "Traceback" not in result.output
 
 

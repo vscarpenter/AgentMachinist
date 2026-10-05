@@ -9,14 +9,18 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from machinist.config import MachinistConfig
 from machinist.lifecycle import Phase, RunStatus
 from machinist.process import credential_reduced_environment
 from machinist.workspace import Workspace
+
+if TYPE_CHECKING:
+    from machinist.local_tasks import LocalTask
+    from machinist.local_workflow import LocalWorkflow
 
 _TASK_TITLE = "Return two from answer() and update its regression test"
 _TASK_BODY = """## Objective
@@ -49,6 +53,54 @@ class RehearsalResult:
     spec_sha: str | None = None
     candidate_sha: str | None = None
     integrated_sha: str | None = None
+    stopped_at: str | None = None
+
+
+@dataclass(frozen=True)
+class RehearsalCheckpoint:
+    """Exact saved artifacts available while the human decision callback waits."""
+
+    stage: Literal["spec", "acceptance"]
+    prompt: str
+    workspace: Path
+    repository: Path
+    task_id: str
+    spec_sha: str
+    spec: str
+    spec_path: Path
+    harness_used: bool
+    candidate_sha: str | None = None
+    diff: str = ""
+    diff_path: Path | None = None
+    candidate_path: Path | None = None
+    verification_report: dict[str, Any] | None = None
+    review_report: dict[str, Any] | None = None
+    report_path: Path | None = None
+
+
+def run_local_rehearsal(
+    *,
+    guided: bool = False,
+    confirm: Callable[[RehearsalCheckpoint], bool] | None = None,
+    temp_parent: Path | None = None,
+    progress: Callable[[str], None] | None = None,
+) -> RehearsalResult:
+    """Exercise the packaged fixture for free, optionally waiting for two decisions.
+
+    ``confirm`` receives the exact Spec before Approval, then the verified and
+    reviewed candidate before disposable integration. The caller renders those
+    artifacts and waits for the operator's decision. Declining retains them and
+    returns ``stopped_at``; no provider or forge is needed in either mode.
+    """
+    return _run_rehearsal(
+        MachinistConfig(),
+        harness_factory=lambda phase: _FakeHarness(),
+        harness_used=False,
+        temp_parent=temp_parent,
+        progress=progress,
+        guided=guided,
+        confirm=confirm,
+    )
 
 
 def simulate_rehearsal(
@@ -81,6 +133,8 @@ def run_harness_rehearsal(
     harness_factory: Callable[[str], Any],
     temp_parent: Path | None = None,
     progress: Callable[[str], None] | None = None,
+    guided: bool = False,
+    confirm: Callable[[RehearsalCheckpoint], bool] | None = None,
 ) -> RehearsalResult:
     """Explicit opt-in: exercise configured Harnesses through the same local path.
 
@@ -94,6 +148,8 @@ def run_harness_rehearsal(
         harness_used=True,
         temp_parent=temp_parent,
         progress=progress,
+        guided=guided,
+        confirm=confirm,
     )
 
 
@@ -104,9 +160,13 @@ def _run_rehearsal(
     harness_used: bool,
     temp_parent: Path | None,
     progress: Callable[[str], None] | None = None,
+    guided: bool = False,
+    confirm: Callable[[RehearsalCheckpoint], bool] | None = None,
 ) -> RehearsalResult:
     from machinist.local_workflow import LocalWorkflow
 
+    if guided and confirm is None:
+        raise ValueError("guided rehearsal requires a confirmation callback")
     path = Path(
         tempfile.mkdtemp(
             prefix="agentmachinist-rehearsal-",
@@ -152,6 +212,20 @@ def _run_rehearsal(
             raise ValueError("production Spec did not record its exact commit")
         spec_sha = task.spec_sha
         reached("spec ready")
+        if guided:
+            checkpoint = _inspection_checkpoint(
+                "spec", workflow, task, path, harness_used=harness_used
+            )
+            assert confirm is not None
+            if not confirm(checkpoint):
+                return RehearsalResult(
+                    tuple(transitions),
+                    harness_used=harness_used,
+                    workspace=path,
+                    task_id=task.id,
+                    spec_sha=spec_sha,
+                    stopped_at=checkpoint.stage,
+                )
         task = workflow.approve(
             task.id, expected_sha=spec_sha, actor="rehearsal operator"
         )
@@ -172,8 +246,23 @@ def _run_rehearsal(
         reached("review complete")
         if not workflow.store.read_report(task.id):
             raise ValueError("production workflow did not save a local report")
-        # This invocation authorizes integration of the disposable fixture.
-        # Real Tasks still wait for the explicit human integration command.
+        if guided:
+            checkpoint = _inspection_checkpoint(
+                "acceptance", workflow, task, path, harness_used=harness_used
+            )
+            assert confirm is not None
+            if not confirm(checkpoint):
+                return RehearsalResult(
+                    tuple(transitions),
+                    harness_used=harness_used,
+                    workspace=path,
+                    task_id=task.id,
+                    spec_sha=spec_sha,
+                    candidate_sha=task.candidate_sha,
+                    stopped_at=checkpoint.stage,
+                )
+        # Automatic rehearsal authorizes the disposable integration up front;
+        # guided rehearsal waits for the separate acceptance decision above.
         integrated = workflow.integrate(task.id)
         observed = _git(repository, "rev-parse", "HEAD").strip()
         if (
@@ -200,6 +289,79 @@ def _run_rehearsal(
         raise RehearsalError(str(exc), path) from exc
     shutil.rmtree(path)
     return result
+
+
+def _inspection_checkpoint(
+    stage: Literal["spec", "acceptance"],
+    workflow: LocalWorkflow,
+    task: LocalTask,
+    path: Path,
+    *,
+    harness_used: bool,
+) -> RehearsalCheckpoint:
+    assert task.spec_sha is not None
+    spec = workflow.workspace.read_at_commit(
+        task.spec_sha,
+        f".machinist/specs/task-{task.number}-spec.md",
+        max_bytes=workflow.config.limits.max_spec_chars * 4,
+    )
+    inspection = path / "inspection"
+    inspection.mkdir(exist_ok=True)
+    spec_file = inspection / "spec.md"
+    spec_file.write_text(spec)
+    checkpoint = RehearsalCheckpoint(
+        stage=stage,
+        prompt="Approve this exact Spec to implement the disposable Task?",
+        workspace=path,
+        repository=workflow.repo_root,
+        task_id=task.id,
+        spec_sha=task.spec_sha,
+        spec=spec,
+        spec_path=spec_file,
+        harness_used=harness_used,
+    )
+    if stage == "spec":
+        return checkpoint
+    assert task.candidate_sha is not None
+    execute = workflow.lifecycle.record(task.number, Phase.EXECUTE)
+    assert execute is not None
+    verification_report = execute.evidence.get("verification_report")
+    if (
+        not isinstance(verification_report, dict)
+        or verification_report.get("success") is not True
+    ):
+        raise ValueError("production Execute did not save successful Verification")
+    diff = _git(
+        workflow.repo_root,
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        task.spec_sha,
+        task.candidate_sha,
+        "--",
+    )
+    diff_file = inspection / "candidate.diff"
+    diff_file.write_text(diff)
+    candidate = inspection / "candidate"
+    for relative in ("feature.py", "tests/test_feature.py"):
+        saved = candidate / relative
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        saved.write_text(
+            workflow.workspace.read_at_commit(
+                task.candidate_sha, relative, max_bytes=1024 * 1024
+            )
+        )
+    return replace(
+        checkpoint,
+        prompt="Accept this reviewed change into the disposable repository?",
+        candidate_sha=task.candidate_sha,
+        diff=diff,
+        diff_path=diff_file,
+        candidate_path=candidate,
+        verification_report=verification_report,
+        review_report=task.review_report,
+        report_path=workflow.store.report_path(task),
+    )
 
 
 class _FakeHarness:
@@ -237,6 +399,7 @@ def _initialize_repo(path: Path) -> None:
         ("user.name", "AgentMachinist rehearsal"),
         ("user.email", "agentmachinist@localhost"),
         ("commit.gpgsign", "false"),
+        ("maintenance.auto", "false"),
         ("core.hooksPath", str(path / ".git/hooks")),
     ):
         _git(path, "config", name, value)
