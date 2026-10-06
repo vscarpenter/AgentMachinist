@@ -21,8 +21,9 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-Current release:
-[AgentMachinist 0.19.0 on PyPI](https://pypi.org/project/agentmachinist/0.19.0/).
+This guide covers **AgentMachinist 0.20.0**.
+Package reference:
+[AgentMachinist 0.20.0 on PyPI](https://pypi.org/project/agentmachinist/0.20.0/).
 
 ## Install
 
@@ -32,6 +33,8 @@ Install the controller, then enter the repository you want to work on:
 uv tool install agentmachinist
 machinist --version
 ```
+
+Use AgentMachinist 0.20.0 or newer for the onboarding commands below.
 
 You also need `git` and one supported Harness executable (`claude`, `opencode`,
 `pi`, `codex`, or `goose`). GitHub operations require authenticated [`gh`](https://cli.github.com);
@@ -44,9 +47,7 @@ background service commands are macOS-only; on Linux, schedule
 
 ### Try the workflow free
 
-These onboarding additions are unreleased; use this checkout until a package
-release includes them. Install it with `uv tool install --editable .` from the
-AgentMachinist source directory, then:
+After installation, learn the decisions with a disposable sample project:
 
 ```sh
 machinist rehearse --guided

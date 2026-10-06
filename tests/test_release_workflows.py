@@ -1,6 +1,7 @@
 """Release and CI workflow safety contracts."""
 
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -95,6 +96,8 @@ def test_ci_has_bounded_cross_platform_and_minimum_dependency_lanes():
     gate = jobs["ci-gate"]
 
     assert workflow["concurrency"]["cancel-in-progress"] is True
+    assert jobs["test"]["strategy"]["fail-fast"] is False
+    assert set(matrix) == {"os", "python"}
     assert set(matrix["os"]) == {"ubuntu-latest", "macos-latest"}
     assert set(matrix["python"]) == {"3.12", "3.13", "3.14"}
     assert all(job["timeout-minutes"] > 0 for job in jobs.values())
@@ -110,6 +113,8 @@ def test_ci_has_bounded_cross_platform_and_minimum_dependency_lanes():
     assert gate["if"] == "always()"
     assert set(gate["needs"]) == {
         "test",
+        "test-ubuntu-required",
+        "test-macos-required",
         "minimum-dependencies",
         "quality",
         "coverage",
@@ -118,10 +123,127 @@ def test_ci_has_bounded_cross_platform_and_minimum_dependency_lanes():
     assert gate["permissions"] == {}
     gate_commands = _runs(gate)
     assert 'test "$TEST_RESULT" = success' in gate_commands
+    assert 'test "$UBUNTU_REQUIRED_RESULT" = success' in gate_commands
+    assert 'test "$MACOS_REQUIRED_RESULT" = success' in gate_commands
     assert 'test "$MINIMUM_DEPENDENCIES_RESULT" = success' in gate_commands
     assert 'test "$QUALITY_RESULT" = success' in gate_commands
     assert 'test "$COVERAGE_RESULT" = success' in gate_commands
     assert 'test "$PACKAGE_RESULT" = success' in gate_commands
+
+
+@pytest.mark.parametrize(
+    ("job_name", "check_name", "gate_result_name"),
+    [
+        (
+            "test-ubuntu-required",
+            "test (ubuntu-latest)",
+            "UBUNTU_REQUIRED_RESULT",
+        ),
+        (
+            "test-macos-required",
+            "test (macos-latest)",
+            "MACOS_REQUIRED_RESULT",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "matrix_result", ["success", "failure", "cancelled", "skipped"]
+)
+def test_required_test_contexts_only_pass_after_the_complete_matrix_succeeds(
+    job_name, check_name, gate_result_name, matrix_result
+):
+    jobs = _load_workflow("ci.yml")["jobs"]
+    job = jobs[job_name]
+    gate = jobs["ci-gate"]
+
+    assert job["name"] == check_name
+    assert job["needs"] == "test"
+    assert job["if"] == "always()"
+    assert job["permissions"] == {}
+    assert 1 <= job["timeout-minutes"] <= 5
+    assert not jobs["test"].get("continue-on-error", False)
+    assert all(
+        not step.get("continue-on-error", False) for step in jobs["test"]["steps"]
+    )
+    assert not job.get("continue-on-error", False)
+    assert all(not step.get("continue-on-error", False) for step in job["steps"])
+    assert job["steps"][0]["env"] == {"MATRIX_RESULT": "${{ needs.test.result }}"}
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", _runs(job)],
+        env={"MATRIX_RESULT": matrix_result},
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+    assert (result.returncode == 0) is (matrix_result == "success")
+
+    gate_env = gate["steps"][0]["env"]
+    assert gate_env[gate_result_name] == f"${{{{ needs.{job_name}.result }}}}"
+    outcomes = {name: "success" for name in gate_env}
+    outcomes[gate_result_name] = matrix_result
+    gate_result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", _runs(gate)],
+        env=outcomes,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+    assert (gate_result.returncode == 0) is (matrix_result == "success")
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name", "minimum_budget", "maximum_budget"),
+    [
+        ("ci.yml", "test", 90, 90),
+        ("ci.yml", "minimum-dependencies", 60, 60),
+        ("ci.yml", "coverage", 60, 60),
+        ("ci.yml", "package", 105, 120),
+        ("release.yml", "build", 105, 120),
+    ],
+)
+def test_full_git_suite_jobs_have_headroom_above_observed_hosted_timeouts(
+    workflow_name, job_name, minimum_budget, maximum_budget
+):
+    # PR #77's macOS lanes exhausted 60 minutes while progressing at 73%.
+    # Give the matrix headroom and canonical builds an additional budget;
+    # retain the proven Linux-only budgets and a finite runaway cutoff.
+    job = _load_workflow(workflow_name)["jobs"][job_name]
+
+    assert minimum_budget <= job["timeout-minutes"] <= maximum_budget
+
+
+def test_canonical_build_jobs_budget_quality_and_installed_package_checks():
+    ci_jobs = _load_workflow("ci.yml")["jobs"]
+    release_jobs = _load_workflow("release.yml")["jobs"]
+    suite_budget = max(
+        ci_jobs[name]["timeout-minutes"]
+        for name in ("test", "minimum-dependencies", "coverage")
+    )
+
+    for job in (ci_jobs["package"], release_jobs["build"]):
+        assert suite_budget + 15 <= job["timeout-minutes"] <= 120
+        assert any(step.get("run") == "bash scripts/verify.sh" for step in job["steps"])
+
+
+def test_repository_verification_budgets_full_coverage_without_weakening_gates():
+    config = yaml.safe_load((_ROOT / "machinist.yaml").read_text())
+    gates = config["verification"]["gates"]
+
+    assert [gate["name"] for gate in gates] == [
+        "workflows",
+        "format",
+        "lint",
+        "types",
+        "coverage",
+    ]
+    assert all(gate["required"] for gate in gates)
+    assert all(gate["mutation_policy"] == "forbid" for gate in gates)
+    assert all(
+        gate["command"] == f"bash scripts/verify.sh {gate['name']}" for gate in gates
+    )
+    coverage = gates[-1]
+    ci_coverage = _load_workflow("ci.yml")["jobs"]["coverage"]
+    assert 60 <= coverage["timeout_minutes"] <= ci_coverage["timeout-minutes"]
 
 
 def test_all_third_party_actions_use_immutable_shas_with_version_comments():

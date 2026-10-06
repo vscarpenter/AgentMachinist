@@ -16,12 +16,11 @@ and [workflow diagram](how-it-works.html) when you need them.
 
 ## Try the workflow free
 
-The published baseline is **AgentMachinist 0.19.0**. These onboarding additions
-are unreleased; use this checkout until a package release includes them.
-You need Python 3.12+, `uv`, and Git. From the AgentMachinist source directory:
+This guide covers **AgentMachinist 0.20.0**. You need Python 3.12+, `uv`, and
+Git. Install the package, then try the workflow:
 
 ```sh
-uv tool install --editable .
+uv tool install agentmachinist
 machinist rehearse --guided
 ```
 

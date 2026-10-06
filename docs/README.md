@@ -12,11 +12,9 @@ own project. The other pages answer specific questions when you need them.
 Prefer illustrated instructions? The [visual first-run guide](first-run-guide.html)
 walks through the same journey with examples and recovery help.
 
-The current operating documentation covers the published **AgentMachinist 0.19.0** baseline
-and unreleased onboarding additions in the current source checkout. Use the
-source checkout for those additions until a package release includes them.
+The current operating documentation covers **AgentMachinist 0.20.0**.
 See the [changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md)
-for details.
+for version details.
 
 ## Find a specific answer
 

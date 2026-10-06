@@ -16,7 +16,8 @@ Task → Spec commit → human Approval → Execute → verification → Review
 ```
 
 Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, published to PyPI as `agentmachinist` (current release: 0.19.0).
+hatchling, packaged for PyPI as `agentmachinist` (current release: 0.20.0).
+This guide describes the 0.20.0 package and workflow.
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, ordered workflow,
 format, lint, type, and coverage/test gates from `scripts/verify.sh`).
@@ -351,9 +352,19 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current checkout (2026-09-27)
+## Current checkout (2026-10-06)
 
-- **0.19.0 adds a built-in Goose adapter and first-run guidance fixes.** Spec
+- **0.20.0 improves the local onboarding and decision flow.**
+  `rehearse --guided` uses a fake Harness and pauses for human Approval and
+  integration. `revise T1 --feedback` replaces an initial Spec while retaining
+  its history and requiring fresh Approval; `inspect T1` collects the plan,
+  exact diff, Verification, Review, and next action. `config show/set --local`
+  selects saved local settings explicitly, and `doctor --local --fresh-workshop`
+  runs Gates in a disposable committed checkout without a Task or model call.
+  Help and onboarding lead with this local journey; GitHub automation remains
+  optional. See the first-Task guide and local workflow reference.
+
+- **0.19.0 added a built-in Goose adapter and first-run guidance fixes.** Spec
   and Review read through Goose's `developer` builtin, so read-only custody is
   advisory, as for OpenCode. Goose has no managed Spec CI profile or auth
   probe, and first-run discovery never selects it. Before any configuration,

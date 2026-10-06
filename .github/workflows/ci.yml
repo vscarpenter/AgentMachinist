@@ -18,8 +18,8 @@ concurrency:
 
 jobs:
   test:
-    # Real-Git lifecycle/rehearsal coverage exceeds 15 minutes on hosted runners.
-    timeout-minutes: 30
+    # PR #77's macOS lanes reached 73% before exhausting 60 minutes.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -43,9 +43,36 @@ jobs:
       - name: Run tests
         run: uv run --frozen pytest -o addopts= --tb=short
 
+  # Preserve protected-main check names. Each requires every OS/Python lane.
+  test-ubuntu-required:
+    name: test (ubuntu-latest)
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require the complete test matrix to pass
+        env:
+          MATRIX_RESULT: ${{ needs.test.result }}
+        run: test "$MATRIX_RESULT" = success
+
+  test-macos-required:
+    name: test (macos-latest)
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require the complete test matrix to pass
+        env:
+          MATRIX_RESULT: ${{ needs.test.result }}
+        run: test "$MATRIX_RESULT" = success
+
   minimum-dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,7 +120,7 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -113,7 +140,8 @@ jobs:
 
   package:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Full coverage plus quality, builds, and installed wheel/sdist checks.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -131,7 +159,14 @@ jobs:
   ci-gate:
     name: CI gate
     if: always()
-    needs: [test, minimum-dependencies, quality, coverage, package]
+    needs:
+      - test
+      - test-ubuntu-required
+      - test-macos-required
+      - minimum-dependencies
+      - quality
+      - coverage
+      - package
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -139,12 +174,16 @@ jobs:
       - name: Require every CI job to pass
         env:
           TEST_RESULT: ${{ needs.test.result }}
+          UBUNTU_REQUIRED_RESULT: ${{ needs.test-ubuntu-required.result }}
+          MACOS_REQUIRED_RESULT: ${{ needs.test-macos-required.result }}
           MINIMUM_DEPENDENCIES_RESULT: ${{ needs.minimum-dependencies.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
         run: |
           test "$TEST_RESULT" = success
+          test "$UBUNTU_REQUIRED_RESULT" = success
+          test "$MACOS_REQUIRED_RESULT" = success
           test "$MINIMUM_DEPENDENCIES_RESULT" = success
           test "$QUALITY_RESULT" = success
           test "$COVERAGE_RESULT" = success

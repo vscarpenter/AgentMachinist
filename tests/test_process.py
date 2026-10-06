@@ -450,10 +450,16 @@ def test_invalid_programmatic_command_has_stable_typed_start_error():
         (signal.SIGHUP, 128 + signal.SIGHUP),
     ),
 )
+@pytest.mark.parametrize(
+    "terminal_persistence_delay",
+    (0, 6),
+    ids=("normal-finalization", "slow-finalization"),
+)
 def test_controller_signal_cleans_process_tree_and_finishes_lifecycle(
     tmp_path,
     termination_signal,
     expected_exit,
+    terminal_persistence_delay,
 ):
     runs_dir = tmp_path / "runs"
     leader_pid = tmp_path / "leader.pid"
@@ -480,10 +486,17 @@ def test_controller_signal_cleans_process_tree_and_finishes_lifecycle(
         "time.sleep(60)"
     )
     worker_code = (
-        "import sys; from pathlib import Path; "
-        "from machinist.lifecycle import Phase, TaskLifecycle; "
-        "from machinist.process import run_supervised; "
-        f"lifecycle = TaskLifecycle(Path({str(runs_dir)!r})); "
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "from machinist.lifecycle import Phase, TaskLifecycle\n"
+        "from machinist.process import run_supervised\n"
+        f"lifecycle = TaskLifecycle(Path({str(runs_dir)!r}))\n"
+        "persist = lifecycle._persist\n"
+        "def persist_with_delay(record, *, event):\n"
+        "    if event == 'cancelled':\n"
+        f"        time.sleep({terminal_persistence_delay})\n"
+        "    persist(record, event=event)\n"
+        "lifecycle._persist = persist_with_delay\n"
         "lifecycle.run(42, Phase.EXECUTE, lambda _claim: run_supervised("
         f"[sys.executable, '-c', {leader_code!r}], "
         f"stdout_log={str(stdout_log)!r}, stderr_log={str(stderr_log)!r}, "
@@ -509,7 +522,10 @@ def test_controller_signal_cleans_process_tree_and_finishes_lifecycle(
         assert projection.exists() and leader_pid.exists() and descendant_pid.exists()
 
         worker.send_signal(termination_signal)
-        stdout, stderr = worker.communicate(timeout=5)
+        # Exit includes process-group cleanup and durable cancellation writes.
+        # Allow storage/scheduling latency while staying below the supervised
+        # command's 30-second deadline, so a lost signal still fails this test.
+        stdout, stderr = worker.communicate(timeout=15)
 
         assert worker.returncode == expected_exit
         assert stdout == ""

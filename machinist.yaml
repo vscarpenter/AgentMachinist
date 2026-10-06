@@ -58,6 +58,6 @@ verification:
       mutation_policy: forbid
     - name: coverage
       command: bash scripts/verify.sh coverage
-      timeout_minutes: 15
+      timeout_minutes: 60
       required: true
       mutation_policy: forbid

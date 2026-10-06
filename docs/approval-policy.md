@@ -12,7 +12,7 @@ This is an operating reference, not a policy engine. AgentMachinist checks the
 items under [Enforced controls](#enforced-controls). Everything under
 [Advisory controls](#advisory-controls) depends on you.
 
-The published baseline is 0.19.0. It includes the bounded Execute repair
+This policy covers AgentMachinist 0.20.0, including the bounded Execute repair
 described below, added in 0.18.0.
 
 ## What a valid Approval covers
