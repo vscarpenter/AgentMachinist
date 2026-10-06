@@ -281,7 +281,7 @@
         </div>
         <figcaption>The whole loop in 90 seconds: describe a Task, approve its exact Spec, and integrate the reviewed change. Nothing loads from YouTube until you press play. <a href="https://www.youtube.com/watch?v=XfLDEiakdkw">Watch on YouTube</a>.</figcaption>
       </figure>
-      <p data-release="unreleased">These onboarding additions are unreleased; use this source checkout until a package release includes them. The guided rehearsal uses a fake coding agent and makes no model API calls. After practicing, check your own project and make one small real change. <a href="getting-started.md#github-setup-and-automation">GitHub automation</a> and optional GitHub or GitLab publication are available when you are ready to share work.</p>
+      <p data-release="released">This documentation covers <strong>AgentMachinist 0.20.0</strong>. The guided rehearsal uses a fake coding agent and makes no model API calls. After practicing, check your own project and make one small real change. <a href="getting-started.md#github-setup-and-automation">GitHub automation</a> and optional GitHub or GitLab publication are available when you are ready to share work.</p>
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
@@ -536,8 +536,8 @@
         <div class="term">
           <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>terminal / local workflow</span></div>
           <div class="term-body">
-            <p class="tline c"># from the AgentMachinist source checkout</p>
-            <p class="tline p"><b>$ </b>uv tool install --editable .</p>
+            <p class="tline c"># install AgentMachinist</p>
+            <p class="tline p"><b>$ </b>uv tool install agentmachinist</p>
             <p class="tline p"><b>$ </b>machinist rehearse --guided</p>
             <p class="tline c"># then change into your own committed project</p>
             <p class="tline p"><b>$ </b>machinist doctor --local --fresh-workshop</p>
@@ -563,8 +563,7 @@
   </main>
   <footer class="site-footer shell">
     <div class="footer-row">
-      <span>AgentMachinist 0.19.0 · local Task → exact Approval → verified candidate → your decision</span>
-      <p>Published baseline: <code>uv tool install agentmachinist</code> installs 0.19.0. The onboarding additions described here require this source checkout.</p>
+      <span>AgentMachinist 0.20.0 · local Task → exact Approval → verified candidate → your decision</span>
       <nav aria-label="Documentation">
         <a href="#documentation">All documentation</a>
         <a href="first-run-guide.html">Try the workflow free</a>

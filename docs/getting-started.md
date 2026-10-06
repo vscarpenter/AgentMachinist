@@ -9,9 +9,8 @@ AgentMachinist takes a Task through an exact human-approved Spec, isolated
 implementation, verification, and independent Review. You can integrate the
 reviewed candidate locally and optionally publish it to GitHub or GitLab.
 
-These onboarding additions are unreleased; use this checkout until a package
-release includes them. Guided rehearsal, initial Spec revision, local
-inspection/settings selectors, and fresh-Workshop readiness are described below.
+This guide covers AgentMachinist 0.20.0, including guided rehearsal, initial
+Spec revision, local inspection/settings selectors, and fresh-Workshop readiness.
 
 ## What is AgentMachinist?
 
@@ -45,11 +44,11 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.19.0 includes the local workflow, optional GitHub/GitLab
+AgentMachinist 0.20.0 includes the local workflow, optional GitHub/GitLab
 intake and publication, existing GitHub issue automation, and next-step CLI
 guidance. Local readiness, exact remote-base validation, bounded diagnostics,
 bounded Execute repair, and combined reporting remain available. This release
-adds a built-in Goose adapter. Install the published package, then change into the
+includes the Goose adapter introduced in 0.19.0. Install the package, then change into the
 repository you want to work on:
 
 ```sh
@@ -64,19 +63,19 @@ uv tool upgrade agentmachinist
 machinist --version
 ```
 
-Confirm that `machinist --version` reports 0.18.0 or newer for the repair and
-reporting guidance described here. `machinist doctor --local` is available
-since 0.15.0.
-For the unreleased onboarding additions, run `uv tool install --editable .` from its source
-checkout, then enter the repository you want to change. An editable install
-tracks that checkout instead of the published package; use its Git and `uv sync`
-workflow to update it.
+Confirm that `machinist --version` reports 0.20.0 or newer for the onboarding
+commands described here. Bounded repair and combined reporting are available
+since 0.18.0; `machinist doctor --local` is available since 0.15.0.
 
-Begin with `machinist rehearse --guided`: a fake Harness runs the real local machinery
-in a disposable project, with no model or API calls. It pauses for you to read
-and approve the sample Spec, then inspect the diff, checks, and Review before
-integration. Declining retains the printed project path. Explicit `--harness`
-uses configured Harnesses and may consume provider quota.
+Begin with `machinist rehearse --guided`: a fake Harness runs the real local
+machinery in a disposable project, with no model or API calls. It pauses for you
+to read and approve the sample Spec, then inspect the diff, checks, and Review
+before integration. Declining retains the printed project path. Explicit
+`--harness` uses configured Harnesses and may consume provider quota.
+
+Contributors can optionally install from an AgentMachinist source checkout with
+`uv tool install --editable .`. That installation tracks the checkout; use its
+Git and `uv sync` workflow to update it.
 
 Managed GitHub workflows pin the installed controller version; this repository's
 own development workflows use `github.spec_install: checkout`.

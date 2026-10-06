@@ -9,13 +9,10 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-These onboarding additions are unreleased; use this checkout until a package
-release includes them. They add guided rehearsal, initial Spec revision,
+This guide covers AgentMachinist 0.20.0: guided rehearsal, initial Spec revision,
 local inspection/settings selectors, and readiness in a fresh Workshop.
-
-AgentMachinist 0.19.0 is the published baseline. For the additions in this
-checkout, use the [editable source installation](getting-started.md#install)
-and run local commands in the repository you want to change. The existing
+Use the [package installation](getting-started.md#install) and run local commands
+in the repository you want to change. The existing
 [GitHub issue workflow](getting-started.md#github-setup-and-automation)
 remains available.
 

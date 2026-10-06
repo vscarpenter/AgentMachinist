@@ -14,6 +14,8 @@ Website deployment is outside this release-preparation request.
 1. Start from the merged main commit and confirm the published version.
 2. Increase bounded CI/release test budgets based on observed 30-minute
    timeouts; retain every platform, Python version, check, and publish gate.
+   Restore the historical required check names with strict full-matrix
+   aggregate checks rather than changing branch protection.
 3. Bump package metadata and lockfile to 0.20.0, date the complete Unreleased
    changelog, and align current guides with package-based onboarding.
 4. Regenerate/check managed workflows, run focused release contracts, then run
@@ -35,4 +37,14 @@ Website deployment is outside this release-preparation request.
 
 ## Verification and delivery
 
-Pending the final candidate and its local/remote checks.
+- Version metadata and the complete 0.20.0 changelog are prepared. Dependency
+  versions are unchanged; the refreshed lockfile passes CI's uv 0.12.5 check.
+- Timeout TDD: seven cases failed against the old budgets. All 16 focused
+  release/CI contracts and 154 configuration/workflow checks then passed.
+- The release-ready documentation describes version applicability, uses
+  package installation for guided onboarding, and preserves historical Goose
+  references. No HTML styles, scripts, or SVGs changed.
+- The obsolete source-install TLDR assertion was updated for package-based
+  0.20.0 onboarding. Combined release/docs/packaging checks: 67 passed.
+- Final canonical verification, hosted CI, PR delivery, and publication remain
+  pending. Release-ready prose in the draft branch is not PyPI publication proof.

@@ -28,8 +28,9 @@ and release automation maintained in this repository.
 Task bodies, imported issues, PR/MR branches, and Verification failure output
 are untrusted input. The repository owner, default branch, local configuration
 and Verification commands, installed Harness, and the local user account
-launching AgentMachinist are trusted inputs. The published baseline is 0.19.0,
-which adds a built-in Goose adapter whose read-only control is advisory.
+launching AgentMachinist are trusted inputs. This policy describes
+AgentMachinist 0.20.0. The Goose adapter, added in 0.19.0, has advisory
+read-only control.
 
 ## Security Invariants
 

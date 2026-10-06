@@ -1,13 +1,13 @@
 # Harness support matrix
 
-AgentMachinist 0.19.0 includes five built-in adapters, including Goose, and
+AgentMachinist 0.20.0 includes five built-in adapters, including Goose, and
 discovers installed v1 plugins. The guided local workflow requires executable adapters for all three
 Phases; the first-run selector accepts a full-pipeline adapter. Phase profiles
 may subsequently select different supported adapters. “Spec and Review control”
 describes adapter arguments; the controller also checks repository custody and
 rejects changes from these read-only Phases.
 
-This matrix describes the adapters in AgentMachinist 0.19.0. It covers the local
+This matrix describes the adapters in AgentMachinist 0.20.0. It covers the local
 workflow, GitLab publication, and local readiness.
 The CI column below describes the existing GitHub Actions Spec workflow, not
 GitLab CI. See [Goose](#goose) for its advisory read-only profile.

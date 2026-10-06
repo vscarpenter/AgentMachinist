@@ -359,7 +359,7 @@ def test_tldr_is_one_short_provider_neutral_path():
     text = _TLDR_PATH.read_text()
     assert len(text.splitlines()) <= 100
     assert text.count("## Try the workflow free") == 1
-    assert "uv tool install --editable ." in text
+    assert "uv tool install agentmachinist" in text
     for command in (
         "rehearse --guided",
         "inspect T1",
