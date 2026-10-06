@@ -31,6 +31,24 @@
         ],
         "createdAt": "2026-10-05T21:39:54.098Z",
         "reason": "Agent: HTML text extraction found no prose dashes in the guide and only one em dash plus five double hyphens in index prose; detector saturation comes from domain-appropriate CLI flags in code examples."
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "docs/first-run-guide.html"
+        ],
+        "createdAt": "2026-10-06T13:24:45.858Z",
+        "reason": "Agent: body 1rem and h3 1.22rem lead to h2 clamp(2rem,4vw,3.5rem) and h1 clamp(2.8rem,7vw,5.8rem); h2 minimum is 1.64 times h3. Detector incorrectly treats the 1.3rem rehearsal subheading as the full h2 role and omits responsive headings."
+      },
+      {
+        "rule": "wide-tracking",
+        "value": "*",
+        "files": [
+          "docs/first-run-guide.html"
+        ],
+        "createdAt": "2026-10-06T13:24:45.919Z",
+        "reason": "Agent: all three current hits specify 0.06em, used only by .visual-label metadata bars at 0.72rem. These bars identify a Task brief, saved Spec, or accepted candidate; prose has no positive letter spacing. This is a label-versus-body classification error."
       }
     ]
   }
