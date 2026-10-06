@@ -12,6 +12,13 @@
 - Restore the historical required OS test-check names with unprivileged
   aggregate checks that require the entire OS/Python matrix to succeed.
   Cancellation, skipping, or failure cannot produce a successful aggregate.
+- Allow the signal-cleanup test enough time to persist cancellation records
+  on slower runners, with regression cases for delayed finalization and all
+  process-tree cleanup assertions retained.
+- Improve the documentation index and first-run guide with clearer headline
+  spacing, readable functional labels, accessible active-button contrast,
+  and flatter layouts. Preserve the onboarding controls, commands, diagrams,
+  and human/machine ownership cues in both themes.
 
 - Add initial local plan revision with `revise T1 --feedback`: preserve the Task,
   prior Spec commits and attempt/feedback history, generate a new exact Spec

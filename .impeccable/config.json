@@ -49,6 +49,15 @@
         ],
         "createdAt": "2026-10-06T13:24:45.919Z",
         "reason": "Agent: all three current hits specify 0.06em, used only by .visual-label metadata bars at 0.72rem. These bars identify a Task brief, saved Spec, or accepted candidate; prose has no positive letter spacing. This is a label-versus-body classification error."
+      },
+      {
+        "rule": "wide-tracking",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-10-06T16:36:27.019Z",
+        "reason": "Agent: the only 0.07em match is the short uppercase .step .who role label at line 107; paragraph prose uses the separate .step p rule."
       }
     ]
   }

@@ -9,6 +9,10 @@ preserve the full verification gates, and push a reviewable release PR.
 version bump and push. Do not bypass protected-main review or required checks.
 Website deployment is outside this release-preparation request.
 
+Vinny subsequently approved including the documentation design-hook fixes in
+0.20.0. This adds a scoped readability and layout pass over the documentation
+index and first-run guide, preserving their brand, content, controls, and links.
+
 ## Plan
 
 1. Start from the merged main commit and confirm the published version.
@@ -24,6 +28,19 @@ Website deployment is outside this release-preparation request.
 6. After required review/merge and explicit publication authorization, create
    `v0.20.0` at the verified merge commit. Verify all release jobs, PyPI wheel
    and sdist, checksums, and an isolated installation of the new commands.
+
+### Approved documentation design follow-up
+
+- Retain the established light/dark colors and orange human/blue machine
+  ownership cues. Preserve the complete onboarding journey, commands,
+  illustrations, anchors, theme switch, copying, simulation, and checklist.
+- Improve contrast for active buttons, increase undersized functional labels,
+  relax tight headline tracking, and remove duplicate hero labels.
+- Replace heavy colored card borders and actual nested cards with neutral
+  dividers, spacing, and clearer type. Keep code panels identifiable.
+- Persist only evidence-backed detector exceptions through Impeccable.
+- Verify both pages on desktop/mobile and in both themes, exercise controls,
+  rerun documentation/package contracts, then commit and push to PR #77.
 
 ## Initial evidence
 
@@ -43,7 +60,8 @@ Website deployment is outside this release-preparation request.
   release/CI contracts and 154 configuration/workflow checks then passed.
 - The release-ready documentation describes version applicability, uses
   package installation for guided onboarding, and preserves historical Goose
-  references. No HTML styles, scripts, or SVGs changed.
+  references. This initial alignment did not change HTML styles, scripts,
+  or SVGs; the subsequently approved design follow-up is recorded below.
 - The obsolete source-install TLDR assertion was updated for package-based
   0.20.0 onboarding. Combined release/docs/packaging checks: 67 passed.
 - Required-check compatibility TDD failed nine cases before the aggregate
@@ -69,5 +87,31 @@ Website deployment is outside this release-preparation request.
   passed. Format and managed-workflow consistency checks passed. Independent
   review confirmed that the follow-up changes only limits and release evidence;
   no runtime source, platform lanes, or publication safeguards changed.
-- Updated-candidate hosted CI, protected-main review/merge, and publication
-  remain pending. Release-ready prose is not PyPI publication proof.
+- Hosted CI on `9e885c4` completed: Linux/Python 3.12–3.14, macOS/Python
+  3.13–3.14, minimum dependencies, coverage, quality, and the complete package
+  gate passed. macOS/Python 3.12 finished in 67 minutes with one failure:
+  the signal-cleanup fixture's five-second finalization wait expired. Strict
+  required aggregates correctly failed. The exact hosted stall is unproven.
+- The process fixture now permits 15 seconds for cleanup and durable terminal
+  records, below its 30-second supervised-command deadline. Two controlled
+  six-second persistence cases reproduced the old timeout before the fix.
+  All exit, raw-log, descendant-cleanup, cancelled projection, and journal
+  assertions remain; no runtime code changed. The process file passed all
+  23 tests, and 20 repeated normal TERM/HUP cases passed.
+- The approved documentation pass improved contrast and functional label
+  sizes, relaxed headline tracking, removed duplicate kickers, and replaced
+  heavy frames with dividers. Seven nested code panels were resolved by
+  flattening the legacy disclosure frame while preserving its commands.
+  Static comparison preserved commands, anchors, links, scripts, controls,
+  and diagrams apart from four SVG subtitle styling classes.
+- Final Impeccable scan of both pages returned no findings. A scoped index
+  `wide-tracking` exception records the short uppercase role label, which the
+  detector misclassified as prose; no broad detector rule was disabled.
+- Browser checks covered desktop and phone layouts in both themes, no
+  horizontal overflow, keyboard focus, route selection, exact command copy,
+  checklist persistence/reset, disclosure expansion, and walkthrough
+  next/back/jump/replay. No browser errors were reported.
+- Final combined release/docs/packaging/process checks: 98 passed. The full
+  canonical gate result above belongs to `b9495ae`, not these final follow-ups.
+  Hosted CI for the final pushed candidate, protected-main review/merge, and
+  publication remain pending. Release-ready prose is not publication proof.
