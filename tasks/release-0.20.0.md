@@ -46,5 +46,9 @@ Website deployment is outside this release-preparation request.
   references. No HTML styles, scripts, or SVGs changed.
 - The obsolete source-install TLDR assertion was updated for package-based
   0.20.0 onboarding. Combined release/docs/packaging checks: 67 passed.
+- Required-check compatibility TDD failed nine cases before the aggregate
+  jobs were added; all 24 release/CI contracts now pass. Both historical OS
+  check names strictly require the complete matrix and are themselves required
+  by the CI gate. They have no permissions and a five-minute cutoff.
 - Final canonical verification, hosted CI, PR delivery, and publication remain
   pending. Release-ready prose in the draft branch is not PyPI publication proof.

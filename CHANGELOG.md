@@ -8,6 +8,9 @@
   30-minute hosted job limits. CI test and coverage jobs allow 60 minutes;
   complete CI/release builds allow 90 minutes, and the repository's required
   coverage Gate allows 60 minutes. All checks and publication guards remain.
+- Restore the historical required OS test-check names with unprivileged
+  aggregate checks that require the entire OS/Python matrix to succeed.
+  Cancellation, skipping, or failure cannot produce a successful aggregate.
 
 - Add initial local plan revision with `revise T1 --feedback`: preserve the Task,
   prior Spec commits and attempt/feedback history, generate a new exact Spec
