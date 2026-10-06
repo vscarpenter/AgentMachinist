@@ -192,23 +192,24 @@ def test_required_test_contexts_only_pass_after_the_complete_matrix_succeeds(
 
 
 @pytest.mark.parametrize(
-    ("workflow_name", "job_name"),
+    ("workflow_name", "job_name", "minimum_budget", "maximum_budget"),
     [
-        ("ci.yml", "test"),
-        ("ci.yml", "minimum-dependencies"),
-        ("ci.yml", "coverage"),
-        ("ci.yml", "package"),
-        ("release.yml", "build"),
+        ("ci.yml", "test", 90, 90),
+        ("ci.yml", "minimum-dependencies", 60, 60),
+        ("ci.yml", "coverage", 60, 60),
+        ("ci.yml", "package", 105, 120),
+        ("release.yml", "build", 105, 120),
     ],
 )
 def test_full_git_suite_jobs_have_headroom_above_observed_hosted_timeouts(
-    workflow_name, job_name
+    workflow_name, job_name, minimum_budget, maximum_budget
 ):
-    # PR #76 exhausted 30 minutes on Linux 3.13 and macOS. Keep room for
-    # the complete real-Git suite while retaining a finite runaway cutoff.
+    # PR #77's macOS lanes exhausted 60 minutes while progressing at 73%.
+    # Give the matrix headroom and canonical builds an additional budget;
+    # retain the proven Linux-only budgets and a finite runaway cutoff.
     job = _load_workflow(workflow_name)["jobs"][job_name]
 
-    assert 60 <= job["timeout-minutes"] <= 90
+    assert minimum_budget <= job["timeout-minutes"] <= maximum_budget
 
 
 def test_canonical_build_jobs_budget_quality_and_installed_package_checks():
@@ -220,7 +221,7 @@ def test_canonical_build_jobs_budget_quality_and_installed_package_checks():
     )
 
     for job in (ci_jobs["package"], release_jobs["build"]):
-        assert suite_budget + 15 <= job["timeout-minutes"] <= 90
+        assert suite_budget + 15 <= job["timeout-minutes"] <= 120
         assert any(step.get("run") == "bash scripts/verify.sh" for step in job["steps"])
 
 

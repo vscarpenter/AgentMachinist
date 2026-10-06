@@ -50,5 +50,24 @@ Website deployment is outside this release-preparation request.
   jobs were added; all 24 release/CI contracts now pass. Both historical OS
   check names strictly require the complete matrix and are themselves required
   by the CI gate. They have no permissions and a five-minute cutoff.
-- Final canonical verification, hosted CI, PR delivery, and publication remain
-  pending. Release-ready prose in the draft branch is not PyPI publication proof.
+- The complete canonical gate passed on `b9495ae`: 1,872 tests passed with
+  88.85% coverage on macOS/Python 3.12.13. Workflow consistency, format, lint,
+  and mypy for 24 source files passed, with no source mutation before builds.
+  The 0.20.0 wheel and sdist passed isolated installed-package checks on
+  Python 3.13.15, including automatic/guided rehearsal and local decisions.
+- Release PR #77 is open and ready for review. Hosted Linux/Python 3.12,
+  3.13, and 3.14, minimum dependencies, coverage, complete packaging, quality,
+  and CodeQL passed on `b9495ae`.
+- All three hosted macOS/Python lanes exhausted 60 minutes after steady progress
+  to 73%, with no test failure markers in the completed logs. GitHub's check
+  annotations confirm the execution cutoff. Large real-Git lifecycle groups
+  took roughly three times their passing Linux duration. Raise the bounded
+  matrix budget to 90 minutes and complete-build budgets to 120 minutes;
+  retain every check and verify the updated candidate independently.
+- Timeout follow-up TDD failed three budget cases before the final adjustment.
+  All 24 release/CI contracts and 75 combined release/docs/packaging tests then
+  passed. Format and managed-workflow consistency checks passed. Independent
+  review confirmed that the follow-up changes only limits and release evidence;
+  no runtime source, platform lanes, or publication safeguards changed.
+- Updated-candidate hosted CI, protected-main review/merge, and publication
+  remain pending. Release-ready prose is not PyPI publication proof.

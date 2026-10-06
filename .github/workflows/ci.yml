@@ -18,8 +18,8 @@ concurrency:
 
 jobs:
   test:
-    # PR #76's real-Git suite exhausted 30 minutes on Linux 3.13 and macOS.
-    timeout-minutes: 60
+    # PR #77's macOS lanes reached 73% before exhausting 60 minutes.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -141,7 +141,7 @@ jobs:
   package:
     runs-on: ubuntu-latest
     # Full coverage plus quality, builds, and installed wheel/sdist checks.
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

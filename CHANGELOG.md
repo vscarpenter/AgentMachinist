@@ -5,9 +5,10 @@
 ## 0.20.0 — 2026-10-06
 
 - Increase bounded verification budgets after the real-Git suite exceeded
-  30-minute hosted job limits. CI test and coverage jobs allow 60 minutes;
-  complete CI/release builds allow 90 minutes, and the repository's required
-  coverage Gate allows 60 minutes. All checks and publication guards remain.
+  hosted job limits. The OS/Python matrix allows 90 minutes; coverage and
+  minimum-dependency jobs allow 60 minutes; complete CI/release builds allow
+  120 minutes. The repository's required coverage Gate allows 60 minutes.
+  All checks and publication guards remain.
 - Restore the historical required OS test-check names with unprivileged
   aggregate checks that require the entire OS/Python matrix to succeed.
   Cancellation, skipping, or failure cannot produce a successful aggregate.

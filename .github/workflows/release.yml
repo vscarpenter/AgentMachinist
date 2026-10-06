@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     # Match CI's complete verification gate, including installed-package checks.
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: read
     outputs:
