@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.20.0 — 2026-10-06
+
+- Increase bounded verification budgets after the real-Git suite exceeded
+  30-minute hosted job limits. CI test and coverage jobs allow 60 minutes;
+  complete CI/release builds allow 90 minutes, and the repository's required
+  coverage Gate allows 60 minutes. All checks and publication guards remain.
+
 - Add initial local plan revision with `revise T1 --feedback`: preserve the Task,
   prior Spec commits and attempt/feedback history, generate a new exact Spec
   commit even for unchanged text, and require fresh human Approval. Interrupted
@@ -23,7 +30,7 @@
   `--run-gates` remains current-checkout verification.
 - Lead help and existing onboarding guides with the local journey, plain
   decision language, free rehearsal, and effective settings; introduce optional
-  GitHub automation separately. These additions are not yet published.
+  GitHub automation separately.
 
 - Fix Goose Specs and Reviews. Goose's text output mixes its tool transcript
   into the answer even with `-q`, so a Goose Spec started with shell commands
