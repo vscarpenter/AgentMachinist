@@ -124,6 +124,60 @@ def test_ci_has_bounded_cross_platform_and_minimum_dependency_lanes():
     assert 'test "$PACKAGE_RESULT" = success' in gate_commands
 
 
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name"),
+    [
+        ("ci.yml", "test"),
+        ("ci.yml", "minimum-dependencies"),
+        ("ci.yml", "coverage"),
+        ("ci.yml", "package"),
+        ("release.yml", "build"),
+    ],
+)
+def test_full_git_suite_jobs_have_headroom_above_observed_hosted_timeouts(
+    workflow_name, job_name
+):
+    # PR #76 exhausted 30 minutes on Linux 3.13 and macOS. Keep room for
+    # the complete real-Git suite while retaining a finite runaway cutoff.
+    job = _load_workflow(workflow_name)["jobs"][job_name]
+
+    assert 60 <= job["timeout-minutes"] <= 90
+
+
+def test_canonical_build_jobs_budget_quality_and_installed_package_checks():
+    ci_jobs = _load_workflow("ci.yml")["jobs"]
+    release_jobs = _load_workflow("release.yml")["jobs"]
+    suite_budget = max(
+        ci_jobs[name]["timeout-minutes"]
+        for name in ("test", "minimum-dependencies", "coverage")
+    )
+
+    for job in (ci_jobs["package"], release_jobs["build"]):
+        assert suite_budget + 15 <= job["timeout-minutes"] <= 90
+        assert any(step.get("run") == "bash scripts/verify.sh" for step in job["steps"])
+
+
+def test_repository_verification_budgets_full_coverage_without_weakening_gates():
+    config = yaml.safe_load((_ROOT / "machinist.yaml").read_text())
+    gates = config["verification"]["gates"]
+
+    assert [gate["name"] for gate in gates] == [
+        "workflows",
+        "format",
+        "lint",
+        "types",
+        "coverage",
+    ]
+    assert all(gate["required"] for gate in gates)
+    assert all(gate["mutation_policy"] == "forbid" for gate in gates)
+    assert all(
+        gate["command"] == f"bash scripts/verify.sh {gate['name']}" for gate in gates
+    )
+    coverage = gates[-1]
+    ci_coverage = _load_workflow("ci.yml")["jobs"]["coverage"]
+    assert 60 <= coverage["timeout_minutes"] <= ci_coverage["timeout-minutes"]
+
+
 def test_all_third_party_actions_use_immutable_shas_with_version_comments():
     files = [
         _WORKFLOWS / "ci.yml",

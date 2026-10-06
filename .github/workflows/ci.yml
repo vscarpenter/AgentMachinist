@@ -18,8 +18,8 @@ concurrency:
 
 jobs:
   test:
-    # Real-Git lifecycle/rehearsal coverage exceeds 15 minutes on hosted runners.
-    timeout-minutes: 30
+    # PR #76's real-Git suite exhausted 30 minutes on Linux 3.13 and macOS.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -45,7 +45,7 @@ jobs:
 
   minimum-dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,7 +93,7 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -113,7 +113,8 @@ jobs:
 
   package:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Full coverage plus quality, builds, and installed wheel/sdist checks.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
