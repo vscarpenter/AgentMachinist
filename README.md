@@ -201,7 +201,7 @@ never appears in `update-check --json`.
 
 1. [Understand the workflow](docs/how-it-works.html): one diagram of your decisions
    and the controller's work. Prefer video? Watch
-   [AgentMachinist in 90 seconds](https://www.youtube.com/watch?v=NyQFiGe7V7Q).
+   [AgentMachinist in 90 seconds](https://www.youtube.com/watch?v=XfLDEiakdkw).
    The [Approval policy](docs/approval-policy.md) explains what each Approval
    authorizes.
 2. [Complete your first Task](docs/tldr.md): the short installation-to-integration

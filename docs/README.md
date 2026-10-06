@@ -37,7 +37,7 @@ These cover the same workflow in different formats; none is a prerequisite.
 | Format | Resource |
 | --- | --- |
 | Interactive tour and web directory | [Documentation home](index.html) |
-| 90-second video | [AgentMachinist in 90 seconds](https://www.youtube.com/watch?v=NyQFiGe7V7Q) on YouTube |
+| 90-second video | [AgentMachinist in 90 seconds](https://www.youtube.com/watch?v=XfLDEiakdkw) on YouTube |
 
 ## Architecture decisions
 
