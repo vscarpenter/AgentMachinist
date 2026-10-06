@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from machinist.config import MachinistConfig, WorkspaceConfig
+from machinist.config import (
+    MachinistConfig,
+    VerificationGateConfig,
+    WorkspaceConfig,
+    WorkspaceStrategy,
+)
 from machinist.doctor import (
     _COMMAND_TIMEOUT_SECONDS,
     CheckLevel,
@@ -24,6 +30,11 @@ from machinist.doctor import (
 from machinist.local_setup import resolve_local_config
 from machinist.local_workspace import LocalWorkspace
 from machinist.process import run_supervised
+from machinist.verification import (
+    VerificationError,
+    VerificationFailed,
+    run_verification_gates,
+)
 from machinist.workspace import Workspace, WorkspaceError
 
 _FIX_HINTS = {
@@ -51,6 +62,11 @@ _FIX_HINTS = {
     "verification execution": (
         "resolve failed readiness checks and gates, then rerun machinist doctor --local --run-gates"
     ),
+    "fresh Workshop": (
+        "make configured gates prepare dependencies from committed files, then rerun "
+        "machinist doctor --local --fresh-workshop; ignored dependencies in the "
+        "controller checkout are not copied"
+    ),
     "workspace": (
         "choose a writable workspace.root outside this repository in the local configuration"
     ),
@@ -61,8 +77,15 @@ _FIX_HINTS = {
 }
 
 
-def local_fix_hint_for_check_name(name: str) -> str | None:
+def local_fix_hint_for_check_name(
+    name: str, *, fresh_workshop: bool = False
+) -> str | None:
     """Keep local remediation independent of GitHub setup and managed workflows."""
+    if fresh_workshop and name == "verification execution":
+        return (
+            "make dependencies available from committed files and the configured "
+            "check command, then rerun machinist doctor --local --fresh-workshop"
+        )
     return _FIX_HINTS.get(name) or fix_hint_for_check_name(name)
 
 
@@ -180,18 +203,120 @@ def _add_local_git_checks(checks, workspace: Workspace, root: Path) -> None:
     checks.append(DoctorCheck(CheckLevel.FAIL, "working tree", detail))
 
 
+def _run_fresh_workshop_readiness(
+    root: Path,
+    config: MachinistConfig,
+    gates: tuple[VerificationGateConfig, ...],
+    *,
+    gate_runner,
+) -> tuple[DoctorCheck, ...]:
+    """Prove start's committed baseline without creating a Task or local state.
+
+    A disposable clone uses production provisioning/custody but leaves the
+    controller's Git worktree registrations, refs and configuration untouched.
+    Its enclosing temporary directory owns cleanup even if a Gate violates
+    custody and normal Workshop cleanup would correctly refuse to proceed.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix="machinist-doctor-fresh-") as folder:
+            temporary = Path(folder)
+            settings = config.workspace.model_copy(
+                update={
+                    "root": temporary / "workshops",
+                    "strategy": WorkspaceStrategy.CLONE,
+                }
+            )
+            workspace = LocalWorkspace(root, settings)
+            base = workspace.resolve_commit()
+            controller_changes = workspace.change_snapshot(root)
+            path = workspace.provision(
+                "doctor-readiness", f"{settings.branch_prefix}doctor-readiness", base
+            )
+            before = workspace.capture_harness_state(path)
+            selected_runner = (
+                run_supervised if gate_runner is subprocess.run else gate_runner
+            )
+
+            def guarded_runner(*args, **kwargs):
+                checkpoint = workspace.capture_harness_state(path)
+                try:
+                    return selected_runner(*args, **kwargs)
+                finally:
+                    workspace.assert_harness_state(path, checkpoint)
+                    if workspace.change_snapshot(root) != controller_changes:
+                        raise WorkspaceError(
+                            "Verification changed the controller working tree"
+                        )
+
+            try:
+                report = run_verification_gates(
+                    path,
+                    gates,
+                    log_dir=temporary / "verification-logs",
+                    snapshotter=workspace.change_snapshot,
+                    runner=guarded_runner,
+                )
+            except VerificationFailed as exc:
+                verification = DoctorCheck(
+                    CheckLevel.FAIL,
+                    "verification execution",
+                    f"fresh Workshop {base}: {exc}",
+                )
+            else:
+                workspace.assert_harness_state(path, before)
+                changed = workspace.changed_files(path)
+                if changed:
+                    raise WorkspaceError(
+                        "fresh baseline Verification changed the Workshop "
+                        f"({', '.join(changed[:5])}); commit generated files or ignore them"
+                    )
+                if report.advisory_failures:
+                    failures = ", ".join(gate.name for gate in report.advisory_failures)
+                    verification = DoctorCheck(
+                        CheckLevel.WARN,
+                        "verification execution",
+                        f"fresh Workshop {base}: required gates passed; advisory failures: {failures}",
+                    )
+                else:
+                    verification = DoctorCheck(
+                        CheckLevel.PASS,
+                        "verification execution",
+                        f"fresh Workshop {base}: all {len(report.gates)} configured gate(s) passed",
+                    )
+            return (
+                DoctorCheck(
+                    CheckLevel.PASS,
+                    "fresh Workshop",
+                    f"checked committed HEAD {base} in a disposable local clone; no Task recorded",
+                ),
+                verification,
+            )
+    except (WorkspaceError, VerificationError, OSError, ValueError) as exc:
+        return (
+            DoctorCheck(CheckLevel.FAIL, "fresh Workshop", str(exc)),
+            DoctorCheck(
+                CheckLevel.FAIL,
+                "verification execution",
+                f"fresh Workshop readiness could not complete safely: {exc}",
+            ),
+        )
+
+
 def run_local_doctor(
     repo_root: Path,
     *,
     run_gates: bool = False,
+    fresh_workshop: bool = False,
     which: Callable[[str], str | None] = shutil.which,
     runner=subprocess.run,
     gate_runner=run_supervised,
 ) -> DoctorReport:
     """Diagnose local start without adopting the repository or invoking a model.
 
-    Gate execution is explicitly opt-in and can run project commands. Its logs
-    use the shared doctor's temporary directory, never local Task runtime state.
+    Gate execution is explicitly opt-in and can run project commands. The
+    fresh Workshop option implies execution in a disposable committed checkout;
+    otherwise run_gates keeps using the controller checkout. Logs and fresh
+    checkouts use temporary directories, never local Task runtime state.
     """
     root = Path(repo_root).expanduser().resolve()
     checks: list[DoctorCheck] = []
@@ -235,7 +360,15 @@ def run_local_doctor(
         config = resolve_local_config(root, which=which)
     except Exception as exc:  # noqa: BLE001 - isolate configuration and plugin failures
         checks.append(DoctorCheck(CheckLevel.FAIL, "local configuration", str(exc)))
-        if run_gates:
+        if run_gates or fresh_workshop:
+            if fresh_workshop:
+                checks.append(
+                    DoctorCheck(
+                        CheckLevel.FAIL,
+                        "fresh Workshop",
+                        "skipped: local configuration is not ready",
+                    )
+                )
             checks.append(
                 DoctorCheck(
                     CheckLevel.FAIL,
@@ -273,7 +406,7 @@ def run_local_doctor(
         )
     )
     checks.append(_verification_command_check(gates, root, which))
-    if not run_gates:
+    if not run_gates and not fresh_workshop:
         checks.append(
             DoctorCheck(
                 CheckLevel.WARN,
@@ -282,11 +415,25 @@ def run_local_doctor(
             )
         )
     elif any(check.level is CheckLevel.FAIL for check in checks):
+        if fresh_workshop:
+            checks.append(
+                DoctorCheck(
+                    CheckLevel.FAIL,
+                    "fresh Workshop",
+                    "skipped: resolve failed readiness checks before provisioning",
+                )
+            )
         checks.append(
             DoctorCheck(
                 CheckLevel.FAIL,
                 "verification execution",
                 "skipped: resolve failed readiness checks before running project commands",
+            )
+        )
+    elif fresh_workshop:
+        checks.extend(
+            _run_fresh_workshop_readiness(
+                root, config, tuple(gates), gate_runner=gate_runner
             )
         )
     else:

@@ -57,10 +57,19 @@ never-merges rule only for that human-directed local operation.
   configuration, Harness probes, and verification availability without forge
   setup, update checks, or runtime writes; plain `doctor` runs the same checks
   when no root `machinist.yaml` exists. `--run-gates` explicitly executes
-  Verification in the controller checkout, not an isolated Workshop.
+  Verification in the controller checkout. `--fresh-workshop` checks committed
+  HEAD in a disposable clone without a Task/model or controller runtime writes.
 - `local_workflow.py` — guided local Spec, exact-SHA Approval, Execute, Review,
-  amendment/recovery, and explicit integration. Task Run construction still
+  initial plan revision, amendment/recovery, and explicit integration. Revision
+  retains prior plans and requires a new Approval SHA even for unchanged text.
+  Task Run construction still
   belongs to `dispatch.py`; verification belongs to `verification.py`.
+- `local_inspection.py` — bounded read-only `inspect T1 [--json]` decision view:
+  saved plan, exact diff, checks, advisory findings and history. Mismatched
+  Evidence prevents delivery guidance.
+- `local_config_cli.py` — explicit `config show/set --local`, active-source
+  metadata, and safe edits validated against foreground local requirements.
+  A running command retains its already-loaded configuration.
 - `local_workspace.py` — Workshops provisioned from local commits without
   requiring a forge (worktrees share repository remotes; clones remove origin),
   durable candidate refs, Git custody, explicit clean fast-forward integration,
@@ -74,7 +83,7 @@ never-merges rule only for that human-directed local operation.
   hosts; it does not provide hosted Spec CI or remote Approval.
 - `cli.py` — Click entrypoints: `init [--harness --test-cmd]`, `doctor`,
   `sync-workflows [--check]`, `spec`, `approve`, `run [--force]`,
-  `review`, `amend`, `watch [--once -v --interval]`,
+  `review`, `amend`, `revise T1 --feedback`, `watch [--once -v --interval]`,
   `retry [--phase --run]`, `status [-v]`, `update-check [--json --timeout]`,
   `clean [--issue --task --all --force]`, `inspect`. Ergonomics worth knowing:
   `init` auto-detects the test gate from the project manifest
@@ -87,7 +96,7 @@ never-merges rule only for that human-directed local operation.
   machine Phases; there is no ambiguous positional target.
   `retry <n> --phase execute --run
   [--resume|--fresh]` is the one recovery entry (`run` carries no retry
-  flags); `inspect <issue>` prints issue, PR,
+  flags); `inspect T1` presents the local plan/result and `inspect <issue>` prints issue, PR,
   approval SHA, workspace path, and all Task Run records in one pass. Click
   owns validation, rendering, notifications, and the daemon loop; it delegates
   claimed Phase construction to `dispatch.py`.

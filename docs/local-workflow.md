@@ -9,15 +9,23 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This guide describes AgentMachinist 0.19.0. Install the published package with
-`uv tool install agentmachinist`, or upgrade an existing tool installation with
-`uv tool upgrade agentmachinist`; then run the commands below in the repository
-you want to change. The existing
+These onboarding additions are unreleased; use this checkout until a package
+release includes them. They add guided rehearsal, initial Spec revision,
+local inspection/settings selectors, and readiness in a fresh Workshop.
+
+AgentMachinist 0.19.0 is the published baseline. For the additions in this
+checkout, use the [editable source installation](getting-started.md#install)
+and run local commands in the repository you want to change. The existing
 [GitHub issue workflow](getting-started.md#github-setup-and-automation)
-remains available. See [installation](getting-started.md#install) for an optional
-editable source setup.
+remains available.
 
 ## Complete one Task
+
+Try `machinist rehearse --guided` first. It uses a fake Harness in a disposable
+project, pauses to let you read and approve the plan, then shows the change,
+checks, and Review before you accept it. It makes no model or API calls;
+`--harness` is the explicit option that invokes configured, potentially paid
+Harnesses. Declining either decision retains the printed project path.
 
 Start on a named branch in a clean Git repository with an initial commit, a
 repository-local Git author, an installed and authenticated Harness, and a
@@ -46,14 +54,16 @@ changes to the root file do not automatically propagate. Runtime files are
 excluded through Git's local exclude file. Setup preserves the root config and
 does not generate GitHub workflows, labels, or issue forms.
 
-To inspect or change these settings, target the local file. Without a root
-`machinist.yaml`, the `config` commands default to it and `--path` is optional:
+To inspect or change saved local settings, use the explicit `--local` selector:
 
 ```sh
-machinist config show --path .machinist/runs/local/config.yaml
-machinist config set tests.command "uv run pytest" --path .machinist/runs/local/config.yaml
+machinist config show --local
+machinist config set tests.command "uv run pytest" --local
 machinist config validate --path .machinist/runs/local/config.yaml
 ```
+
+`--path .machinist/runs/local/config.yaml` remains an alternative. Without a
+root `machinist.yaml`, these commands default to the saved local file.
 
 The `tests.command` example applies when you use the single Gate. If you have
 named `verification.gates`, edit those entries instead; the two forms cannot
@@ -96,7 +106,10 @@ commit that change and start a new Task from the updated base.
 
 The command saves a Task such as `T1`, verifies the baseline, generates its Spec
 in the isolated Workshop, retains the exact Spec commit, and stops. Read the
-Spec, then copy the full command printed by the CLI:
+Spec. If the initial plan needs correction, use `machinist revise T1 --feedback
+"Keep the public API unchanged."` before implementation. Read its new Spec;
+earlier Approval cannot authorize it. When satisfied, copy the full command
+printed by the CLI:
 
 ```sh
 machinist approve --task T1 --spec-sha <full-spec-commit-sha>
@@ -109,8 +122,8 @@ a report. Review findings are advisory; a completed Review does not mean that
 every finding is resolved or that the change is safe to merge.
 
 ```sh
-machinist status T1
-machinist status T1 --json
+machinist inspect T1
+machinist inspect T1 --json
 ```
 
 Optional bounded repair is off by default.
@@ -132,9 +145,9 @@ configuration; `machinist status T1 --watch --interval 2` shows changed
 snapshots. Local status does not query the forge.
 
 The candidate is retained on `<branch_prefix>task-1` (`agent/task-1` by
-default). Status prints the report path and commits; it does not display the
-diff. Read that report and compare the full Spec SHA with the Candidate SHA
-printed by status to inspect the implementation:
+default). `machinist inspect T1` brings together the plan, candidate diff,
+Verification, Review, and recovery guidance without contacting a forge.
+To compare commits directly:
 
 ```sh
 git diff <full-spec-commit-sha> <full-candidate-commit-sha>
@@ -158,7 +171,7 @@ silently discarding edits. The command does not push or merge a remote PR/MR.
 Local status and completion receipts name
 the next human activity and supply commands with the saved Task ID and exact
 Spec SHA where needed. The short path is `start`, read and approve the Spec, inspect the
-candidate and Review report through `status T1`, then `integrate T1`.
+candidate and Review report through `inspect T1`, then `integrate T1`.
 After integration, the CLI reports that local work is complete and offers
 optional publication commands with `--provider github` or `--provider gitlab`.
 Choose one only when you want to share the candidate. Text guidance is kept
@@ -198,11 +211,18 @@ not mean its tests passed.
 To explicitly execute the configured Gates:
 
 ```sh
+machinist doctor --local --fresh-workshop
+# Or run in your current checkout:
 machinist doctor --local --run-gates
 ```
 
-This uses the existing Verification engine in your **controller checkout**;
-project commands can write files or download dependencies. It does not prove
+`--fresh-workshop` uses a disposable clone of committed `HEAD` and the shared
+Verification engine. It leaves controller Git metadata unchanged and creates
+no Task or model call. Project commands can write files or download dependencies.
+It checks the committed baseline that a new Task would receive; ignored local
+dependency directories are not copied.
+
+`--run-gates` instead uses your **controller checkout**. It does not prove
 the isolated Workshop baseline, which `start` still checks before Spec work.
 Resolve reported readiness failures before running Gates. Plain `doctor` runs
 these same checks when no root `machinist.yaml` exists and checks the existing
@@ -253,10 +273,19 @@ lint or publication fails so corrections do not require retyping the Task.
 
 ## Amend or recover
 
-Amendment requires a completed, verified and reviewed candidate. It cannot
-revise an initial Spec awaiting Approval; if you reject that Spec, start a new
-Task with corrected intent. Supply feedback on a completed candidate to produce
-a new Spec:
+For an initial saved Spec before a candidate exists, keep its Task and revise
+the plan:
+
+```sh
+machinist revise T1 --feedback "Keep the public API unchanged."
+# Read the new Spec and approve its newly printed SHA.
+```
+
+Revision generates a new Spec, invalidates earlier Approval, and stops for a
+fresh human decision. It does not implement the change. Recover a failed Phase
+with explicit retry first.
+
+Amendment is for feedback on a completed, verified and reviewed candidate:
 
 ```sh
 machinist amend --task T1 --feedback "Also show which timezone value was rejected."
@@ -374,10 +403,11 @@ Local Tasks and legacy issue numbers have separate records and recovery paths:
 | --- | --- | --- |
 | Create | `start` with text or explicit issue import | `task new`; local Spec source: `spec` directly or trigger label plus `watch`; hosted Spec source: trigger label starts GitHub Actions |
 | Approve | `approve --task T1 --spec-sha <sha>` continues in foreground | `approve --issue 42` or `--pr 8` requests trusted workflow Evidence; wait for `explain 42` to report `approved` before the first Execute |
+| Revise initial plan | `revise T1 --feedback "text"` generates a new Spec before a candidate exists | `spec 42 --revise` revises a draft Spec |
 | Resume | `continue T1`; failure requires `retry --task T1 --phase execute` | `retry 42 --phase execute --run --resume` explicitly reuses edits |
-| Inspect | `status T1`, `status T1 --json`, printed report | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42` for Evidence |
+| Inspect | `inspect T1`, `inspect T1 --json` for plan/diff/checks/Review; `status T1` for state | `explain 42` for live state/next action; `inspect 42`, `runs --issue 42` for Evidence |
 | Aggregate | `report --source local` | `report --source legacy`; the default `report` combines both namespaces |
-| Configure | `config show`, which defaults to `.machinist/runs/local/config.yaml` when no root `machinist.yaml` exists; `--path` selects it explicitly | `config show` reads `machinist.yaml` when present |
+| Configure | `config show --local` and `config set <key> <value> --local`; explicit `--path` remains available | `config show` reads `machinist.yaml` when present |
 | Schedule | Foreground commands | `watch`, `queue`, and macOS `service` |
 | Deliver | Explicit `integrate T1` and/or `publish T1 --provider gitlab` (or `github`) | Ready GitHub PR; human remote merge |
 
@@ -388,14 +418,14 @@ runtime records for recovery; do not commit them or edit Task JSON manually.
 
 Plain `doctor` is the root GitHub setup preflight when `machinist.yaml` exists
 and runs local readiness otherwise; `doctor --local`
-checks local readiness explicitly as described above. `runs`, `inspect`, `explain`, and portfolio `status --all` read the legacy
+checks local readiness explicitly as described above. `runs`, numeric `inspect 42`, `explain`, and portfolio `status --all` read the legacy
 issue-run namespace under `.machinist/runs/`. Aggregate `report` reads both
 namespaces by default; use
 `machinist report --source local --since 30d --json`
 for foreground Tasks only, without root configuration or forge access.
 `status --local` is an offline view of legacy issue runs only when no local
 configuration is present. In a mixed checkout, default status selects local
-Tasks; use `runs`/`inspect` for legacy Evidence.
+Tasks; use `runs`/`inspect 42` for legacy Evidence. `inspect T1` always reads a local Task.
 
 Report `success_rate` measures terminal Phase attempts. `first_pass_execute`
 measures terminal first Execute attempts that succeeded without repair. Phase

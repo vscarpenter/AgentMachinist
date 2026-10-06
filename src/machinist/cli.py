@@ -43,6 +43,7 @@ from machinist.config_cli import (
 from machinist.config_cli import (
     write_schema as write_config_schema,
 )
+from machinist.diagnostics import sanitize_diagnostic
 from machinist.dispatch import TaskDispatcher
 from machinist.doctor import (
     CheckLevel,
@@ -88,7 +89,14 @@ from machinist.local_cli import (
     retry_local,
     validate_task_id,
 )
+from machinist.local_config_cli import (
+    LOCAL_CONFIG_CHANGE_NOTICE,
+    local_config_path,
+    set_local_value,
+    show_local_effective,
+)
 from machinist.local_doctor import local_fix_hint_for_check_name, run_local_doctor
+from machinist.local_inspection import LocalInspectionError, render_local_inspection
 from machinist.local_setup import detect_test_command, find_repository_root
 from machinist.local_tasks import LocalTask, LocalTaskError, LocalTaskStore
 from machinist.local_workspace import LocalWorkspace
@@ -130,8 +138,10 @@ from machinist.portfolio import (
 from machinist.process import run_supervised
 from machinist.queue_control import QueueControl, QueueControlError
 from machinist.rehearsal import (
+    RehearsalCheckpoint,
     RehearsalError,
     run_harness_rehearsal,
+    run_local_rehearsal,
     simulate_rehearsal,
 )
 from machinist.reporting import (
@@ -384,6 +394,17 @@ def _existing_config_path(path: Path | None) -> Path:
     return resolved
 
 
+def _saved_local_config_root(path: Path) -> Path | None:
+    """Recognize saved settings selected by default or an explicit path."""
+    try:
+        root = find_repository_root(Path.cwd())
+    except ConfigError:
+        return None
+    return (
+        root if path.absolute() == root / ".machinist/runs/local/config.yaml" else None
+    )
+
+
 def _display_path(path: Path) -> Path:
     try:
         return path.relative_to(Path.cwd())
@@ -536,48 +557,47 @@ _MACHINIST_ERRORS = (
 
 _COMMAND_GROUPS: list[tuple[str, list[str]]] = [
     (
-        "Tasks  — create and approve work",
-        ["start", "task", "spec", "approve"],
-    ),
-    (
-        "Build  — implement and review",
+        "Local Tasks — plan, check, and accept",
         [
+            "start",
+            "revise",
+            "inspect",
+            "approve",
             "continue",
-            "run",
-            "review",
+            "integrate",
+            "publish",
+            "status",
             "amend",
             "retry",
             "cancel",
-            "integrate",
-            "publish",
         ],
     ),
     (
-        "Setup  — rehearsal, optional GitHub & health",
+        "Readiness and settings",
+        ["rehearse", "doctor", "config", "update-check"],
+    ),
+    (
+        "GitHub automation — optional",
         [
+            "task",
             "onboard",
             "init",
-            "doctor",
-            "rehearse",
+            "spec",
+            "run",
+            "review",
+            "watch",
             "sync-labels",
             "sync-workflows",
-            "update-check",
-        ],
-    ),
-    (
-        "Operate — daily",
-        ["watch", "status"],
-    ),
-    (
-        "Operate — advanced",
-        [
             "queue",
             "service",
             "explain",
-            "inspect",
+        ],
+    ),
+    (
+        "History and maintenance",
+        [
             "report",
             "runs",
-            "config",
             "clean",
             "repo",
         ],
@@ -626,10 +646,12 @@ class MachinistGroup(click.Group):
 def main() -> None:
     """AgentMachinist: plan, approve, verify, and integrate local coding Tasks.
 
-    Start with 'machinist start OBJECTIVE' in a Git repository. Read the generated
-    Spec, approve its exact SHA, then integrate the reviewed result.
+    Try 'machinist rehearse --guided' free: read a sample plan and inspect the
+    checked result before accepting it.
 
-    Try 'machinist rehearse' to exercise the local workflow with a fake Harness.
+    In your project, use 'machinist start OBJECTIVE'. Read the generated Spec,
+    approve its exact SHA, then inspect and integrate the reviewed result.
+
     Use 'machinist onboard' for the optional GitHub issue and watcher integration.
     """
 
@@ -1139,13 +1161,23 @@ def onboard(
 
 @main.command()
 @click.option(
+    "--guided",
+    is_flag=True,
+    help="Pause to read the plan, inspect the result, and accept the disposable change.",
+)
+@click.option(
     "--harness",
     "use_harness",
     is_flag=True,
     help="Use configured Spec, Execute, and Review Harnesses; provider usage may occur.",
 )
-def rehearse(use_harness: bool) -> None:
+def rehearse(use_harness: bool, guided: bool = False) -> None:
     """Exercise the production local workflow with a fake Harness by default."""
+    click.echo(
+        "Uses your coding assistant's model quota."
+        if use_harness
+        else "Free controller rehearsal. No model calls or API usage."
+    )
     click.echo(
         "Rehearsing a disposable Task with real Git and verification; "
         "this can take a minute."
@@ -1154,6 +1186,54 @@ def rehearse(use_harness: bool) -> None:
     def reached(transition: str) -> None:
         click.echo(f"  ✓ {transition}")
 
+    def decide(checkpoint: RehearsalCheckpoint) -> bool:
+        click.echo(f"\nDisposable repository: {checkpoint.repository}")
+        click.echo(f"Task: {checkpoint.task_id}; plan commit: {checkpoint.spec_sha}")
+        if checkpoint.stage == "spec":
+            click.echo("Read the written plan before approving its exact version:")
+            click.echo(sanitize_diagnostic(checkpoint.spec, limit=20_000).rstrip())
+            click.echo(f"Saved plan: {checkpoint.spec_path}")
+        else:
+            click.echo(f"Change ready for your review: {checkpoint.candidate_sha}")
+            click.echo(
+                sanitize_diagnostic(checkpoint.diff, limit=30_000).rstrip()
+                or "No implementation diff."
+            )
+            report = checkpoint.verification_report or {}
+            click.echo(
+                "Checks passed."
+                if report.get("success") is True
+                else "Checks did not pass."
+            )
+            review = checkpoint.review_report or {}
+            click.echo(
+                f"Review: {sanitize_diagnostic(str(review.get('summary', 'No summary')), limit=4_000)}"
+            )
+            for finding in review.get("findings", []):
+                click.echo(
+                    sanitize_diagnostic(
+                        f"  {finding.get('severity', 'unknown')} "
+                        f"({finding.get('confidence', 'unknown')} confidence) "
+                        f"{finding.get('file', 'unknown')}:{finding.get('line', '?')}: "
+                        f"{finding.get('message', 'No finding message')}",
+                        limit=4_000,
+                    )
+                )
+                if finding.get("remediation"):
+                    click.echo(
+                        sanitize_diagnostic(
+                            f"    Suggested correction: {finding['remediation']}",
+                            limit=4_000,
+                        )
+                    )
+            click.echo(f"Saved diff: {checkpoint.diff_path}")
+            click.echo(f"Saved review: {checkpoint.report_path}")
+            click.echo("Acceptance changes only this disposable repository.")
+        click.echo(
+            "You can inspect these files before answering. Declining retains the sample."
+        )
+        return click.confirm(checkpoint.prompt, default=False)
+
     try:
         if use_harness:
             config = (
@@ -1161,19 +1241,35 @@ def rehearse(use_harness: bool) -> None:
                 if has_local_configuration()
                 else load_config()
             )
-            run_harness_rehearsal(
+            result = run_harness_rehearsal(
                 config,
                 harness_factory=lambda phase: _make_harness(config, Phase(phase)),
                 progress=reached,
+                **({"guided": True, "confirm": decide} if guided else {}),
             )
             mode = "configured Harnesses; API usage may have occurred"
         else:
-            simulate_rehearsal(review_enabled=True, progress=reached)
+            result = (
+                run_local_rehearsal(guided=True, confirm=decide, progress=reached)
+                if guided
+                else simulate_rehearsal(review_enabled=True, progress=reached)
+            )
             mode = "production local Phases with a fake Harness; no model or API usage"
     except _MACHINIST_ERRORS as exc:
         raise click.ClickException(str(exc)) from exc
+    if result is not None and result.stopped_at:
+        click.echo(
+            f"Rehearsal paused at {result.stopped_at}; sample retained at {result.workspace}."
+        )
+        click.echo(
+            "Inspect the saved files, or rerun machinist rehearse --guided for a new sample."
+        )
+        return
     click.echo(f"Rehearsal passed ({mode}).")
-    click.echo("Next: machinist start OBJECTIVE")
+    click.echo("Next: in your project, run machinist doctor --local --fresh-workshop.")
+    click.echo(
+        "Then: machinist start OBJECTIVE (uses your coding assistant's model quota)."
+    )
 
 
 @main.group()
@@ -1542,14 +1638,23 @@ def sync_labels_command(ctx: click.Context, check: bool, apply: bool) -> None:
     click.echo("Required GitHub labels are present.")
 
 
-def _doctor_fix_hints(report: DoctorReport, *, local_only: bool = False) -> list[str]:
+def _doctor_fix_hints(
+    report: DoctorReport, *, local_only: bool = False, fresh_workshop: bool = False
+) -> list[str]:
     """Return one remediation line per failing check, attributed to that check.
 
     Hints are keyed on the canonical check name rather than matched against
     rendered text, so a new check without a fix fails a test instead of
     silently degrading to generic advice.
     """
-    lookup = local_fix_hint_for_check_name if local_only else fix_hint_for_check_name
+
+    def lookup(name: str) -> str | None:
+        return (
+            local_fix_hint_for_check_name(name, fresh_workshop=fresh_workshop)
+            if local_only
+            else fix_hint_for_check_name(name)
+        )
+
     return [
         f"  → fix ({check.name}): {hint}"
         for check in report.checks
@@ -1566,25 +1671,38 @@ def _doctor_fix_hints(report: DoctorReport, *, local_only: bool = False) -> list
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable report.")
 @click.option(
+    "--fresh-workshop",
+    is_flag=True,
+    help="Run local checks in a disposable checkout of committed HEAD; no model call.",
+)
+@click.option(
     "--run-gates",
     is_flag=True,
     help="Execute configured verification gates in the controller checkout.",
 )
 @click.pass_context
 def doctor(
-    ctx: click.Context, as_json: bool, run_gates: bool, local_only: bool
+    ctx: click.Context,
+    as_json: bool,
+    run_gates: bool,
+    local_only: bool,
+    fresh_workshop: bool = False,
 ) -> None:
     """Diagnose installation readiness; gate execution is opt-in."""
-    local_readiness = local_only or not _root_config_present()
+    local_readiness = local_only or fresh_workshop or not _root_config_present()
     try:
         if local_readiness:
-            if not local_only and not as_json:
+            if not local_only and not fresh_workshop and not as_json:
                 click.echo(
                     "No machinist.yaml in this checkout; checking local Task "
                     "readiness. Run 'machinist onboard' for GitHub automation.",
                     err=True,
                 )
-            report = run_local_doctor(Path.cwd(), run_gates=run_gates)
+            report = run_local_doctor(
+                Path.cwd(),
+                run_gates=run_gates or fresh_workshop,
+                **({"fresh_workshop": True} if fresh_workshop else {}),
+            )
         else:
             config = load_config()
             report = run_doctor(
@@ -1601,7 +1719,9 @@ def doctor(
         for check in report.checks:
             click.echo(f"{check.level.value:<4} {check.name:<28} {check.detail}")
         if not report.ok:
-            for hint in _doctor_fix_hints(report, local_only=local_readiness):
+            for hint in _doctor_fix_hints(
+                report, local_only=local_readiness, fresh_workshop=fresh_workshop
+            ):
                 click.echo(hint)
     if not report.ok:
         ctx.exit(1)
@@ -1635,7 +1755,7 @@ def update_check_command(timeout_seconds: int, as_json: bool) -> None:
 
 @main.group("config")
 def config_command() -> None:
-    """Validate, inspect, and update machinist.yaml."""
+    """Validate, inspect, and update saved workflow settings."""
 
 
 _CONFIG_PATH_HELP = (
@@ -1663,11 +1783,35 @@ def config_validate(path: Path | None, as_json: bool) -> None:
 
 @config_command.command("show")
 @click.option("--path", type=click.Path(path_type=Path), help=_CONFIG_PATH_HELP)
+@click.option(
+    "--local",
+    "local_only",
+    is_flag=True,
+    help="Show the saved settings used by local Tasks.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of YAML.")
-def config_show(path: Path | None, as_json: bool) -> None:
+def config_show(path: Path | None, as_json: bool, local_only: bool = False) -> None:
     """Show the effective phase-resolved configuration."""
+    if local_only and path is not None:
+        raise click.UsageError("choose --local or --path, not both")
     try:
-        effective = show_effective(_existing_config_path(path))
+        if local_only:
+            effective = show_local_effective(find_repository_root(Path.cwd()))
+        else:
+            selected = _existing_config_path(path)
+            local_root = _saved_local_config_root(selected)
+            effective = {
+                "configuration": {
+                    "workflow": "local"
+                    if local_root is not None
+                    else "root or explicit file",
+                    "path": str(selected.absolute()),
+                    "changes_apply": LOCAL_CONFIG_CHANGE_NOTICE
+                    if local_root is not None
+                    else "Saved local Tasks use their own settings. Use machinist config show --local to inspect them.",
+                },
+                **show_effective(selected),
+            }
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -1697,14 +1841,41 @@ def config_schema_command(output: Path | None) -> None:
 @click.argument("key")
 @click.argument("value")
 @click.option("--path", type=click.Path(path_type=Path), help=_CONFIG_PATH_HELP)
-def config_set(key: str, value: str, path: Path | None) -> None:
+@click.option(
+    "--local",
+    "local_only",
+    is_flag=True,
+    help="Update saved local Task settings after local workflow validation.",
+)
+def config_set(
+    key: str, value: str, path: Path | None, local_only: bool = False
+) -> None:
     """Set a dotted value after full validation; rewrites canonical YAML."""
+    if local_only and path is not None:
+        raise click.UsageError("choose --local or --path, not both")
     try:
+        if local_only:
+            root = find_repository_root(Path.cwd())
+            path = local_config_path(root)
+            set_local_value(key, value, root)
+            click.echo(
+                f"set {key} in local settings: {path} (comments were normalized)"
+            )
+            click.echo(LOCAL_CONFIG_CHANGE_NOTICE)
+            return
         path = _existing_config_path(path)
+        local_root = _saved_local_config_root(path)
+        # Keep generic/default and explicit-file editing compatible. --local
+        # additionally validates foreground workflow invariants under setup's lock.
         set_config_value(key, value, path)
     except (ConfigError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"set {key} in {_display_path(path)} (comments were normalized)")
+    click.echo(
+        LOCAL_CONFIG_CHANGE_NOTICE
+        if local_root is not None
+        else "Saved local Tasks use their own settings; use machinist config set --local to change them."
+    )
 
 
 @main.command()
@@ -2748,13 +2919,29 @@ def _task_from_workspace_path(repo_root: Path, path: Path) -> int | None:
 
 
 @main.command()
-@click.argument("issue_number", type=click.IntRange(min=1))
+@click.argument("target")
 @click.option("--offline", is_flag=True, help="Read only local runs and Workshops.")
 @click.option(
     "--json", "as_json", is_flag=True, help="Emit the complete JSON read model."
 )
-def inspect(issue_number: int, offline: bool = False, as_json: bool = False) -> None:
-    """Show diagnostic and runtime history for ISSUE_NUMBER."""
+def inspect(target: str, offline: bool = False, as_json: bool = False) -> None:
+    """Inspect a local Task (T1) or GitHub issue number, including its history."""
+    if target.startswith("T"):
+        validate_task_id(target)
+        try:
+            click.echo(
+                render_local_inspection(
+                    find_repository_root(Path.cwd()), target, as_json=as_json
+                )
+            )
+        except (LocalInspectionError, *_MACHINIST_ERRORS) as exc:
+            raise click.ClickException(str(exc)) from exc
+        return
+    if not target.isdecimal() or int(target) < 1:
+        raise click.UsageError(
+            "provide a local Task such as T1 or a positive GitHub issue number"
+        )
+    issue_number = int(target)
     try:
         lifecycle = TaskLifecycle(Path(".machinist/runs"))
     except _MACHINIST_ERRORS as exc:

@@ -363,3 +363,134 @@ def test_start_refuses_a_dirty_checkout_and_names_the_pending_paths(local):
         workflow.start("Improve the answer with its regression test")
 
     assert harness.calls == []
+
+
+def test_initial_plan_revision_keeps_task_and_history_and_requires_new_approval(local):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer with its regression test")
+    first = task.spec_sha
+    harness.value = 3
+
+    revised = workflow.revise(task.id, "Return three and keep the regression test")
+
+    assert revised.id == task.id and revised.spec_sha != first
+    assert revised.approval is None and revised.candidate_sha is None
+    assert revised.spec_base_sha == first
+    assert git(root, "show", f"{first}:.machinist/specs/task-1-spec.md").startswith(
+        "# Spec"
+    )
+    assert git(root, "rev-parse", f"{revised.spec_sha}^") == first
+    records = workflow.lifecycle.history(task.number, Phase.SPEC)
+    assert len(records) == 2
+    assert records[-1].evidence["local_feedback"] == revised.feedback
+    with pytest.raises(LocalWorkflowError, match="Spec.*changed|Spec.*match"):
+        workflow.approve(task.id, expected_sha=first)
+    with pytest.raises(LocalWorkflowError, match="Approval"):
+        workflow.continue_task(task.id)
+    assert harness.calls == ["spec", "spec"]
+    delivered = workflow.approve(task.id, expected_sha=revised.spec_sha)
+    assert delivered.review_report["reviewed_sha"] == delivered.candidate_sha
+    assert harness.calls == ["spec", "spec", "execute", "review"]
+
+
+def test_multiple_initial_revisions_are_bound_to_latest_spec(local):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer")
+    for value in (3, 4):
+        prior = task.spec_sha
+        harness.value = value
+        task = workflow.revise(task.id, f"Return {value} instead")
+        assert git(root, "rev-parse", f"{task.spec_sha}^") == prior
+    assert len(workflow.lifecycle.history(task.number, Phase.SPEC)) == 3
+    assert workflow.status(task.id)["state"] == "awaiting approval"
+
+
+def test_initial_revision_intent_can_continue_after_interruption(local, monkeypatch):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer")
+    original = workflow.dispatcher.run_local_spec
+
+    def interrupted(*args, **kwargs):
+        raise RuntimeError("interrupted after revision intent")
+
+    monkeypatch.setattr(workflow.dispatcher, "run_local_spec", interrupted)
+    with pytest.raises(RuntimeError, match="revision intent"):
+        workflow.revise(task.id, "Return three instead")
+    pending = workflow.store.get(task.id)
+    assert pending.spec_sha is None and pending.spec_base_sha == task.spec_sha
+    assert pending.approval is None
+    monkeypatch.setattr(workflow.dispatcher, "run_local_spec", original)
+    harness.value = 3
+    recovered = workflow.continue_task(task.id)
+    assert recovered.spec_sha != task.spec_sha and recovered.approval is None
+    assert harness.calls == ["spec", "spec"]
+
+
+def test_failed_initial_revision_keeps_history_and_requires_explicit_retry(
+    local, monkeypatch
+):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer")
+    original = harness.generate_spec
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("revision model failed")
+
+    monkeypatch.setattr(harness, "generate_spec", fail)
+    with pytest.raises(RuntimeError, match="revision model"):
+        workflow.revise(task.id, "Return three instead")
+    pending = workflow.store.get(task.id)
+    assert pending.spec_sha is None and pending.spec_base_sha == task.spec_sha
+    assert workflow.workspace.branch_sha(task.branch) == task.spec_sha
+    with pytest.raises(LifecycleError, match="retry"):
+        workflow.continue_task(task.id)
+    with pytest.raises(LocalWorkflowError, match="successful|saved"):
+        workflow.revise(task.id, "Different feedback")
+    monkeypatch.setattr(harness, "generate_spec", original)
+    recovered = workflow.retry(task.id, phase=Phase.SPEC)
+    assert recovered.spec_sha != task.spec_sha
+    assert len(workflow.lifecycle.history(task.number, Phase.SPEC)) == 3
+
+
+@pytest.mark.parametrize(
+    "feedback",
+    ["", "  ", "bad\x00feedback", "x" * 50_001],
+    ids=["empty", "whitespace", "nul", "oversized"],
+)
+def test_initial_revision_rejects_invalid_feedback_without_mutation(local, feedback):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer")
+    with pytest.raises(LocalWorkflowError, match="feedback"):
+        workflow.revise(task.id, feedback)
+    assert workflow.store.get(task.id) == task
+    assert harness.calls == ["spec"]
+
+
+def test_initial_revision_refuses_branch_drift_before_invalidating_plan(local):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer")
+    git(root, "update-ref", f"refs/heads/{task.branch}", task.base_sha)
+    with pytest.raises(LocalWorkflowError, match="branch changed"):
+        workflow.revise(task.id, "Return three instead")
+    assert workflow.store.get(task.id) == task
+    assert harness.calls == ["spec"]
+
+
+def test_initial_revision_refuses_completed_candidate_and_preserves_approval(local):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer")
+    task = workflow.approve(task.id, expected_sha=task.spec_sha)
+    with pytest.raises(LocalWorkflowError, match="amend|implementation"):
+        workflow.revise(task.id, "Return three instead")
+    assert workflow.store.get(task.id) == task
+    assert harness.calls == ["spec", "execute", "review"]
+
+
+def test_initial_revision_refuses_approval_before_execute(local):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer")
+    task = workflow.store.update(task, approval={"actor": "human"})
+    with pytest.raises(LocalWorkflowError, match="Approval|approved"):
+        workflow.revise(task.id, "Return three instead")
+    assert workflow.store.get(task.id) == task
+    assert harness.calls == ["spec"]

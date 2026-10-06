@@ -1,13 +1,17 @@
 # Getting Started with AgentMachinist
 
-**Looking for the short path?** [Complete your first Task](tldr.md) covers setup
-through integration. This longer guide is the configuration and GitHub automation
+**Looking for the short path?** [Start here](tldr.md) covers the free rehearsal,
+project readiness, and one small real change. This longer guide is the configuration and GitHub automation
 reference; its existing headings and links are retained. Browse the
 [documentation index](README.md) for other topics.
 
 AgentMachinist takes a Task through an exact human-approved Spec, isolated
 implementation, verification, and independent Review. You can integrate the
 reviewed candidate locally and optionally publish it to GitHub or GitLab.
+
+These onboarding additions are unreleased; use this checkout until a package
+release includes them. Guided rehearsal, initial Spec revision, local
+inspection/settings selectors, and fresh-Workshop readiness are described below.
 
 ## What is AgentMachinist?
 
@@ -41,7 +45,7 @@ LaunchAgent integration is macOS-only; Linux users can schedule
 
 ## Install
 
-AgentMachinist 0.19.0 includes the guided local workflow, optional GitHub/GitLab
+AgentMachinist 0.19.0 includes the local workflow, optional GitHub/GitLab
 intake and publication, existing GitHub issue automation, and next-step CLI
 guidance. Local readiness, exact remote-base validation, bounded diagnostics,
 bounded Execute repair, and combined reporting remain available. This release
@@ -63,11 +67,16 @@ machinist --version
 Confirm that `machinist --version` reports 0.18.0 or newer for the repair and
 reporting guidance described here. `machinist doctor --local` is available
 since 0.15.0.
-For contributing to AgentMachinist, an editable installation is optional:
-run `uv tool install --editable .` from its source
+For the unreleased onboarding additions, run `uv tool install --editable .` from its source
 checkout, then enter the repository you want to change. An editable install
 tracks that checkout instead of the published package; use its Git and `uv sync`
 workflow to update it.
+
+Begin with `machinist rehearse --guided`: a fake Harness runs the real local machinery
+in a disposable project, with no model or API calls. It pauses for you to read
+and approve the sample Spec, then inspect the diff, checks, and Review before
+integration. Declining retains the printed project path. Explicit `--harness`
+uses configured Harnesses and may consume provider quota.
 
 Managed GitHub workflows pin the installed controller version; this repository's
 own development workflows use `github.spec_install: checkout`.
@@ -111,7 +120,7 @@ machinist start "Handle an invalid timezone without crashing" --test-cmd "uv run
 # Read the Spec; use the exact SHA printed by start:
 machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 # Approval continues Execute, verification, and independent Review.
-machinist status T1
+machinist inspect T1
 # Inspect the candidate diff and report, then:
 machinist integrate T1
 ```
@@ -165,14 +174,16 @@ machinist amend --task T1 --feedback "Also name the rejected timezone value."
 
 Local amendment requires a completed, verified and reviewed candidate and
 creates a new Spec requiring fresh Approval and Review. Use retry to recover a
-failed Phase first. To reject an initial Spec awaiting Approval, start a new
-Task with corrected intent; local amendment cannot revise that initial Spec.
+failed Phase first. To correct an initial Spec before a candidate exists, use
+`machinist revise T1 --feedback "Keep the public API unchanged."` and read its
+new Spec before fresh Approval. Local amendment is for a completed candidate.
 Once integration begins, start a new Task from the updated base instead.
 
 Local setup and the existing GitHub setup use separate configuration and run
-namespaces. `watch`, `queue`, `runs`, `inspect`, `explain`, and portfolio
+namespaces. `watch`, `queue`, `runs`, numeric `inspect 42`, `explain`, and portfolio
 `status --all` retain their legacy scope and do not manage or aggregate `T1`
-records. Plain `doctor` and `config` follow the root `machinist.yaml` when it
+records. `inspect T1` selects the local plan, diff, checks, and Review.
+Plain `doctor` and `config` follow the root `machinist.yaml` when it
 exists and the local workflow otherwise. `clean` covers issue Workshops and local
 Task Workshops whenever their configuration exists, so `clean --all` removes both
 kinds in a mixed checkout. Aggregate `report` reads both namespaces by
@@ -555,9 +566,9 @@ root `machinist.yaml`; foreground Tasks read the saved local file. Inspect or
 change that file explicitly:
 
 ```sh
-machinist config show --path .machinist/runs/local/config.yaml
+machinist config show --local
 machinist config validate --path .machinist/runs/local/config.yaml
-machinist config set tests.command "uv run pytest" --path .machinist/runs/local/config.yaml
+machinist config set tests.command "uv run pytest" --local
 ```
 
 Use `tests.command` only for the single-Gate form; if named Gates are present,
@@ -565,6 +576,8 @@ edit `verification.gates` instead. Local loading additionally requires at least
 one required Gate, Review enabled, local Spec source, managed workflows off,
 telemetry endpoint unset, and an absolute Workshop root outside the repository.
 Generic `config validate` checks the shared schema, not all local constraints.
+The explicit `--path .machinist/runs/local/config.yaml` form remains available;
+`show --local` and `set ... --local` remove ambiguity in mixed checkouts.
 Changing `github.repo` does not choose a local publication target: that target
 comes from origin plus the explicit `publish --provider` selection.
 
@@ -1162,11 +1175,15 @@ healthy ones instead of failing the entire view.
 
 ## Troubleshooting
 
-For a foreground Task, start with `machinist status T1`; follow its printed
-`Next:` command. Use `machinist config show --path .machinist/runs/local/config.yaml` to
+For a foreground Task, start with `machinist inspect T1`; follow its printed
+`Next:` command. Use `machinist config show --local` to
 inspect the local settings and the [local recovery guide](local-workflow.md#amend-or-recover)
 for retry, amendment, integration, or publication problems. Plain `doctor`
 checks GitHub setup when `machinist.yaml` exists and local readiness otherwise.
+
+`machinist inspect T1` collects the saved Spec, candidate diff, Verification,
+Review, and next action in one local view. Use it before integrating and when
+recovering; `--json` provides the structured view.
 
 **New in 0.15.0:** optional local readiness is available with
 `machinist doctor --local` or `machinist doctor --local --json`. It adds no
@@ -1181,6 +1198,12 @@ access or quota.
 the controller checkout after readiness checks pass. Those commands can write
 or download; passing them does not prove the isolated Workshop baseline that
 `start` still checks. See [optional local readiness](local-workflow.md#optional-local-readiness).
+
+For a dependency check matching a new Task's committed checkout, use
+`machinist doctor --local --fresh-workshop`. This explicitly runs Gates in a
+disposable clone of `HEAD`, creates no Task, makes no model call, and leaves
+controller Git metadata unchanged. Commands may download dependencies; `start`
+still verifies its own baseline before Spec generation.
 
 For the legacy GitHub issue workflow, start with:
 

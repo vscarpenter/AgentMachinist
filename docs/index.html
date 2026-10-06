@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="AgentMachinist documentation: understand the local workflow, complete your first Task, and find configuration, recovery, architecture, and trust references. AgentMachinist 0.19.0.">
+  <meta name="description" content="AgentMachinist helps your coding agent make a change you can check before accepting it. Try the workflow free, then make a small change in your own project.">
   <meta name="theme-color" content="#f3f1eb">
   <meta property="og:title" content="AgentMachinist documentation">
-  <meta property="og:description" content="Start with the workflow explainer and first-Task guide, then find every operating reference and architecture decision. AgentMachinist 0.19.0.">
+  <meta property="og:description" content="Try the workflow free. Read the plan, inspect the change and its checks, then decide whether to accept it. Find every operating reference and architecture decision.">
   <meta name="twitter:card" content="summary">
   <title>AgentMachinist documentation</title>
   <style>
@@ -259,18 +259,18 @@
         <a href="#loop">The loop</a>
         <a href="#simulate">Watch it run</a>
         <a class="nav-keep" href="#documentation">All documentation</a>
-        <a class="boxed" href="first-run-guide.html">First Task →</a>
+        <a class="boxed" href="first-run-guide.html">Try it free →</a>
       </div>
     </nav>
   </header>
   <main id="top">
     <section class="hero shell">
       <p class="kicker">AgentMachinist documentation</p>
-      <h1>One Task. A reviewed local change.</h1>
-      <p class="lede">Start with a bounded objective. Approve its exact Spec, then let the controller coordinate implementation, verification, and independent Review. Inspect the result and integrate it locally. Publish a GitHub PR or GitLab MR whenever sharing helps.</p>
+      <h1>Make a change you can check.</h1>
+      <p class="lede">AgentMachinist helps your coding agent work through a small change in your project. Read and approve the plan, inspect the change and its checks, then decide whether to accept it. Your agent writes the code; AgentMachinist manages the steps and keeps the evidence.</p>
       <nav class="reading-path" aria-label="Start here">
+        <a class="primary" href="first-run-guide.html">Try the workflow free <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <a href="how-it-works.html">Understand the workflow <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-        <a class="primary" href="first-run-guide.html">Complete your first Task <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
       </nav>
       <figure class="explainer">
         <div class="explainer-frame">
@@ -281,7 +281,7 @@
         </div>
         <figcaption>The whole loop in 90 seconds: describe a Task, approve its exact Spec, and integrate the reviewed change. Nothing loads from YouTube until you press play. <a href="https://www.youtube.com/watch?v=XfLDEiakdkw">Watch on YouTube</a>.</figcaption>
       </figure>
-      <p><strong>AgentMachinist 0.19.0</strong> adds a built-in Goose Harness and clearer first-run guidance, including a repository-local Git author and free checks before your first paid run. Install 0.19.0 from PyPI. Exact Spec Approval, verification, independent Review, and optional GitHub or GitLab publication remain part of the workflow. The <a href="getting-started.md#github-setup-and-automation">existing GitHub workflow</a> remains supported.</p>
+      <p data-release="unreleased">These onboarding additions are unreleased; use this source checkout until a package release includes them. The guided rehearsal uses a fake coding agent and makes no model API calls. After practicing, check your own project and make one small real change. <a href="getting-started.md#github-setup-and-automation">GitHub automation</a> and optional GitHub or GitLab publication are available when you are ready to share work.</p>
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
@@ -291,7 +291,7 @@
     <section class="section shell documentation" id="documentation" aria-labelledby="documentation-title">
       <header class="section-head">
         <h2 id="documentation-title">All documentation</h2>
-        <p>Start with the <a href="how-it-works.html">workflow explainer</a>, then <a href="first-run-guide.html">complete your first Task</a>. Use the references below when you need more detail. The same directory is available in the <a href="README.md">repository documentation index</a>.</p>
+        <p>Start with the <a href="first-run-guide.html">free guided rehearsal</a>, then check your own project and make a small real change. The <a href="how-it-works.html">workflow explainer</a> shows how the steps fit together. Use the references below when you need more detail. The same directory is available in the <a href="README.md">repository documentation index</a>.</p>
       </header>
       <div class="doc-groups">
         <section class="doc-group" aria-labelledby="reference-title">
@@ -536,22 +536,22 @@
         <div class="term">
           <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>terminal / local workflow</span></div>
           <div class="term-body">
-            <p class="tline c"># install the released controller</p>
-            <p class="tline p"><b>$ </b>uv tool install agentmachinist</p>
+            <p class="tline c"># from the AgentMachinist source checkout</p>
+            <p class="tline p"><b>$ </b>uv tool install --editable .</p>
+            <p class="tline p"><b>$ </b>machinist rehearse --guided</p>
             <p class="tline c"># then change into your own committed project</p>
+            <p class="tline p"><b>$ </b>machinist doctor --local --fresh-workshop</p>
             <p class="tline p"><b>$ </b>machinist start "Add CSV export for the currently filtered rows" --test-cmd "uv run pytest"</p>
             <p class="tline c"># inspect the Spec; use the full SHA printed by start</p>
             <p class="tline p"><b>$ </b>machinist approve --task T1 --spec-sha &lt;full-spec-commit-sha&gt;</p>
             <p class="tline c"># inspect the report and diff before integration</p>
-            <p class="tline p"><b>$ </b>machinist status T1</p>
+            <p class="tline p"><b>$ </b>machinist inspect T1</p>
             <p class="tline p"><b>$ </b>machinist integrate T1</p>
             <p class="tline">&nbsp;</p>
             <p class="tline c"># optional: choose one forge; matching origin/auth required</p>
             <p class="tline p"><b>$ </b>machinist publish T1 --provider github</p>
             <p class="tline c"># or: machinist publish T1 --provider gitlab</p>
             <p class="tline">&nbsp;</p>
-            <p class="tline c"># deterministic rehearsal: temporary Git repo, fake Harness</p>
-            <p class="tline p"><b>$ </b>machinist rehearse</p>
           </div>
         </div>
       </div>
@@ -564,9 +564,10 @@
   <footer class="site-footer shell">
     <div class="footer-row">
       <span>AgentMachinist 0.19.0 · local Task → exact Approval → verified candidate → your decision</span>
+      <p>Published baseline: <code>uv tool install agentmachinist</code> installs 0.19.0. The onboarding additions described here require this source checkout.</p>
       <nav aria-label="Documentation">
         <a href="#documentation">All documentation</a>
-        <a href="first-run-guide.html">Complete your first Task</a>
+        <a href="first-run-guide.html">Try the workflow free</a>
         <a href="local-workflow.md">Local workflow</a>
         <a href="first-run-guide.html">Field guide</a>
         <a href="how-it-works.html">How it works</a>

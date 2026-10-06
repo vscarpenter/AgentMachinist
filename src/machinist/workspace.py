@@ -355,10 +355,14 @@ class Workspace:
             )
         return parent / raw.name
 
-    def commit_all(self, path: Path, message: str) -> None:
+    def commit_all(
+        self, path: Path, message: str, *, allow_empty: bool = False
+    ) -> None:
         self._assert_bound_custody(path)
         self._git(path, "add", "-A")
         args = ["commit", "-m", message]
+        if allow_empty:
+            args.append("--allow-empty")
         if not self._has_identity(path):
             # Bare CI runners have no git identity configured.
             args = [

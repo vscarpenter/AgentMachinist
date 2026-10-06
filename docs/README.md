@@ -1,18 +1,22 @@
 # AgentMachinist documentation
 
-Start with two resources. Everything else is a reference or an alternate format.
+AgentMachinist helps your coding agent make a change you can check before
+accepting it. Start with a free rehearsal, then try one small change in your
+own project. The other pages answer specific questions when you need them.
 
 | I want to… | Read this |
 | --- | --- |
 | Understand the workflow | [How it works](how-it-works.html): one diagram showing what you decide and what the controller does. |
-| Complete my first Task | [Start here](tldr.md): installation, exact Spec Approval, review, and local integration in one short guide. |
+| Try it, then complete my first Task | [Start here](tldr.md): free guided rehearsal, project readiness, plan Approval, inspection, and local integration. |
 
 Prefer illustrated instructions? The [visual first-run guide](first-run-guide.html)
 walks through the same journey with examples and recovery help.
 
-This is the current operating documentation for **AgentMachinist 0.19.0**.
-See the [changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md) for details; the short
-first-Task path works with the published package.
+The current operating documentation covers the published **AgentMachinist 0.19.0** baseline
+and unreleased onboarding additions in the current source checkout. Use the
+source checkout for those additions until a package release includes them.
+See the [changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md)
+for details.
 
 ## Find a specific answer
 

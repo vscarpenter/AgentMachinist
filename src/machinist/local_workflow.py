@@ -180,6 +180,61 @@ class LocalWorkflow:
         ready_candidate(task, self.workspace, self.lifecycle)
         return task
 
+    def revise(self, task_id: str | int, feedback: str) -> LocalTask:
+        """Refine an initial saved Spec; keep history and require fresh Approval."""
+        if (
+            not feedback.strip()
+            or "\x00" in feedback
+            or len(feedback) > self.config.limits.max_issue_body_chars
+        ):
+            raise LocalWorkflowError(
+                "revision feedback must be nonempty text without NUL bytes "
+                f"and at most {self.config.limits.max_issue_body_chars} characters"
+            )
+        with self.store.claim(task_id) as task:
+            if task.candidate_sha or any(
+                self.lifecycle.record(task.number, phase)
+                or self.lifecycle.history(task.number, phase)
+                for phase in (Phase.EXECUTE, Phase.REVIEW)
+            ):
+                raise LocalWorkflowError(
+                    "implementation has started; use explicit retry for failed work "
+                    "or amend a completed candidate"
+                )
+            if task.approval is not None:
+                raise LocalWorkflowError(
+                    "Approval has already been recorded; continue or retry the approved work"
+                )
+            if task.integration is not None or task.publication is not None:
+                raise LocalWorkflowError("delivery has started; create a new Task")
+            if task.review_report is not None:
+                raise LocalWorkflowError(
+                    "Review already exists; use amend for a completed candidate"
+                )
+            spec = self.lifecycle.record(task.number, Phase.SPEC)
+            if (
+                not task.spec_sha
+                or spec is None
+                or spec.status is not RunStatus.SUCCEEDED
+                or spec.evidence.get("spec_sha") != task.spec_sha
+            ):
+                raise LocalWorkflowError(
+                    "revision needs a saved successful Spec; continue or explicitly retry Spec first"
+                )
+            if self.workspace.branch_sha(task.branch) != task.spec_sha:
+                raise LocalWorkflowError("Spec branch changed; refusing revision")
+            # Intent and Approval invalidation are durable before any model call.
+            # The old commit remains the exact input and expected ref for recovery.
+            task = self.store.update(
+                task,
+                feedback=feedback.strip(),
+                spec_base_sha=task.spec_sha,
+                spec_sha=None,
+                approval=None,
+                review_report=None,
+            )
+            return self.dispatcher.run_local_spec(task, store=self.store, revise=True)
+
     def amend(self, task_id: str | int, feedback: str) -> LocalTask:
         if not feedback.strip():
             raise LocalWorkflowError("amendment feedback must not be empty")

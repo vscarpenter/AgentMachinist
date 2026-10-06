@@ -358,8 +358,16 @@ def test_github_approval_requires_a_separate_execution_copy_step():
 def test_tldr_is_one_short_provider_neutral_path():
     text = _TLDR_PATH.read_text()
     assert len(text.splitlines()) <= 100
-    assert text.count("## One-time setup") == 1
-    assert "uv tool install agentmachinist" in text
+    assert text.count("## Try the workflow free") == 1
+    assert "uv tool install --editable ." in text
+    for command in (
+        "rehearse --guided",
+        "inspect T1",
+        "revise T1",
+        "doctor --local --fresh-workshop",
+        "config show --local",
+    ):
+        assert f"machinist {command}" in text
     assert "getting-started.md#github-setup-and-automation" in text
     assert "index.html#documentation" in text
     assert "AgentMachinist never merges automatically" in text

@@ -117,6 +117,18 @@ def _render_status(
         return
     click.echo(f"{payload['id']}: {payload['title']}")
     click.echo(f"State: {payload['state']}")
+    description = {
+        "awaiting approval": "Plan ready for your approval.",
+        "approved": "Plan approved. Implementation is ready to continue.",
+        "execute running": "Implementation running.",
+        "review running": "Review running against the saved change.",
+        "awaiting review": "Checks complete. A separate Review is still required.",
+        "ready to integrate": "Change ready for your review and acceptance.",
+        "integrated": "Change accepted into your local project.",
+        "baseline failed": "Project checks failed before any model work.",
+    }.get(payload["state"])
+    if description:
+        click.echo(description)
     if show_spec and payload.get("spec"):
         click.echo("\n" + payload["spec"].rstrip() + "\n")
     for label, key in (
@@ -132,6 +144,9 @@ def _render_status(
         click.echo(f"Logs: {payload['log_dir']}")
     if payload["state"] == "awaiting approval":
         click.echo("Read the Spec before approving it.")
+        click.echo(
+            f"Need a different plan? machinist revise {payload['id']} --feedback 'Describe the change'"
+        )
     elif payload["state"] == "ready to integrate":
         click.echo("Inspect the Review report and candidate diff before integrating.")
     elif payload["state"] == "baseline failed":
@@ -140,7 +155,13 @@ def _render_status(
             "verification command or its dependencies and retry, or commit a "
             "baseline change and start a new Task from that commit."
         )
-    if payload.get("next_action"):
+    if payload["state"] == "ready to integrate":
+        click.echo(f"Next: machinist inspect {payload['id']}")
+        click.echo(f"Accept after review: machinist integrate {payload['id']}")
+        click.echo(
+            f"Request changes: machinist amend --task {payload['id']} --feedback 'Describe the change'"
+        )
+    elif payload.get("next_action"):
         click.echo(f"Next: {payload['next_action']}")
     if payload["state"] == "integrated":
         click.echo(
@@ -194,6 +215,32 @@ def amend_local(task_id: str, feedback: str) -> None:
     with local_errors():
         workflow = _existing_workflow()
         task = workflow.amend(task_id, feedback)
+        _render_status(workflow.status(task.id), show_spec=True)
+
+
+@click.command("revise")
+@click.argument("task_id")
+@click.option("--feedback", help="Changes to make to the initial written plan.")
+@click.option(
+    "--feedback-file", help="Read plan feedback from UTF-8 text, or '-' for stdin."
+)
+def revise_command(
+    task_id: str, feedback: str | None, feedback_file: str | None
+) -> None:
+    """Revise an initial local plan and stop for fresh exact-SHA Approval."""
+    validate_task_id(task_id)
+    if (feedback is None) == (feedback_file is None):
+        raise click.UsageError("provide exactly one of --feedback or --feedback-file")
+    if feedback_file is not None:
+        feedback = read_body_file(feedback_file)
+    assert feedback is not None
+    if not feedback.strip() or "\x00" in feedback or len(feedback) > _MAX_BODY_BYTES:
+        raise click.UsageError(
+            f"feedback must be nonempty text without NUL bytes and at most {_MAX_BODY_BYTES} characters"
+        )
+    with local_errors():
+        workflow = _existing_workflow()
+        task = workflow.revise(task_id, feedback)
         _render_status(workflow.status(task.id), show_spec=True)
 
 
@@ -368,6 +415,9 @@ def start_command(
             else ""
         )
         workflow = _workflow(config, root)
+        click.echo(
+            "Uses your coding assistant's model quota for planning, implementation, and Review."
+        )
         if source_target:
             source_provider, repository, source_host, number = source_target
             issue = _forge_client(source_provider, repository, source_host).get_issue(
@@ -439,6 +489,7 @@ def publish_command(task_id: str, provider: str, host: str | None) -> None:
 def register_local_commands(group: click.Group) -> None:
     for command in (
         start_command,
+        revise_command,
         continue_command,
         integrate_command,
         publish_command,
