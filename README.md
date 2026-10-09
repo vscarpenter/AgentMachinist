@@ -1,5 +1,7 @@
 # AgentMachinist
 
+Website and docs: [agentmachinist.com](https://agentmachinist.com/)
+
 AgentMachinist helps your coding agent make a change you can check before
 accepting it. You read its plan, authorize the work, then inspect the changes,
 test results, and a separate review before adding them to your project.
@@ -242,7 +244,7 @@ never appears in `update-check --json`.
    authorizes.
 2. [Complete your first Task](docs/tldr.md): the short installation-to-integration
    guide. Prefer illustrated instructions? Use the
-   [visual first-run guide](https://agentmachinist.vinny.dev/first-run-guide.html).
+   [visual first-run guide](https://agentmachinist.com/docs/first-run-guide.html).
 
 The [complete documentation index](docs/README.md) links every guide, reference,
 architecture decision, and historical plan. For detailed settings, use the
