@@ -69,8 +69,7 @@ numbers, and worker instructions describe the work at the time.
 The [old onboarding URL](onboarding.html) redirects to the visual first-run guide.
 The retired [job card](job-card.html) and [animated explainer](explainer.html)
 URLs redirect to the first-run guide and [How it works](how-it-works.html).
-[CNAME](CNAME) and [.nojekyll](.nojekyll) configure the static site; they are not
-guides. Editing these sources does not publish the website or a package release.
+[.nojekyll](.nojekyll) configures the static site; it is not a guide. Editing these sources does not publish the website or a package release.
 
 ## Keeping the documentation small
 
