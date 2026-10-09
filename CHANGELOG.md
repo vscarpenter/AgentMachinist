@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Point the README, getting-started guide, canonical page links, and CLI
+  guidance at https://agentmachinist.com/docs/ instead of the former
+  agentmachinist.vinny.dev host. Link the project site from the top of the
+  README.
+
 ## 0.20.0 — 2026-10-06
 
 - Increase bounded verification budgets after the real-Git suite exceeded

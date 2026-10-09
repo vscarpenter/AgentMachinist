@@ -1324,7 +1324,7 @@ def load_config(path: str | Path = CONFIG_FILENAME) -> MachinistConfig:
             "Run 'machinist onboard' (recommended) or 'machinist onboard --setup-pr' on GitHub "
             "— fallback: 'machinist init'. "
             "After setup, verify with 'machinist doctor --run-gates'. "
-            "Guide: https://agentmachinist.vinny.dev/first-run-guide.html"
+            "Guide: https://agentmachinist.com/docs/first-run-guide.html"
         )
     try:
         text = read_config_text(path)

@@ -452,7 +452,7 @@ def test_first_run_guide_is_visual_interactive_and_linked():
     assert "approval stale" in html
     assert "agentmachinist never" in html and "merge" in html
     assert (
-        "https://agentmachinist.vinny.dev/first-run-guide.html"
+        "https://agentmachinist.com/docs/first-run-guide.html"
         in _README_PATH.read_text()
     ), "README must link the rendered guide, not the raw blob"
 

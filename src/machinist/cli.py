@@ -332,7 +332,7 @@ def _print_init_receipt(
     )
     click.echo("")
     click.echo(
-        "  Visual walkthrough: https://agentmachinist.vinny.dev/first-run-guide.html"
+        "  Visual walkthrough: https://agentmachinist.com/docs/first-run-guide.html"
     )
 
 
@@ -520,7 +520,7 @@ def _load_setup_config(root: Path) -> MachinistConfig:
             "Run 'machinist onboard' (recommended) or 'machinist onboard --setup-pr' on GitHub "
             "— fallback: 'machinist init'. "
             "After setup, verify with 'machinist doctor --run-gates'. "
-            "Guide: https://agentmachinist.vinny.dev/first-run-guide.html"
+            "Guide: https://agentmachinist.com/docs/first-run-guide.html"
         )
     try:
         data = strict_yaml_load(text)
@@ -1069,7 +1069,7 @@ def onboard(
     Prefer 'machinist onboard --setup-pr' when setup should be reviewed
     as a draft PR rather than committed directly.
 
-    Visual walkthrough: https://agentmachinist.vinny.dev/first-run-guide.html
+    Visual walkthrough: https://agentmachinist.com/docs/first-run-guide.html
     """
     arguments = {
         "force": False,

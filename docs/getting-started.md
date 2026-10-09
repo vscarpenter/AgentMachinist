@@ -320,7 +320,7 @@ form, and Verification Gates, and prints remediation for each `FAIL`. Resolve
 every `FAIL`. Treat a warning that no Gates are configured as an explicit
 decision. The approval workflow must exist on GitHub's default branch before a
 comment or label can record SHA-bound Approval. See the [visual
-guide](https://agentmachinist.vinny.dev/first-run-guide.html) for the foreground
+guide](https://agentmachinist.com/docs/first-run-guide.html) for the foreground
 local alternative.
 
 ## Your first GitHub issue Task
