@@ -1334,9 +1334,16 @@ first-pass Execute worse?" from Evidence `report` already records.
   pre-truncation counts, sanitized bounds, and revision recovery. Its newline-only
   comparison finding is fixed: three revision and four reader contracts passed,
   with independent confirmation that the bounded reader retains custody checks.
-- [ ] Canonical verification including package smoke.
-- [ ] Local implementation commits and final evidence.
+- [x] Canonical verification passed: 1,892 tests, 88.95% coverage, workflow
+  drift, format, lint, and types; wheel and source builds, installed dependency
+  checks, guided rehearsals for both distributions, and local-readiness smoke.
+  Full gate exited 0. The 148 warnings are existing Click test-fixture
+  deprecations; no verification failures occurred.
+- [x] Local implementation commits: `fa3be6f` (spec/plan), `6d11cee` (revision
+  receipt), `437d720` (inspection summary), and `5a1adc8` (committed line endings).
+  Final evidence: `/Users/vinnycarpenter/.codex/visualizations/2026/10/10/01a1264e-833e-7ec0-babc-4bdb003682ea/decision-output-verification.log`.
 
-Resuming from here: implementation is underway. `tasks/next.md` is the user's
+Resuming from here: implementation and local verification are complete on
+`codex/local-decision-output`. `tasks/next.md` is the user's
 pre-existing untracked proposal and stays untouched/uncommitted. No publication,
 release, or other roadmap feature is included.
