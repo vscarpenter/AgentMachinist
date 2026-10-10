@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from bisect import bisect_left
 from collections.abc import Callable, Mapping
+from functools import partial
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
@@ -24,7 +25,7 @@ from machinist.managed_paths import (
     read_managed_text,
     write_managed_text,
 )
-from machinist.process import credential_reduced_environment
+from machinist.process import credential_reduced_environment, run_supervised
 from machinist.workspace import (
     Workspace,
     WorkspaceError,
@@ -116,7 +117,7 @@ class LocalWorkspace:
             )
 
     def read_at_commit(self, sha: str, relative: str, *, max_bytes: int) -> str:
-        """Read a bounded regular blob from the exact local commit."""
+        """Read a bounded regular blob without translating its line endings."""
         self._controller_custody()
         self._workspace._validate_sha(sha, label="Spec commit")
         path = PurePosixPath(relative)
@@ -140,7 +141,19 @@ class LocalWorkspace:
         size = int(self._workspace._git(self.repo_root, "cat-file", "-s", object_name))
         if size > max_bytes:
             raise WorkspaceError(f"Spec exceeds its {max_bytes}-byte limit")
-        return self._workspace._git(self.repo_root, "cat-file", "blob", object_name)
+        # subprocess text mode translates CR/CRLF to LF. The supervised runner
+        # decodes the bounded raw stream directly, preserving the committed text
+        # while Workspace retains safe Git options, environment, and errors.
+        reader = Workspace(
+            self.repo_root,
+            self.config,
+            runner=partial(
+                run_supervised,
+                max_output_bytes=max_bytes,
+                cancel_check=self.cancel_check,
+            ),
+        )
+        return reader._git(self.repo_root, "cat-file", "blob", object_name)
 
     def branch_sha(self, branch: str) -> str | None:
         self._controller_custody()

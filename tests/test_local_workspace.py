@@ -279,6 +279,28 @@ def test_read_at_commit_reads_exact_bounded_regular_file(local_repo, tmp_path):
         source.read_at_commit(sha, "../README.md", max_bytes=100)
 
 
+@pytest.mark.parametrize("ending", ["\n", "\r\n", "\r"], ids=["lf", "crlf", "cr"])
+def test_read_at_commit_preserves_decoded_blob_line_endings(
+    local_repo, tmp_path, ending
+):
+    git(local_repo, "config", "maintenance.auto", "false")
+    git(local_repo, "config", "core.autocrlf", "false")
+    content = f"# Caf\u00e9{ending}{ending}Exact committed text.{ending}".encode(
+        "utf-8"
+    )
+    (local_repo / "README.md").write_bytes(content)
+    git(local_repo, "add", "README.md")
+    git(local_repo, "commit", "-qm", "preserve blob line endings")
+    source = workshop(local_repo, tmp_path)
+    sha = source.resolve_commit()
+
+    assert source.read_at_commit(sha, "README.md", max_bytes=len(content)) == (
+        content.decode("utf-8")
+    )
+    with pytest.raises(WorkspaceError, match="exceeds"):
+        source.read_at_commit(sha, "README.md", max_bytes=len(content) - 1)
+
+
 def test_publication_uses_exact_candidate_and_lease_without_touching_base(
     local_repo, tmp_path
 ):

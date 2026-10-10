@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 from test_local_workflow import (
     git,
@@ -16,6 +18,7 @@ from machinist.workspace import WorkspaceError
 def local_revision(local):  # noqa: F811
     root, workflow, harness = local
     git(root, "config", "maintenance.auto", "false")
+    git(root, "config", "core.autocrlf", "false")
     # Bind custody after configuring the fixture's Git metadata.
     workflow = LocalWorkflow(
         workflow.config,
@@ -65,6 +68,65 @@ def test_identical_revision_comparison_still_names_new_approval(local_revision):
     assert status["spec_revision"]["text"] == ""
     assert task.spec_sha != first
     assert task.spec_sha in status["next_action"]
+
+
+def test_revision_comparison_detects_committed_line_ending_only_changes(
+    local_revision, monkeypatch
+):
+    root, workflow, harness = local_revision
+    task = workflow.start("Improve the answer")
+    first = task.spec_sha
+    path = ".machinist/specs/task-1-spec.md"
+    previous = subprocess.run(
+        ["git", "cat-file", "blob", f"{first}:{path}"],
+        cwd=root,
+        capture_output=True,
+        check=True,
+    ).stdout
+
+    def crlf_spec(prompt, cwd):
+        harness.calls.append("spec")
+        return previous.decode("utf-8").replace("\n", "\r\n")
+
+    monkeypatch.setattr(harness, "generate_spec", crlf_spec)
+    task = workflow.revise(task.id, "Use CRLF line endings for the same Spec")
+    current = subprocess.run(
+        ["git", "cat-file", "blob", f"{task.spec_sha}:{path}"],
+        cwd=root,
+        capture_output=True,
+        check=True,
+    ).stdout
+    assert b"\r" not in previous
+    assert current == previous.replace(b"\n", b"\r\n")
+    # A fresh CLI status read has no active Phase cancellation callback, unlike
+    # the workflow instance that just generated the Spec.
+    workflow = LocalWorkflow(
+        workflow.config,
+        repo_root=root,
+        harness_factory=lambda phase, number: harness,
+    )
+    before = {
+        str(file.relative_to(root)): file.read_bytes()
+        for file in root.rglob("*")
+        if file.is_file()
+    }
+
+    status = workflow.status(task.id)
+    comparison = status["spec_revision"]
+
+    assert comparison["unchanged"] is False
+    assert comparison["text"]
+    assert comparison["error"] is None
+    assert workflow.workspace.read_at_commit(
+        task.spec_sha, path, max_bytes=len(current)
+    ) == current.decode("utf-8")
+    assert task.spec_sha in status["next_action"]
+    assert harness.calls == ["spec", "spec"]
+    assert before == {
+        str(file.relative_to(root)): file.read_bytes()
+        for file in root.rglob("*")
+        if file.is_file()
+    }
 
 
 def test_revision_comparison_uses_latest_pair_after_multiple_revisions(local_revision):

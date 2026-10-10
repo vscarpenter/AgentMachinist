@@ -1331,9 +1331,10 @@ first-pass Execute worse?" from Evidence `report` already records.
 - [x] Inspection summary: three initial RED contracts now pass, plus bounded
   header formatting coverage; eight existing safety/output regressions passed.
 - [x] Independent review checked candidate eligibility, accumulated paths,
-  pre-truncation counts, sanitized bounds, and revision recovery. One newline-only
-  Spec comparison issue is being corrected with a real Git regression contract.
-- [ ] Independent review and canonical verification including package smoke.
+  pre-truncation counts, sanitized bounds, and revision recovery. Its newline-only
+  comparison finding is fixed: three revision and four reader contracts passed,
+  with independent confirmation that the bounded reader retains custody checks.
+- [ ] Canonical verification including package smoke.
 - [ ] Local implementation commits and final evidence.
 
 Resuming from here: implementation is underway. `tasks/next.md` is the user's
