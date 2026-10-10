@@ -1318,3 +1318,16 @@ first-pass Execute worse?" from Evidence `report` already records.
   - OpenCode Spec fails: "left background processes running after exit".
   - Pi Spec fails: "Connection error"; likely Pi provider login or model
     configuration on this machine.
+
+## Local decision output (2026-10-10)
+
+- [x] Scope approved: decision-first inspection and exact Spec revision diff.
+- [x] Specification and plan recorded in `tasks/decision-output-spec.md` and
+  `tasks/decision-output-plan.md`; branch `codex/local-decision-output`.
+- [ ] Failing contracts, implementation, and focused verification.
+- [ ] Independent review and canonical verification including package smoke.
+- [ ] Local implementation commits and final evidence.
+
+Resuming from here: implementation is underway. `tasks/next.md` is the user's
+pre-existing untracked proposal and stays untouched/uncommitted. No publication,
+release, or other roadmap feature is included.
