@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Start local inspection with a bounded decision summary of accumulated Task
+  paths, Gate outcomes, high-severity advisory Review findings, and eligible
+  next actions; repeat actions after the details. Preserve exact Evidence checks
+  and label the detailed diff as the latest Execute. Count results before
+  truncation so omitted failures and findings remain visible.
+- Show bounded exact-commit Spec differences before an initial revised plan,
+  including recovered revisions. Explain unchanged text and fresh Approval;
+  provide an exact comparison command for truncated or unavailable previews.
+
 - Point the README, getting-started guide, canonical page links, and CLI
   guidance at https://agentmachinist.com/docs/ instead of the former
   agentmachinist.vinny.dev host. Link the project site from the top of the

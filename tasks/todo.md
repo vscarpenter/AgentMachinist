@@ -1329,7 +1329,10 @@ first-pass Execute worse?" from Evidence `report` already records.
   Comparisons use saved commits, remain bounded/read-only, and preserve fresh
   Approval and successful saved-plan delivery when comparison is unavailable.
 - [x] Inspection summary: three initial RED contracts now pass, plus bounded
-  header formatting coverage. Existing safety regressions are being checked.
+  header formatting coverage; eight existing safety/output regressions passed.
+- [x] Independent review checked candidate eligibility, accumulated paths,
+  pre-truncation counts, sanitized bounds, and revision recovery. One newline-only
+  Spec comparison issue is being corrected with a real Git regression contract.
 - [ ] Independent review and canonical verification including package smoke.
 - [ ] Local implementation commits and final evidence.
 

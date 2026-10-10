@@ -42,6 +42,7 @@ _MAX_SPEC_CHARS = 20_000
 _MAX_DIFF_CHARS = 40_000
 _MAX_ITEMS = 30
 _MAX_HISTORY = 50
+_MAX_SUMMARY_ITEMS = 8
 
 
 class LocalInspectionError(Exception):
@@ -81,6 +82,7 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
         ):
             verification = _verification(execute, "execute")
         diff = None
+        task_changes = None
         review = None
 
         if task.candidate_sha and _current_approval(task):
@@ -94,7 +96,7 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
                 else:
                     candidate["verified"] = True
                     try:
-                        diff = _exact_diff(root, workspace, task)
+                        diff, task_changes = _exact_diffs(root, workspace, task)
                     except WorkspaceError as exc:
                         issues.append(f"Cannot inspect the exact candidate diff: {exc}")
                     review = _exact_review(task, records[Phase.REVIEW], issues)
@@ -127,6 +129,7 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
         if expected_branch and workspace.branch_sha(task.branch) != expected_branch:
             issues.append("Local Task branch changed; inspect its commit history.")
             diff = None
+            task_changes = None
             candidate["verified"] = False
         if task.candidate_sha and candidate["reviewed"] and not issues:
             ready_candidate(store.get(task.id), workspace, lifecycle)
@@ -161,6 +164,25 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
             if issues and not recovery_action
             else decision.next_action
         )
+        next_actions = [_text(action)]
+        if (
+            state == "ready to integrate"
+            and candidate["reviewed"]
+            and task.integration is None
+            and not (task.publication and task.publication.get("stage") == "publishing")
+        ):
+            next_actions.append(
+                shlex.join(
+                    [
+                        "machinist",
+                        "amend",
+                        "--task",
+                        task.id,
+                        "--feedback",
+                        "Describe the changes you want.",
+                    ]
+                )
+            )
         return {
             "schema_version": 1,
             "task_id": task.id,
@@ -170,6 +192,7 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
             "spec": spec,
             "candidate": candidate,
             "diff": diff,
+            "task_changes": task_changes,
             "verification": verification,
             "review": review,
             "history": [
@@ -180,6 +203,7 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
             "corrupt_total": len(runs.corrupt),
             "issues": [_text(issue) for issue in dict.fromkeys(issues)],
             "next_action": _text(action),
+            "next_actions": next_actions,
         }
     except (
         ConfigError,
@@ -207,6 +231,8 @@ def render_local_inspection(
         f"{payload['task_id']}: {payload['title']}",
         f"State: {payload['state']}",
         "",
+        *_decision_summary(payload),
+        "",
         "Objective",
         payload["objective"],
         "",
@@ -231,10 +257,10 @@ def render_local_inspection(
         lines.extend(
             [
                 "",
-                "Changed files",
+                "Changed files (latest Execute)",
                 *diff["changed_files"],
                 "",
-                "Candidate diff",
+                "Candidate diff (latest Execute: Spec to candidate)",
                 diff["text"],
             ]
         )
@@ -253,6 +279,10 @@ def render_local_inspection(
                 lines.append(f"    {gate['error']}")
             if gate.get("stderr_excerpt"):
                 lines.append(f"    {gate['stderr_excerpt']}")
+        if verification["gate_count"] > len(verification["gates"]):
+            lines.append(
+                f"Showing the first {len(verification['gates'])} of {verification['gate_count']} Gates."
+            )
     lines.extend(["", "Independent Review"])
     review = payload["review"]
     if review is None:
@@ -268,7 +298,7 @@ def render_local_inspection(
                     f"    Suggested fix: {finding['remediation']}",
                 ]
             )
-        if not review["findings"]:
+        if review["finding_count"] == 0:
             lines.append("No findings reported.")
         if review["finding_count"] > len(review["findings"]):
             lines.append(
@@ -299,8 +329,84 @@ def render_local_inspection(
         )
     for issue in payload["issues"]:
         lines.append(f"Inspection issue: {issue}")
-    lines.extend(["", f"Next: {payload['next_action']}"])
+    lines.extend(["", *_next_actions(payload)])
     return "\n".join(lines)
+
+
+def _next_actions(payload: dict[str, Any]) -> list[str]:
+    actions = payload["next_actions"]
+    return [f"Next: {actions[0]}"] + [f"Or amend: {action}" for action in actions[1:]]
+
+
+def _summary_text(value: object, *, limit: int) -> str:
+    """Render each header field on one physical line after bounded sanitizing."""
+    return " ".join(_text(value, limit=limit).split())
+
+
+def _decision_summary(payload: dict[str, Any]) -> list[str]:
+    """Keep the decision visible above large plans, diffs, and advisory reports."""
+    lines = ["Decision summary"]
+    candidate = payload["candidate"]
+    if candidate["sha"]:
+        lines.append(f"Candidate commit: {candidate['sha']}")
+    changes = payload["task_changes"]
+    if changes is None:
+        lines.append("Task changes: no verified candidate diff is available.")
+    else:
+        paths = changes["changed_files"][:_MAX_SUMMARY_ITEMS]
+        lines.append(
+            f"Task changes (original base to candidate): {changes['changed_file_count']} files"
+        )
+        lines.extend(f"  {_summary_text(path, limit=200)}" for path in paths)
+        if changes["changed_file_count"] > len(paths):
+            lines.extend(
+                [
+                    f"Showing {len(paths)} of {changes['changed_file_count']} Task paths in this summary.",
+                    f"Full file list: {changes['command']}",
+                ]
+            )
+    verification = payload["verification"]
+    if verification is None:
+        lines.append("Verification: no valid report is available.")
+    else:
+        counts = ", ".join(
+            f"{verification['status_counts'][status.value]} {status.value}"
+            for status in GateStatus
+            if status.value in verification["status_counts"]
+        )
+        outcome = "requirements passed" if verification["success"] else "blocked"
+        lines.append(f"Verification ({verification['phase']}): {outcome}; {counts}")
+        gates = verification["summary_gates"]
+        for gate in gates:
+            requirement = "required" if gate["required"] else "advisory"
+            lines.append(
+                f"  {_summary_text(gate['name'], limit=120)}: {gate['status']} ({requirement})"
+            )
+        if verification["gate_count"] > len(gates):
+            lines.append(
+                f"Showing {len(gates)} of {verification['gate_count']} Gates in this summary."
+            )
+    review = payload["review"]
+    if review is None:
+        lines.append("Independent Review: no completed exact-candidate report.")
+    else:
+        counts = review["severity_counts"]
+        lines.append(
+            f"Independent Review: {review['finding_count']} findings "
+            f"({counts['high']} high, {counts['medium']} medium, {counts['low']} low); advisory."
+        )
+        for finding in review["high_findings"]:
+            lines.append(
+                f"  High: {_summary_text(finding['file'], limit=120)}:"
+                f"{_summary_text(finding['line'], limit=20)}: "
+                f"{_summary_text(finding['message'], limit=200)}"
+            )
+        if counts["high"] > len(review["high_findings"]):
+            lines.append(
+                f"Showing {len(review['high_findings'])} of {counts['high']} high findings in this summary."
+            )
+    lines.extend(_next_actions(payload))
+    return lines
 
 
 def _text(value: object, *, limit: int = 1_000) -> str:
@@ -377,11 +483,13 @@ def _bound_execute(task: LocalTask, record: RunRecord | None) -> bool:
     )
 
 
-def _exact_diff(root: Path, local: LocalWorkspace, task: LocalTask) -> dict[str, Any]:
+def _exact_diffs(
+    root: Path, local: LocalWorkspace, task: LocalTask
+) -> tuple[dict[str, Any], dict[str, Any]]:
     assert task.spec_sha and task.candidate_sha
     # Resolution validates exact commit references through the Workshop's
     # custody boundary. Git receives no caller-supplied flags or external tools.
-    for sha in (task.spec_sha, task.candidate_sha):
+    for sha in (task.base_sha, task.spec_sha, task.candidate_sha):
         if local.resolve_commit(sha) != sha:
             raise WorkspaceError("Task diff reference is not its exact commit")
     git = Workspace(
@@ -400,8 +508,11 @@ def _exact_diff(root: Path, local: LocalWorkspace, task: LocalTask) -> dict[str,
     names = git._git(root, *controls, "--name-only", "-z", *refs)
     raw = git._git(root, *controls, "--no-renames", *refs)
     changed_files = [name for name in names.split("\0") if name]
+    task_refs = (task.base_sha, task.candidate_sha, "--")
+    task_names = git._git(root, *controls, "--name-only", "-z", *task_refs)
+    task_files = [name for name in task_names.split("\0") if name]
     text = _text(raw, limit=_MAX_DIFF_CHARS)
-    return {
+    diff = {
         "base_sha": task.spec_sha,
         "candidate_sha": task.candidate_sha,
         "changed_files": [
@@ -412,6 +523,16 @@ def _exact_diff(root: Path, local: LocalWorkspace, task: LocalTask) -> dict[str,
         "truncated": len(sanitize_diagnostic(raw, limit=len(raw))) > _MAX_DIFF_CHARS,
         "command": shlex.join(["git", "diff", "--no-ext-diff", "--no-textconv", *refs]),
     }
+    task_changes = {
+        "base_sha": task.base_sha,
+        "candidate_sha": task.candidate_sha,
+        "changed_files": [_text(name, limit=500) for name in task_files[:_MAX_ITEMS]],
+        "changed_file_count": len(task_files),
+        "command": shlex.join(
+            ["git", "diff", "--no-ext-diff", "--no-textconv", "--name-only", *task_refs]
+        ),
+    }
+    return diff, task_changes
 
 
 def _verification(record: RunRecord | None, phase: str) -> dict[str, Any] | None:
@@ -429,6 +550,9 @@ def _verification(record: RunRecord | None, phase: str) -> dict[str, Any] | None
     if not isinstance(gates, list) or not gates:
         return None
     displayed = []
+    status_counts: dict[str, int] = {}
+    passed: list[dict[str, Any]] = []
+    other_outcomes: list[dict[str, Any]] = []
     success = report.get("success") is True
     for index, gate in enumerate(gates):
         if not isinstance(gate, dict):
@@ -452,6 +576,16 @@ def _verification(record: RunRecord | None, phase: str) -> dict[str, Any] | None
             success = False
         if gate["required"] and status is not GateStatus.PASSED:
             success = False
+        status_counts[status.value] = status_counts.get(status.value, 0) + 1
+        summary_group = passed if status is GateStatus.PASSED else other_outcomes
+        if len(summary_group) < _MAX_SUMMARY_ITEMS:
+            summary_group.append(
+                {
+                    "name": _text(name),
+                    "status": status.value,
+                    "required": gate["required"],
+                }
+            )
         if index >= _MAX_ITEMS:
             continue
         displayed.append(
@@ -474,6 +608,8 @@ def _verification(record: RunRecord | None, phase: str) -> dict[str, Any] | None
         "success": success,
         "gates": displayed,
         "gate_count": len(gates),
+        "status_counts": status_counts,
+        "summary_gates": (other_outcomes + passed)[:_MAX_SUMMARY_ITEMS],
     }
 
 
@@ -510,12 +646,25 @@ def _exact_review(
                 for key, value in asdict(finding).items()
             }
         )
+    high_findings = [
+        {
+            key: _text(value) if isinstance(value, str) else value
+            for key, value in asdict(finding).items()
+        }
+        for finding in parsed.findings
+        if finding.severity == "high"
+    ][:_MAX_SUMMARY_ITEMS]
     return {
         "completed": True,
         "reviewed_sha": task.candidate_sha,
         "summary": _text(parsed.summary, limit=2_000),
         "findings": findings,
         "finding_count": len(parsed.findings),
+        "severity_counts": {
+            severity: sum(finding.severity == severity for finding in parsed.findings)
+            for severity in ("high", "medium", "low")
+        },
+        "high_findings": high_findings,
     }
 
 

@@ -82,16 +82,19 @@ ask for a new plan before approving:
 machinist revise T1 --feedback "Keep the public API unchanged."
 ```
 
-Each revision needs fresh Approval. When satisfied, copy the exact Approval
-command printed by start or revise:
+Revision shows the difference from the previous saved Spec before the new plan.
+Each revision needs fresh Approval, including when its text is unchanged. When
+satisfied, copy the exact Approval command printed by start or revise:
 
 ```sh
 machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 ```
 
 Approval continues implementation, verification, and independent Review. Use
-`inspect` to read the plan, change, checks, and Review together. Then accept
-the reviewed change with `integrate`:
+`inspect` to read a decision summary first, followed by the plan, change, checks,
+and Review. The summary covers accumulated Task files, including amendments;
+the detailed diff covers the latest Execute. Then accept the reviewed change
+with `integrate`:
 
 ```sh
 machinist inspect T1
