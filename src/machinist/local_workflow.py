@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import getpass
+import shlex
 from collections.abc import Callable
 from datetime import UTC, datetime
+from difflib import unified_diff
 from pathlib import Path
 from typing import Any
 
 from machinist.cancellation import CancellationStore
 from machinist.config import MachinistConfig
+from machinist.diagnostics import sanitize_diagnostic
 from machinist.dispatch import TaskDispatcher
+from machinist.evidence import TaskEvidence
 from machinist.lifecycle import (
     LifecycleError,
     Phase,
@@ -23,6 +27,9 @@ from machinist.local_workspace import LocalWorkspace
 from machinist.process import run_supervised
 from machinist.publication import ready_candidate
 from machinist.transitions import LocalTransitionDecision, classify_local_task
+from machinist.workspace import WorkspaceError
+
+_MAX_REVISION_CHARS = 20_000
 
 
 class LocalWorkflowError(Exception):
@@ -352,7 +359,79 @@ class LocalWorkflow:
             )
             if failure
             else None,
+            "spec_revision": self._spec_revision(task, records[Phase.SPEC]),
         }
+
+    def _spec_revision(
+        self, task: LocalTask, record: RunRecord | None
+    ) -> dict[str, Any] | None:
+        if not task.spec_base_sha or not task.spec_sha or task.candidate_sha:
+            return None
+        path = f".machinist/specs/task-{task.number}-spec.md"
+        result: dict[str, Any] = {
+            "previous_sha": task.spec_base_sha,
+            "current_sha": task.spec_sha,
+            "text": None,
+            "unchanged": False,
+            "truncated": False,
+            "command": shlex.join(
+                [
+                    "git",
+                    "diff",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--no-color",
+                    task.spec_base_sha,
+                    task.spec_sha,
+                    "--",
+                    path,
+                ]
+            ),
+            "error": None,
+        }
+        try:
+            prior = any(
+                attempt.status is RunStatus.SUCCEEDED
+                and TaskEvidence.load(attempt.evidence).spec_sha == task.spec_base_sha
+                for attempt in self.lifecycle.history(task.number, Phase.SPEC)
+            )
+            if (
+                record is None
+                or record.status is not RunStatus.SUCCEEDED
+                or TaskEvidence.load(record.evidence).spec_sha != task.spec_sha
+                or not prior
+                or self.workspace.branch_sha(task.branch) != task.spec_sha
+            ):
+                raise WorkspaceError("saved Spec commits do not match current Evidence")
+            texts = [
+                self.workspace.read_at_commit(
+                    sha, path, max_bytes=self.config.limits.max_spec_chars * 4
+                )
+                for sha in (task.spec_base_sha, task.spec_sha)
+            ]
+            # Compare raw text so redaction cannot turn a real change into
+            # an unchanged-text receipt; sanitize only the displayed difference.
+            lines = unified_diff(
+                texts[0].splitlines(keepends=True),
+                texts[1].splitlines(keepends=True),
+                fromfile=f"{task.spec_base_sha}/{path}",
+                tofile=f"{task.spec_sha}/{path}",
+            )
+            raw = "".join(
+                line
+                if line.endswith("\n")
+                else line + "\n\\ No newline at end of file\n"
+                for line in lines
+            )
+            sanitized = sanitize_diagnostic(raw, limit=len(raw))
+            result.update(
+                text=sanitize_diagnostic(raw, limit=_MAX_REVISION_CHARS),
+                unchanged=texts[0] == texts[1],
+                truncated=len(sanitized) > _MAX_REVISION_CHARS,
+            )
+        except (WorkspaceError, LifecycleError, ValueError, OSError) as exc:
+            result["error"] = sanitize_diagnostic(f"Spec comparison unavailable: {exc}")
+        return result
 
     @staticmethod
     def _failed_record(records: dict[Phase, RunRecord | None]) -> RunRecord | None:

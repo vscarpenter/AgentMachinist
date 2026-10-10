@@ -1324,7 +1324,12 @@ first-pass Execute worse?" from Evidence `report` already records.
 - [x] Scope approved: decision-first inspection and exact Spec revision diff.
 - [x] Specification and plan recorded in `tasks/decision-output-spec.md` and
   `tasks/decision-output-plan.md`; branch `codex/local-decision-output`.
-- [ ] Failing contracts, implementation, and focused verification.
+- [x] Spec revision differences: five initial RED contracts; six focused
+  read/display contracts and fourteen CLI receipt/validation tests passed.
+  Comparisons use saved commits, remain bounded/read-only, and preserve fresh
+  Approval and successful saved-plan delivery when comparison is unavailable.
+- [x] Inspection summary: three initial RED contracts now pass, plus bounded
+  header formatting coverage. Existing safety regressions are being checked.
 - [ ] Independent review and canonical verification including package smoke.
 - [ ] Local implementation commits and final evidence.
 
