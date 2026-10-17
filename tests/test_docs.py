@@ -29,6 +29,7 @@ _FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
 _ONBOARDING_PATH = _REPO_ROOT / "docs" / "onboarding.html"
 _HARNESS_PATH = _REPO_ROOT / "docs" / "harnesses.md"
 _HOW_IT_WORKS_PATH = _REPO_ROOT / "docs" / "how-it-works.html"
+_TASK_LIFECYCLE_PATH = _REPO_ROOT / "docs" / "task-lifecycle.html"
 _TRUST_MODEL_PATH = _REPO_ROOT / "docs" / "trust-model.md"
 _APPROVAL_POLICY_PATH = _REPO_ROOT / "docs" / "approval-policy.md"
 _DOCS_INDEX_PATH = _REPO_ROOT / "docs" / "README.md"
@@ -241,9 +242,21 @@ def test_visual_guides_link_back_to_complete_directory():
     for name in (
         "first-run-guide.html",
         "how-it-works.html",
+        "task-lifecycle.html",
     ):
         text = (_REPO_ROOT / "docs" / name).read_text()
         assert 'href="index.html#documentation"' in text, name
+
+
+def test_task_lifecycle_diagram_names_real_local_states():
+    page = _TASK_LIFECYCLE_PATH.read_text()
+    states = re.findall(r'data-state="([^"]+)"', page)
+    transitions = (_REPO_ROOT / "src/machinist/transitions.py").read_text()
+    # Local-only states are literals in classify_local_task, not PIPELINE_STATES.
+    for state in states:
+        assert state in PIPELINE_STATES or f'"{state}"' in transitions, state
+    for state in ("awaiting approval", "ready to integrate", "integrated"):
+        assert state in states, state
 
 
 class _HtmlReferences(HTMLParser):

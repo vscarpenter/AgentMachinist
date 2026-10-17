@@ -11,6 +11,10 @@
   including recovered revisions. Explain unchanged text and fresh Approval;
   provide an exact comparison command for truncated or unavailable previews.
 
+- Add a local Task lifecycle diagram (`docs/task-lifecycle.html`) that shows
+  each state `machinist status` prints, the command that moves it, and where
+  retry, revise, and amend re-enter. A docs test keeps its state names real.
+
 - Point the README, getting-started guide, canonical page links, and CLI
   guidance at https://agentmachinist.com/docs/ instead of the former
   agentmachinist.vinny.dev host. Link the project site from the top of the

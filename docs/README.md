@@ -20,6 +20,7 @@ for version details.
 
 | Question | Reference |
 | --- | --- |
+| Which state is my Task in, and which command moves it? | [Task lifecycle](task-lifecycle.html) |
 | How do local settings, context, amendments, and publication work? | [Local workflow](local-workflow.md) |
 | How do I configure Gates, repair, profiles, notifications, or GitHub automation? | [Configuration and GitHub reference](getting-started.md) |
 | How do I diagnose, retry, cancel, monitor, or release? | [Operator runbook](operator-runbook.md) |

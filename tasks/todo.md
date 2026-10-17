@@ -1347,3 +1347,24 @@ Resuming from here: implementation and local verification are complete on
 `codex/local-decision-output`. `tasks/next.md` is the user's
 pre-existing untracked proposal and stays untouched/uncommitted. No publication,
 release, or other roadmap feature is included.
+
+## Local Task lifecycle diagram (2026-10-17)
+
+- [x] Mapped local Task states from `classify_local_task` (`transitions.py`):
+  a local Task stores facts, not a status, and the CLI derives the state.
+- [x] Added `docs/task-lifecycle.html`, a lifecycle phase map with five main
+  states, one recovery state, and two outcomes in 10 transitions. Accent marks
+  only the two human Gates.
+- [x] Red-first docs test keeps every `data-state` string a real local state.
+  Linked from `docs/README.md` and `docs/index.html#documentation`.
+- [x] `scripts/verify.sh` exited 0: 1,893 tests, 88.95% coverage, drift,
+  format, lint, types, builds, and installed rehearsals.
+- Reported, not fixed: a repeated `approve` or `continue` on a failed local
+  Phase prints `machinist retry 1` (`lifecycle.py:307-310`);
+  `local-workflow.md` says revision invalidates Approval, but `revise` refuses
+  once one exists, and it lists `continue T1` under Resume although only
+  `retry` resumes retained edits; amend with identical Spec text fails.
+
+Resuming from here: the diagram page is committed on
+`codex/local-decision-output`. Nothing is pushed. The four findings above are
+candidates for a follow-up fix.
