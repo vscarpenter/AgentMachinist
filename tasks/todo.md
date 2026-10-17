@@ -1359,12 +1359,15 @@ release, or other roadmap feature is included.
   Linked from `docs/README.md` and `docs/index.html#documentation`.
 - [x] `scripts/verify.sh` exited 0: 1,893 tests, 88.95% coverage, drift,
   format, lint, types, builds, and installed rehearsals.
-- Reported, not fixed: a repeated `approve` or `continue` on a failed local
-  Phase prints `machinist retry 1` (`lifecycle.py:307-310`);
-  `local-workflow.md` says revision invalidates Approval, but `revise` refuses
-  once one exists, and it lists `continue T1` under Resume although only
-  `retry` resumes retained edits; amend with identical Spec text fails.
+- [x] Fixed: a repeated `approve` or `continue` on a stopped local Phase printed
+  `machinist retry 1`. The lifecycle now raises `RetryRequiredError`, and the
+  dispatcher names `machinist retry --task T1 --phase <phase>` through
+  `transitions.local_retry_command`. Legacy issue wording is unchanged.
+- Reported, not fixed: `local-workflow.md` says revision invalidates Approval,
+  but `revise` refuses once one exists, and it lists `continue T1` under Resume
+  although only `retry` resumes retained edits; amend with identical Spec text
+  fails.
 
-Resuming from here: the diagram page is committed on
-`codex/local-decision-output`. Nothing is pushed. The four findings above are
+Resuming from here: the diagram page and the retry-message fix are committed on
+`codex/local-decision-output`. Nothing is pushed. The three findings above are
 candidates for a follow-up fix.

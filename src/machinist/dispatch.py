@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol, TypeVar
 
@@ -14,6 +15,7 @@ from machinist.harness import get_harness
 from machinist.lifecycle import (
     LifecycleError,
     Phase,
+    RetryRequiredError,
     RunRecord,
     RunStatus,
     TaskClaim,
@@ -25,6 +27,7 @@ from machinist.phases.review import run_review_phase
 from machinist.phases.spec import preview_spec_phase, run_spec_phase
 from machinist.process import run_supervised
 from machinist.repository_custody import bind_repository
+from machinist.transitions import local_retry_command
 from machinist.workspace import Workspace
 
 _Result = TypeVar("_Result")
@@ -35,6 +38,18 @@ ReviewRunner = Callable[..., PullRequest]
 
 # Collaborators are opaque here because each Phase module owns its concrete
 # interface; dispatch only constructs and passes the selected adapters.
+
+
+@contextmanager
+def _local_retry_wording(task_id: str) -> Iterator[None]:
+    """The shared lifecycle knows Task numbers; local Tasks retry by identifier."""
+    try:
+        yield
+    except RetryRequiredError as exc:
+        raise LifecycleError(
+            f"Task {task_id} {exc.phase.value} previously {exc.status.value}; "
+            f"run '{local_retry_command(task_id, exc.phase)}'"
+        ) from exc
 
 
 class Lifecycle(Protocol):
@@ -229,69 +244,72 @@ class TaskDispatcher:
         """Enter a claimed local Spec using the same durable lifecycle."""
         from machinist.phases.local import run_local_spec
 
-        return self.lifecycle.run(
-            task.number,
-            Phase.SPEC,
-            lambda claim: run_local_spec(
-                task,
-                self.config,
-                store=store,
-                workspace=self._local_workspace(task.number),
-                harness=self._harness(Phase.SPEC, task.number),
-                claim=claim,
-                cancel_check=self.cancellation.check(task.number),
-                test_runner=self._test_runner,
-            ),
-            repeat_succeeded=revise,
-            repeat_succeeded_if=lambda prior: bool(
-                task.spec_sha is None and task.spec_base_sha and task.feedback
-            ),
-        )
+        with _local_retry_wording(task.id):
+            return self.lifecycle.run(
+                task.number,
+                Phase.SPEC,
+                lambda claim: run_local_spec(
+                    task,
+                    self.config,
+                    store=store,
+                    workspace=self._local_workspace(task.number),
+                    harness=self._harness(Phase.SPEC, task.number),
+                    claim=claim,
+                    cancel_check=self.cancellation.check(task.number),
+                    test_runner=self._test_runner,
+                ),
+                repeat_succeeded=revise,
+                repeat_succeeded_if=lambda prior: bool(
+                    task.spec_sha is None and task.spec_base_sha and task.feedback
+                ),
+            )
 
     def run_local_execute(self, task, *, store, resume: bool = False):
         """Execute the exact local Approval, allowing a newly approved amendment."""
         from machinist.phases.local import run_local_execute
 
-        return self.lifecycle.run(
-            task.number,
-            Phase.EXECUTE,
-            lambda claim: run_local_execute(
-                task,
-                self.config,
-                store=store,
-                workspace=self._local_workspace(task.number),
-                harness=self._harness(Phase.EXECUTE, task.number),
-                claim=claim,
-                cancel_check=self.cancellation.check(task.number),
-                test_runner=self._test_runner,
-                resume=resume,
-            ),
-            repeat_succeeded_if=lambda prior: (
-                prior.evidence.get("approved_sha") != task.spec_sha
-            ),
-        )
+        with _local_retry_wording(task.id):
+            return self.lifecycle.run(
+                task.number,
+                Phase.EXECUTE,
+                lambda claim: run_local_execute(
+                    task,
+                    self.config,
+                    store=store,
+                    workspace=self._local_workspace(task.number),
+                    harness=self._harness(Phase.EXECUTE, task.number),
+                    claim=claim,
+                    cancel_check=self.cancellation.check(task.number),
+                    test_runner=self._test_runner,
+                    resume=resume,
+                ),
+                repeat_succeeded_if=lambda prior: (
+                    prior.evidence.get("approved_sha") != task.spec_sha
+                ),
+            )
 
     def run_local_review(self, task, *, store):
         """Review one immutable local candidate, repeating only for a new head."""
         from machinist.phases.local import run_local_review
 
-        return self.lifecycle.run(
-            task.number,
-            Phase.REVIEW,
-            lambda claim: run_local_review(
-                task,
-                self.config,
-                store=store,
-                workspace=self._local_workspace(task.number),
-                harness=self._harness(Phase.REVIEW, task.number),
-                claim=claim,
-                cancel_check=self.cancellation.check(task.number),
-                test_runner=self._test_runner,
-            ),
-            repeat_succeeded_if=lambda prior: (
-                prior.evidence.get("reviewed_sha") != task.candidate_sha
-            ),
-        )
+        with _local_retry_wording(task.id):
+            return self.lifecycle.run(
+                task.number,
+                Phase.REVIEW,
+                lambda claim: run_local_review(
+                    task,
+                    self.config,
+                    store=store,
+                    workspace=self._local_workspace(task.number),
+                    harness=self._harness(Phase.REVIEW, task.number),
+                    claim=claim,
+                    cancel_check=self.cancellation.check(task.number),
+                    test_runner=self._test_runner,
+                ),
+                repeat_succeeded_if=lambda prior: (
+                    prior.evidence.get("reviewed_sha") != task.candidate_sha
+                ),
+            )
 
     def _github_client(self) -> object:
         if self._github is not None:

@@ -59,6 +59,18 @@ class LifecycleFinalizationError(LifecycleError):
     action_succeeded = True
 
 
+class RetryRequiredError(LifecycleError):
+    """A stopped Phase needs explicit retry; callers may name their own command."""
+
+    def __init__(self, issue: int, phase: Phase, status: RunStatus):
+        super().__init__(
+            f"issue #{issue} {phase.value} previously {status.value}; "
+            f"run 'machinist retry {issue}'"
+        )
+        self.phase = phase
+        self.status = status
+
+
 class LifecycleSignalInterruption(SystemExit):
     """A service termination signal received while a Task Claim was active."""
 
@@ -304,10 +316,7 @@ class TaskLifecycle:
                     RunStatus.CANCELLED,
                     RunStatus.ABANDONED,
                 }:
-                    raise LifecycleError(
-                        f"issue #{issue} {phase.value} previously {prior.status.value}; "
-                        f"run 'machinist retry {issue}'"
-                    )
+                    raise RetryRequiredError(issue, phase, prior.status)
                 raise LifecycleError(
                     f"issue #{issue} {phase.value} is {prior.status.value}; refusing a duplicate run"
                 )

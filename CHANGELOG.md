@@ -11,6 +11,10 @@
   including recovered revisions. Explain unchanged text and fresh Approval;
   provide an exact comparison command for truncated or unavailable previews.
 
+- Name the local retry command when `approve` or `continue` meets a stopped
+  local Phase. The refusal printed the GitHub issue form, `machinist retry 1`,
+  and now prints `machinist retry --task T1 --phase execute`.
+
 - Add a local Task lifecycle diagram (`docs/task-lifecycle.html`) that shows
   each state `machinist status` prints, the command that moves it, and where
   retry, revise, and amend re-enter. A docs test keeps its state names real.
