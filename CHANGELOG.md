@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Keep the first-run instructions on the six local commands. The disposable
+  example uses `rehearse --guided`, the README start section points recovery
+  and publication at the short guide, and the getting-started install block
+  leaves release history to the changelog.
+
 - Start local inspection with a bounded decision summary of accumulated Task
   paths, Gate outcomes, high-severity advisory Review findings, and eligible
   next actions; repeat actions after the details. Preserve exact Evidence checks
