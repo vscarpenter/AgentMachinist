@@ -5,9 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="AgentMachinist helps your coding agent make a change you can check before accepting it. Try the workflow free, then make a small change in your own project.">
   <meta name="theme-color" content="#f3f1eb">
+  <link rel="canonical" href="https://agentmachinist.com/docs/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://agentmachinist.com/docs/">
   <meta property="og:title" content="AgentMachinist documentation">
   <meta property="og:description" content="Try the workflow free. Read the plan, inspect the change and its checks, then decide whether to accept it. Find every operating reference and architecture decision.">
-  <meta name="twitter:card" content="summary">
+  <meta property="og:image" content="https://agentmachinist.com/assets/og-card.jpg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
+  <meta property="og:image:alt" content="You approve. It codes. A Spec card stamped APPROVED.">
+  <meta name="twitter:card" content="summary_large_image">
   <title>AgentMachinist documentation</title>
   <style>
     :root {
@@ -81,7 +88,6 @@
     .doc-history { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
     .doc-history summary { min-height: 2.75rem; padding-block: 0.5rem; cursor: pointer; font-weight: 650; }
     .doc-history > p { max-width: 48rem; margin-block: 0.75rem 1.25rem; color: var(--ink-1); }
-    .doc-metadata { margin: 2rem 0 0; color: var(--ink-2); font-size: 0.85rem; }
     .legend { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
     .chip { display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 999px; padding: 0.4rem 0.9rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 750; letter-spacing: 0.06em; }
     .chip i { width: 0.6rem; height: 0.6rem; border-radius: 50%; }
@@ -283,7 +289,7 @@
       <div class="legend">
         <span class="chip you"><i></i>ORANGE = YOU ACT</span>
         <span class="chip mach"><i></i>BLUE = MACHINE WORKS</span>
-        <small>No forge or server is needed for the local journey.</small>
+        <small>No <a href="glossary.html#forge">forge</a> or server is needed for the local journey.</small>
       </div>
     </section>
     <section class="section shell documentation" id="documentation" aria-labelledby="documentation-title">
@@ -297,11 +303,13 @@
           <ul class="doc-list">
             <li><a href="local-workflow.md">Local workflow</a>: commands, Task lifecycle, integration, and optional publication.</li>
             <li><a href="getting-started.md">Configuration and GitHub reference</a>: installation choices, settings, and GitHub automation.</li>
+            <li><a href="legacy-github-actions.html">Legacy GitHub Actions setup</a>: issue automation with draft PR Specs and a local runner.</li>
             <li><a href="operator-runbook.md">Operator runbook</a>: diagnostics, retry, repair, reporting, and recovery.</li>
             <li><a href="harnesses.md">Harness reference</a>: supported adapters, models, and permissions.</li>
             <li><a href="trust-model.md">Trust model</a>: guarantees, boundaries, and limitations.</li>
             <li><a href="approval-policy.md">Approval policy</a>: what Approval authorizes and which controls are enforced.</li>
             <li><a href="architecture.md">Architecture</a>: controller internals and module responsibilities.</li>
+            <li><a href="glossary.html">Glossary</a>: what Task, Spec, Harness, Workshop, and the other terms mean.</li>
           </ul>
         </section>
         <section class="doc-group" aria-labelledby="formats-title">
@@ -319,38 +327,27 @@
         </section>
       </div>
       <details class="doc-history">
-        <summary>Historical Specs, implementation plans, and compatibility links</summary>
-        <p>These records explain earlier decisions. Follow the operating references above for current commands and behavior.</p>
-        <div class="doc-groups">
-          <section class="doc-group" aria-labelledby="historical-specs-title">
-            <h3 id="historical-specs-title">Specs</h3>
-            <ul class="doc-list">
-              <li><a href="superpowers/specs/2026-08-16-agentmachinist-design.md">Original v0.1 design</a> · August 16, 2026</li>
-              <li><a href="superpowers/specs/2026-08-17-reliability-and-usability-hardening.md">Reliability and usability hardening</a> · August 17, 2026</li>
-              <li><a href="superpowers/specs/2026-09-03-resume-push-and-approve-flags.md">Resume-push and Approval flags</a> · September 3, 2026</li>
-            </ul>
-          </section>
-          <section class="doc-group" aria-labelledby="historical-plans-title">
-            <h3 id="historical-plans-title">Implementation plans</h3>
-            <ul class="doc-list">
-              <li><a href="superpowers/plans/2026-08-17-build-system-hardening.md">Build system hardening</a> · August 17, 2026</li>
-              <li><a href="superpowers/plans/2026-09-03-resume-push-and-approve-flags.md">Resume-push and Approval flags</a> · September 3, 2026</li>
-              <li><a href="superpowers/plans/2026-09-03-spec-to-execute-simplification.md">Spec-to-Execute simplification</a> · September 3, 2026</li>
-              <li><a href="superpowers/plans/2026-09-07-local-workflow-gitlab.md">Local workflow and GitLab</a> · September 7, 2026</li>
-            </ul>
-          </section>
-        </div>
+        <summary>History</summary>
+        <p>These design specs and implementation plans explain earlier decisions. Follow the operating references above for current commands and behavior.</p>
+        <ul class="doc-list">
+          <li><a href="superpowers/specs/2026-08-16-agentmachinist-design.md">Original v0.1 design</a> · design spec · August 16, 2026</li>
+          <li><a href="superpowers/specs/2026-08-17-reliability-and-usability-hardening.md">Reliability and usability hardening</a> · design spec · August 17, 2026</li>
+          <li><a href="superpowers/plans/2026-08-17-build-system-hardening.md">Build system hardening</a> · plan · August 17, 2026</li>
+          <li><a href="superpowers/specs/2026-09-03-resume-push-and-approve-flags.md">Resume-push and Approval flags</a> · design spec · September 3, 2026</li>
+          <li><a href="superpowers/plans/2026-09-03-resume-push-and-approve-flags.md">Resume-push and Approval flags</a> · plan · September 3, 2026</li>
+          <li><a href="superpowers/plans/2026-09-03-spec-to-execute-simplification.md">Spec-to-Execute simplification</a> · plan · September 3, 2026</li>
+          <li><a href="superpowers/plans/2026-09-07-local-workflow-gitlab.md">Local workflow and GitLab</a> · plan · September 7, 2026</li>
+        </ul>
         <p><a href="onboarding.html">Previous onboarding URL</a> redirects to the visual first-run guide.</p>
         <p>The retired <a href="job-card.html">job card</a> and <a href="explainer.html">animated explainer</a> URLs redirect to the first-run guide and the workflow explainer.</p>
       </details>
-      <p class="doc-metadata"><code>CNAME</code> and <code>.nojekyll</code> configure this documentation site; they are not reading material.</p>
     </section>
     <section class="strip" aria-label="The pipeline at a glance">
       <div class="strip-grid shell">
         <div class="strip-cell you"><span class="idx">01 · YOU</span><strong>Start a Task</strong><small>one objective, optional context</small></div>
         <div class="strip-cell"><span class="idx">02 · MACHINE</span><strong>Save the Spec</strong><small>baseline verified, exact commit retained</small></div>
         <div class="strip-cell you"><span class="idx">03 · YOU</span><strong>Approve the SHA</strong><small>read the plan before execution</small></div>
-        <div class="strip-cell"><span class="idx">04 · MACHINE</span><strong>Build and verify</strong><small>isolated Workshop, real Gates</small></div>
+        <div class="strip-cell"><span class="idx">04 · MACHINE</span><strong>Build and verify</strong><small>isolated <a href="glossary.html#workshop">Workshop</a>, real <a href="glossary.html#gate">Gates</a></small></div>
         <div class="strip-cell"><span class="idx">05 · MACHINE</span><strong>Review the candidate</strong><small>independent, advisory findings</small></div>
         <div class="strip-cell you"><span class="idx">06 · YOU</span><strong>Accept or share</strong><small>explicit integration; optional PR/MR</small></div>
       </div>
@@ -367,7 +364,7 @@
           <article class="step you" data-step="0">
             <span class="who">STATION 01 · YOU</span>
             <h3>Describe one useful change.</h3>
-            <p>Start from a clean committed Git checkout with an installed Harness and a verification command. Add detail from a file outside the checkout with <code>--body-file ../task.md</code>, or import a GitHub or GitLab issue with <code>--from-issue</code>. The controller gives the Task a local ID such as <code>T1</code>.</p>
+            <p>Start from a clean committed Git checkout with an installed <a href="glossary.html#harness">Harness</a> and a verification command. Add detail from a file outside the checkout with <code>--body-file ../task.md</code>, or import a GitHub or GitLab issue with <code>--from-issue</code>. The controller gives the Task a local ID such as <code>T1</code>.</p>
             <span class="cmd">machinist start "Add CSV export for the currently filtered rows" --test-cmd "uv run pytest"</span>
           </article>
           <article class="step" data-step="1">
@@ -385,7 +382,7 @@
           <article class="step" data-step="3">
             <span class="who">STATION 04 · MACHINE</span>
             <h3>Build and verify away from your checkout.</h3>
-            <p>The Harness edits in an isolated Workshop from the approved Spec. The controller owns commits and Task records, checks Git custody, and runs the configured Verification Gates. A failed Execute retains Evidence and requires explicit retry.</p>
+            <p>The Harness edits in an isolated Workshop from the approved Spec. The controller owns commits and Task records, checks Git <a href="glossary.html#custody">custody</a>, and runs the configured Verification Gates. A failed Execute retains <a href="glossary.html#evidence">Evidence</a> and requires explicit retry.</p>
             <span class="cmd">machinist status T1 --watch</span>
           </article>
           <article class="step" data-step="4">
@@ -520,13 +517,13 @@
           <p style="font-size:1.05rem;margin-bottom:1.5rem">Install AgentMachinist from PyPI, then change into your project. First start saves local settings without overwriting your existing configuration.</p>
           <div class="prereqs">
             <div class="prereq"><strong>Clean Git checkout with an initial commit and repository-local author</strong><code>git status --short</code></div>
-            <div class="prereq"><strong>Python 3.12+ and uv</strong><code>uv --version</code></div>
-            <div class="prereq"><strong>One installed Harness</strong><code>Claude Code · OpenCode · Pi · Codex · Goose</code></div>
+            <div class="prereq"><strong>Python 3.12 or newer (tested on 3.12 to 3.14) and uv</strong><code>uv --version</code></div>
+            <div class="prereq"><strong>One installed Harness</strong><code>Claude Code · Codex · OpenCode · Pi · Goose</code></div>
             <div class="prereq"><strong>Verification works in an isolated checkout</strong><code>uv run pytest</code></div>
           </div>
           <p style="margin:1rem 0 0;font-size:0.9rem">First-run discovery never picks Goose, so choose it with <code>machinist start --harness goose</code>.</p>
           <p style="margin:1.5rem 0 0;font-size:0.9rem">Dependencies in your original <code>.venv/</code> or <code>node_modules/</code> are not copied. Include dependency setup in the Gate when needed, such as <code>npm ci &amp;&amp; npm test</code>.</p>
-          <p style="margin:1rem 0 0;font-size:0.9rem">Solo developers can keep the whole Task local. Small teams can use one persistent runner checkout and publish reviewable changes to their forge. Local Claims do not coordinate separate laptops. Watcher budgets do not constrain foreground local Tasks.</p>
+          <p style="margin:1rem 0 0;font-size:0.9rem">Solo developers can keep the whole Task local. Small teams can use one persistent runner checkout and publish reviewable changes to their forge. Local <a href="glossary.html#claim">Claims</a> do not coordinate separate laptops. Watcher budgets do not constrain foreground local Tasks.</p>
         </div>
         <div class="term">
           <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><span>terminal / local workflow</span></div>
@@ -551,7 +548,7 @@
         </div>
       </div>
       <div class="shell" style="padding-bottom:3rem">
-        <p><strong>Local orchestration does not guarantee offline inference.</strong> Your Harness may use a cloud model. Offline operation requires a local provider, downloaded models, prepared dependencies, and separate network-denied validation. Custody checks reduce credentials and detect violations; they are not an OS sandbox.</p>
+        <p><strong>Local orchestration does not guarantee offline inference.</strong> Your Harness may use a cloud model. Offline operation requires a local provider, downloaded models, prepared dependencies, and separate network-denied validation. Reduced credentials limit what the agent can reach. Post-run Git checks catch violations. Neither is an OS sandbox.</p>
         <p>GitLab supports issue import, nested projects, explicit self-managed hosts, and MR publication through <code>glab</code>. Hosted GitLab Spec CI and remote GitLab Approval are outside this workflow. Existing <a href="getting-started.md#github-setup-and-automation">GitHub Actions setup and watcher commands</a> remain supported.</p>
       </div>
     </section>

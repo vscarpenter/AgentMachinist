@@ -38,9 +38,9 @@ Install and verify:
 The local workflow requires no origin or forge account. Optional GitHub
 operations require authenticated `gh` and access to the target repository;
 GitLab operations require authenticated `glab` for the selected host.
-The core CLI is tested on macOS and Linux with Python 3.12–3.14. The managed
-LaunchAgent integration is macOS-only; Linux users can schedule
-`machinist watch --once` with their existing service manager.
+The core CLI runs on macOS and Linux with Python 3.12 or newer (tested on 3.12
+to 3.14). The managed LaunchAgent integration is macOS-only; Linux users can
+schedule `machinist watch --once` with their existing service manager.
 
 ## Install
 
@@ -910,7 +910,7 @@ See [repair recovery](operator-runbook.md#bounded-repair-recovery).
 
 ## Choosing a harness
 
-Set `harness.name` to `claude-code`, `opencode`, `pi`, `codex`, or `goose` in
+Set `harness.name` to `claude-code`, `codex`, `opencode`, `pi`, or `goose` in
 the configuration used by your chosen workflow. First-run discovery never picks
 `goose` on its own. Runs
 reuse the provider authentication already available to that executable.

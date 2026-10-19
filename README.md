@@ -6,7 +6,7 @@ AgentMachinist helps your coding agent make a change you can check before
 accepting it. You read its plan, authorize the work, then inspect the changes,
 test results, and a separate review before adding them to your project.
 
-It works with Claude Code, OpenCode, Pi, Codex, or Goose. GitHub and GitLab
+It works with Claude Code, Codex, OpenCode, Pi, or Goose. GitHub and GitLab
 are optional inputs and places to share the result.
 
 New here? Follow [Start here](docs/tldr.md): try the workflow free, check your
@@ -38,12 +38,12 @@ machinist --version
 
 Use AgentMachinist 0.20.0 or newer for the onboarding commands below.
 
-You also need `git` and one supported Harness executable (`claude`, `opencode`,
-`pi`, `codex`, or `goose`). GitHub operations require authenticated [`gh`](https://cli.github.com);
+You also need `git` and one supported Harness executable (`claude`, `codex`,
+`opencode`, `pi`, or `goose`). GitHub operations require authenticated [`gh`](https://cli.github.com);
 GitLab operations require authenticated [`glab`](https://docs.gitlab.com/cli/).
-The core CLI is tested on macOS and Linux with Python 3.12 to 3.14. Managed
-background service commands are macOS-only; on Linux, schedule
-`machinist watch --once` with your existing service manager.
+The core CLI runs on macOS and Linux with Python 3.12 or newer (tested on 3.12
+to 3.14). Managed background service commands are macOS-only; on Linux,
+schedule `machinist watch --once` with your existing service manager.
 
 ## Start
 
