@@ -16,8 +16,8 @@ GitLab CI. See [Goose](#goose) for its advisory read-only profile.
 | --- | --- | --- | --- | --- |
 | `claude-code` | `claude` | Plan permission mode, Read/Grep/Glob tools, no session persistence | Edit mode with gate commands allowlisted and no session persistence; prompt plus Git postconditions | `ANTHROPIC_API_KEY` |
 | `codex` | `codex` | Read-only sandbox and ephemeral session | Workspace-write sandbox, approval prompts disabled, ephemeral session; prompt plus Git postconditions | `OPENAI_API_KEY` |
-| `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools with session persistence disabled; prompt plus Git postconditions | `GEMINI_API_KEY` |
 | `opencode` | `opencode` | Pure plan agent; treated as advisory | Normal run agent; prompt plus Git postconditions | `ANTHROPIC_API_KEY` by default |
+| `pi` | `pi` | Read/grep/find/ls allowlist; extensions, skills, prompt templates, and sessions disabled | Normal print-mode tools with session persistence disabled; prompt plus Git postconditions | `GEMINI_API_KEY` |
 | `goose` | `goose` | Quiet JSON run with only the developer builtin loaded and no session; treated as advisory | Normal profile with no session; prompt plus Git postconditions | None; managed Spec CI is unsupported |
 
 ### Goose
@@ -70,7 +70,7 @@ completed Review for the same candidate is not repeated.
 When gates are configured and `verification.harness_may_run_gates` is true
 (the default), the implementation prompt lists each gate command and asks the
 harness to run required gates and iterate until they pass before finishing.
-`codex`, `pi`, `opencode`, and `goose` execute modes already permit command
+`codex`, `opencode`, `pi`, and `goose` execute modes already permit command
 execution, so only the prompt changes for them. `claude-code`'s headless edit mode
 denies commands, so the adapter additionally allowlists the configured gate
 commands and variants with additional arguments

@@ -8,8 +8,26 @@
   <meta name="description" content="Swimlane diagram of the local AgentMachinist workflow, showing who acts at each step from Task to integrated candidate.">
   <meta name="theme-color" content="#fbfaf6">
   <link rel="canonical" href="https://agentmachinist.com/docs/how-it-works.html">
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://agentmachinist.com/docs/how-it-works.html">
+  <meta property="og:title" content="How AgentMachinist works">
+  <meta property="og:description" content="One diagram of a local Task: who acts at each step, from the Spec you approve to the reviewed change you integrate.">
+  <meta property="og:image" content="https://agentmachinist.com/assets/og-card.jpg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
+  <meta property="og:image:alt" content="You approve. It codes. A Spec card stamped APPROVED.">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preload" href="fonts/instrument-serif-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <style>
+    @font-face {
+      font-family: "Instrument Serif";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
@@ -152,6 +170,9 @@
     .footer a { color: var(--color-link); text-underline-offset: 0.2em; }
     .footer a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
 
+    .subtitle a, .card a { color: var(--color-link); text-underline-offset: 0.2em; }
+    .subtitle a:focus-visible, .card a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+
     /* min-width: 0 lets long commands scroll inside pre instead of widening the grid. */
     .card.wide { grid-column: 1 / -1; min-width: 0; }
     .card pre {
@@ -183,7 +204,7 @@
     <header class="header">
       <p class="header-eyebrow">Local workflow · Swimlane</p>
       <h1>How AgentMachinist works</h1>
-      <p class="subtitle">You describe a Task and make two decisions. AgentMachinist runs the coding Harness, checks its work, and makes every commit.</p>
+      <p class="subtitle">You describe a Task and make two decisions. AgentMachinist runs the coding <a href="glossary.html#harness">Harness</a>, checks its work, and makes every commit.</p>
       <nav class="doc-nav" aria-label="Related documentation"><a href="first-run-guide.html">Complete your first Task</a><a href="index.html#documentation">All documentation</a></nav>
     </header>
 
@@ -378,12 +399,12 @@ machinist publish T1 --provider github</code></pre>
         </section>
 
         <section class="card">
-          <p class="eyebrow">Custody</p>
+          <p class="eyebrow"><a href="glossary.html#custody">Custody</a></p>
           <div class="card-header"><span class="card-dot ink"></span><h2>AgentMachinist makes every commit</h2></div>
           <ul>
             <li>The Harness drafts, edits, and reviews. AgentMachinist commits.</li>
             <li>After each Harness run, AgentMachinist checks HEAD, local refs, and protected Git metadata for changes.</li>
-            <li>Required verification gates must pass before AgentMachinist commits a candidate.</li>
+            <li>Required verification <a href="glossary.html#gate">gates</a> must pass before AgentMachinist commits a candidate.</li>
             <li>This is detection plus reduced credentials, not a sandbox.</li>
           </ul>
         </section>
@@ -393,7 +414,7 @@ machinist publish T1 --provider github</code></pre>
           <div class="card-header"><span class="card-dot muted"></span><h2>Amend, retry, or publish</h2></div>
           <ul>
             <li><code>machinist amend</code> turns feedback on a reviewed candidate into a new Spec, which needs a fresh Approval.</li>
-            <li>Failed runs retain Evidence and need an explicit retry. Local <code>machinist retry</code> defaults to resuming validated retained Execute edits. Add <code>--fresh</code> to start in a new Workshop.</li>
+            <li>Failed runs retain <a href="glossary.html#evidence">Evidence</a> and need an explicit retry. Local <code>machinist retry</code> defaults to resuming validated retained Execute edits. Add <code>--fresh</code> to start in a new <a href="glossary.html#workshop">Workshop</a>.</li>
             <li><code>machinist publish</code> pushes the candidate and opens a GitHub PR or GitLab MR without rerunning any Phase.</li>
           </ul>
           <p>Optional <a href="operator-runbook.md#bounded-repair-recovery">bounded repair</a>, added in 0.18.0, defaults off and can repeat implementation once after an eligible required Gate failure, before rerunning all Gates. It stays inside Execute and the approved Spec. Failed or interrupted repair needs explicit <code>retry --fresh</code>.</p>

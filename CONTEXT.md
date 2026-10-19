@@ -6,6 +6,9 @@ checkout. GitHub and GitLab intake and publication are optional.
 
 ## Language
 
+Readers see these definitions in plain language in the
+[documentation glossary](docs/glossary.html). Keep both lists in step.
+
 **Task**:
 A bounded development objective owned by the controller. Local Tasks have IDs
 such as `T1`; an imported GitHub/GitLab issue is optional provenance. Existing
@@ -53,7 +56,7 @@ The isolated worktree or clone where a harness reads or changes repository files
 _Avoid_: Workspace, checkout
 
 **Harness**:
-A coding-agent CLI selected by configuration. Claude Code, OpenCode, PI, Codex, and Goose are Harness adapters.
+A coding-agent CLI selected by configuration. Claude Code, Codex, OpenCode, Pi, and Goose are Harness adapters.
 _Avoid_: Agent provider, model
 
 **Evidence**:
@@ -62,6 +65,19 @@ implementation commit, independent Review report, and error details. Local
 integration and optional PR/MR publication also retain recoverable intent and
 observed results.
 _Avoid_: Log, output
+
+**Custody**:
+The controller's ownership of Git during a Task. It makes every commit and owns
+Task records; the Harness must not commit, push, or touch `.machinist/`.
+Postconditions and Workshop metadata checks detect violations after the fact.
+They reduce and detect risk; they are not a sandbox.
+_Avoid_: Sandbox, isolation
+
+**Forge**:
+A code-hosting service such as GitHub or GitLab. Local Tasks need none. Issue
+import records provenance, publication opens a PR or MR, and a human performs
+any remote merge.
+_Avoid_: Remote
 
 ## Flagged ambiguities
 

@@ -22,11 +22,13 @@ for version details.
 | --- | --- |
 | How do local settings, context, amendments, and publication work? | [Local workflow](local-workflow.md) |
 | How do I configure Gates, repair, profiles, notifications, or GitHub automation? | [Configuration and GitHub reference](getting-started.md) |
+| How do I set up and run the legacy GitHub Actions workflow? | [Legacy GitHub Actions setup](legacy-github-actions.html) |
 | How do I diagnose, retry, cancel, monitor, or release? | [Operator runbook](operator-runbook.md) |
 | Which Harness can I use, and how do I authenticate or extend it? | [Harness support](harnesses.md) |
 | What does my Approval authorize? | [Approval policy](approval-policy.md) |
 | What is enforced, and what risks remain? | [Trust model](trust-model.md) |
 | How is the controller implemented? | [Architecture and lifecycle](architecture.md) |
+| What do Task, Spec, Harness, Workshop, and the other terms mean? | [Glossary](glossary.html) |
 
 The long `getting-started.md` file remains at its existing URL because generated
 configuration and external links use it. Treat it as a reference; begin with
@@ -69,7 +71,7 @@ numbers, and worker instructions describe the work at the time.
 The [old onboarding URL](onboarding.html) redirects to the visual first-run guide.
 The retired [job card](job-card.html) and [animated explainer](explainer.html)
 URLs redirect to the first-run guide and [How it works](how-it-works.html).
-[.nojekyll](.nojekyll) configures the static site; it is not a guide. Editing these sources does not publish the website or a package release.
+Editing these sources does not publish the website or a package release.
 
 ## Keeping the documentation small
 
