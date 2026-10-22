@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Set up and run AgentMachinist's legacy GitHub workflow: issues start Tasks, Specs arrive as draft pull requests, and a runner on your machine executes approved work.">
+  <meta name="theme-color" content="#f3f1eb">
+  <link rel="canonical" href="https://agentmachinist.com/docs/legacy-github-actions.html">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://agentmachinist.com/docs/legacy-github-actions.html">
+  <meta property="og:title" content="Legacy GitHub Actions setup for AgentMachinist">
+  <meta property="og:description" content="Issues start Tasks, Specs arrive as draft pull requests, and a runner on your machine executes approved work.">
+  <meta property="og:image" content="https://agentmachinist.com/assets/og-card.jpg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
+  <meta property="og:image:alt" content="You approve. It codes. A Spec card stamped APPROVED.">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>Legacy GitHub Actions setup | AgentMachinist</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --paper-0: #fbfaf6;
+      --paper-1: #f3f1eb;
+      --paper-2: #e8e5dc;
+      --ink-0: #17212a;
+      --ink-1: #34434f;
+      --ink-2: #58656f;
+      --line: #c8c7c1;
+      --line-strong: #90969a;
+      --blueprint: #285f78;
+      --blueprint-soft: #dce8ec;
+      --signal: #c84f24;
+      --signal-strong: #9f3716;
+      --signal-soft: #f4ded4;
+      --success: #287451;
+      --success-soft: #dbece2;
+      --terminal: #17212a;
+      --terminal-ink: #e9eee9;
+      --terminal-muted: #a9b7ba;
+      --shadow-sm: 0 1px 2px rgb(23 33 42 / 0.06), 0 4px 10px rgb(23 33 42 / 0.04);
+      --shadow-lg: 0 18px 44px rgb(23 33 42 / 0.10), 0 4px 12px rgb(23 33 42 / 0.06);
+      --radius-md: 8px;
+      --radius-lg: 14px;
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-5: 1.5rem;
+      --space-6: 2rem;
+      --space-7: 3rem;
+      --space-8: 4rem;
+      --space-9: 6rem;
+      --duration-fast: 140ms;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --paper-0: #10171d;
+        --paper-1: #151f27;
+        --paper-2: #202d36;
+        --ink-0: #edf0ec;
+        --ink-1: #c6d0d2;
+        --ink-2: #91a0a6;
+        --line: #34434d;
+        --line-strong: #63727a;
+        --blueprint: #77b4c9;
+        --blueprint-soft: #183542;
+        --signal: #f08457;
+        --signal-strong: #ff9d76;
+        --signal-soft: #45281f;
+        --success: #72c79b;
+        --success-soft: #18382a;
+        --terminal: #090e12;
+        --terminal-ink: #e5ebe8;
+        --terminal-muted: #8da0a4;
+        --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.06);
+        --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.09);
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --paper-0: #10171d;
+      --paper-1: #151f27;
+      --paper-2: #202d36;
+      --ink-0: #edf0ec;
+      --ink-1: #c6d0d2;
+      --ink-2: #91a0a6;
+      --line: #34434d;
+      --line-strong: #63727a;
+      --blueprint: #77b4c9;
+      --blueprint-soft: #183542;
+      --signal: #f08457;
+      --signal-strong: #ff9d76;
+      --signal-soft: #45281f;
+      --success: #72c79b;
+      --success-soft: #18382a;
+      --terminal: #090e12;
+      --terminal-ink: #e5ebe8;
+      --terminal-muted: #8da0a4;
+      --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.06);
+      --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.09);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper-0);
+      color: var(--ink-0);
+      font-family: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+    button { font: inherit; }
+    a { color: var(--blueprint); text-underline-offset: 0.2em; }
+    a:hover { color: var(--signal-strong); }
+    svg { display: block; max-width: 100%; height: auto; }
+    code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace; }
+    code { font-size: 0.9em; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { text-wrap: balance; }
+    h1 { max-width: 16ch; margin-bottom: var(--space-5); font-size: clamp(2.6rem, 6vw, 4.6rem); font-weight: 650; letter-spacing: -0.025em; line-height: 0.98; }
+    h2 { margin-bottom: var(--space-4); font-size: clamp(1.9rem, 3.5vw, 3rem); font-weight: 620; letter-spacing: -0.04em; line-height: 1.04; }
+    h3 { margin-bottom: var(--space-2); font-size: 1.22rem; font-weight: 650; letter-spacing: -0.018em; line-height: 1.2; }
+    p { color: var(--ink-1); }
+    :focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; }
+
+    .skip-link {
+      position: fixed;
+      top: var(--space-3);
+      left: var(--space-3);
+      z-index: 60;
+      transform: translateY(-180%);
+      padding: var(--space-3) var(--space-4);
+      border: 2px solid var(--signal);
+      border-radius: var(--radius-md);
+      background: var(--paper-0);
+      color: var(--ink-0);
+      font-weight: 700;
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .shell { width: min(100% - 2rem, 74rem); margin-inline: auto; }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--paper-0) 92%, transparent);
+      backdrop-filter: blur(14px);
+    }
+    .nav { min-height: 4.25rem; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+    .brand { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--ink-0); text-decoration: none; font-weight: 700; letter-spacing: -0.02em; }
+    .brand-mark { width: 2rem; height: 2rem; color: var(--signal); }
+    .nav-links { display: flex; align-items: center; gap: var(--space-5); }
+    .nav-links a { color: var(--ink-1); font-size: 0.88rem; font-weight: 600; text-decoration: none; }
+    .theme-toggle, .copy-button {
+      min-height: 2.75rem;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      background: var(--paper-0);
+      color: var(--ink-0);
+      cursor: pointer;
+      font-weight: 650;
+      transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease;
+    }
+    .theme-toggle { min-width: 2.75rem; padding: 0; }
+    .theme-toggle:hover, .copy-button:hover { border-color: var(--signal); color: var(--signal-strong); }
+
+    .intro { padding-block: clamp(var(--space-8), 8vw, var(--space-9)) var(--space-6); }
+    .intro-lede { max-width: 44rem; font-size: clamp(1.08rem, 2vw, 1.3rem); }
+    .intro p { max-width: 44rem; }
+
+    .section { padding-block: clamp(var(--space-7), 7vw, var(--space-9)); border-top: 1px solid var(--line); }
+    .section-head { max-width: 46rem; margin-bottom: var(--space-6); }
+    .section-head p { font-size: 1.1rem; }
+    .prose { max-width: 52rem; }
+    .prose ul { padding-left: 1.2rem; color: var(--ink-1); }
+    .prose li { margin-bottom: var(--space-2); }
+
+    .mode-shell { border-block: 1px solid var(--line); }
+    .mode-board { display: grid; grid-template-columns: 1.1fr 0.9fr; background: var(--paper-0); }
+    .mode-board > * { min-width: 0; }
+    .mode-map { padding: clamp(var(--space-5), 4vw, var(--space-7)); border-right: 1px solid var(--line); }
+    .mode-steps { padding: clamp(var(--space-5), 4vw, var(--space-7)); background: var(--paper-1); }
+    .mode-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-5); }
+    .mode-title span { color: var(--signal); font: 700 0.75rem ui-monospace, monospace; }
+    .diagram-blue-secondary { fill: color-mix(in srgb, var(--ink-1) 70%, var(--blueprint)); }
+    .mode-steps ol { margin: 0; padding: 0; list-style: none; counter-reset: mode-step; }
+    .mode-steps li { position: relative; padding: 0 0 var(--space-5) 2.7rem; color: var(--ink-1); }
+    .mode-steps li::before {
+      counter-increment: mode-step;
+      content: counter(mode-step);
+      position: absolute;
+      left: 0;
+      top: -0.15rem;
+      width: 1.75rem;
+      height: 1.75rem;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--signal);
+      border-radius: 50%;
+      color: var(--signal-strong);
+      font: 700 0.78rem ui-monospace, monospace;
+    }
+
+    .terminal { margin-block: var(--space-4) var(--space-5); overflow: hidden; border-radius: var(--radius-lg); background: var(--terminal); color: var(--terminal-ink); box-shadow: var(--shadow-lg); }
+    .terminal-bar {
+      min-height: 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+      border-bottom: 1px solid rgb(255 255 255 / 0.12);
+      color: var(--terminal-muted);
+      font: 0.75rem ui-monospace, monospace;
+    }
+    .copy-button { padding: 0 var(--space-3); border-color: rgb(255 255 255 / 0.3); background: transparent; color: var(--terminal-ink); font: 650 0.75rem ui-monospace, monospace; }
+    .terminal pre { margin: 0; padding: var(--space-5); overflow-x: auto; color: var(--terminal-ink); font-size: 0.9rem; line-height: 1.7; white-space: pre; }
+
+    details { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--paper-1); box-shadow: var(--shadow-sm); }
+    details[open] { border-color: var(--line-strong); }
+    summary { min-height: 4rem; display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-5); cursor: pointer; color: var(--ink-0); font-weight: 680; }
+    summary::marker { color: var(--signal); }
+    .detail-body { padding: 0 var(--space-5) var(--space-5); }
+    .detail-body p { margin-bottom: var(--space-3); }
+    .detail-body code { color: var(--signal-strong); }
+    .micro-note { color: var(--ink-2); font-size: 0.86rem; }
+
+    footer { padding-block: var(--space-7); color: var(--ink-2); font-size: 0.85rem; }
+    .footer-row { display: flex; justify-content: space-between; gap: var(--space-5); border-top: 1px solid var(--line); padding-top: var(--space-5); }
+
+    @media (max-width: 62rem) {
+      .nav-links a { display: none; }
+      .nav-links .nav-keep { display: inline-block; }
+      .mode-board { grid-template-columns: minmax(0, 1fr); }
+      .mode-map { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+    @media (max-width: 40rem) {
+      .shell { width: min(100% - 1.25rem, 74rem); }
+      .brand span { display: none; }
+      .terminal pre { font-size: 0.78rem; }
+      .footer-row { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the GitHub setup</a>
+  <header class="site-header"><nav class="nav shell" aria-label="Legacy GitHub Actions setup">
+    <a class="brand" href="index.html"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9h20v14H6zM10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>AgentMachinist / GitHub Actions</span></a>
+    <div class="nav-links"><a href="first-run-guide.html">First-run guide</a><a class="nav-keep" href="index.html#documentation">All documentation</a><button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button></div>
+  </nav></header>
+  <main id="main">
+    <section class="intro shell">
+      <h1>Legacy GitHub Actions setup</h1>
+      <p class="intro-lede">In the original AgentMachinist workflow, GitHub issues start Tasks, each Spec arrives as a draft pull request, and a runner on your machine executes approved work. It's still supported.</p>
+      <p>Starting fresh? The <a href="first-run-guide.html">first-run guide</a> covers the local workflow, which needs no GitHub setup and can still publish a pull request when you're ready. In this workflow, <code>github.spec_source: local</code> still means GitHub-backed work: your machine writes the Spec, then pushes it as a draft PR.</p>
+    </section>
+    <section class="section shell" id="route" aria-labelledby="route-title">
+      <header class="section-head"><h2 id="route-title">Who owns each step.</h2></header>
+      <div class="mode-shell"><div class="mode-board"><div class="mode-map">
+              <div class="mode-title"><span>LEGACY GITHUB</span><h3>Actions writes the Spec; your runner executes</h3></div>
+              <svg viewBox="0 0 560 330" role="img" aria-label="GitHub Actions mode: a labeled issue triggers the Actions Spec workflow, then a local runner or watcher runs Execute after trusted Approval and runs Review only when enabled.">
+                <defs><marker id="ci-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--line-strong)"/></marker></defs>
+                <g fill="none" stroke="var(--line-strong)" stroke-width="2" marker-end="url(#ci-arrow)"><path d="M140 70H215"/><path d="M345 70H420"/><path d="M480 115v70"/><path d="M420 230H345"/></g>
+                <g font-family="Avenir Next, system-ui, sans-serif">
+                  <rect x="20" y="35" width="120" height="75" rx="8" fill="var(--paper-0)" stroke="var(--line-strong)"/><text x="80" y="67" text-anchor="middle" fill="var(--ink-0)" font-size="14" font-weight="700">Labeled issue</text><text x="80" y="87" text-anchor="middle" fill="var(--ink-2)" font-size="11">GitHub</text>
+                  <rect x="215" y="30" width="130" height="85" rx="8" fill="var(--blueprint-soft)" stroke="var(--blueprint)"/><text x="280" y="63" text-anchor="middle" fill="var(--blueprint)" font-size="14" font-weight="700">Actions</text><text class="diagram-blue-secondary" x="280" y="84" text-anchor="middle" fill="var(--ink-1)" font-size="11">adapter writes spec</text>
+                  <rect x="420" y="35" width="120" height="80" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="67" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Approval</text><text x="480" y="88" text-anchor="middle" fill="var(--ink-1)" font-size="11">exact SHA</text>
+                  <rect x="420" y="185" width="120" height="85" rx="8" fill="var(--signal-soft)" stroke="var(--signal)"/><text x="480" y="218" text-anchor="middle" fill="var(--signal-strong)" font-size="14" font-weight="700">Local runner</text><text x="480" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">Execute; Review if on</text>
+                  <rect x="215" y="185" width="130" height="85" rx="8" fill="var(--success-soft)" stroke="var(--success)"/><text x="280" y="218" text-anchor="middle" fill="var(--success)" font-size="14" font-weight="700">Ready PR</text><text x="280" y="239" text-anchor="middle" fill="var(--ink-1)" font-size="11">you review</text>
+                </g>
+                <text x="280" y="313" text-anchor="middle" fill="var(--ink-2)" font-family="ui-monospace, monospace" font-size="10">github.spec_source: github-actions</text>
+              </svg>
+            </div><div class="mode-steps">
+        <h3>Set up and run it</h3><ol><li>Use <code>machinist onboard --setup-pr --spec-source github-actions</code> to commit and push managed setup changes and open a draft setup PR.</li><li>Managed workflows install the selected Spec adapter and use its declared repository secret. <code>github.spec_install: pypi</code> pins the published controller version; <code>checkout</code> is for its own development repository.</li><li>Review and merge setup first. Then run <code>machinist doctor --run-gates</code> to verify default-branch deployment.</li><li>Actions generates Specs and records trusted Approval. A local runner or watcher owns Execute and optional legacy Review. You merge the resulting PR yourself.</li></ol>
+      </div></div></div>
+    </section>
+    <section class="section shell" id="setup" aria-labelledby="setup-title">
+      <header class="section-head"><h2 id="setup-title">Adopt it, then run each Task.</h2><p>The supported GitHub workflow uses issues, draft PR Specs, workflow-authored Approval, and a local Execute runner. Numeric issue IDs and local <code>T1</code> IDs are separate.</p></header>
+      <div class="prose"><p><code>onboard --setup-pr</code> performs setup preflight, commits and pushes managed changes, and opens or reuses a draft setup PR. A retry preserves valid settings and resumes managed-only setup work; unrelated branch history is rejected.</p><div class="terminal" aria-label="legacy GitHub setup"><div class="terminal-bar"><span>terminal / legacy GitHub setup</span><button class="copy-button" type="button" data-copy="machinist onboard --setup-pr --spec-source github-actions">Copy commands</button></div><pre>machinist onboard --setup-pr --spec-source github-actions</pre></div>
+        <p>Add the repository secret declared by your selected Spec adapter. Review and merge the setup PR before checking the deployed default-branch workflows:</p><div class="terminal" aria-label="verify merged GitHub setup"><div class="terminal-bar"><span>terminal / verify merged GitHub setup</span><button class="copy-button" type="button" data-copy="machinist doctor --run-gates">Copy commands</button></div><pre>machinist doctor --run-gates</pre></div>
+        <p>Create a GitHub Task by answering five terminal prompts: Objective, Acceptance criteria, Constraints, Verification, and optional Context. To supply an existing Markdown body instead, add <code>--body-file ../task.md</code>.</p><div class="terminal" aria-label="create a GitHub Task"><div class="terminal-bar"><span>terminal / create a GitHub Task</span><button class="copy-button" type="button" data-copy="machinist task new --title &quot;Add CSV export for filtered transaction rows&quot; --dispatch">Copy commands</button></div><pre>machinist task new --title &quot;Add CSV export for filtered transaction rows&quot; --dispatch</pre></div>
+        <p><strong>Available since 0.16.0:</strong> issue creation prints the next activity and a sample command for the configured Spec source. In GitHub Actions mode, follow <code>machinist explain 42</code> while the Spec is generated. In legacy local Spec mode, an undispatched issue suggests <code>machinist spec 42</code>; a dispatched issue suggests <code>machinist watch --once -v</code>, which can process other eligible queued Tasks too.</p>
+        <p>Wait for Actions to create its Spec PR, then read the Spec. Issue <code>42</code> and PR <code>18</code> below are illustrative; use the numbers returned for your Task.</p><div class="terminal" aria-label="request GitHub Approval"><div class="terminal-bar"><span>terminal / request GitHub Approval</span><button class="copy-button" type="button" data-copy="machinist approve --issue 42&#10;# Or target its PR explicitly: machinist approve --pr 18">Copy commands</button></div><pre>machinist approve --issue 42
+# Or target its PR explicitly: machinist approve --pr 18</pre></div>
+        <p><strong>Stop here and wait for the approval workflow to complete successfully.</strong> The CLI requests Approval asynchronously; it does not mint trusted <a href="glossary.html#evidence">Evidence</a>. Confirm the configured approval label is on the draft PR, then inspect the full commit identities:</p><div class="terminal" aria-label="check GitHub Approval Evidence"><div class="terminal-bar"><span>terminal / check GitHub Approval Evidence</span><button class="copy-button" type="button" data-copy="machinist inspect 42 --json">Copy commands</button></div><pre>machinist inspect 42 --json</pre></div>
+        <p>In the <code>github_pr</code> source, <code>approval_sha</code> must equal <code>head_sha</code>. If Approval is missing, stale, or the workflow failed, resolve that before executing. An early <code>run</code> can create a failed Execute attempt that requires explicit retry. Once the current Spec has trusted Approval, run:</p><div class="terminal" aria-label="execute the approved GitHub Spec"><div class="terminal-bar"><span>terminal / execute the approved GitHub Spec</span><button class="copy-button" type="button" data-copy="machinist run 42">Copy commands</button></div><pre>machinist run 42</pre></div>
+        <p>Only if legacy <code>review.enabled: true</code> is configured, run independent Review after Execute succeeds:</p><div class="terminal" aria-label="optional GitHub Review"><div class="terminal-bar"><span>terminal / optional GitHub Review</span><button class="copy-button" type="button" data-copy="machinist review 42">Copy commands</button></div><pre>machinist review 42</pre></div>
+        <p>The managed workflow checks write or admin access and the current head before recording its trusted SHA marker. To request Approval from GitHub instead of the CLI, post the PR-body command <code>/machinist-execute &lt;full-spec-commit-sha&gt;</code> as a PR comment. GitHub’s review Approve button is not this <a href="glossary.html#gate">Gate</a>.</p><p>A label without trusted Evidence is <code>approval pending</code>; a changed head is <code>approval stale</code>. With legacy Review enabled, Execute leaves the PR draft until independent Review completes. Findings remain advisory. With Review disabled, Execute can mark it ready after verification. You perform the remote merge.</p>
+        <p>If you used <code>init</code> or <code>onboard</code> without <code>--setup-pr</code>, commit setup manually: inspect the generated file list and stage selected files. Setup adds <code>/.machinist/runs/</code> to <code>.gitignore</code>, so Task Run records stay out of the commit. Stage the Approval workflow with <code>git add -- .github/workflows/machinist-approve.yml</code>. With <code>github.spec_source: github-actions</code>, also run <code>git add -- .github/workflows/machinist-spec.yml</code>. When switching Spec modes or disabling workflow management, stage any removed managed workflow path shown by <code>git status --short</code> with <code>git add -- &lt;path&gt;</code>. Omit the workflow commands when no managed workflow files were generated or removed. Review the full staged diff with <code>git diff --cached</code>, then <code>git commit</code> and <code>git push</code> before the full doctor check.</p><p>Choose the recovery action matching the Task’s state; these are alternatives:</p><ul><li>Revise a draft Spec: <code>machinist spec 42 --revise</code>.</li><li>Abandon the Task and close its Spec PR: <code>machinist spec 42 --abandon --reason "requirements changed"</code>.</li><li>Retry failed Execute with retained edits: <code>machinist retry 42 --phase execute --run --resume</code>.</li><li>Retry failed Execute from a fresh <a href="glossary.html#workshop">Workshop</a>: <code>machinist retry 42 --phase execute --run --fresh</code>.</li></ul><p>Legacy Execute recovery defaults to fresh; local <code>retry --task T1</code> defaults to resume. In legacy <code>github.spec_source: local</code> mode, use <code>machinist spec 42</code> or <code>watch</code> for Spec generation. It still requires GitHub Approval workflows. See the <a href="getting-started.md#github-setup-and-automation">GitHub setup reference</a> and <a href="operator-runbook.md">operator runbook</a> for watcher services, labels, and recovery.</p></div>
+    </section>
+    <section class="section shell" id="recover" aria-labelledby="recover-title">
+      <header class="section-head"><h2 id="recover-title">When setup stops.</h2></header>
+      <div class="prose">
+      <details><summary>Existing GitHub adoption stopped</summary><div class="detail-body"><p>Rerun <code>machinist onboard --setup-pr</code> to resume managed setup work and reuse its draft PR. Existing valid settings are preserved; change them with <code>machinist config set</code>. Merge setup before checking deployed default-branch workflows.</p><code>machinist doctor --run-gates</code></div></details>
+      <p class="micro-note">GitHub-specific diagnostics remain available: <code>machinist doctor --run-gates</code>, <code>machinist sync-labels [--check|--apply]</code>, and <code>machinist sync-workflows --check</code>. These are not prerequisites for a local-only Task.</p>
+      </div>
+    </section>
+  </main>
+  <footer class="shell"><div class="footer-row"><span>AgentMachinist / legacy GitHub Actions setup</span><span><a href="getting-started.md#github-setup-and-automation">GitHub configuration reference</a> · <a href="operator-runbook.md">Operator runbook</a></span></div></footer>
+  <div id="live-region" aria-live="polite" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"></div>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const themeButton = document.getElementById('theme-toggle');
+      const storage = {
+        get(key) {
+          try { return window.localStorage.getItem(key); } catch (error) { return null; }
+        },
+        set(key, value) {
+          try { window.localStorage.setItem(key, value); } catch (error) { /* Preferences remain session-only. */ }
+        },
+      };
+      // Shares the first-run guide's key, so one theme choice covers both pages.
+      const savedTheme = storage.get('agentmachinist-guide-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
+
+      themeButton.addEventListener('click', () => {
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const currentDark = root.dataset.theme ? root.dataset.theme === 'dark' : systemDark;
+        const next = currentDark ? 'light' : 'dark';
+        root.dataset.theme = next;
+        storage.set('agentmachinist-guide-theme', next);
+        themeButton.setAttribute('aria-label', `Use ${currentDark ? 'dark' : 'light'} theme`);
+      });
+
+      const liveRegion = document.getElementById('live-region');
+      const copyText = async (value) => {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(value);
+          return;
+        }
+        const field = document.createElement('textarea');
+        field.value = value;
+        field.setAttribute('readonly', '');
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        field.select();
+        const copied = document.execCommand('copy');
+        field.remove();
+        if (!copied) throw new Error('Copy command was rejected');
+      };
+      document.querySelectorAll('[data-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          try {
+            await copyText(button.dataset.copy);
+            const original = button.textContent;
+            button.textContent = 'Copied';
+            liveRegion.textContent = 'Commands copied to clipboard';
+            window.setTimeout(() => { button.textContent = original; }, 1400);
+          } catch (error) {
+            liveRegion.textContent = 'Clipboard access was unavailable. Select the commands manually.';
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

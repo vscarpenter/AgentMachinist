@@ -1,6 +1,6 @@
 # Contributing
 
-Use Python 3.12 or newer and `uv`:
+Use Python 3.12 or newer (tested on 3.12 to 3.14) and `uv`:
 
 ```sh
 uv sync

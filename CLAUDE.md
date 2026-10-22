@@ -5,7 +5,7 @@ Guidance for Claude Code when working in this repository.
 ## What this is
 
 AgentMachinist is a local development workflow for solo developers and small
-teams. It coordinates a coding Harness (Claude Code, OpenCode, Pi, Codex, or
+teams. It coordinates a coding Harness (Claude Code, Codex, OpenCode, Pi, or
 Goose) around an exact human-approved Spec and a reviewed local candidate. GitHub and
 GitLab issue intake and PR/MR publication are optional:
 
@@ -15,8 +15,9 @@ Task → Spec commit → human Approval → Execute → verification → Review
                                                   → optional PR/MR publication
 ```
 
-Python 3.12+, Click CLI (`machinist`), pydantic config, packaged with
-hatchling, packaged for PyPI as `agentmachinist` (current release: 0.20.0).
+Python 3.12 or newer (tested on 3.12 to 3.14), Click CLI (`machinist`),
+pydantic config, packaged with hatchling, packaged for PyPI as `agentmachinist`
+(current release: 0.20.0).
 This guide describes the 0.20.0 package and workflow.
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, ordered workflow,
@@ -161,7 +162,7 @@ never-merges rule only for that human-directed local operation.
 - `harness/` — `base.py` owns subprocess mechanics, timeouts, 30s heartbeat
   callbacks, and credential scrubbing (removes `GH_TOKEN`, `GITHUB_TOKEN`,
   askpass/SSH-agent vars; sets `GIT_TERMINAL_PROMPT=0`). Adapters
-  (`claude_code`, `codex`, `pi`, `opencode`, `goose`) build a read-only argv
+  (`claude_code`, `codex`, `opencode`, `pi`, `goose`) build a read-only argv
   profile (shared by Spec and Review) and an Execute edit profile, and stay one
   screen long. Registry in `__init__.py`. Every adapter splices
   `Harness._passthrough_argv()` (`--model <value>` plus `harness.extra_args`)
@@ -226,6 +227,9 @@ never-merges rule only for that human-directed local operation.
   presence.
 
 ## Domain language (see CONTEXT.md for the full glossary)
+
+`docs/glossary.html` presents the same terms to readers, and
+`tests/test_docs.py` keeps its entries equal to the CONTEXT.md list.
 
 Use these terms exactly in docs and messages: **Task** (controller-owned local
 objective or legacy GitHub issue), **Phase** (Spec, Execute, or Review — Approve is a human Gate, not a
@@ -330,10 +334,13 @@ for compatibility; docs say Workshop), **Harness**, **Evidence**.
 - `docs/` — getting-started, architecture, operator-runbook, trust-model,
   approval-policy (the ask-vs-act boundary, wired into the Harness prompts
   through `instructions:`),
-  harnesses matrix, local workflow, and three HTML pages: index, first-run
-  guide, and the how-it-works swimlane diagram. The index hero holds the
-  90-second explainer video: a click-to-load YouTube player whose poster
-  lives in `docs/assets/`. `onboarding.html`,
+  harnesses matrix, local workflow, and five HTML pages: index, first-run
+  guide (local workflow only), legacy GitHub Actions setup, glossary, and the
+  how-it-works swimlane diagram. `docs/fonts/` self-hosts the how-it-works
+  heading font, and each page carries its agentmachinist.com canonical URL and
+  share card. Link internal terms to the glossary on first use. The index hero
+  holds the 90-second explainer video: a click-to-load YouTube player whose
+  poster lives in `docs/assets/`. `onboarding.html`,
   `job-card.html`, and `explainer.html` are redirect stubs kept so old links
   resolve; do not add content to them. Documentation tests validate commands,
   configuration, version identity, links, and control targets.

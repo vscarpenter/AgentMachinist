@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Plain definitions of the terms the AgentMachinist docs use, from Approval and custody to Harness, Workshop, and forge.">
+  <meta name="theme-color" content="#f3f1eb">
+  <link rel="canonical" href="https://agentmachinist.com/docs/glossary.html">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://agentmachinist.com/docs/glossary.html">
+  <meta property="og:title" content="AgentMachinist glossary">
+  <meta property="og:description" content="What Task, Spec, Approval, Harness, Workshop, Gate, Evidence, custody, Claim, and forge mean in AgentMachinist.">
+  <meta property="og:image" content="https://agentmachinist.com/assets/og-card.jpg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
+  <meta property="og:image:alt" content="You approve. It codes. A Spec card stamped APPROVED.">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>AgentMachinist glossary</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --paper-0: #fbfaf6; --paper-1: #f3f1eb;
+      --ink-0: #17212a; --ink-1: #34434f; --ink-2: #58656f;
+      --line: #c8c7c1;
+      --blueprint: #285f78;
+      --signal: #c84f24; --signal-strong: #9f3716;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper-0: #10171d; --paper-1: #151f27;
+        --ink-0: #edf0ec; --ink-1: #c6d0d2; --ink-2: #91a0a6;
+        --line: #34434d;
+        --blueprint: #77b4c9;
+        --signal: #f08457; --signal-strong: #ff9d76;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper-0); color: var(--ink-0); font-family: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif; font-size: 1rem; line-height: 1.6; }
+    a { color: var(--blueprint); text-underline-offset: 0.2em; }
+    a:hover { color: var(--signal-strong); }
+    code { font-family: var(--mono); font-size: 0.9em; }
+    :focus-visible { outline: 3px solid var(--signal); outline-offset: 3px; }
+    .skip-link { position: fixed; top: 0.5rem; left: 0.5rem; z-index: 30; transform: translateY(-200%); padding: 0.6rem 1rem; background: var(--paper-0); }
+    .skip-link:focus { transform: translateY(0); }
+    .shell { width: min(100% - 2rem, 50rem); margin-inline: auto; }
+    .site-header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--paper-0) 92%, transparent); backdrop-filter: blur(14px); }
+    .nav { min-height: 4.25rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .brand { display: inline-flex; align-items: center; gap: 0.75rem; color: var(--ink-0); text-decoration: none; font-weight: 700; letter-spacing: -0.02em; }
+    .brand svg { width: 2rem; height: 2rem; color: var(--signal); display: block; }
+    .nav-links { display: flex; align-items: center; gap: 1.5rem; font-size: 0.88rem; font-weight: 600; }
+    .nav-links a { color: var(--ink-1); text-decoration: none; }
+    main { padding-block: clamp(3rem, 7vw, 5rem); }
+    h1 { margin: 0 0 1rem; font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 650; letter-spacing: -0.025em; line-height: 1; }
+    .lede { margin: 0 0 2.5rem; color: var(--ink-1); font-size: 1.15rem; }
+    .terms { margin: 0; border-top: 1px solid var(--line); }
+    .terms dt { scroll-margin-top: 5.5rem; padding-top: 1.25rem; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; }
+    .terms dt:target { color: var(--signal-strong); }
+    .terms dd { margin: 0.25rem 0 0; padding-bottom: 1.25rem; border-bottom: 1px solid var(--line); color: var(--ink-1); }
+    .site-footer { padding-block: 2.5rem; color: var(--ink-2); font-size: 0.85rem; }
+    @media (max-width: 40rem) {
+      .shell { width: min(100% - 1.25rem, 50rem); }
+      .brand span { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to the glossary</a>
+  <header class="site-header">
+    <nav class="nav shell" aria-label="Glossary">
+      <a class="brand" href="index.html">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9h20v14H6z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 9V6h12v3M10 23v3h12v-3M16 11v10M12 14h8M12 18h8" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <span>AgentMachinist / glossary</span>
+      </a>
+      <div class="nav-links">
+        <a href="first-run-guide.html">First-run guide</a>
+        <a href="index.html#documentation">All documentation</a>
+      </div>
+    </nav>
+  </header>
+  <main id="main" class="shell">
+    <h1>Glossary</h1>
+    <p class="lede">The docs capitalize these terms because each one names a specific part of the workflow. Here's what each one means in AgentMachinist.</p>
+    <dl class="terms">
+      <dt id="approval">Approval</dt>
+      <dd>Your decision to let Execute start on one exact Spec commit. Local Approval records the repository, Task, Spec SHA, who approved, and when. If the Spec changes, you approve the new commit. A review's Approve button on GitHub or GitLab isn't Approval.</dd>
+
+      <dt id="claim">Claim</dt>
+      <dd>Exclusive local ownership of one Task's Phase while it runs. A Claim stops two local workers that share a runtime from spending <a href="#harness">Harness</a> time on the same Task. It doesn't coordinate separate checkouts or machines.</dd>
+
+      <dt id="custody">Custody</dt>
+      <dd>AgentMachinist's ownership of Git during a Task: it makes every commit and keeps the Task records. The Harness must not commit, push, or edit <code>.machinist/</code>. After each Harness run, AgentMachinist checks HEAD, local refs, and protected Git metadata. These checks catch violations after the fact, and they can't undo a side effect outside Git.</dd>
+
+      <dt id="evidence">Evidence</dt>
+      <dd>The durable facts a <a href="#task-run">Task Run</a> leaves behind: the approved Spec commit, verification results, the implementation commit, the independent Review report, and error details. Integration and publication also record what they intended and what happened, so an interrupted command can recover.</dd>
+
+      <dt id="forge">Forge</dt>
+      <dd>A code-hosting service such as GitHub or GitLab. Local Tasks don't need one. You can import an issue from a forge as a Task, or publish a reviewed candidate to one as a pull request or merge request. AgentMachinist never merges on a forge; a person does.</dd>
+
+      <dt id="gate">Gate</dt>
+      <dd>A point where work waits for durable <a href="#evidence">Evidence</a> before it continues. <a href="#approval">Approval</a> is the first Gate. The last is your review and explicit integration, or a person's merge on a forge. Verification Gates run your configured checks, such as your test command, and required ones must pass before AgentMachinist keeps a candidate.</dd>
+
+      <dt id="harness">Harness</dt>
+      <dd>The coding-agent CLI that reads and edits your code: Claude Code, Codex, OpenCode, Pi, or Goose. Installed plugins can add others. AgentMachinist runs it under the login you already have.</dd>
+
+      <dt id="phase">Phase</dt>
+      <dd>One kind of machine work on a Task: Spec, Execute, or Review. Approval is a human Gate between Spec and Execute. Integration and publication come after Review, and neither is a Phase.</dd>
+
+      <dt id="spec">Spec</dt>
+      <dd>The written implementation plan for a Task. AgentMachinist commits it to the Task branch, and its exact commit SHA identifies it. Approval names that SHA.</dd>
+
+      <dt id="task">Task</dt>
+      <dd>One bounded objective, such as adding CSV export for filtered rows. AgentMachinist owns each Task and gives local Tasks IDs like <code>T1</code>. An imported GitHub or GitLab issue is kept as provenance. Legacy GitHub Tasks keep their numeric issue IDs.</dd>
+
+      <dt id="task-run">Task Run</dt>
+      <dd>The durable record of one Phase attempt for a Task: its <a href="#claim">Claim</a>, result, Evidence, and any failure. A failed Task Run stays failed until you retry it explicitly, and earlier attempts stay on record.</dd>
+
+      <dt id="workshop">Workshop</dt>
+      <dd>The isolated Git worktree or clone where the Harness reads and edits files for a Task. Your own checkout stays unchanged until you integrate. Code and configuration call it a workspace, as in <code>workspace.strategy</code>.</dd>
+    </dl>
+  </main>
+  <footer class="site-footer shell">
+    <p>Want the full picture? <a href="how-it-works.html">See how the steps fit together</a> or read the <a href="trust-model.md">trust model</a>.</p>
+  </footer>
+</body>
+</html>

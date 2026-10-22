@@ -11,13 +11,13 @@ Task → Spec → approve exact SHA → Execute → verify → Review → you in
 A Task is one objective, with an ID such as `T1`. The plan is its Spec;
 Approval authorizes that exact saved version. Your coding-agent CLI is the
 Harness. It works in a separate checkout called a Workshop; the finished
-commit is the candidate. See the [glossary](https://github.com/vscarpenter/AgentMachinist/blob/main/CONTEXT.md)
-and [workflow diagram](how-it-works.html) when you need them.
+commit is the candidate. See the [glossary](glossary.html) and
+[workflow diagram](how-it-works.html) when you need them.
 
 ## Try the workflow free
 
-This guide covers **AgentMachinist 0.20.0**. You need Python 3.12+, `uv`, and
-Git. Install the package, then try the workflow:
+This guide covers **AgentMachinist 0.20.0**. You need Python 3.12 or newer (tested
+on 3.12 to 3.14), `uv`, and Git. Install the package, then try the workflow:
 
 ```sh
 uv tool install agentmachinist

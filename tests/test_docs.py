@@ -26,6 +26,8 @@ from machinist.phases.status import PIPELINE_STATES
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _GUIDE_PATH = _REPO_ROOT / "docs" / "getting-started.md"
 _FIRST_RUN_GUIDE_PATH = _REPO_ROOT / "docs" / "first-run-guide.html"
+_LEGACY_GITHUB_PATH = _REPO_ROOT / "docs" / "legacy-github-actions.html"
+_GLOSSARY_PATH = _REPO_ROOT / "docs" / "glossary.html"
 _ONBOARDING_PATH = _REPO_ROOT / "docs" / "onboarding.html"
 _HARNESS_PATH = _REPO_ROOT / "docs" / "harnesses.md"
 _HOW_IT_WORKS_PATH = _REPO_ROOT / "docs" / "how-it-works.html"
@@ -242,6 +244,8 @@ def test_visual_guides_link_back_to_complete_directory():
     for name in (
         "first-run-guide.html",
         "how-it-works.html",
+        "glossary.html",
+        "legacy-github-actions.html",
         "task-lifecycle.html",
     ):
         text = (_REPO_ROOT / "docs" / name).read_text()
@@ -451,18 +455,11 @@ def test_first_run_guide_is_visual_interactive_and_linked():
         'href="#main"',
         '<nav class="nav shell" aria-label=',
         '<main id="main">',
-        'role="group" aria-label="choose workflow route"',
-        'data-mode-button="local" aria-pressed="true"',
-        'data-mode-button="ci" aria-pressed="false"',
         'aria-live="polite"',
         "</html>",
     ):
         assert required in html
     assert html.count("<svg") >= 8, "first-run guide should remain visually led"
-    assert "machinist approve --pr 18" in html
-    assert "machinist run 42" in html
-    assert "/machinist-execute" in html
-    assert "approval stale" in html
     assert "agentmachinist never" in html and "merge" in html
     assert (
         "https://agentmachinist.com/docs/first-run-guide.html"
@@ -470,10 +467,45 @@ def test_first_run_guide_is_visual_interactive_and_linked():
     ), "README must link the rendered guide, not the raw blob"
 
 
+def test_legacy_github_setup_has_its_own_page():
+    """The first-run guide stays local; the GitHub Actions route lives on one linked page."""
+    guide = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    legacy = _LEGACY_GITHUB_PATH.read_text().lower()
+
+    assert 'href="legacy-github-actions.html"' in guide
+    # Old first-run-guide.html#legacy-github links land on the pointer to the new page.
+    assert 'id="legacy-github"' in guide
+    for legacy_only in (
+        "machinist onboard --setup-pr",
+        "machinist approve --pr 18",
+        "machinist run 42",
+        "/machinist-execute",
+        "data-mode-button",
+    ):
+        assert legacy_only not in guide, legacy_only
+
+    for required in (
+        "<!doctype html>",
+        '<html lang="en">',
+        '<meta name="viewport"',
+        'href="#main"',
+        '<main id="main">',
+        'aria-live="polite"',
+        "</html>",
+    ):
+        assert required in legacy
+    assert "machinist onboard --setup-pr --spec-source github-actions" in legacy
+    assert "machinist approve --pr 18" in legacy
+    assert "machinist run 42" in legacy
+    assert "/machinist-execute" in legacy
+    assert "approval stale" in legacy
+    assert 'href="first-run-guide.html"' in legacy
+
+
 def test_setup_docs_require_review_commit_and_push():
     readme = _README_PATH.read_text().lower()
     guide = _guide_text().lower()
-    html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    html = _LEGACY_GITHUB_PATH.read_text().lower()
     # The README points to the guide instead of repeating the setup steps.
     assert "docs/getting-started.md#github-setup-and-automation" in readme
     assert "### github setup and automation" in guide
@@ -500,7 +532,7 @@ def test_setup_docs_require_review_commit_and_push():
 
 def test_spec_lifecycle_and_execute_recovery_commands_are_documented():
     guide = _guide_text().lower()
-    html = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    html = _LEGACY_GITHUB_PATH.read_text().lower()
     operator = (_REPO_ROOT / "docs" / "operator-runbook.md").read_text().lower()
     architecture = (_REPO_ROOT / "docs" / "architecture.md").read_text().lower()
     combined = "\n".join((guide, html, operator, architecture))
@@ -554,7 +586,7 @@ def test_adoption_docs_expose_readiness_progress_and_platform_boundaries():
         "machinist sync-labels --check",
         "current named stage",
         "last completed watcher poll",
-        "python 3.12–3.14",
+        "python 3.12 or newer (tested on 3.12 to 3.14)",
         "macos-only",
     ):
         assert phrase in combined
@@ -569,6 +601,7 @@ def test_all_public_docs_share_current_approval_and_readiness_contract():
         (_REPO_ROOT / "docs/operator-runbook.md").read_text().lower().split()
     )
     first_run = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    legacy = _LEGACY_GITHUB_PATH.read_text().lower()
     how_it_works = " ".join(_HOW_IT_WORKS_PATH.read_text().lower().split())
 
     assert (
@@ -581,15 +614,15 @@ def test_all_public_docs_share_current_approval_and_readiness_contract():
     )
     assert (
         "the managed workflow checks write or admin access and the current head"
-        in first_run
+        in legacy
     )
     assert "pi auth check --model &lt;model&gt; --json --no-refresh" in first_run
-    assert "machinist sync-labels [--check|--apply]" in first_run
-    assert "machinist doctor --run-gates" in first_run
+    assert "machinist sync-labels [--check|--apply]" in legacy
+    assert "machinist doctor --run-gates" in legacy
     assert "machinist approve --task t1 --spec-sha" in how_it_works
     assert "machinist integrate t1" in how_it_works
 
-    combined = "\n".join((trust, operator, first_run, how_it_works))
+    combined = "\n".join((trust, operator, first_run, legacy, how_it_works))
     for stale_claim in (
         "guaranteed human-approved",
         "immutable spec pr",
@@ -724,7 +757,7 @@ def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> No
     trust = " ".join(_TRUST_MODEL_PATH.read_text().lower().split())
     architecture = (_REPO_ROOT / "docs/architecture.md").read_text().lower()
     landing = (_REPO_ROOT / "docs/index.html").read_text().lower()
-    first_run = _FIRST_RUN_GUIDE_PATH.read_text().lower()
+    legacy = _LEGACY_GITHUB_PATH.read_text().lower()
     how_it_works = _HOW_IT_WORKS_PATH.read_text().lower()
 
     assert "chore/agentmachinist-setup" in readme + guide
@@ -734,9 +767,9 @@ def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> No
         assert name in harnesses
     assert "agentmachinist.harnesses.v1" in harnesses + architecture
     assert "findings are advisory" in guide
-    assert "selected spec adapter" in first_run
-    assert "machinist task new" in first_run
-    assert "machinist review 42" in first_run
+    assert "selected spec adapter" in legacy
+    assert "machinist task new" in legacy
+    assert "machinist review 42" in legacy
     assert "independent review" in how_it_works
     assert "machinist approve --task t1" in how_it_works
     assert "machinist start" in landing
@@ -751,6 +784,64 @@ def test_toolkit_expansion_docs_preserve_adoption_and_privacy_boundaries() -> No
         "credential values",
     ):
         assert forbidden_export in trust
+
+
+def test_glossary_defines_the_context_terms():
+    """The reader glossary and CONTEXT.md define the same domain terms."""
+    context = _CONTEXT_PATH.read_text()
+    terms = re.findall(r"^\*\*([A-Z][A-Za-z ]+)\*\*:$", context, flags=re.MULTILINE)
+    expected = {term.lower().replace(" ", "-") for term in terms}
+    defined = set(re.findall(r'<dt id="([^"]+)">', _GLOSSARY_PATH.read_text()))
+    assert {"custody", "forge", "harness", "workshop"} <= expected
+    assert defined == expected
+    assert "(docs/glossary.html)" in context
+
+
+def test_visual_guides_link_internal_terms_to_the_glossary():
+    for name in ("index.html", "first-run-guide.html", "how-it-works.html"):
+        text = (_REPO_ROOT / "docs" / name).read_text()
+        for term in ("harness", "workshop", "gate", "evidence", "custody"):
+            assert f'href="glossary.html#{term}"' in text, (name, term)
+
+
+@pytest.mark.parametrize(
+    "name, url",
+    [
+        ("index.html", "https://agentmachinist.com/docs/"),
+        (
+            "first-run-guide.html",
+            "https://agentmachinist.com/docs/first-run-guide.html",
+        ),
+        ("how-it-works.html", "https://agentmachinist.com/docs/how-it-works.html"),
+        ("glossary.html", "https://agentmachinist.com/docs/glossary.html"),
+        (
+            "legacy-github-actions.html",
+            "https://agentmachinist.com/docs/legacy-github-actions.html",
+        ),
+    ],
+)
+def test_published_pages_carry_canonical_and_share_card_metadata(name, url):
+    text = (_REPO_ROOT / "docs" / name).read_text()
+    assert f'<link rel="canonical" href="{url}">' in text
+    assert f'<meta property="og:url" content="{url}">' in text
+    assert (
+        '<meta property="og:image" content="https://agentmachinist.com/assets/og-card.jpg">'
+        in text
+    )
+    assert '<meta name="twitter:card" content="summary_large_image">' in text
+    assert "agentmachinist.vinny.dev" not in text
+
+
+def test_docs_pages_self_host_their_fonts():
+    """No docs page asks a font CDN for files; the site serves its own."""
+    for path in sorted((_REPO_ROOT / "docs").glob("*.html")):
+        text = path.read_text()
+        assert "fonts.googleapis.com" not in text, path
+        assert "fonts.gstatic.com" not in text, path
+    how_it_works = _HOW_IT_WORKS_PATH.read_text()
+    font = "fonts/instrument-serif-latin-400-normal.woff2"
+    assert f'url("{font}")' in how_it_works
+    assert (_REPO_ROOT / "docs" / font).is_file()
 
 
 def test_first_run_guide_describes_verification_and_cleanup_precisely():

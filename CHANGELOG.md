@@ -28,6 +28,26 @@
   guidance at https://agentmachinist.com/docs/ instead of the former
   agentmachinist.vinny.dev host. Link the project site from the top of the
   README.
+- Keep the first-run guide to the local workflow. The legacy GitHub Actions
+  setup, its recovery note, and its GitHub-only diagnostics move to
+  `docs/legacy-github-actions.html`, and old `#legacy-github` links land on a
+  pointer to it.
+- Add a reader glossary, `docs/glossary.html`, and link Harness, Workshop,
+  Gate, Evidence, custody, Claim, and forge to it on first use. `CONTEXT.md`
+  gains matching custody and forge entries, and a docs test keeps the two term
+  lists equal.
+- Label the first-run guide's login cards "Log in:" and "Flag:", present Pi's
+  command as a credential check, and add a Goose card for `goose configure`.
+- Give the documentation home, first-run guide, how-it-works, glossary, and
+  legacy pages canonical agentmachinist.com URLs and large-image share cards
+  that reuse the site's social image. How-it-works now self-hosts Instrument
+  Serif instead of loading Google Fonts.
+- Collapse the documentation home's historical design specs and plans into one
+  History list, and drop the note about GitHub Pages hosting files.
+- Use one Python requirement, "Python 3.12 or newer (tested on 3.12 to 3.14),"
+  and one agent order, Claude Code, Codex, OpenCode, Pi, and Goose, across the
+  docs. The trust notes now read "Reduced credentials limit what the agent can
+  reach. Post-run Git checks catch violations."
 
 ## 0.20.0 — 2026-10-06
 
