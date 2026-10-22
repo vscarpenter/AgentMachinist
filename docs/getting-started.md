@@ -44,12 +44,7 @@ schedule `machinist watch --once` with their existing service manager.
 
 ## Install
 
-AgentMachinist 0.20.0 includes the local workflow, optional GitHub/GitLab
-intake and publication, existing GitHub issue automation, and next-step CLI
-guidance. Local readiness, exact remote-base validation, bounded diagnostics,
-bounded Execute repair, and combined reporting remain available. This release
-includes the Goose adapter introduced in 0.19.0. Install the package, then change into the
-repository you want to work on:
+Install the package, then change into the repository you want to work on:
 
 ```sh
 uv tool install agentmachinist
@@ -64,8 +59,7 @@ machinist --version
 ```
 
 Confirm that `machinist --version` reports 0.20.0 or newer for the onboarding
-commands described here. Bounded repair and combined reporting are available
-since 0.18.0; `machinist doctor --local` is available since 0.15.0.
+commands described here.
 
 Begin with `machinist rehearse --guided`: a fake Harness runs the real local
 machinery in a disposable project, with no model or API calls. It pauses for you

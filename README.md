@@ -82,16 +82,19 @@ ask for a new plan before approving:
 machinist revise T1 --feedback "Keep the public API unchanged."
 ```
 
-Each revision needs fresh Approval. When satisfied, copy the exact Approval
-command printed by start or revise:
+Revision shows the difference from the previous saved Spec before the new plan.
+Each revision needs fresh Approval, including when its text is unchanged. When
+satisfied, copy the exact Approval command printed by start or revise:
 
 ```sh
 machinist approve --task T1 --spec-sha <full-spec-commit-sha>
 ```
 
 Approval continues implementation, verification, and independent Review. Use
-`inspect` to read the plan, change, checks, and Review together. Then accept
-the reviewed change with `integrate`:
+`inspect` to read a decision summary first, followed by the plan, change, checks,
+and Review. The summary covers accumulated Task files, including amendments;
+the detailed diff covers the latest Execute. Then accept the reviewed change
+with `integrate`:
 
 ```sh
 machinist inspect T1
@@ -99,57 +102,12 @@ machinist inspect T1
 machinist integrate T1
 ```
 
-Completion output explains the next activity and includes a
-command using your Task or issue ID. Local integration reports completion;
-publication is an optional follow-up with an explicit forge selection.
-
-First start reuses applicable root settings, discovering an installed Harness
-and verification command when those settings are absent. Its local
-settings and Task records live under `.machinist/runs/local/`, excluded through
-Git's local exclude file. It does not require an origin, labels, a daemon, forge
-authentication, or hosted workflows. Existing `machinist.yaml` settings remain
-available. Local orchestration can still use a cloud model; offline inference
-requires a separately configured local provider.
-
-Verification runs in an isolated committed checkout; dependency folders from
-your working repository are not copied. Use a self-preparing command such as
-`npm ci && npm test` or `uv run pytest`, with its lockfile committed. A failing
-baseline stops before the Spec Harness, and `machinist status T1` shows the
-Gate's error and log directory. Correct the Gate in
-`.machinist/runs/local/config.yaml` or its dependency setup, then run
-`machinist retry --task T1 --phase spec`. If the committed baseline itself
-needs a fix, commit it and start a new Task. To try the loop on something
-disposable first, copy [examples/first-task](examples/first-task/README.md).
-
 `start`, `revise`, and `approve` use your Harness's model and provider quota.
-The guided rehearsal remains free. `doctor --local --fresh-workshop` explicitly
-runs your project checks in a disposable checkout of committed files; commands
-may download dependencies. It makes no model call and creates no Task.
-
-`machinist doctor --local` is an
-optional readiness check using the same configuration resolution as first start or your
-saved local settings. It checks Git, Harness probes, and verification command
-availability without creating a Task or requiring a forge. Add `--json` for
-structured output. Add `--run-gates` to execute project commands in your
-current checkout; this does not prove dependencies are ready in a fresh Workshop.
-Plain `machinist doctor` runs these local checks when no `machinist.yaml`
-exists and its GitHub setup checks otherwise.
-
-You can publish the same reviewed candidate when collaboration is useful:
-
-```sh
-machinist publish T1 --provider gitlab
-# Or: machinist publish T1 --provider github
-```
-
-Publication requires an origin that matches the selected forge and authenticated
-CLI. It preserves local work on failure and retries the same branch and change
-request without repeating Harness work or verification. GitLab support includes
-nested projects and explicitly bound self-managed hosts; it covers issue intake
-and merge-request publication, not GitLab-hosted Spec automation.
-
-See the [local workflow guide](docs/local-workflow.md) for input files, external
-issues, amendments, recovery, and use by a solo developer or small team.
+The guided rehearsal remains free. If a command stops, `machinist status T1`
+prints the error and the next command. Saved settings, baseline recovery, and
+optional publication are in the [short guide](docs/tldr.md) and the
+[local workflow guide](docs/local-workflow.md). To try the loop on something
+disposable first, copy [examples/first-task](examples/first-task/README.md).
 
 ## GitHub automation
 

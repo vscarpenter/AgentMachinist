@@ -190,6 +190,158 @@ def test_reviewed_candidate_has_exact_diff_checks_findings_and_attempt_history(l
     assert harness.calls == calls
 
 
+def test_decision_summary_precedes_details_and_repeats_exact_candidate_actions(local):
+    root, _workflow, harness, task = delivered(local)
+    before = snapshot(root)
+    calls = harness.calls.copy()
+
+    payload = build_local_inspection(root, task.id)
+    text = render_local_inspection(root, task.id)
+
+    header = text.split("Saved plan", 1)[0]
+    assert "Decision summary" in header
+    assert f"Candidate commit: {task.candidate_sha}" in header
+    assert "Task changes (original base to candidate): 3 files" in header
+    assert "feature.py" in header and "tests/test_feature.py" in header
+    assert "legacy-tests: passed (required)" in header
+    assert "Independent Review: 1 findings (0 high, 0 medium, 1 low)" in header
+    assert payload["verification"]["status_counts"] == {"passed": 1}
+    assert payload["review"]["severity_counts"] == {"high": 0, "medium": 0, "low": 1}
+    assert payload["next_actions"] == [
+        "machinist integrate T1",
+        "machinist amend --task T1 --feedback 'Describe the changes you want.'",
+    ]
+    for action in payload["next_actions"]:
+        assert action in header
+        assert text.count(action) == 2
+    assert "Candidate diff (latest Execute: Spec to candidate)" in text
+    assert snapshot(root) == before
+    assert harness.calls == calls
+
+
+def test_task_change_summary_includes_changes_retained_across_amendments(
+    local, monkeypatch
+):
+    root, workflow, harness, task = delivered(local)
+    first_candidate = task.candidate_sha
+    harness.spec = "# Plan\n\nKeep the better answer and add a usage note.\n"
+
+    def add_note(prompt: str, cwd: Path) -> str:
+        harness.calls.append("execute")
+        (cwd / "usage.md").write_text("The answer is two.\n")
+        return "Added the usage note."
+
+    monkeypatch.setattr(harness, "implement", add_note)
+    task = workflow.amend(task.id, "Add a usage note.")
+    task = workflow.approve(task.id, expected_sha=task.spec_sha)
+    before = snapshot(root)
+
+    payload = build_local_inspection(root, task.id)
+    text = render_local_inspection(root, task.id)
+
+    assert task.spec_base_sha == first_candidate
+    assert payload["task_changes"]["base_sha"] == task.base_sha
+    assert payload["task_changes"]["candidate_sha"] == task.candidate_sha
+    assert payload["task_changes"]["changed_files"] == [
+        ".machinist/specs/task-1-spec.md",
+        "feature.py",
+        "tests/test_feature.py",
+        "usage.md",
+    ]
+    assert payload["diff"]["changed_files"] == ["usage.md"]
+    header = text.split("Saved plan", 1)[0]
+    assert "feature.py" in header and "usage.md" in header
+    assert "Task changes (original base to candidate): 4 files" in header
+    assert snapshot(root) == before
+
+
+def test_decision_counts_and_high_findings_include_items_after_detail_limit(local):
+    root, workflow, _harness, task = delivered(local)
+    execute_path = root / ".machinist/runs/local/issue-1-execute.json"
+    execute = json.loads(execute_path.read_text())
+    gate = execute["evidence"]["verification_report"]["gates"][0]
+    execute["evidence"]["verification_report"]["gates"] = [
+        {**gate, "name": f"check-{index}"} for index in range(30)
+    ] + [{**gate, "name": "late-advisory", "status": "failed", "required": False}]
+    execute_path.write_text(json.dumps(execute))
+    review = json.loads(json.dumps(task.review_report))
+    finding = review["findings"][0]
+    review["findings"] = [dict(finding) for _ in range(30)] + [
+        {**finding, "severity": "high", "message": "Late high finding matters."}
+    ]
+    task = workflow.store.update(task, review_report=review)
+    review_path = root / ".machinist/runs/local/issue-1-review.json"
+    record = json.loads(review_path.read_text())
+    record["evidence"]["review_report"] = review
+    review_path.write_text(json.dumps(record))
+    before = snapshot(root)
+
+    payload = build_local_inspection(root, task.id)
+    text = render_local_inspection(root, task.id)
+
+    assert payload["candidate"]["reviewed"] is True
+    assert len(payload["verification"]["gates"]) == 30
+    assert payload["verification"]["status_counts"] == {"passed": 30, "failed": 1}
+    assert payload["review"]["severity_counts"] == {"high": 1, "medium": 0, "low": 30}
+    assert (
+        payload["review"]["high_findings"][0]["message"] == "Late high finding matters."
+    )
+    assert len(payload["review"]["findings"]) == 30
+    header = text.split("Saved plan", 1)[0]
+    assert "30 passed, 1 failed" in header
+    assert "late-advisory: failed (advisory)" in header
+    assert "Late high finding matters." in header
+    assert "31 findings (1 high, 0 medium, 30 low)" in header
+    assert "Showing 8 of 31 Gates in this summary." in header
+    assert "Showing the first 30 of 31 Gates." in text
+    assert "No findings reported." not in text
+    assert snapshot(root) == before
+
+
+def test_decision_summary_is_bounded_sanitized_and_discloses_omitted_items():
+    from machinist.local_inspection import _decision_summary
+
+    unsafe = (
+        "first\nsecond\tthird\n\x1b[31mAPI_KEY=sample-summary-value\x1b[0m\n"
+        + "x" * 5_000
+    )
+    payload = {
+        "candidate": {"sha": "exact-candidate"},
+        "task_changes": {
+            "changed_files": [unsafe] * 30,
+            "changed_file_count": 50,
+            "command": "git diff --name-only exact-base exact-candidate --",
+        },
+        "verification": {
+            "phase": "execute",
+            "success": True,
+            "status_counts": {"passed": 50},
+            "summary_gates": [{"name": unsafe, "status": "passed", "required": True}]
+            * 8,
+            "gate_count": 50,
+        },
+        "review": {
+            "finding_count": 50,
+            "severity_counts": {"high": 50, "medium": 0, "low": 0},
+            "high_findings": [{"file": unsafe, "line": 10**999, "message": unsafe}] * 8,
+        },
+        "next_actions": ["machinist integrate T1"],
+    }
+
+    header = "\n".join(_decision_summary(payload))
+
+    assert len(header) < 8_000
+    assert "Candidate commit: exact-candidate" in header
+    assert "sample-summary-value" not in header and "\x1b" not in header
+    assert "[REDACTED]" in header
+    assert "first second third" in header
+    assert "\t" not in header
+    assert not any(line.startswith(("second", "third")) for line in header.splitlines())
+    assert "Showing 8 of 50 Task paths in this summary." in header
+    assert "Showing 8 of 50 Gates in this summary." in header
+    assert "Showing 8 of 50 high findings in this summary." in header
+
+
 @pytest.mark.parametrize(
     "tamper", ["branch", "task_sha", "execute_evidence", "review_evidence"]
 )
@@ -218,8 +370,13 @@ def test_changed_candidate_or_evidence_never_gets_an_actionable_delivery_summary
     assert payload["state"] != "ready to integrate"
     assert payload["next_action"] != "machinist integrate T1"
     assert "Next: machinist integrate" not in text
+    assert "machinist amend --task" not in text
     if tamper != "review_evidence":
         assert payload["diff"] is None
+    if tamper in {"execute_evidence", "task_sha"}:
+        assert payload["verification"] is None
+        assert "requirements passed" not in text
+        assert "Verification: no valid report is available." in text
     assert snapshot(root) == before
 
 

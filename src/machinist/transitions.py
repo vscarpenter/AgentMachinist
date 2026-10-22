@@ -25,6 +25,11 @@ class LocalTransitionDecision:
     next_action: str
 
 
+def local_retry_command(task_id: str, phase: Phase) -> str:
+    """The explicit retry a stopped local Phase needs before it can rerun."""
+    return f"machinist retry --task {task_id} --phase {phase.value}"
+
+
 def classify_local_task(
     task: LocalTask,
     *,
@@ -51,7 +56,7 @@ def classify_local_task(
         action = (
             f"machinist cancel --task {task.id}"
             if claim_held
-            else f"machinist retry --task {task.id} --phase {phase.value}"
+            else local_retry_command(task.id, phase)
         )
         return LocalTransitionDecision(state, action)
 

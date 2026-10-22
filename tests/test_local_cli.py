@@ -122,6 +122,32 @@ def test_start_shows_spec_and_exact_approval_command_without_executing(local_cli
     assert f"approve --task T1 --spec-sha {SHA}" in result.output
 
 
+@pytest.mark.parametrize(
+    "command", [["continue", "T1"], ["retry", "--task", "T1", "--phase", "spec"]]
+)
+def test_spec_recovery_receipt_shows_saved_revision_difference(
+    local_cli, monkeypatch, command
+):
+    payload = local_cli.workflow.status("T1")
+    payload["spec_revision"] = {
+        "previous_sha": "c" * 40,
+        "current_sha": SHA,
+        "text": "-old plan\n+recovered plan",
+        "unchanged": False,
+        "truncated": False,
+        "command": "git diff prior current -- spec.md",
+        "error": None,
+    }
+    monkeypatch.setattr(local_cli.workflow, "status", lambda task_id: payload)
+
+    result = CliRunner().invoke(main, command)
+
+    assert result.exit_code == 0, result.output
+    assert "-old plan\n+recovered plan" in result.output
+    assert result.output.index("Plan changes") < result.output.index("## Plan")
+    assert f"approve --task T1 --spec-sha {SHA}" in result.output
+
+
 def test_start_can_read_bounded_task_body_from_stdin(local_cli):
     result = CliRunner().invoke(
         main,

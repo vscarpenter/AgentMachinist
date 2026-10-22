@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>Local Task lifecycle</title>
+  <meta name="description" content="State diagram of a local AgentMachinist Task: each state machinist status prints, the command that moves it, and where retry, revise, and amend re-enter.">
+  <meta name="theme-color" content="#fbfaf6">
+  <link rel="canonical" href="https://agentmachinist.com/docs/task-lifecycle.html">
+  <link rel="preload" href="fonts/instrument-serif-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <style>
+    @font-face {
+      font-family: "Instrument Serif";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-paper:       #fbfaf6;
+      --color-paper-2:     #f3f1eb;
+      --color-ink:         #17212a;
+      --color-muted:       #34434f;
+      --color-soft:        #65727c;
+      --color-rule:        rgba(23,33,42,0.12);
+      --color-rule-solid:  #c8c7c1;
+      --color-accent:      #c84f24;
+      --color-accent-tint: #f4ded4;
+      --color-link:        #285f78;
+      --font-serif: 'Instrument Serif', Georgia, serif;
+      --font-sans:  'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif;
+      --font-mono:  ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    .header { margin-bottom: 2rem; }
+    .doc-nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: 1rem; }
+    .doc-nav a { display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--color-link); text-underline-offset: 0.2em; }
+    .doc-nav a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-soft);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(2.25rem, 3vw + 1.25rem, 3.25rem);
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      line-height: 1.05;
+      margin-bottom: 0.75rem;
+    }
+
+    .subtitle {
+      font-size: 1.05rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 64ch;
+    }
+
+    .diagram-container { width: 100%; overflow-x: auto; }
+
+    svg { width: 100%; min-width: 1200px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 0.9fr;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid var(--color-rule-solid);
+      border-radius: 6px;
+      padding: 1.25rem;
+    }
+
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-soft);
+      margin-bottom: 0.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.875rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid var(--color-rule);
+    }
+
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.ink   { background: var(--color-ink); }
+    .card-dot.muted { background: var(--color-muted); }
+
+    .card h2 { font-size: 0.95rem; font-weight: 600; line-height: 1.3; }
+
+    .card p, .card li { color: var(--color-muted); font-size: 0.875rem; line-height: 1.55; }
+    .card p + p { margin-top: 0.6rem; }
+    .card ul { list-style: none; }
+    .card li { position: relative; padding-left: 0.875rem; margin-bottom: 0.45rem; }
+    .card li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.8em;
+      width: 6px;
+      height: 1px;
+      background: var(--color-rule-solid);
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.82em;
+      color: var(--color-ink);
+      background: var(--color-paper-2);
+      border-radius: 4px;
+      padding: 0.05em 0.3em;
+    }
+
+    /* min-width: 0 lets long commands scroll inside pre instead of widening the grid. */
+    .card { min-width: 0; }
+    .card pre {
+      margin-top: 0.6rem;
+      padding: 0.875rem 1rem;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: var(--color-ink);
+    }
+    .card pre code { padding: 0; background: none; font-size: inherit; }
+    .card pre .comment { color: var(--color-soft); }
+    .card pre + p, .card ul + pre { margin-top: 0.6rem; }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--color-rule);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .footer a { color: var(--color-link); text-underline-offset: 0.2em; }
+    .footer a:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+
+    .skip-link { position: absolute; left: -10000px; }
+    .skip-link:focus { left: 1rem; top: 1rem; padding: 0.5rem 0.75rem; background: #ffffff; color: var(--color-link); outline: 3px solid var(--color-accent); }
+
+    @media (max-width: 860px) {
+      body { padding: 2rem 1rem; }
+      .cards { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="container">
+
+    <header class="header">
+      <p class="header-eyebrow">Local workflow · Lifecycle</p>
+      <h1>Local Task lifecycle</h1>
+      <p class="subtitle">A local Task passes through three machine Phases and two decisions that belong to you. The mono line in each state is what <code>machinist status</code> prints. Arrows named for a command, such as APPROVE or RETRY, are steps you take.</p>
+      <nav class="doc-nav" aria-label="Related documentation"><a href="how-it-works.html">Who does each step</a><a href="local-workflow.md">Local workflow reference</a><a href="index.html#documentation">All documentation</a></nav>
+    </header>
+
+    <main id="main">
+      <figure class="diagram-container">
+        <svg viewBox="0 0 1200 648" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="task-lifecycle-title task-lifecycle-desc">
+          <title id="task-lifecycle-title">Local Task lifecycle</title>
+          <desc id="task-lifecycle-desc">A local Task moves from Spec to your Approval, then through Execute and Review to your choice to integrate, amend, or publish; a stopped run waits for retry, and revise or amend return to Spec.</desc>
+          <defs>
+            <marker id="task-lifecycle-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#34434f"/></marker>
+            <marker id="task-lifecycle-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#c84f24"/></marker>
+            <marker id="task-lifecycle-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#285f78"/></marker>
+          </defs>
+
+          <rect width="100%" height="100%" fill="#fbfaf6"/>
+
+          <!-- Bands: recovery above the rail, outcomes below it. -->
+          <rect x="24" y="24" width="1152" height="152" rx="8" fill="rgba(52,67,79,0.035)" stroke="rgba(23,33,42,0.12)"/>
+          <rect x="24" y="424" width="1152" height="128" rx="8" fill="rgba(23,33,42,0.035)" stroke="rgba(23,33,42,0.12)"/>
+          <g fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.14em">
+            <text x="40" y="44">RECOVERY</text>
+            <text x="40" y="220">MAIN PATH</text>
+            <text x="40" y="444">OUTCOMES</text>
+          </g>
+
+          <!-- Ten transitions, drawn before the states. Dashed means return or optional. -->
+          <g fill="none" stroke="#34434f" stroke-width="1.2">
+            <line x1="248" y1="272" x2="304" y2="272" marker-end="url(#task-lifecycle-arrow)"/>
+            <line x1="464" y1="272" x2="520" y2="272" marker-end="url(#task-lifecycle-arrow)"/>
+            <line x1="680" y1="272" x2="736" y2="272" marker-end="url(#task-lifecycle-arrow)"/>
+            <line x1="896" y1="272" x2="952" y2="272" marker-end="url(#task-lifecycle-arrow)"/>
+            <line x1="572" y1="232" x2="572" y2="152" marker-end="url(#task-lifecycle-arrow)"/>
+            <line x1="628" y1="152" x2="628" y2="232" stroke-dasharray="5,4" marker-end="url(#task-lifecycle-arrow)"/>
+            <path d="M384 312 V336 A8 8 0 0 1 376 344 H204 A8 8 0 0 1 196 336 V312" stroke-dasharray="5,4" marker-end="url(#task-lifecycle-arrow)"/>
+            <path d="M992 312 V360 A8 8 0 0 1 984 368 H148 A8 8 0 0 1 140 360 V312" stroke-dasharray="5,4" marker-end="url(#task-lifecycle-arrow)"/>
+            <path d="M1032 312 V384 A8 8 0 0 1 1024 392 H824 A8 8 0 0 0 816 400 V448" marker-end="url(#task-lifecycle-arrow)"/>
+            <line x1="1072" y1="312" x2="1072" y2="448" stroke-dasharray="5,4" marker-end="url(#task-lifecycle-arrow)"/>
+          </g>
+
+          <!-- Opaque masks keep every label clear of its stroke. -->
+          <g font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.06em" text-anchor="middle">
+            <rect x="260" y="254" width="32" height="12" rx="2" fill="#fbfaf6"/><text x="276" y="263" fill="#65727c">SAVED</text>
+            <rect x="470" y="254" width="44" height="12" rx="2" fill="#fbfaf6"/><text x="492" y="263" fill="#65727c">APPROVE</text>
+            <rect x="688" y="254" width="40" height="12" rx="2" fill="#fbfaf6"/><text x="708" y="263" fill="#65727c">PASSED</text>
+            <rect x="900" y="254" width="48" height="12" rx="2" fill="#fbfaf6"/><text x="924" y="263" fill="#65727c">REVIEWED</text>
+            <rect x="520" y="186" width="44" height="12" rx="2" fill="#fbfaf6"/><text x="542" y="195" fill="#65727c">STOPPED</text>
+            <rect x="636" y="186" width="32" height="12" rx="2" fill="#fbfaf6"/><text x="652" y="195" fill="#65727c">RETRY</text>
+            <rect x="272" y="326" width="40" height="12" rx="2" fill="#fbfaf6"/><text x="292" y="335" fill="#65727c">REVISE</text>
+            <rect x="584" y="350" width="32" height="12" rx="2" fill="#fbfaf6"/><text x="600" y="359" fill="#65727c">AMEND</text>
+            <rect x="896" y="398" width="52" height="12" rx="2" fill="#fbfaf6"/><text x="922" y="407" fill="#65727c">INTEGRATE</text>
+            <rect x="1080" y="374" width="44" height="12" rx="2" fill="#fbfaf6"/><text x="1102" y="383" fill="#65727c">PUBLISH</text>
+          </g>
+
+          <!-- Main path: three machine Phases and your two decisions. -->
+          <g text-anchor="middle">
+            <g>
+              <rect x="88" y="232" width="160" height="80" rx="8" fill="#fbfaf6"/>
+              <rect x="88" y="232" width="160" height="80" rx="8" fill="#ffffff" stroke="#17212a"/>
+              <rect x="98" y="242" width="32" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.40)" stroke-width="0.8"/>
+              <text x="114" y="251" fill="#34434f" font-size="7" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.08em">PHASE</text>
+              <text x="168" y="278" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Spec</text>
+              <text x="168" y="294" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" data-state="spec running">spec running</text>
+            </g>
+            <g>
+              <rect x="304" y="232" width="160" height="80" rx="8" fill="#fbfaf6"/>
+              <rect x="304" y="232" width="160" height="80" rx="8" fill="#f4ded4" stroke="#c84f24" stroke-width="1.2"/>
+              <rect x="314" y="242" width="28" height="12" rx="2" fill="none" stroke="rgba(200,79,36,0.50)" stroke-width="0.8"/>
+              <text x="328" y="251" fill="#9f3716" font-size="7" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.08em">GATE</text>
+              <text x="384" y="278" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Approval</text>
+              <text x="384" y="294" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" data-state="awaiting approval">awaiting approval</text>
+            </g>
+            <g>
+              <rect x="520" y="232" width="160" height="80" rx="8" fill="#fbfaf6"/>
+              <rect x="520" y="232" width="160" height="80" rx="8" fill="#ffffff" stroke="#17212a"/>
+              <rect x="530" y="242" width="32" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.40)" stroke-width="0.8"/>
+              <text x="546" y="251" fill="#34434f" font-size="7" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.08em">PHASE</text>
+              <text x="600" y="278" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Execute</text>
+              <text x="600" y="294" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" data-state="execute running">execute running</text>
+            </g>
+            <g>
+              <rect x="736" y="232" width="160" height="80" rx="8" fill="#fbfaf6"/>
+              <rect x="736" y="232" width="160" height="80" rx="8" fill="#ffffff" stroke="#17212a"/>
+              <rect x="746" y="242" width="32" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.40)" stroke-width="0.8"/>
+              <text x="762" y="251" fill="#34434f" font-size="7" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.08em">PHASE</text>
+              <text x="816" y="278" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Review</text>
+              <text x="816" y="294" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" data-state="review running">review running</text>
+            </g>
+            <g>
+              <rect x="952" y="232" width="160" height="80" rx="8" fill="#fbfaf6"/>
+              <rect x="952" y="232" width="160" height="80" rx="8" fill="#f4ded4" stroke="#c84f24" stroke-width="1.2"/>
+              <rect x="962" y="242" width="28" height="12" rx="2" fill="none" stroke="rgba(200,79,36,0.50)" stroke-width="0.8"/>
+              <text x="976" y="251" fill="#9f3716" font-size="7" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.08em">GATE</text>
+              <text x="1032" y="278" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Accept or amend</text>
+              <text x="1032" y="294" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" data-state="ready to integrate">ready to integrate</text>
+            </g>
+          </g>
+
+          <!-- Recovery: any stopped machine Phase waits here for an explicit retry. -->
+          <g text-anchor="middle">
+            <rect x="520" y="72" width="160" height="80" rx="8" fill="#fbfaf6" stroke="#34434f" stroke-dasharray="5,4"/>
+            <rect x="530" y="82" width="48" height="12" rx="2" fill="none" stroke="rgba(52,67,79,0.45)" stroke-width="0.8"/>
+            <text x="554" y="91" fill="#34434f" font-size="7" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.08em">RECOVERY</text>
+            <text x="600" y="118" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Stopped run</text>
+            <text x="600" y="134" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" data-state="execute failed">execute failed</text>
+          </g>
+
+          <!-- Outcomes: integration ends the Task; publication is optional. -->
+          <g text-anchor="middle">
+            <g>
+              <rect x="736" y="448" width="160" height="80" rx="8" fill="#fbfaf6"/>
+              <rect x="736" y="448" width="160" height="80" rx="8" fill="rgba(23,33,42,0.05)" stroke="#17212a" stroke-width="1.2"/>
+              <circle cx="754" cy="466" r="7" fill="none" stroke="#17212a"/>
+              <circle cx="754" cy="466" r="4" fill="#17212a"/>
+              <text x="816" y="494" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Integrated</text>
+              <text x="816" y="510" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" data-state="integrated">integrated</text>
+            </g>
+            <g>
+              <rect x="952" y="448" width="160" height="80" rx="8" fill="#fbfaf6"/>
+              <rect x="952" y="448" width="160" height="80" rx="8" fill="rgba(23,33,42,0.02)" stroke="rgba(23,33,42,0.30)" stroke-dasharray="4,3"/>
+              <rect x="962" y="458" width="48" height="12" rx="2" fill="none" stroke="rgba(23,33,42,0.30)" stroke-width="0.8"/>
+              <text x="986" y="467" fill="#34434f" font-size="7" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.08em">OPTIONAL</text>
+              <text x="1032" y="494" fill="#17212a" font-size="12" font-weight="600" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">Published</text>
+              <text x="1032" y="510" fill="#34434f" font-size="9" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace">PR or MR, no reruns</text>
+            </g>
+          </g>
+
+          <!-- Two editorial callouts in the band margins. -->
+          <g fill="#17212a" font-size="14" font-style="italic" font-family="'Instrument Serif', Georgia, serif" text-anchor="end">
+            <text x="488" y="100">Spec and Review stop and retry the same way.</text>
+            <text x="488" y="120">A failing baseline stops Spec before any plan.</text>
+            <text x="704" y="480">Integration fast-forwards from where start found your base.</text>
+            <text x="704" y="500">If the base branch moved, start a new Task.</text>
+          </g>
+          <g fill="none" stroke="rgba(23,33,42,0.40)" stroke-width="1" stroke-dasharray="4,3">
+            <path d="M496 106 Q508 106 516 112"/>
+            <path d="M712 486 Q724 486 732 488"/>
+          </g>
+          <circle cx="520" cy="112" r="2" fill="#17212a"/>
+          <circle cx="736" cy="488" r="2" fill="#17212a"/>
+
+          <!-- Legend strip. -->
+          <line x1="40" y1="588" x2="1160" y2="588" stroke="rgba(23,33,42,0.10)" stroke-width="0.8"/>
+          <text x="40" y="616" fill="#34434f" font-size="8" font-family="ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace" letter-spacing="0.14em">LEGEND</text>
+          <g fill="#34434f" font-size="9" font-family="'Avenir Next', Avenir, 'Segoe UI', system-ui, sans-serif">
+            <rect x="112" y="606" width="16" height="12" rx="2" fill="#ffffff" stroke="#17212a"/>
+            <text x="136" y="615">Machine Phase</text>
+            <rect x="256" y="606" width="16" height="12" rx="2" fill="#f4ded4" stroke="#c84f24" stroke-width="1.2"/>
+            <text x="280" y="615">Your decision</text>
+            <rect x="400" y="606" width="16" height="12" rx="2" fill="#fbfaf6" stroke="#34434f" stroke-dasharray="3,2"/>
+            <text x="424" y="615">Stopped run</text>
+            <rect x="528" y="606" width="16" height="12" rx="2" fill="rgba(23,33,42,0.02)" stroke="rgba(23,33,42,0.30)" stroke-dasharray="3,2"/>
+            <text x="552" y="615">Optional</text>
+            <circle cx="648" cy="612" r="6" fill="none" stroke="#17212a"/>
+            <circle cx="648" cy="612" r="3.5" fill="#17212a"/>
+            <text x="664" y="615">End state</text>
+            <line x1="768" y1="612" x2="796" y2="612" stroke="#34434f" stroke-width="1.2" marker-end="url(#task-lifecycle-arrow)"/>
+            <text x="804" y="615">Next step</text>
+            <line x1="896" y1="612" x2="924" y2="612" stroke="#34434f" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#task-lifecycle-arrow)"/>
+            <text x="932" y="615">Return or optional</text>
+          </g>
+        </svg>
+      </figure>
+
+      <div class="cards">
+        <section class="card">
+          <p class="eyebrow">Your two decisions</p>
+          <div class="card-header"><span class="card-dot coral"></span><h2>Approve one plan, then accept or amend one candidate</h2></div>
+          <p>Approval names one exact Spec commit. Before you approve, revision replaces the plan with a new commit, and that commit needs its own Approval.</p>
+<pre><code>machinist approve --task T1 --spec-sha &lt;sha&gt;
+<span class="comment"># Or replace the plan first:</span>
+machinist revise T1 --feedback '…'</code></pre>
+          <p>At <code>ready to integrate</code>, inspection shows the plan, the diff, the Gates, and the Review.</p>
+<pre><code>machinist inspect T1
+<span class="comment"># Then accept, amend, or share it:</span>
+machinist integrate T1
+machinist amend --task T1 --feedback '…'
+machinist publish T1 --provider github</code></pre>
+        </section>
+
+        <section class="card">
+          <p class="eyebrow">When a run stops</p>
+          <div class="card-header"><span class="card-dot ink"></span><h2>A stopped run waits for you</h2></div>
+          <ul>
+            <li>A failed, cancelled, or interrupted Phase keeps its Evidence and blocks the Task until you retry it.</li>
+            <li>Retry reruns the Phase that stopped. Execute resumes retained edits unless you add <code>--fresh</code>.</li>
+            <li>A failing baseline means your own checks fail before any change. Fix them, then retry with <code>--phase spec</code>.</li>
+            <li><code>machinist status</code> always prints the next command.</li>
+          </ul>
+<pre><code>machinist retry --task T1 --phase execute
+<span class="comment"># Ask a running Phase to stop:</span>
+machinist cancel --task T1</code></pre>
+        </section>
+
+        <section class="card">
+          <p class="eyebrow">Limits</p>
+          <div class="card-header"><span class="card-dot muted"></span><h2>Where the lifecycle refuses</h2></div>
+          <ul>
+            <li>After Approval, the plan stays fixed until a reviewed candidate exists. Revise is refused, and amend needs that candidate.</li>
+            <li>Integration needs a clean checkout of your base branch and fast-forwards only.</li>
+            <li>Integration ends the Task. Amend and revise are refused afterward, while publication stays available and reruns no Phase.</li>
+          </ul>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span>AgentMachinist · Task lifecycle</span>
+      <a href="index.html">AgentMachinist home</a>
+    </footer>
+
+  </div>
+</body>
+</html>

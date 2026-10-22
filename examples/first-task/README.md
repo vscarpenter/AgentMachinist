@@ -35,8 +35,8 @@ shows the report path and candidate commit, and `machinist integrate T1`
 fast-forwards `main` when you accept the change.
 
 To see the whole loop without spending model tokens first, run
-`machinist rehearse` anywhere. It builds its own throwaway repository and uses
-a fake Harness.
+`machinist rehearse --guided` anywhere. It builds its own throwaway repository,
+uses a fake Harness, and pauses so you can read the plan and the result.
 
 ## Why these files
 

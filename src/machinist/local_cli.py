@@ -129,6 +129,25 @@ def _render_status(
     }.get(payload["state"])
     if description:
         click.echo(description)
+    revision = payload.get("spec_revision")
+    if show_spec and revision:
+        click.echo("\nPlan changes")
+        click.echo(f"Previous Spec: {revision['previous_sha']}")
+        click.echo(f"Revised Spec: {revision['current_sha']}")
+        if revision["error"]:
+            click.echo(revision["error"])
+        elif revision["unchanged"]:
+            click.echo(
+                "Spec text unchanged; this revision still requires fresh Approval."
+            )
+        else:
+            click.echo(revision["text"])
+        if (
+            revision["truncated"]
+            or revision["error"]
+            or revision.get("line_endings_only")
+        ):
+            click.echo(f"Full Spec comparison: {revision['command']}")
     if show_spec and payload.get("spec"):
         click.echo("\n" + payload["spec"].rstrip() + "\n")
     for label, key in (

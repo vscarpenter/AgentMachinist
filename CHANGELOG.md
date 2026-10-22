@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- A line-ending-only Spec revision says the text differs only by line endings
+  and still needs fresh Approval, instead of displaying every line as rewritten.
+  An Execute report whose implementation commit does not match the candidate is
+  omitted from the inspection summary instead of being called a passing check.
+
+- Keep the first-run instructions on the six local commands. The disposable
+  example uses `rehearse --guided`, the README start section points recovery
+  and publication at the short guide, and the getting-started install block
+  leaves release history to the changelog.
+
+- Start local inspection with a bounded decision summary of accumulated Task
+  paths, Gate outcomes, high-severity advisory Review findings, and eligible
+  next actions; repeat actions after the details. Preserve exact Evidence checks
+  and label the detailed diff as the latest Execute. Count results before
+  truncation so omitted failures and findings remain visible.
+- Show bounded exact-commit Spec differences before an initial revised plan,
+  including recovered revisions. Explain unchanged text and fresh Approval;
+  provide an exact comparison command for truncated or unavailable previews.
+
+- Name the local retry command when `approve` or `continue` meets a stopped
+  local Phase. The refusal printed the GitHub issue form, `machinist retry 1`,
+  and now prints `machinist retry --task T1 --phase execute`.
+
+- Add a local Task lifecycle diagram (`docs/task-lifecycle.html`) that shows
+  each state `machinist status` prints, the command that moves it, and where
+  retry, revise, and amend re-enter. A docs test keeps its state names real.
+
 - Point the README, getting-started guide, canonical page links, and CLI
   guidance at https://agentmachinist.com/docs/ instead of the former
   agentmachinist.vinny.dev host. Link the project site from the top of the

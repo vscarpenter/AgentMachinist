@@ -144,6 +144,13 @@ snapshots. Local status does not query the forge.
 The candidate is retained on `<branch_prefix>task-1` (`agent/task-1` by
 default). `machinist inspect T1` brings together the plan, candidate diff,
 Verification, Review, and recovery guidance without contacting a forge.
+Its decision summary comes first: accumulated changed files from the original
+Task base to the candidate, Gate outcomes, high-severity Review findings, and
+the valid next actions. The actions repeat after the details. The summary stays
+bounded, reports omitted paths/Gates/findings, and counts all validated results
+before truncation. Findings remain advisory. Acceptance and amendment commands
+appear only for an exact verified and reviewed candidate with consistent Evidence.
+The detailed file list and diff are labeled as the latest Execute.
 To compare commits directly:
 
 ```sh
@@ -279,7 +286,15 @@ machinist revise T1 --feedback "Keep the public API unchanged."
 ```
 
 Revision generates a new Spec, invalidates earlier Approval, and stops for a
-fresh human decision. It does not implement the change. Recover a failed Phase
+fresh human decision. Before the replacement plan, its receipt shows a bounded
+textual difference between the exact previous and new Spec commits. Identical
+text still receives a new commit and requires fresh Approval. Completed revision
+recovery through Spec retry or continue uses those same saved commits.
+If the comparison is too large or unavailable, the receipt gives an exact Git
+comparison command; an unavailable comparison does not hide the saved plan.
+Difference previews use the existing diagnostic sanitizer for recognized
+credentials and terminal controls, rather than guaranteeing arbitrary text is
+secret-free. Revision does not implement the change. Recover a failed Phase
 with explicit retry first.
 
 Amendment is for feedback on a completed, verified and reviewed candidate:

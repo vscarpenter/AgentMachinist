@@ -147,6 +147,20 @@ def test_failed_execute_needs_explicit_retry_and_resume_preserves_edits(local):
     )
 
 
+def test_refused_continuation_names_the_local_retry_command(local):
+    root, workflow, harness = local
+    task = workflow.start("Improve the answer with its regression test")
+    harness.fail = True
+    with pytest.raises(RuntimeError, match="interrupted"):
+        workflow.approve(task.id, expected_sha=task.spec_sha)
+    with pytest.raises(LifecycleError) as refused:
+        workflow.continue_task(task.id)
+    assert str(refused.value) == (
+        "Task T1 execute previously failed; "
+        "run 'machinist retry --task T1 --phase execute'"
+    )
+
+
 def test_duplicate_continuation_does_not_repeat_paid_work(local):
     root, workflow, harness = local
     task = workflow.start("Improve the answer with its regression test")

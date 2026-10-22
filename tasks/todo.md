@@ -1318,3 +1318,56 @@ first-pass Execute worse?" from Evidence `report` already records.
   - OpenCode Spec fails: "left background processes running after exit".
   - Pi Spec fails: "Connection error"; likely Pi provider login or model
     configuration on this machine.
+
+## Local decision output (2026-10-10)
+
+- [x] Scope approved: decision-first inspection and exact Spec revision diff.
+- [x] Specification and plan recorded in `tasks/decision-output-spec.md` and
+  `tasks/decision-output-plan.md`; branch `codex/local-decision-output`.
+- [x] Spec revision differences: five initial RED contracts; six focused
+  read/display contracts and fourteen CLI receipt/validation tests passed.
+  Comparisons use saved commits, remain bounded/read-only, and preserve fresh
+  Approval and successful saved-plan delivery when comparison is unavailable.
+- [x] Inspection summary: three initial RED contracts now pass, plus bounded
+  header formatting coverage; eight existing safety/output regressions passed.
+- [x] Independent review checked candidate eligibility, accumulated paths,
+  pre-truncation counts, sanitized bounds, and revision recovery. Its newline-only
+  comparison finding is fixed: three revision and four reader contracts passed,
+  with independent confirmation that the bounded reader retains custody checks.
+- [x] Canonical verification passed: 1,892 tests, 88.95% coverage, workflow
+  drift, format, lint, and types; wheel and source builds, installed dependency
+  checks, guided rehearsals for both distributions, and local-readiness smoke.
+  Full gate exited 0. The 148 warnings are existing Click test-fixture
+  deprecations; no verification failures occurred.
+- [x] Local implementation commits: `fa3be6f` (spec/plan), `6d11cee` (revision
+  receipt), `437d720` (inspection summary), and `5a1adc8` (committed line endings).
+  Final evidence: `/Users/vinnycarpenter/.codex/visualizations/2026/10/10/01a1264e-833e-7ec0-babc-4bdb003682ea/decision-output-verification.log`.
+
+Resuming from here: implementation and local verification are complete on
+`codex/local-decision-output`. `tasks/next.md` is the user's
+pre-existing untracked proposal and stays untouched/uncommitted. No publication,
+release, or other roadmap feature is included.
+
+## Local Task lifecycle diagram (2026-10-17)
+
+- [x] Mapped local Task states from `classify_local_task` (`transitions.py`):
+  a local Task stores facts, not a status, and the CLI derives the state.
+- [x] Added `docs/task-lifecycle.html`, a lifecycle phase map with five main
+  states, one recovery state, and two outcomes in 10 transitions. Accent marks
+  only the two human Gates.
+- [x] Red-first docs test keeps every `data-state` string a real local state.
+  Linked from `docs/README.md` and `docs/index.html#documentation`.
+- [x] `scripts/verify.sh` exited 0: 1,893 tests, 88.95% coverage, drift,
+  format, lint, types, builds, and installed rehearsals.
+- [x] Fixed: a repeated `approve` or `continue` on a stopped local Phase printed
+  `machinist retry 1`. The lifecycle now raises `RetryRequiredError`, and the
+  dispatcher names `machinist retry --task T1 --phase <phase>` through
+  `transitions.local_retry_command`. Legacy issue wording is unchanged.
+- Reported, not fixed: `local-workflow.md` says revision invalidates Approval,
+  but `revise` refuses once one exists, and it lists `continue T1` under Resume
+  although only `retry` resumes retained edits; amend with identical Spec text
+  fails.
+
+Resuming from here: the diagram page and the retry-message fix are committed on
+`codex/local-decision-output`. Nothing is pushed. The three findings above are
+candidates for a follow-up fix.

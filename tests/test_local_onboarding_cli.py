@@ -40,6 +40,15 @@ def revision_workflow(monkeypatch):
                 "state": "awaiting approval",
                 "spec_sha": SPEC_SHA,
                 "spec": "# Revised Spec\nKeep the exact feedback.\n",
+                "spec_revision": {
+                    "previous_sha": "c" * 40,
+                    "current_sha": SPEC_SHA,
+                    "text": "-Old acceptance\n+Keep the exact feedback.",
+                    "unchanged": False,
+                    "truncated": False,
+                    "command": "git diff exact-prior exact-current -- spec.md",
+                    "error": None,
+                },
                 "next_action": (
                     f"machinist approve --task {task_id} --spec-sha {SPEC_SHA}"
                 ),
@@ -57,6 +66,43 @@ def test_revise_delegates_exact_feedback_and_shows_new_approval(revision_workflo
     assert result.exit_code == 0, result.output
     assert revision_workflow == [("T1", feedback)]
     assert "Revised Spec" in result.output
+    assert "Plan changes" in result.output
+    assert "-Old acceptance" in result.output
+    assert "+Keep the exact feedback." in result.output
+    assert result.output.index("Plan changes") < result.output.index("# Revised Spec")
+    assert f"approve --task T1 --spec-sha {SPEC_SHA}" in result.output
+
+
+@pytest.mark.parametrize("mode", ["unchanged", "truncated", "unavailable"])
+def test_revision_receipts_preserve_fresh_approval_and_full_comparison(
+    revision_workflow, monkeypatch, mode
+):
+    from machinist import local_cli
+
+    workflow = local_cli._existing_workflow()
+    payload = workflow.status("T1")
+    comparison = payload["spec_revision"]
+    comparison["unchanged"] = mode == "unchanged"
+    comparison["truncated"] = mode == "truncated"
+    if mode == "unavailable":
+        comparison["error"] = "Spec comparison unavailable: old blob missing"
+    monkeypatch.setattr(workflow, "status", lambda task_id: payload)
+    monkeypatch.setattr(local_cli, "_existing_workflow", lambda: workflow)
+
+    result = CliRunner().invoke(main, ["revise", "T1", "--feedback", "Clarify"])
+
+    assert result.exit_code == 0, result.output
+    if mode == "unchanged":
+        assert (
+            "Spec text unchanged; this revision still requires fresh Approval."
+            in result.output
+        )
+    else:
+        assert (
+            "Full Spec comparison: git diff exact-prior exact-current -- spec.md"
+            in result.output
+        )
+    assert "# Revised Spec" in result.output
     assert f"approve --task T1 --spec-sha {SPEC_SHA}" in result.output
 
 
