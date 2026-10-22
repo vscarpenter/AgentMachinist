@@ -74,11 +74,19 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
         candidate: dict[str, Any] = {"sha": None, "verified": False, "reviewed": False}
         verification = _verification(records[Phase.SPEC], "baseline")
         execute = records[Phase.EXECUTE]
+        execute_evidence = (
+            TaskEvidence.load(execute.evidence) if execute is not None else None
+        )
         if (
             _current_approval(task)
             and execute is not None
-            and TaskEvidence.load(execute.evidence).approved_sha == task.spec_sha
+            and execute_evidence is not None
+            and execute_evidence.approved_sha == task.spec_sha
             and isinstance(execute.evidence.get("verification_report"), dict)
+            and (
+                not task.candidate_sha
+                or execute_evidence.implementation_sha == task.candidate_sha
+            )
         ):
             verification = _verification(execute, "execute")
         diff = None
@@ -107,6 +115,8 @@ def build_local_inspection(repo_root: Path, task_id: str) -> dict[str, Any]:
                 issues.append(
                     "Execute Evidence does not match this Spec and candidate."
                 )
+                # An unbound Execute report is not this candidate's check.
+                verification = None
         elif task.spec_sha and spec["verified"]:
             if workspace.branch_sha(task.branch) != task.spec_sha:
                 issues.append("Local Spec branch changed since the saved plan.")

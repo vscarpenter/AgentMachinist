@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A line-ending-only Spec revision says the text differs only by line endings
+  and still needs fresh Approval, instead of displaying every line as rewritten.
+  An Execute report whose implementation commit does not match the candidate is
+  omitted from the inspection summary instead of being called a passing check.
+
 - Keep the first-run instructions on the six local commands. The disposable
   example uses `rehearse --guided`, the README start section points recovery
   and publication at the short guide, and the getting-started install block

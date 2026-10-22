@@ -142,7 +142,11 @@ def _render_status(
             )
         else:
             click.echo(revision["text"])
-        if revision["truncated"] or revision["error"]:
+        if (
+            revision["truncated"]
+            or revision["error"]
+            or revision.get("line_endings_only")
+        ):
             click.echo(f"Full Spec comparison: {revision['command']}")
     if show_spec and payload.get("spec"):
         click.echo("\n" + payload["spec"].rstrip() + "\n")

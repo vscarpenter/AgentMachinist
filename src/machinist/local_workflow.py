@@ -373,6 +373,7 @@ class LocalWorkflow:
             "current_sha": task.spec_sha,
             "text": None,
             "unchanged": False,
+            "line_endings_only": False,
             "truncated": False,
             "command": shlex.join(
                 [
@@ -410,25 +411,37 @@ class LocalWorkflow:
                 for sha in (task.spec_base_sha, task.spec_sha)
             ]
             # Compare raw text so redaction cannot turn a real change into
-            # an unchanged-text receipt; sanitize only the displayed difference.
-            lines = unified_diff(
-                texts[0].splitlines(keepends=True),
-                texts[1].splitlines(keepends=True),
-                fromfile=f"{task.spec_base_sha}/{path}",
-                tofile=f"{task.spec_sha}/{path}",
-            )
-            raw = "".join(
-                line
-                if line.endswith("\n")
-                else line + "\n\\ No newline at end of file\n"
-                for line in lines
-            )
-            sanitized = sanitize_diagnostic(raw, limit=len(raw))
-            result.update(
-                text=sanitize_diagnostic(raw, limit=_MAX_REVISION_CHARS),
-                unchanged=texts[0] == texts[1],
-                truncated=len(sanitized) > _MAX_REVISION_CHARS,
-            )
+            # an unchanged-text receipt. Line-ending-only revisions stay out of
+            # the unified diff: sanitizing CR bytes would display them as a
+            # full rewrite of identical lines.
+            if texts[0] != texts[1] and texts[0].splitlines() == texts[1].splitlines():
+                result.update(
+                    text=(
+                        "Spec text differs only by line endings; "
+                        "this revision still requires fresh Approval."
+                    ),
+                    unchanged=False,
+                    line_endings_only=True,
+                )
+            else:
+                lines = unified_diff(
+                    texts[0].splitlines(keepends=True),
+                    texts[1].splitlines(keepends=True),
+                    fromfile=f"{task.spec_base_sha}/{path}",
+                    tofile=f"{task.spec_sha}/{path}",
+                )
+                raw = "".join(
+                    line
+                    if line.endswith(("\n", "\r"))
+                    else line + "\n\\ No newline at end of file\n"
+                    for line in lines
+                )
+                sanitized = sanitize_diagnostic(raw, limit=len(raw))
+                result.update(
+                    text=sanitize_diagnostic(raw, limit=_MAX_REVISION_CHARS),
+                    unchanged=texts[0] == texts[1],
+                    truncated=len(sanitized) > _MAX_REVISION_CHARS,
+                )
         except (WorkspaceError, LifecycleError, ValueError, OSError) as exc:
             result["error"] = sanitize_diagnostic(f"Spec comparison unavailable: {exc}")
         return result

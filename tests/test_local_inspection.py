@@ -373,6 +373,10 @@ def test_changed_candidate_or_evidence_never_gets_an_actionable_delivery_summary
     assert "machinist amend --task" not in text
     if tamper != "review_evidence":
         assert payload["diff"] is None
+    if tamper in {"execute_evidence", "task_sha"}:
+        assert payload["verification"] is None
+        assert "requirements passed" not in text
+        assert "Verification: no valid report is available." in text
     assert snapshot(root) == before
 
 

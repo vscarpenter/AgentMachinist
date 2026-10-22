@@ -115,8 +115,15 @@ def test_revision_comparison_detects_committed_line_ending_only_changes(
     comparison = status["spec_revision"]
 
     assert comparison["unchanged"] is False
-    assert comparison["text"]
+    assert comparison["line_endings_only"] is True
+    assert (
+        "Spec text differs only by line endings; "
+        "this revision still requires fresh Approval."
+    ) in comparison["text"]
+    assert "\n-" not in comparison["text"]
     assert comparison["error"] is None
+    assert first in comparison["command"]
+    assert task.spec_sha in comparison["command"]
     assert workflow.workspace.read_at_commit(
         task.spec_sha, path, max_bytes=len(current)
     ) == current.decode("utf-8")
