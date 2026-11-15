@@ -16,7 +16,7 @@ commit is the candidate. See the [glossary](glossary.html) and
 
 ## Try the workflow free
 
-This guide covers **AgentMachinist 0.20.0**. You need Python 3.12 or newer (tested
+This guide covers **AgentMachinist 0.21.0**. You need Python 3.12 or newer (tested
 on 3.12 to 3.14), `uv`, and Git. Install the package, then try the workflow:
 
 ```sh

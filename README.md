@@ -23,9 +23,9 @@ The controller owns commits, Task records, and optional publication. Local
 integration is an explicit fast-forward operation into your clean base checkout.
 AgentMachinist never merges remotely or automatically.
 
-This guide covers **AgentMachinist 0.20.0**.
+This guide covers **AgentMachinist 0.21.0**.
 Package reference:
-[AgentMachinist 0.20.0 on PyPI](https://pypi.org/project/agentmachinist/0.20.0/).
+[AgentMachinist 0.21.0 on PyPI](https://pypi.org/project/agentmachinist/0.21.0/).
 
 ## Install
 

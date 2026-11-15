@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.21.0 — 2026-11-15
+
+- Refresh dependencies. The lockfile moves to Click 8.5.1, pydantic 2.14.3,
+  and pytest 9.2.0. The pinned development tools move to Ruff 0.17.5, mypy
+  2.4.1, and Hatchling 1.33.0, which also builds the package. Runtime
+  requirements keep their existing minimums. The managed Spec workflow
+  template now pins `astral-sh/setup-uv` v10.3.3. If your repository runs Spec
+  in GitHub Actions, run `machinist sync-workflows` to adopt it.
 
 - A line-ending-only Spec revision says the text differs only by line endings
   and still needs fresh Approval, instead of displaying every line as rewritten.

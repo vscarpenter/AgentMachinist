@@ -12,7 +12,7 @@ own project. The other pages answer specific questions when you need them.
 Prefer illustrated instructions? The [visual first-run guide](first-run-guide.html)
 walks through the same journey with examples and recovery help.
 
-The current operating documentation covers **AgentMachinist 0.20.0**.
+The current operating documentation covers **AgentMachinist 0.21.0**.
 See the [changelog](https://github.com/vscarpenter/AgentMachinist/blob/main/CHANGELOG.md)
 for version details.
 

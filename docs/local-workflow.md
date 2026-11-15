@@ -9,7 +9,7 @@ verification, independent Review, and explicit local integration. GitHub or
 GitLab can supply the initial issue and receive the completed change whenever
 you choose to publish it.
 
-This guide covers AgentMachinist 0.20.0: guided rehearsal, initial Spec revision,
+This guide covers AgentMachinist 0.21.0: guided rehearsal, initial Spec revision,
 local inspection/settings selectors, and readiness in a fresh Workshop.
 Use the [package installation](getting-started.md#install) and run local commands
 in the repository you want to change. The existing
