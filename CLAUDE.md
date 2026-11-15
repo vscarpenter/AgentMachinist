@@ -17,8 +17,8 @@ Task → Spec commit → human Approval → Execute → verification → Review
 
 Python 3.12 or newer (tested on 3.12 to 3.14), Click CLI (`machinist`),
 pydantic config, packaged with hatchling, packaged for PyPI as `agentmachinist`
-(current release: 0.20.0).
-This guide describes the 0.20.0 package and workflow.
+(current release: 0.21.0).
+This guide describes the 0.21.0 package and workflow.
 This repository dogfoods itself: the root `machinist.yaml` configures the
 pipeline for this repo (`spec_source: github-actions`, ordered workflow,
 format, lint, type, and coverage/test gates from `scripts/verify.sh`).
@@ -359,7 +359,18 @@ a GitHub Release tagged `v<version>`. The release workflow enforces
 tag/version equality, reruns the suite, smoke-tests the installed wheel
 (including packaged templates), and publishes last.
 
-## Current checkout (2026-10-06)
+## Current checkout (2026-11-15)
+
+- **0.21.0 makes local decisions easier to read and refreshes dependencies.**
+  `inspect T1` opens with a bounded decision summary: changed paths, Gate
+  outcomes, high-severity advisory Review findings, and eligible next actions.
+  `revise` shows a bounded exact-commit Spec difference before the revised
+  plan. A stopped local Phase names `machinist retry --task T1 --phase
+  <phase>` instead of the GitHub issue form. The docs add a reader glossary, a
+  local Task lifecycle diagram, and a separate legacy GitHub Actions page, all
+  linked under agentmachinist.com. The lockfile and pinned development tools
+  were refreshed on 2026-11-15, and runtime minimums are unchanged. See
+  `tasks/decision-output-spec.md`.
 
 - **0.20.0 improves the local onboarding and decision flow.**
   `rehearse --guided` uses a fake Harness and pauses for human Approval and

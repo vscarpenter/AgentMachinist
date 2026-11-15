@@ -4,7 +4,7 @@ AgentMachinist is designed for repositories and harness installations you
 already trust. It improves custody and failure visibility; it is not an OS
 sandbox, container boundary, malware scanner, or policy engine.
 
-This reference covers AgentMachinist 0.20.0. The built-in Goose adapter was
+This reference covers AgentMachinist 0.21.0. The built-in Goose adapter was
 added in 0.19.0. Bounded Execute repair and combined local/legacy reporting arrived in
 0.18.0.
 Local readiness and bounded diagnostic rendering were introduced in 0.15.0.

@@ -1,6 +1,6 @@
 # Operator runbook
 
-This runbook describes AgentMachinist 0.20.0, including the foreground
+This runbook describes AgentMachinist 0.21.0, including the foreground
 local workflow, optional GitLab intake/publication, and the readiness,
 remote-base, and diagnostic behavior introduced in 0.15.0.
 See the [installation instructions](getting-started.md#install) for the
@@ -9,7 +9,7 @@ package installation and optional contributor setup.
 Release 0.18.0 added the bounded repair and combined reporting options
 described below.
 
-Version 0.20.0 adds guided rehearsal, initial Spec revision, local inspection
+Version 0.20.0 added guided rehearsal, initial Spec revision, local inspection
 and settings selectors, and fresh-Workshop readiness.
 
 ## Local foreground operation

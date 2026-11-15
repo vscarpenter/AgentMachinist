@@ -1371,3 +1371,25 @@ release, or other roadmap feature is included.
 Resuming from here: the diagram page and the retry-message fix are committed on
 `codex/local-decision-output`. Nothing is pushed. The three findings above are
 candidates for a follow-up fix.
+
+## 0.21.0 dependency refresh and release (2026-11-15)
+
+Vinny asked for every dependency updated and the latest version redeployed to
+PyPI. PyPI served 0.20.0, and `main` carried seven unreleased commits, so the
+refresh ships as a new version. PyPI versions cannot be replaced.
+
+- [x] Surveyed the pins. All five GitHub Actions already matched their latest
+  release. The lockfile had 11 stale packages, and two exact development pins
+  had newer releases.
+- [x] `chore(deps)` commit `1a30a6f`: `uv lock --upgrade`, Ruff 0.17.5, and
+  types-pyyaml 6.0.12.20261113. CI's pinned uv 0.12.5 accepts the lock.
+- [x] Release prep: version 0.21.0 in `pyproject.toml` and `uv.lock`, the dated
+  changelog section, and the current-release statements the docs test checks.
+  Statements that name the release a feature arrived in keep 0.20.0.
+- [ ] `scripts/verify.sh` on the committed candidate. The PR records the result.
+- [ ] Release PR, required CI, merge, `v0.21.0` GitHub Release, PyPI check.
+
+Left unchanged on purpose: the CI uv pin (0.12.5) and the Harness CLI versions
+the managed Spec workflow installs. Contract tests pin both, and each adapter's
+arguments were checked against that CLI version. Runtime minimums also stay,
+because raising them would drop support the minimum-dependency job still proves.

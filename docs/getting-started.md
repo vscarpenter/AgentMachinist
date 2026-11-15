@@ -9,7 +9,7 @@ AgentMachinist takes a Task through an exact human-approved Spec, isolated
 implementation, verification, and independent Review. You can integrate the
 reviewed candidate locally and optionally publish it to GitHub or GitLab.
 
-This guide covers AgentMachinist 0.20.0, including guided rehearsal, initial
+This guide covers AgentMachinist 0.21.0, including guided rehearsal, initial
 Spec revision, local inspection/settings selectors, and fresh-Workshop readiness.
 
 ## What is AgentMachinist?
