@@ -1,4 +1,4 @@
-# agentmachinist-managed-sha256: b214c8df2bf3af3eacba72ab243f07d9a23df0d56002dd36e3365394cd576387
+# agentmachinist-managed-sha256: f8e77e13d500909f96970d9a4dce22e21e0722bd6e6cb8e844969e9a51d0a81c
 # AgentMachinist — Phase 1 in CI: generate a spec and open a draft PR
 # when an issue receives the configured trigger label.
 #
