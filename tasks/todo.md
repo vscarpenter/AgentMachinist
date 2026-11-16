@@ -1386,10 +1386,34 @@ refresh ships as a new version. PyPI versions cannot be replaced.
 - [x] Release prep: version 0.21.0 in `pyproject.toml` and `uv.lock`, the dated
   changelog section, and the current-release statements the docs test checks.
   Statements that name the release a feature arrived in keep 0.20.0.
-- [ ] `scripts/verify.sh` on the committed candidate. The PR records the result.
-- [ ] Release PR, required CI, merge, `v0.21.0` GitHub Release, PyPI check.
+- [x] `bash scripts/verify.sh` from the release candidate `b20d041` exited 0:
+  1,903 passed, 88.97% coverage, and the 0.21.0 wheel and sdist smoke-tested.
+- [x] Pushed `release/0.21.0` and opened PR #84. All 16 checks passed on its
+  head, including the five required ones.
+- [x] Merged PR #84 as `2de64f8` (2026-11-15 23:58 UTC), pinned with
+  `--match-head-commit`. The merge commit and `b20d041` share one tree hash.
+- [x] `gh release create v0.21.0 --target 2de64f8` at 00:38 UTC on 2026-11-16,
+  on Vinny's go-ahead. Release run 43781562991 passed build, publish,
+  verify-published, and release-assets.
+- [x] PyPI check. The version endpoint lists the wheel and sdist, neither
+  yanked, and their SHA-256 digests match the Release assets. An isolated
+  `uv tool run --from agentmachinist==0.21.0` reports 0.21.0.
+- [x] CI on the merge commit passed all 13 jobs at 01:17 UTC. CodeQL passed too.
 
 Left unchanged on purpose: the CI uv pin (0.12.5) and the Harness CLI versions
 the managed Spec workflow installs. Contract tests pin both, and each adapter's
 arguments were checked against that CLI version. Runtime minimums also stay,
 because raising them would drop support the minimum-dependency job still proves.
+
+Resuming from here: 0.21.0 is published and marked Latest. PR #85 carries
+this note to `main`, which accepts changes only through a PR. The release
+went out while the merge commit's macOS lanes were still running. Its tree
+was the one PR #84 had verified, and its Ubuntu, package, and coverage jobs
+had passed. Those macOS lanes passed 39 minutes later. Next:
+agentmachinist.com/docs still names 0.20.0 until the site repository deploys.
+Vinny had the local and remote `release/0.21.0` branches deleted after the
+release, and `main` keeps every commit from them. Timing for the next
+release: the local gate takes about 46 minutes, and hosted macOS lanes take
+about 1 hour 18 minutes. Assumption: 0.21.0 is a minor bump, because the
+`inspect` decision summary and the `revise` Spec difference are new
+user-facing output.
