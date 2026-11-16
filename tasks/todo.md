@@ -1405,14 +1405,15 @@ the managed Spec workflow installs. Contract tests pin both, and each adapter's
 arguments were checked against that CLI version. Runtime minimums also stay,
 because raising them would drop support the minimum-dependency job still proves.
 
-Resuming from here: 0.21.0 is published and marked Latest. This note lives on
-`docs/todo-ledger-0.21.0` until the next change's PR carries it, because
-`main` is PR-protected. The release went out while the merge commit's macOS
-lanes were still running. Its tree was the one PR #84 had verified, and its
-Ubuntu, package, and coverage jobs had passed. Those macOS lanes passed 39
-minutes later. Next: agentmachinist.com/docs still names 0.20.0 until the
-site repository deploys. The local and remote `release/0.21.0` branches
-remain, and deleting them waits for Vinny. Timing for the next release: the
-local gate takes about 46 minutes, and hosted macOS lanes take about 1 hour
-18 minutes. Assumption: 0.21.0 is a minor bump, because the `inspect`
-decision summary and the `revise` Spec difference are new user-facing output.
+Resuming from here: 0.21.0 is published and marked Latest. PR #85 carries
+this note to `main`, which accepts changes only through a PR. The release
+went out while the merge commit's macOS lanes were still running. Its tree
+was the one PR #84 had verified, and its Ubuntu, package, and coverage jobs
+had passed. Those macOS lanes passed 39 minutes later. Next:
+agentmachinist.com/docs still names 0.20.0 until the site repository deploys.
+Vinny had the local and remote `release/0.21.0` branches deleted after the
+release, and `main` keeps every commit from them. Timing for the next
+release: the local gate takes about 46 minutes, and hosted macOS lanes take
+about 1 hour 18 minutes. Assumption: 0.21.0 is a minor bump, because the
+`inspect` decision summary and the `revise` Spec difference are new
+user-facing output.
